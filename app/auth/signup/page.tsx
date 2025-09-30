@@ -2,9 +2,48 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
+interface Company {
+  id: string
+  name: string
+  industry: string
+}
+
+interface FormData {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  companyName: string
+  companyId: string
+  jobTitle: string
+  department: string
+  password: string
+  confirmPassword: string
+  acceptTerms: boolean
+}
+
+interface User {
+  userId?: string
+  user_id?: string
+  firstName?: string
+  first_name?: string
+  lastName?: string
+  last_name?: string
+  email?: string
+  companyName?: string
+  company_name?: string
+  role?: string
+}
+
+interface RegistrationResponse {
+  userId?: string
+  sessionToken?: string
+  user?: User
+}
+
 export default function SignupPage() {
   const router = useRouter()
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
     email: '',
@@ -18,7 +57,7 @@ export default function SignupPage() {
     acceptTerms: false
   })
   
-  const [companies, setCompanies] = useState<any[]>([])
+  const [companies, setCompanies] = useState<Company[]>([])
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, text: 'Password strength will appear here', class: '' })
   const [loading, setLoading] = useState(false)
@@ -69,7 +108,7 @@ export default function SignupPage() {
     setShowCompanyDropdown(matches.length > 0)
   }
 
-  function selectCompany(company: any) {
+  function selectCompany(company: Company) {
     setFormData(prev => ({
       ...prev,
       companyName: company.name,
@@ -86,7 +125,7 @@ export default function SignupPage() {
     }
     
     let score = 0
-    let feedback = []
+    const feedback = []
     
     if (password.length >= 8) score++
     else feedback.push('at least 8 characters')
@@ -159,17 +198,20 @@ export default function SignupPage() {
         try {
           const error = await response.json()
           errorMessage = error.message || errorMessage
-        } catch (e) {}
+        } catch (e) {
+          // Could not parse error response
+        }
         throw new Error(errorMessage)
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Sign up error:', error)
-      setMessage({ text: error.message || 'Registration failed', type: 'error' })
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed'
+      setMessage({ text: errorMessage, type: 'error' })
       setLoading(false)
     }
   }
 
-  function handleRegistrationSuccess(response: any) {
+  function handleRegistrationSuccess(response: RegistrationResponse) {
     setMessage({ text: '🎉 Account created! Redirecting to dashboard...', type: 'success' })
     
     const authData = {
@@ -414,4 +456,12 @@ export default function SignupPage() {
 
           <p className="text-center mt-6 text-gray-600">
             Already have an account?{' '}
-            <a h
+            <a href="/auth/login" className="text-blue-600 font-semibold hover:underline">
+              Sign in here
+            </a>
+          </p>
+        </form>
+      </div>
+    </div>
+  )
+}
