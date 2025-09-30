@@ -182,16 +182,16 @@ export default function HowItWorksPage() {
                           </li>
                         ))}
                       </ul>
-                      {step.id === 5 && (
+                      {step.id === 4 && (
                         <div className="mt-6 p-4 bg-blue-600/20 rounded-lg border border-blue-500/30">
-                          <p className="text-white/90 text-sm">
-                            <strong>Experience CLARENCE Chat:</strong> Our AI pragmatically advises on positions and transparently brokers compromises. 
-                            <Link href="/auth/signup" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
-                              Start your negotiation →
+                         <p className="text-white/90 text-sm">
+                          <strong>Explore in detail:</strong> View the complete breakdown of each negotiation phase. 
+                            <Link href="/negotiation-phases" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
+                             See the 6-Phase Process →
                             </Link>
-                          </p>
-                        </div>
-                      )}
+                           </p>
+                          </div>
+        )}
                     </div>
                   </div>
                 )}
