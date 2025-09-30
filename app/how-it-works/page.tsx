@@ -13,94 +13,94 @@ interface ProcessStep {
 const processSteps: ProcessStep[] = [
   {
     id: 1,
-    title: "Deal Definition & Profile",
+    title: "Deal Definition",
     icon: "📋",
-    description: "Establish clear parameters and objectives for your negotiation",
+    description: "CLARENCE creates a comprehensive deal profile from party inputs",
     details: [
-      "Define the scope and boundaries of the contract",
-      "Identify key stakeholders and decision-makers",
-      "Set measurable objectives and success criteria",
-      "Document must-have vs. nice-to-have terms",
-      "Establish timeline and milestones"
+      "CLARENCE will ask the parties for a number of details from which it will create a comprehensive deal profile",
+      "These details will auto-populate into the relevant parts of the contract negotiation process",
+      "Expected length of term will go into the Phase 2 term clause",
+      "Expected service levels will display in the Phase 5 services schedule",
+      "All information gathered becomes the foundation for the negotiation"
     ]
   },
   {
     id: 2,
     title: "Party Fit",
     icon: "🤝",
-    description: "Assess compatibility and alignment between negotiating parties",
+    description: "Detailed assessment of compatibility between negotiating parties",
     details: [
-      "Analyze organizational compatibility",
-      "Evaluate cultural and operational alignment",
-      "Identify shared goals and potential conflicts",
-      "Assess risk tolerance and negotiation styles",
-      "Map complementary strengths and needs"
+      "CLARENCE will obtain detailed information about each party",
+      "Present a comprehensive fit assessment",
+      "Work with the parties to understand compatibility",
+      "Find ways to optimize the fit between parties",
+      "Mitigate concerns in areas where the fit is less optimal"
     ]
   },
   {
     id: 3,
     title: "Leverage Assessment",
     icon: "⚖️",
-    description: "Understand negotiation dynamics and relative positions",
+    description: "Realistic evaluation of each party's negotiating position",
     details: [
-      "Evaluate each party's alternatives (BATNA)",
-      "Identify sources of negotiating power",
-      "Assess market conditions and timing factors",
-      "Analyze dependencies and critical needs",
-      "Map areas of flexibility and firm boundaries"
+      "CLARENCE considers several data points to assess parties' respective leverage",
+      "Provides for a realistic negotiation process",
+      "Includes point weighting in relation to each party's position selection",
+      "Accounts for leverage throughout the negotiation",
+      "Ensures balanced and fair outcomes based on actual negotiating power"
     ]
   },
   {
     id: 4,
     title: "6-Phase Negotiation Process",
     icon: "🔄",
-    description: "Structured approach to reaching mutually beneficial agreements",
+    description: "Structured negotiation through six comprehensive phases",
     details: [
-      "Phase 1: Opening positions and initial proposals",
-      "Phase 2: Information exchange and clarification",
-      "Phase 3: Bargaining and trade-offs",
-      "Phase 4: Creative problem-solving",
-      "Phase 5: Agreement refinement",
-      "Phase 6: Final terms and documentation"
+      "Phase 1 – Deal profile, party fit and leverage",
+      "Phase 2 – Contract foundation",
+      "Phase 3 – Gap narrowing",
+      "Phase 4 – Points of contention",
+      "Phase 5 – Deal drivers (the schedules)",
+      "Phase 6 – Final review and closure"
     ]
   },
   {
     id: 5,
     title: "CLARENCE Chat",
     icon: "💬",
-    description: "AI-powered mediation assistant for real-time negotiation support",
+    description: "AI advisor for position selection and compromise brokering",
     details: [
-      "Natural language interaction with CLARENCE AI",
-      "Real-time suggestions for win-win solutions",
-      "Neutral mediation to break deadlocks",
-      "Automated tracking of discussion points",
-      "Intelligent recommendations based on precedents"
+      "Always available to pragmatically advise parties on position selection",
+      "Provides guidance on points of law and business considerations",
+      "Informed by knowledge of contract type, jurisdiction, and regulatory landscape",
+      "Considers deal profile and leverage in all recommendations",
+      "Transparently brokers compromises between parties to efficiently produce optimal outcomes"
     ]
   },
   {
     id: 6,
     title: "Contract Generation",
     icon: "📄",
-    description: "Automated creation of balanced, comprehensive agreements",
+    description: "Real-time contract updates as negotiations progress",
     details: [
-      "AI-powered drafting based on negotiated terms",
-      "Industry-standard templates and clauses",
-      "Balanced language protecting both parties",
-      "Automatic consistency and completeness checks",
-      "Multiple format exports (PDF, Word, etc.)"
+      "CLARENCE updates the draft contract in real time as negotiation progresses",
+      "Reflects positions agreed between the parties immediately",
+      "Maintains clear drafting language throughout the contract evolution",
+      "Ensures internal consistency across all contract sections",
+      "Produces professional, legally sound documentation"
     ]
   },
   {
     id: 7,
     title: "Contract Governance",
     icon: "🛡️",
-    description: "Ongoing management and compliance monitoring",
+    description: "Post-signature relationship management tools",
     details: [
-      "Performance tracking against contract terms",
-      "Automated milestone and deadline reminders",
-      "Change management and amendment tracking",
-      "Dispute resolution support",
-      "Renewal and renegotiation management"
+      "CLARENCE prepares a comprehensive contract handbook for the parties",
+      "Clearly outlines key obligations for each party",
+      "Details governance mechanisms to be implemented",
+      "Ensures harmonious post-signature relationship",
+      "Provides ongoing reference for contract management"
     ]
   }
 ]
@@ -136,8 +136,8 @@ export default function HowItWorksPage() {
             How CLARENCE Works
           </h1>
           <p className="text-xl text-white/80 max-w-3xl mx-auto">
-            CLARENCE uses a proven 7-step process to facilitate successful B2B contract negotiations,
-            combining AI-powered insights with structured mediation techniques.
+            CLARENCE leads parties through an intuitive and structured negotiation process,
+            combining AI-powered insights with transparent compromise brokering to efficiently produce optimal outcomes.
           </p>
         </div>
 
@@ -185,9 +185,9 @@ export default function HowItWorksPage() {
                       {step.id === 5 && (
                         <div className="mt-6 p-4 bg-blue-600/20 rounded-lg border border-blue-500/30">
                           <p className="text-white/90 text-sm">
-                            <strong>Try CLARENCE Chat:</strong> Experience our AI mediation assistant firsthand. 
+                            <strong>Experience CLARENCE Chat:</strong> Our AI pragmatically advises on positions and transparently brokers compromises. 
                             <Link href="/auth/signup" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
-                              Sign up for free →
+                              Start your negotiation →
                             </Link>
                           </p>
                         </div>
@@ -207,7 +207,8 @@ export default function HowItWorksPage() {
               Ready to Transform Your Contract Negotiations?
             </h2>
             <p className="text-white/80 mb-8 max-w-2xl mx-auto">
-              Join forward-thinking companies using CLARENCE to negotiate better contracts in less time.
+              Join forward-thinking companies using CLARENCE to negotiate better contracts with 
+              transparent compromise brokering and real-time contract generation.
             </p>
             <div className="flex gap-4 justify-center">
               <Link href="/auth/signup" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition inline-block">
