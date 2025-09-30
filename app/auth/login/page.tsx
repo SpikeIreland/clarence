@@ -1,6 +1,26 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+
+interface User {
+  userId?: string
+  user_id?: string
+  firstName?: string
+  first_name?: string
+  lastName?: string
+  last_name?: string
+  email?: string
+  companyName?: string
+  company_name?: string
+  role?: string
+}
+
+interface ApiResponse {
+  success: boolean
+  message?: string
+  sessionToken?: string
+  user?: User
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -13,21 +33,9 @@ export default function LoginPage() {
   // Configuration
   const API_BASE = 'https://spikeislandstudios.app.n8n.cloud'
 
-  // Check for existing session on mount
-  useEffect(() => {
-    checkExistingSession()
-    
-    // Pre-fill remembered email
-    const rememberedEmail = localStorage.getItem('rememberUser')
-    if (rememberedEmail) {
-      setEmail(rememberedEmail)
-      setRememberMe(true)
-    }
-  }, [])
-
   // API call helper
-  async function apiCall(endpoint: string, method = 'GET', body: any = null, token: string | null = null) {
-    const headers: any = {
+  async function apiCall(endpoint: string, method = 'GET', body: Record<string, unknown> | null = null, token: string | null = null): Promise<ApiResponse> {
+    const headers: HeadersInit = {
       'Content-Type': 'application/json'
     }
     
@@ -66,7 +74,7 @@ export default function LoginPage() {
     })
     
     if (result.success) {
-      localStorage.setItem('sessionToken', result.sessionToken)
+      localStorage.setItem('sessionToken', result.sessionToken || '')
       localStorage.setItem('user', JSON.stringify(result.user))
       
       if (rememberMe) {
@@ -77,33 +85,8 @@ export default function LoginPage() {
     return result
   }
 
-  // Check existing session
-  async function checkExistingSession() {
-    const token = localStorage.getItem('sessionToken')
-    if (token) {
-      const result = await apiCall('/webhook/auth-validate', 'GET', null, token)
-      if (result.success && result.user) {
-        const userData = {
-          userId: result.user.user_id,
-          firstName: result.user.first_name,
-          lastName: result.user.last_name,
-          email: result.user.email,
-          company: result.user.company_name,
-          role: result.user.role,
-          sessionToken: token
-        }
-        
-        setMessage({ text: `Welcome back, ${userData.firstName}! Redirecting...`, type: 'success' })
-        setTimeout(() => redirectBasedOnRole(userData), 1000)
-      } else {
-        localStorage.removeItem('sessionToken')
-        localStorage.removeItem('user')
-      }
-    }
-  }
-
   // Redirect based on role
-  function redirectBasedOnRole(user: any) {
+  function redirectBasedOnRole(user: User) {
     const userData = {
       userId: user.userId || user.user_id,
       name: `${user.firstName || user.first_name || ''} ${user.lastName || user.last_name || ''}`.trim(),
@@ -126,6 +109,43 @@ export default function LoginPage() {
     router.push('/chat')
   }
 
+  // Check existing session - using useCallback to fix the dependency warning
+  const checkExistingSession = useCallback(async () => {
+    const token = localStorage.getItem('sessionToken')
+    if (token) {
+      const result = await apiCall('/webhook/auth-validate', 'GET', null, token)
+      if (result.success && result.user) {
+        const userData = {
+          userId: result.user.user_id,
+          firstName: result.user.first_name,
+          lastName: result.user.last_name,
+          email: result.user.email,
+          company: result.user.company_name,
+          role: result.user.role,
+          sessionToken: token
+        }
+        
+        setMessage({ text: `Welcome back, ${userData.firstName}! Redirecting...`, type: 'success' })
+        setTimeout(() => redirectBasedOnRole(userData), 1000)
+      } else {
+        localStorage.removeItem('sessionToken')
+        localStorage.removeItem('user')
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check for existing session on mount
+  useEffect(() => {
+    checkExistingSession()
+    
+    // Pre-fill remembered email
+    const rememberedEmail = localStorage.getItem('rememberUser')
+    if (rememberedEmail) {
+      setEmail(rememberedEmail)
+      setRememberMe(true)
+    }
+  }, [checkExistingSession])
+
   // Handle form submission
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -136,10 +156,10 @@ export default function LoginPage() {
 
     if (result.success && result.user) {
       setMessage({ 
-        text: `Welcome back, ${result.user.firstName}! Redirecting...`, 
+        text: `Welcome back, ${result.user.firstName || result.user.first_name}! Redirecting...`, 
         type: 'success' 
       })
-      setTimeout(() => redirectBasedOnRole(result.user), 1500)
+      setTimeout(() => redirectBasedOnRole(result.user!), 1500)
     } else {
       setMessage({ 
         text: result.message || 'Login failed. Please check your credentials.', 
@@ -238,7 +258,7 @@ export default function LoginPage() {
         {/* Sign up link */}
         <div className="text-center mt-6 pt-6 border-t border-gray-200">
           <p className="text-gray-600">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <a href="/auth/signup" className="text-purple-600 font-semibold hover:text-purple-800 hover:underline transition-colors">
               Create account
             </a>
