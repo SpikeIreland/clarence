@@ -198,11 +198,12 @@ export default function SignupPage() {
         try {
           const error = await response.json()
           errorMessage = error.message || errorMessage
-        } catch {
-  // Could not parse error response
-}
+        } catch {  // <- REMOVE THE 'e' HERE
+          // Could not parse error response
+        }
         throw new Error(errorMessage)
       }
+      
     } catch (error) {
       console.error('Sign up error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Registration failed'
