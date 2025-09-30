@@ -6,9 +6,9 @@ export default function Home() {
           <h1 className="text-3xl font-bold text-white">CLARENCE</h1>
           <div className="space-x-6">
             <button className="text-white/80 hover:text-white transition">Platform</button>
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition">
-              Sign In
-            </button>
+            <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition inline-block">
+            Sign In
+            </a>
           </div>
         </nav>
         
