@@ -22,9 +22,9 @@ export default function Home() {
           </p>
           
           <div className="flex gap-4 justify-center mb-16">
-            <button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition">
+            <a href="/chat" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition inline-block">
               Start Demo
-            </button>
+            </a>
             <button className="border border-white/30 hover:border-white/50 text-white px-8 py-4 rounded-lg text-lg transition">
               Learn More
             </button>
