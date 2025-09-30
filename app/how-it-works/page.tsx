@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 
 interface ProcessStep {
   id: number
@@ -117,12 +118,12 @@ export default function HowItWorksPage() {
       <div className="bg-black/20 backdrop-blur border-b border-white/10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            <a href="/" className="text-3xl font-bold text-white">CLARENCE</a>
+            <Link href="/" className="text-3xl font-bold text-white">CLARENCE</Link>
             <div className="flex gap-6">
-              <a href="/how-it-works" className="text-white font-semibold">How It Works</a>
-              <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition">
+              <Link href="/how-it-works" className="text-white font-semibold">How It Works</Link>
+              <Link href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition inline-block">
                 Sign In
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -185,9 +186,9 @@ export default function HowItWorksPage() {
                         <div className="mt-6 p-4 bg-blue-600/20 rounded-lg border border-blue-500/30">
                           <p className="text-white/90 text-sm">
                             <strong>Try CLARENCE Chat:</strong> Experience our AI mediation assistant firsthand. 
-                            <a href="/auth/signup" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
+                            <Link href="/auth/signup" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
                               Sign up for free →
-                            </a>
+                            </Link>
                           </p>
                         </div>
                       )}
@@ -209,12 +210,12 @@ export default function HowItWorksPage() {
               Join forward-thinking companies using CLARENCE to negotiate better contracts in less time.
             </p>
             <div className="flex gap-4 justify-center">
-              <a href="/auth/signup" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition">
+              <Link href="/auth/signup" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition inline-block">
                 Get Started Free
-              </a>
-              <a href="/auth/login" className="border border-white/30 hover:border-white/50 text-white px-8 py-4 rounded-lg text-lg transition">
+              </Link>
+              <Link href="/auth/login" className="border border-white/30 hover:border-white/50 text-white px-8 py-4 rounded-lg text-lg transition inline-block">
                 Sign In
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -222,9 +223,9 @@ export default function HowItWorksPage() {
         {/* Bottom Navigation */}
         <div className="mt-16 pt-8 border-t border-white/10">
           <div className="flex justify-center gap-8">
-            <a href="/" className="text-white/60 hover:text-white transition">Home</a>
-            <a href="/terms" className="text-white/60 hover:text-white transition">Terms</a>
-            <a href="/privacy" className="text-white/60 hover:text-white transition">Privacy</a>
+            <Link href="/" className="text-white/60 hover:text-white transition">Home</Link>
+            <Link href="/terms" className="text-white/60 hover:text-white transition">Terms</Link>
+            <Link href="/privacy" className="text-white/60 hover:text-white transition">Privacy</Link>
           </div>
         </div>
       </div>

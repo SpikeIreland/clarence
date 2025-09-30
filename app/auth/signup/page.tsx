@@ -198,9 +198,9 @@ export default function SignupPage() {
         try {
           const error = await response.json()
           errorMessage = error.message || errorMessage
-        } catch (e) {
-          // Could not parse error response
-        }
+        } catch {
+  // Could not parse error response
+}
         throw new Error(errorMessage)
       }
     } catch (error) {
