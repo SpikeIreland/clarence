@@ -188,7 +188,7 @@ export default function HowItWorksPage() {
                         <div className="mt-6 p-4 bg-blue-600/20 rounded-lg border border-blue-500/30">
                           <p className="text-white/90 text-sm">
                             <strong>Explore in detail:</strong> View the complete breakdown of each negotiation phase. 
-                            <Link href="/negotiation-phases" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
+                            <Link href="/phases" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
                               See the 6-Phase Process →
                             </Link>
                           </p>
