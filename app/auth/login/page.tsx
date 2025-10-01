@@ -106,7 +106,7 @@ export default function LoginPage() {
     
     // For now, redirect to the chat page we created
     // Later you can create a dashboard page and redirect there
-    router.push('/chat')
+    router.push('/auth/contracts-dashboard')
   }
 
   // Check existing session - using useCallback to fix the dependency warning
