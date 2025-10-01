@@ -124,6 +124,12 @@ export default function ContractsDashboard() {
     }
   }
 
+    function startAssessment(sessionId: string) {
+  // Store session info for the assessment page
+  localStorage.setItem('currentSessionId', sessionId)
+  router.push(`/auth/assessment?session=${sessionId}`)
+}
+
   function viewDetails(sessionId: string) {
     // For now, just navigate to chat with session
     continueWithClarence(sessionId)
@@ -148,7 +154,10 @@ export default function ContractsDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/" className="text-2xl font-bold text-blue-600">CLARENCE</Link>
+              <Link href="/" className="flex flex-col">
+                <span className="text-2xl font-bold text-blue-600">CLARENCE</span>
+                <span className="text-xs text-gray-500">The Honest Broker</span>
+            </Link>
               <span className="ml-4 text-gray-600">Contract Dashboard</span>
             </div>
             <div className="flex items-center gap-4">
@@ -335,18 +344,24 @@ export default function ContractsDashboard() {
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() => continueWithClarence(session.sessionId)}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
+                        onClick={() => startAssessment(session.sessionId)}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg"
                     >
-                      Continue with CLARENCE
+                        Start Assessment
                     </button>
                     <button
-                      onClick={() => viewDetails(session.sessionId)}
-                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                        onClick={() => continueWithClarence(session.sessionId)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
                     >
-                      View Details
+                        Chat
                     </button>
-                  </div>
+                    <button
+                        onClick={() => viewDetails(session.sessionId)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                        Details
+                    </button>
+                </div>
                 </div>
               ))}
             </div>
