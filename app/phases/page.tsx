@@ -96,7 +96,7 @@ export default function PhasesPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <Link href="/" className="text-3xl font-bold text-white">CLARENCE</Link>
-            <div className="flex gap-6">
+            <div className="flex gap-6 items-center">  {/* Add items-center here */}
               <Link href="/how-it-works" className="text-white/80 hover:text-white transition">How It Works</Link>
               <Link href="/phases" className="text-white font-semibold">6-Phase Process</Link>
               <Link href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition inline-block">
