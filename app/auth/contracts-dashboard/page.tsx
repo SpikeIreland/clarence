@@ -30,7 +30,7 @@ interface Session {
   lastUpdated?: string
 }
 
-const phases = {
+const phases: Record<number, { name: string; description: string; color: string }> = {
   1: { name: 'Preliminary', description: 'Deal profile & leverage assessment', color: '#6c757d' },
   2: { name: 'Foundation', description: 'Contract foundation', color: '#ffc107' },
   3: { name: 'Gap Narrowing', description: 'High-moderate alignment', color: '#007bff' },
