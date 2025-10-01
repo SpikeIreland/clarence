@@ -114,7 +114,7 @@ export default function PhasesPage() {
             The 6-Phase Negotiation Process
           </h1>
           <p className="text-xl text-white/80 max-w-3xl mx-auto">
-            CLARENCE's structured approach guides parties through a proven negotiation framework,
+            CLARENCE&apos;s structured approach guides parties through a proven negotiation framework,
             from initial profiling to final contract execution.
           </p>
         </div>
