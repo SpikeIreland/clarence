@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { 
@@ -30,16 +30,6 @@ interface Session {
   lastUpdated?: string
 }
 
-interface Provider {
-  id: string
-  name: string
-  email: string
-  contact: string
-  specialty: string
-  status: 'invited' | 'pending' | 'submitted' | 'assessed'
-  assessmentScore?: number
-}
-
 const phases = {
   1: { name: 'Preliminary', description: 'Deal profile & leverage assessment', color: '#6c757d' },
   2: { name: 'Foundation', description: 'Contract foundation', color: '#ffc107' },
@@ -55,14 +45,8 @@ export default function ContractsDashboard() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [showMetrics, setShowMetrics] = useState(true)
-  const [selectedSession, setSelectedSession] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadUserInfo()
-    loadSessions()
-  }, [])
-
-  async function loadUserInfo() {
+  const loadUserInfo = useCallback(async () => {
     const auth = localStorage.getItem('clarence_auth')
     if (!auth) {
       router.push('/auth/login')
@@ -71,7 +55,12 @@ export default function ContractsDashboard() {
     
     const authData = JSON.parse(auth)
     setUserInfo(authData.userInfo)
-  }
+  }, [router])
+
+  useEffect(() => {
+    loadUserInfo()
+    loadSessions()
+  }, [loadUserInfo])
 
   async function loadSessions() {
     try {
@@ -135,8 +124,9 @@ export default function ContractsDashboard() {
     }
   }
 
-  function getPhaseColor(phase: number) {
-    return phases[phase]?.color || '#6c757d'
+  function viewDetails(sessionId: string) {
+    // For now, just navigate to chat with session
+    continueWithClarence(sessionId)
   }
 
   function getStatusBadgeClass(status: string) {
@@ -290,7 +280,7 @@ export default function ContractsDashboard() {
           ) : sessions.length === 0 ? (
             <div className="bg-white p-12 rounded-xl text-center">
               <h3 className="text-xl font-semibold mb-2">Welcome to CLARENCE!</h3>
-              <p className="text-gray-600 mb-6">You don't have any active contracts yet.</p>
+              <p className="text-gray-600 mb-6">{`You don't have any active contracts yet.`}</p>
               <button
                 onClick={() => continueWithClarence()}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
@@ -351,7 +341,7 @@ export default function ContractsDashboard() {
                       Continue with CLARENCE
                     </button>
                     <button
-                      onClick={() => setSelectedSession(session.sessionId)}
+                      onClick={() => viewDetails(session.sessionId)}
                       className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                     >
                       View Details
