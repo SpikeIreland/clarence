@@ -191,6 +191,23 @@ export default function FoundationPhase() {
     calculateAlignment()
   }, [clauses])
 
+    useEffect(() => {
+    // Only check if we have a sessionId
+    if (!sessionId) return
+    
+    // Check if Phase 1 is complete
+    const checkPhaseAccess = async () => {
+      const phase1Complete = localStorage.getItem(`phase1_complete_${sessionId}`)
+      
+      if (!phase1Complete) {
+        alert('Please complete Phase 1 Assessment first')
+        router.push(`/auth/assessment?session=${sessionId}`)
+      }
+    }
+    
+    checkPhaseAccess()
+  }, [sessionId, router])
+  
   const calculateAlignment = () => {
     const alignedClauses = clauses.filter(c => c.aligned).length
     const totalClauses = clauses.length
@@ -287,25 +304,76 @@ export default function FoundationPhase() {
           </div>
         </div>
 
-        {/* Phase Progress */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            {phases.map((phase) => (
-              <div key={phase.num} className="flex flex-col items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold
-                  ${phase.status === 'completed' ? 'bg-green-600 text-white' : 
-                    phase.status === 'active' ? 'bg-blue-600 text-white' : 
-                    'bg-gray-200 text-gray-600'}`}>
-                  {phase.status === 'completed' ? '✓' : phase.num}
-                </div>
-                <span className="text-xs mt-1">{phase.name}</span>
-              </div>
-            ))}
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: '33%' }}></div>
-          </div>
+{/* Phase Progress */}
+<div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+  <div className="flex justify-between items-center mb-4">
+    {phases.map((phase) => (
+      <div 
+        key={phase.num} 
+        className={`flex flex-col items-center 
+          ${phase.status === 'completed' ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
+        onClick={() => {
+          if (phase.status === 'completed') {
+            // Navigate to the appropriate phase page
+            switch(phase.num) {
+              case 1:
+                router.push(`/auth/assessment?session=${sessionId}`)
+                break
+              case 2:
+                router.push(`/auth/foundation?session=${sessionId}`)
+                break
+              case 3:
+                // Add when you create Phase 3 page
+                // router.push(`/auth/gap-narrowing?session=${sessionId}`)
+                alert('Phase 3: Gap Narrowing page coming soon')
+                break
+              case 4:
+                // Add when you create Phase 4 page
+                // router.push(`/auth/complex-issues?session=${sessionId}`)
+                alert('Phase 4: Complex Issues page coming soon')
+                break
+              case 5:
+                // Add when you create Phase 5 page
+                // router.push(`/auth/commercial?session=${sessionId}`)
+                alert('Phase 5: Commercial Terms page coming soon')
+                break
+              case 6:
+                // Add when you create Phase 6 page
+                // router.push(`/auth/final-review?session=${sessionId}`)
+                alert('Phase 6: Final Review page coming soon')
+                break
+            }
+          } else if (phase.status === 'active') {
+            // Stay on current page for active phase
+            console.log('Already on this phase')
+          } else {
+            // Show message for locked phases
+            alert(`Phase ${phase.num} is locked. Please complete previous phases first.`)
+          }
+        }}
+      >
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold
+          ${phase.status === 'completed' ? 'bg-green-600 text-white shadow-lg' : 
+            phase.status === 'active' ? 'bg-blue-600 text-white shadow-lg animate-pulse' : 
+            'bg-gray-200 text-gray-600'}`}>
+          {phase.status === 'completed' ? '✓' : phase.num}
         </div>
+        <span className={`text-xs mt-1 
+          ${phase.status === 'completed' ? 'font-semibold text-green-600' : 
+            phase.status === 'active' ? 'font-semibold text-blue-600' : 
+            'text-gray-500'}`}>
+          {phase.name}
+        </span>
+        {phase.status === 'completed' && (
+          <span className="text-xs text-green-500">Click to review</span>
+        )}
+      </div>
+    ))}
+  </div>
+  <div className="w-full bg-gray-200 rounded-full h-2">
+    <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: '33%' }}></div>
+  </div>
+</div>
 
         {/* Clause Groups Tabs */}
         <div className="bg-white rounded-xl shadow-sm mb-6">

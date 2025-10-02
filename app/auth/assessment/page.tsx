@@ -44,6 +44,7 @@ export default function PreliminaryAssessment() {
   const [providerName, setProviderName] = useState<string>('Provider Name')
   const [activeSection, setActiveSection] = useState<'profile' | 'fit' | 'leverage'>('profile')
   const [leverageScore, setLeverageScore] = useState({ customer: 50, provider: 50 })
+  const [assessmentComplete, setAssessmentComplete] = useState(false)
   
   // Form states
   const [dealProfile, setDealProfile] = useState<DealProfile>({
@@ -128,9 +129,14 @@ export default function PreliminaryAssessment() {
   const handleSubmitAssessment = async () => {
     // Here you would submit to your API
     console.log('Submitting assessment:', { dealProfile, partyFit, leverageFactors })
-    
+
     // For now, just show success and calculate leverage
     calculateLeverage()
+        
+    setAssessmentComplete(true)
+
+    localStorage.setItem(`phase1_complete_${sessionId}`, 'true')
+
     alert('Assessment submitted successfully!')
   }
 
@@ -142,6 +148,7 @@ export default function PreliminaryAssessment() {
     { num: 5, name: 'Commercial', active: false },
     { num: 6, name: 'Final Review', active: false }
   ]
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -465,6 +472,16 @@ export default function PreliminaryAssessment() {
                 className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold"
                 disabled
               >
+
+                {assessmentComplete && (
+              <button
+                onClick={() => router.push(`/auth/foundation?session=${sessionId}&provider=${providerId}`)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold"
+              >
+                Proceed to Phase 2: Foundation →
+              </button>
+            )}
+
                 Draft Contract (Coming Soon)
               </button>
               <button
