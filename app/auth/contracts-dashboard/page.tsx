@@ -526,19 +526,19 @@ export default function ContractsDashboard() {
               }
             })()}
             
-<button
-                onClick={() => viewDetails(session.sessionId)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                View Details
-              </button>
-            </div>  {/* This closes the button flex container */}
-          </div>    {/* This closes the session card div */}
-        );          {/* This closes the return statement */}
-      })}           {/* This closes sessions.map() */}
-    </div>          {/* This closes the grid div */}
-  )}                {/* This closes the ternary operator */}
-</div>              {/* This closes the main Sessions div */}
+                    <button
+                      onClick={() => viewDetails(session.sessionId)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                 >
+                      View Details
+                    </button>
+                  </div>  {/* This closes the button flex container */}
+                </div>    {/* This closes the session card div */}
+               )          {/* This closes the return statement */}
+            })}           {/* This closes sessions.map() */}
+          </div>          {/* This closes the grid div */}
+        )}                {/* This closes the ternary operator */}
+      </div>              {/* This closes the main Sessions div */}
 
       {/* Floating Chat Button */}
       <button
