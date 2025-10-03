@@ -124,14 +124,12 @@ export default function ContractsDashboard() {
     }
   }
 
-    function startAssessment(sessionId: string) {
-  // Store session info for the assessment page
-  localStorage.setItem('currentSessionId', sessionId)
-  router.push(`/auth/assessment?session=${sessionId}`)
-}
+  function startAssessment(sessionId: string) {
+    localStorage.setItem('currentSessionId', sessionId)
+    router.push(`/auth/assessment?session=${sessionId}`)
+  }
 
   function viewDetails(sessionId: string) {
-    // For now, just navigate to chat with session
     continueWithClarence(sessionId)
   }
 
@@ -157,7 +155,7 @@ export default function ContractsDashboard() {
               <Link href="/" className="flex flex-col">
                 <span className="text-2xl font-bold text-blue-600">CLARENCE</span>
                 <span className="text-xs text-gray-500">The Honest Broker</span>
-            </Link>
+              </Link>
               <span className="ml-4 text-gray-600">Contract Dashboard</span>
             </div>
             <div className="flex items-center gap-4">
@@ -279,155 +277,156 @@ export default function ContractsDashboard() {
         </div>
 
         {/* Sessions */}
-<div>
-  <h2 className="text-2xl font-bold mb-4">Active Contract Negotiations</h2>
-  {loading ? (
-    <div className="bg-white p-12 rounded-xl text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-      <p className="mt-4 text-gray-600">Loading contracts...</p>
-    </div>
-  ) : sessions.length === 0 ? (
-    <div className="bg-white p-12 rounded-xl text-center">
-      <h3 className="text-xl font-semibold mb-2">Welcome to CLARENCE!</h3>
-      <p className="text-gray-600 mb-6">{`You don't have any active contracts yet.`}</p>
-      <button
-        onClick={() => continueWithClarence()}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-      >
-        💬 Start with CLARENCE Chat
-      </button>
-    </div>
-  ) : (
-    <div className="grid gap-6">
-      {sessions.map(session => {
-        const phase = session.phase || 1;
-        
-        return (
-          <div key={session.sessionId} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-semibold">
-                  {session.sessionNumber || `Contract ${session.sessionId.substring(0, 8)}`}
-                </h3>
-                <p className="text-gray-600">{session.serviceRequired}</p>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(session.status)}`}>
-                Phase {phase}: {phases[phase].name}
-              </span>
+        <div>
+          <h2 className="text-2xl font-bold mb-4">Active Contract Negotiations</h2>
+          {loading ? (
+            <div className="bg-white p-12 rounded-xl text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading contracts...</p>
             </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-              <div>
-                <span className="text-gray-500">Customer:</span>
-                <p className="font-medium">{session.customerCompany}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Provider:</span>
-                <p className="font-medium">{session.providerCompany || 'TBD'}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Value:</span>
-                <p className="font-medium">£{parseInt(session.dealValue || '0').toLocaleString()}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Progress:</span>
-                <p className="font-medium">{session.phaseAlignment || 0}%</p>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="mb-4">
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all"
-                  style={{ width: `${session.phaseAlignment || 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Phase-based navigation buttons */}
-            <div className="flex gap-2">
-              {phase === 1 ? (
-                <>
-                  <button
-                    onClick={() => startAssessment(session.sessionId)}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg"
-                  >
-                    Start Phase 1: Assessment
-                  </button>
-                  <button
-                    onClick={() => continueWithClarence(session.sessionId)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                  >
-                    💬 Chat
-                  </button>
-                </>
-              ) : phase === 2 ? (
-                <>
-                  <button
-                    onClick={() => router.push(`/auth/foundation?session=${session.sessionId}`)}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
-                  >
-                    Continue Phase 2: Foundation
-                  </button>
-                  <button
-                    onClick={() => continueWithClarence(session.sessionId)}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
-                  >
-                    💬 Chat
-                  </button>
-                </>
-              ) : phase >= 3 && phase <= 5 ? (
-                <>
-                  <button
-                    onClick={() => continueWithClarence(session.sessionId)}
-                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg"
-                  >
-                    Continue Phase {phase} Negotiation
-                  </button>
-                  <button
-                    onClick={() => continueWithClarence(session.sessionId)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                  >
-                    💬 Chat
-                  </button>
-                </>
-              ) : phase === 6 ? (
-                <>
-                  <button
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg"
-                  >
-                    Finalize Contract
-                  </button>
-                  <button
-                    onClick={() => continueWithClarence(session.sessionId)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                  >
-                    💬 Chat
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => continueWithClarence(session.sessionId)}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
-                >
-                  Continue with CLARENCE
-                </button>
-              )}
-              
+          ) : sessions.length === 0 ? (
+            <div className="bg-white p-12 rounded-xl text-center">
+              <h3 className="text-xl font-semibold mb-2">Welcome to CLARENCE!</h3>
+              <p className="text-gray-600 mb-6">{`You don't have any active contracts yet.`}</p>
               <button
-                onClick={() => viewDetails(session.sessionId)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                onClick={() => continueWithClarence()}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
               >
-                      View Details
-                    </button>
-                  </div>  {/* This closes the button flex container */}
-                </div>    {/* This closes the session card div */}
-              )          {/* This closes the return statement */}
-            })}           {/* This closes sessions.map() */}
-          </div>          {/* This closes the grid div */}
-        )}                {/* This closes the ternary operator */}
-      </div>              {/* This closes the main Sessions div */}
+                💬 Start with CLARENCE Chat
+              </button>
+            </div>
+          ) : (
+            <div className="grid gap-6">
+              {sessions.map(session => {
+                const phase = session.phase || 1;
+                
+                return (
+                  <div key={session.sessionId} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">
+                          {session.sessionNumber || `Contract ${session.sessionId.substring(0, 8)}`}
+                        </h3>
+                        <p className="text-gray-600">{session.serviceRequired}</p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(session.status)}`}>
+                        Phase {phase}: {phases[phase].name}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+                      <div>
+                        <span className="text-gray-500">Customer:</span>
+                        <p className="font-medium">{session.customerCompany}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Provider:</span>
+                        <p className="font-medium">{session.providerCompany || 'TBD'}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Value:</span>
+                        <p className="font-medium">£{parseInt(session.dealValue || '0').toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Progress:</span>
+                        <p className="font-medium">{session.phaseAlignment || 0}%</p>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mb-4">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          style={{ width: `${session.phaseAlignment || 0}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Phase-based navigation buttons */}
+                    <div className="flex gap-2">
+                      {phase === 1 ? (
+                        <>
+                          <button
+                            onClick={() => startAssessment(session.sessionId)}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg"
+                          >
+                            Start Phase 1: Assessment
+                          </button>
+                          <button
+                            onClick={() => continueWithClarence(session.sessionId)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                          >
+                            💬 Chat
+                          </button>
+                        </>
+                      ) : phase === 2 ? (
+                        <>
+                          <button
+                            onClick={() => router.push(`/auth/foundation?session=${session.sessionId}`)}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
+                          >
+                            Continue Phase 2: Foundation
+                          </button>
+                          <button
+                            onClick={() => continueWithClarence(session.sessionId)}
+                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+                          >
+                            💬 Chat
+                          </button>
+                        </>
+                      ) : phase >= 3 && phase <= 5 ? (
+                        <>
+                          <button
+                            onClick={() => continueWithClarence(session.sessionId)}
+                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg"
+                          >
+                            Continue Phase {phase} Negotiation
+                          </button>
+                          <button
+                            onClick={() => continueWithClarence(session.sessionId)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                          >
+                            💬 Chat
+                          </button>
+                        </>
+                      ) : phase === 6 ? (
+                        <>
+                          <button
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg"
+                          >
+                            Finalize Contract
+                          </button>
+                          <button
+                            onClick={() => continueWithClarence(session.sessionId)}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                          >
+                            💬 Chat
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => continueWithClarence(session.sessionId)}
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
+                        >
+                          Continue with CLARENCE
+                        </button>
+                      )}
+                      
+                      <button
+                        onClick={() => viewDetails(session.sessionId)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Floating Chat Button */}
       <button
