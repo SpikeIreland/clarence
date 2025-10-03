@@ -489,7 +489,7 @@ export default function PreliminaryAssessment() {
       )}
     </div>
 
-    {/* Secondary Actions */}
+   {/* Secondary Actions */}
     <div className="flex gap-4">
       <button
         className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold"
@@ -497,25 +497,22 @@ export default function PreliminaryAssessment() {
       >
         Draft Contract (Coming Soon)
       </button>
-        <button
-         className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
-          disabled
-        >
-            Progress Report (Coming Soon)
-        </button>
-     </div>
-
-        {/* Save Action */}
-            <div className="flex justify-end">
-                <button
-                    onClick={() => router.push('/auth/contracts-dashboard')}
-                    className="text-gray-600 hover:text-gray-900 font-semibold"
-                >
-                    Save & Return Later
-                </button>
-                </div>
-            </div>
-        </div>
+      <button
+        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
+        disabled
+      >
+        Progress Report (Coming Soon)
+      </button>
     </div>
-  )
-}
+
+    {/* Save Action */}
+    <div className="flex justify-end">
+      <button
+        onClick={() => router.push('/auth/contracts-dashboard')}
+        className="text-gray-600 hover:text-gray-900 font-semibold"
+      >
+        Save & Return Later
+      </button>
+    </div>
+  </div>  {/* This closes the space-y-4 div */}
+</div>    {/* This closes the bg-white rounded-xl div */}
