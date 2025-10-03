@@ -534,7 +534,7 @@ export default function ContractsDashboard() {
             </button>
           </div>
         </div>
-      ))}
+      ))
     </div>
   )}
 </div>
