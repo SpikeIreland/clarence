@@ -459,47 +459,63 @@ export default function PreliminaryAssessment() {
         </div>
 
         {/* Action Buttons */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex justify-between items-center">
-            <div className="flex gap-4">
-              <button
-                onClick={handleSubmitAssessment}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
-              >
-                Complete Assessment
-              </button>
-              <button
-                className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold"
-                disabled
-              >
+<div className="bg-white rounded-xl shadow-sm p-6">
+  <div className="space-y-4">
+    {/* Primary Actions */}
+    <div className="flex gap-4">
+      {!assessmentComplete ? (
+        <button
+          onClick={handleSubmitAssessment}
+          className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
+        >
+          Complete Assessment
+        </button>
+      ) : (
+        <>
+          <button
+            onClick={handleSubmitAssessment}
+            className="bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold cursor-not-allowed"
+            disabled
+          >
+            ✓ Assessment Complete
+          </button>
+          <button
+            onClick={() => router.push(`/auth/foundation?session=${sessionId}&provider=${providerId}`)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold animate-pulse"
+          >
+            Proceed to Phase 2: Foundation →
+          </button>
+        </>
+      )}
+    </div>
 
-                {assessmentComplete && (
-              <button
-                onClick={() => router.push(`/auth/foundation?session=${sessionId}&provider=${providerId}`)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold"
-              >
-                Proceed to Phase 2: Foundation →
-              </button>
-            )}
+    {/* Secondary Actions */}
+    <div className="flex gap-4">
+      <button
+        className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold"
+        disabled
+      >
+        Draft Contract (Coming Soon)
+      </button>
+        <button
+         className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
+          disabled
+        >
+            Progress Report (Coming Soon)
+        </button>
+     </div>
 
-                Draft Contract (Coming Soon)
-              </button>
-              <button
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
-                disabled
-              >
-                Progress Report (Coming Soon)
-              </button>
+        {/* Save Action */}
+            <div className="flex justify-end">
+                <button
+                    onClick={() => router.push('/auth/contracts-dashboard')}
+                    className="text-gray-600 hover:text-gray-900 font-semibold"
+                >
+                    Save & Return Later
+                </button>
+                </div>
             </div>
-            <button
-              onClick={() => router.push('/auth/contracts-dashboard')}
-              className="text-gray-600 hover:text-gray-900 font-semibold"
-            >
-              Save & Return Later
-            </button>
-          </div>
         </div>
-      </div>
     </div>
   )
 }
