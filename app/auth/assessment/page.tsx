@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+// ========== SECTION 1: INTERFACES ==========
 interface DealProfile {
   services: string
   deliveryLocations: string[]
@@ -36,8 +37,11 @@ interface LeverageFactors {
   partyFitScore: number
 }
 
+// ========== SECTION 2: MAIN COMPONENT START ==========
 export default function PreliminaryAssessment() {
   const router = useRouter()
+  
+  // ========== SECTION 3: STATE DECLARATIONS ==========
   const [currentPhase] = useState(1)
   const [sessionId, setSessionId] = useState<string>('')
   const [providerId, setProviderId] = useState<string>('')
@@ -46,7 +50,6 @@ export default function PreliminaryAssessment() {
   const [leverageScore, setLeverageScore] = useState({ customer: 50, provider: 50 })
   const [assessmentComplete, setAssessmentComplete] = useState(false)
   
-  // Form states
   const [dealProfile, setDealProfile] = useState<DealProfile>({
     services: '',
     deliveryLocations: [],
@@ -80,15 +83,14 @@ export default function PreliminaryAssessment() {
     partyFitScore: 0
   })
 
+  // ========== SECTION 4: USE EFFECTS ==========
   useEffect(() => {
-    // Check authentication
     const auth = localStorage.getItem('clarence_auth')
     if (!auth) {
       router.push('/auth/login')
       return
     }
 
-    // Get session and provider from URL or localStorage
     const urlParams = new URLSearchParams(window.location.search)
     const sessionParam = urlParams.get('session') || localStorage.getItem('currentSessionId') || ''
     const providerParam = urlParams.get('provider') || localStorage.getItem('currentProviderId') || ''
@@ -99,25 +101,21 @@ export default function PreliminaryAssessment() {
     setProviderName(providerNameParam)
   }, [router])
 
+  // ========== SECTION 5: FUNCTIONS ==========
   const calculateLeverage = () => {
-    // Simple leverage calculation based on inputs
     let customerLeverage = 50
     
-    // Deal size affects leverage
     const dealValue = parseInt(leverageFactors.dealSize.replace(/\D/g, '')) || 0
     if (dealValue > 5000000) customerLeverage += 10
     else if (dealValue > 1000000) customerLeverage += 5
     
-    // Duration affects leverage
     const duration = parseInt(leverageFactors.contractDuration) || 0
     if (duration > 36) customerLeverage += 5
     else if (duration < 12) customerLeverage -= 5
     
-    // Party fit affects leverage
     if (leverageFactors.partyFitScore > 80) customerLeverage += 10
     else if (leverageFactors.partyFitScore < 50) customerLeverage -= 10
     
-    // Ensure within bounds
     customerLeverage = Math.max(20, Math.min(80, customerLeverage))
     
     setLeverageScore({
@@ -127,16 +125,10 @@ export default function PreliminaryAssessment() {
   }
 
   const handleSubmitAssessment = async () => {
-    // Here you would submit to your API
     console.log('Submitting assessment:', { dealProfile, partyFit, leverageFactors })
-
-    // For now, just show success and calculate leverage
     calculateLeverage()
-        
     setAssessmentComplete(true)
-
     localStorage.setItem(`phase1_complete_${sessionId}`, 'true')
-
     alert('Assessment submitted successfully!')
   }
 
@@ -149,10 +141,10 @@ export default function PreliminaryAssessment() {
     { num: 6, name: 'Final Review', active: false }
   ]
 
-
+  // ========== SECTION 6: RENDER START ==========
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
+      {/* ===== SECTION 7: NAVIGATION ===== */}
       <nav className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -180,7 +172,9 @@ export default function PreliminaryAssessment() {
           </div>
         </div>
       </nav>
+      {/* ===== END SECTION 7 ===== */}
 
+      {/* ===== SECTION 8: MAIN CONTENT CONTAINER ===== */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Contract Header */}
         <div className="bg-gradient-to-r from-blue-800 to-blue-600 text-white p-6 rounded-xl mb-6">
@@ -215,7 +209,7 @@ export default function PreliminaryAssessment() {
           </div>
         </div>
 
-        {/* Assessment Sections */}
+        {/* ===== SECTION 9: ASSESSMENT SECTIONS ===== */}
         <div className="bg-white rounded-xl shadow-sm mb-6">
           <div className="border-b">
             <div className="flex">
@@ -457,62 +451,74 @@ export default function PreliminaryAssessment() {
             )}
           </div>
         </div>
+        {/* ===== END SECTION 9 ===== */}
 
-        {/* Action Buttons */}
-<div className="bg-white rounded-xl shadow-sm p-6">
-  <div className="space-y-4">
-    {/* Primary Actions */}
-    <div className="flex gap-4">
-      {!assessmentComplete ? (
-        <button
-          onClick={handleSubmitAssessment}
-          className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
-        >
-          Complete Assessment
-        </button>
-      ) : (
-        <>
-          <button
-            onClick={handleSubmitAssessment}
-            className="bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold cursor-not-allowed"
-            disabled
-          >
-            ✓ Assessment Complete
-          </button>
-          <button
-            onClick={() => router.push(`/auth/foundation?session=${sessionId}&provider=${providerId}`)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold animate-pulse"
-          >
-            Proceed to Phase 2: Foundation →
-          </button>
-        </>
-      )}
-    </div>
+        {/* ===== SECTION 10: ACTION BUTTONS ===== */}
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <div className="space-y-4">
+            {/* Primary Actions */}
+            <div className="flex gap-4">
+              {!assessmentComplete ? (
+                <button
+                  onClick={handleSubmitAssessment}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
+                >
+                  Complete Assessment
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold cursor-not-allowed"
+                    disabled
+                  >
+                    ✓ Assessment Complete
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('Navigating to foundation with session:', sessionId)
+                      router.push(`/auth/foundation?session=${sessionId}&provider=${providerId}`)
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold animate-pulse"
+                  >
+                    Proceed to Phase 2: Foundation →
+                  </button>
+                </>
+              )}
+            </div>
 
-   {/* Secondary Actions */}
-    <div className="flex gap-4">
-      <button
-        className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold"
-        disabled
-      >
-        Draft Contract (Coming Soon)
-      </button>
-      <button
-        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
-        disabled
-      >
-        Progress Report (Coming Soon)
-      </button>
-    </div>
+            {/* Secondary Actions */}
+            <div className="flex gap-4">
+              <button
+                className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold"
+                disabled
+              >
+                Draft Contract (Coming Soon)
+              </button>
+              <button
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold"
+                disabled
+              >
+                Progress Report (Coming Soon)
+              </button>
+            </div>
 
-    {/* Save Action */}
-    <div className="flex justify-end">
-      <button
-        onClick={() => router.push('/auth/contracts-dashboard')}
-        className="text-gray-600 hover:text-gray-900 font-semibold"
-      >
-        Save & Return Later
-      </button>
-    </div>
-  </div>  {/* This closes the space-y-4 div */}
-</div>    {/* This closes the bg-white rounded-xl div */}
+            {/* Save Action */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => router.push('/auth/contracts-dashboard')}
+                className="text-gray-600 hover:text-gray-900 font-semibold"
+              >
+                Save & Return Later
+              </button>
+            </div>
+          </div> {/* Closes space-y-4 */}
+        </div> {/* Closes action buttons section */}
+        {/* ===== END SECTION 10 ===== */}
+
+      </div> {/* Closes main content container - SECTION 8 */}
+      {/* ===== END SECTION 8 ===== */}
+
+    </div> /* Closes min-h-screen container - SECTION 6 */
+  ) /* Closes return statement - SECTION 6 */
+} /* Closes component function - SECTION 2 */
+/* ========== END OF COMPONENT ========== */
