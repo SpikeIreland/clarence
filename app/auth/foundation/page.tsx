@@ -403,7 +403,7 @@ export default function FoundationPhase() {
               <div className="space-y-6">
                 <h3 className="text-xl font-bold mb-4">Align Positions on Key Clauses</h3>
                 <p className="text-gray-600 mb-6">
-                  Adjust the sliders to indicate each party's position (1 = Strongly Opposed, 10 = Strongly Favorable)
+                  Adjust the sliders to indicate each party&apos;s position (1 = Strongly Opposed, 10 = Strongly Favorable)
                 </p>
                 
                 {clauses.map(clause => (
