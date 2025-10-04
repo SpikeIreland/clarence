@@ -383,14 +383,14 @@ export default function FoundationPhase() {
               >
                 Priority Setting
               </button>
-              <button
+              <              button
                 onClick={() => setActiveTab('review')}
                 className={`px-6 py-4 font-semibold border-b-2 transition
                   ${activeTab === 'review' 
                     ? 'text-blue-600 border-blue-600' 
                     : 'text-gray-600 border-transparent hover:text-gray-900'}`}
               >
-                Review & Notes
+                Review and Notes
               </button>
             </div>
           </div>
@@ -507,9 +507,9 @@ export default function FoundationPhase() {
             )}
 
             {/* Review & Notes Tab */}
-            {activeTab === 'review' && (
+                          {activeTab === 'review' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold mb-4">Review & Add Notes</h3>
+                <h3 className="text-xl font-bold mb-4">Review and Add Notes</h3>
                 <p className="text-gray-600 mb-6">
                   Add any specific notes or considerations for each clause
                 </p>
