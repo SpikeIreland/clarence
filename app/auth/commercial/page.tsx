@@ -526,59 +526,59 @@ useEffect(() => {
                 </div>
 
                 {/* Expected Charges */}
-                <div className="border rounded-lg p-6 bg-gray-50">
-                  <div className="flex justify-between items-start mb-4">
-                    <h4 className="font-semibold text-lg">Expected Charges</h4>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center
-                      ${schedulePositions[4].aligned ? 'bg-green-500' : 'bg-red-500'}`}>
-                      {schedulePositions[4].aligned ? '✓' : '✗'}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h5 className="font-semibold text-blue-900 mb-3">Customer Position</h5>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border rounded-lg mb-4"
-                        placeholder="e.g., £3,500 per FTE"
-                        value={schedulePositions[4].customerPosition}
-                        onChange={(e) => updatePosition('expected-charges', 'customer', e.target.value)}
-                      />
-                      <label className="text-sm font-medium">Priority (1-10):</label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        value={schedulePositions[4].customerPriority}
-                        onChange={(e) => updatePriority('expected-charges', 'customer', parseInt(e.target.value))}
-                        className="w-full mt-2"
-                      />
-                      <span className="text-sm font-bold text-blue-600">{schedulePositions[4].customerPriority}</span>
-                    </div>
-                    
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <h5 className="font-semibold text-green-900 mb-3">Provider Position</h5>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border rounded-lg mb-4"
-                        placeholder="e.g., £4,200 per FTE"
-                        value={schedulePositions[4].providerPosition}
-                        onChange={(e) => updatePosition('expected-charges', 'provider', e.target.value)}
-                      />
-                      <label className="text-sm font-medium">Priority (1-10):</label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        value={schedulePositions[4].providerPriority}
-                        onChange={(e) => updatePriority('expected-charges', 'provider', parseInt(e.target.value))}
-                        className="w-full mt-2"
-                      />
-                      <span className="text-sm font-bold text-green-600">{schedulePositions[4].providerPriority}</span>
-                    </div>
-                  </div>
-                </div>
+<div className="border rounded-lg p-6 bg-gray-50">
+  <div className="flex justify-between items-start mb-4">
+    <h4 className="font-semibold text-lg">Expected Charges</h4>
+    <div className={`w-8 h-8 rounded-full flex items-center justify-center
+      ${schedulePositions[4].aligned ? 'bg-green-500' : 'bg-red-500'}`}>
+      {schedulePositions[4].aligned ? '✓' : '✗'}
+    </div>
+  </div>
+  
+  <div className="grid grid-cols-2 gap-6">
+    <div className="bg-blue-50 p-4 rounded-lg">
+      <h5 className="font-semibold text-blue-900 mb-3">Customer Position</h5>
+      <input
+        type="text"
+        className="w-full px-3 py-2 border rounded-lg mb-4"
+        placeholder="e.g., £3,500 per FTE"
+        value={typeof schedulePositions[4].customerPosition === 'string' ? schedulePositions[4].customerPosition : ''}  // FIX: Ensure string
+        onChange={(e) => updatePosition('expected-charges', 'customer', e.target.value)}
+      />
+      <label className="text-sm font-medium">Priority (1-10):</label>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        value={schedulePositions[4].customerPriority}
+        onChange={(e) => updatePriority('expected-charges', 'customer', parseInt(e.target.value))}
+        className="w-full mt-2"
+      />
+      <span className="text-sm font-bold text-blue-600">{schedulePositions[4].customerPriority}</span>
+    </div>
+    
+    <div className="bg-green-50 p-4 rounded-lg">
+      <h5 className="font-semibold text-green-900 mb-3">Provider Position</h5>
+      <input
+        type="text"
+        className="w-full px-3 py-2 border rounded-lg mb-4"
+        placeholder="e.g., £4,200 per FTE"
+        value={typeof schedulePositions[4].providerPosition === 'string' ? schedulePositions[4].providerPosition : ''}  // FIX: Ensure string
+        onChange={(e) => updatePosition('expected-charges', 'provider', e.target.value)}
+      />
+      <label className="text-sm font-medium">Priority (1-10):</label>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        value={schedulePositions[4].providerPriority}
+        onChange={(e) => updatePriority('expected-charges', 'provider', parseInt(e.target.value))}
+        className="w-full mt-2"
+      />
+      <span className="text-sm font-bold text-green-600">{schedulePositions[4].providerPriority}</span>
+    </div>
+  </div>
+</div>
 
                 {/* COLA Adjustment */}
                 <div className="border rounded-lg p-6 bg-gray-50">
