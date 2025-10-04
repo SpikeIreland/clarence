@@ -207,7 +207,7 @@ export default function FoundationPhase() {
     
     checkPhaseAccess()
   }, [sessionId, router])
-  
+
   const calculateAlignment = () => {
     const alignedClauses = clauses.filter(c => c.aligned).length
     const totalClauses = clauses.length
@@ -311,61 +311,24 @@ export default function FoundationPhase() {
       <div 
         key={phase.num} 
         className={`flex flex-col items-center 
-          ${phase.status === 'completed' ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
+          ${phase.num === 5 ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
         onClick={() => {
-          if (phase.status === 'completed') {
-            // Navigate to the appropriate phase page
-            switch(phase.num) {
-              case 1:
-                router.push(`/auth/assessment?session=${sessionId}`)
-                break
-              case 2:
-                router.push(`/auth/foundation?session=${sessionId}`)
-                break
-              case 3:
-                // Add when you create Phase 3 page
-                // router.push(`/auth/gap-narrowing?session=${sessionId}`)
-                alert('Phase 3: Gap Narrowing page coming soon')
-                break
-              case 4:
-                // Add when you create Phase 4 page
-                // router.push(`/auth/complex-issues?session=${sessionId}`)
-                alert('Phase 4: Complex Issues page coming soon')
-                break
-              case 5:
-                // Add when you create Phase 5 page
-                // router.push(`/auth/commercial?session=${sessionId}`)
-                alert('Phase 5: Commercial Terms page coming soon')
-                break
-              case 6:
-                // Add when you create Phase 6 page
-                // router.push(`/auth/final-review?session=${sessionId}`)
-                alert('Phase 6: Final Review page coming soon')
-                break
-            }
-          } else if (phase.status === 'active') {
-            // Stay on current page for active phase
-            console.log('Already on this phase')
-          } else {
-            // Show message for locked phases
-            alert(`Phase ${phase.num} is locked. Please complete previous phases first.`)
+          if (phase.num === 5) {
+            // Temporary navigation to Phase 5 for demo
+            router.push(`/auth/commercial?session=${sessionId}`)
           }
         }}
       >
         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold
-          ${phase.status === 'completed' ? 'bg-green-600 text-white shadow-lg' : 
-            phase.status === 'active' ? 'bg-blue-600 text-white shadow-lg animate-pulse' : 
-            'bg-gray-200 text-gray-600'}`}>
+          ${phase.status === 'completed' ? 'bg-green-600 text-white' : 
+            phase.status === 'active' ? 'bg-blue-600 text-white' : 
+            'bg-gray-200 text-gray-600'}
+          ${phase.num === 5 ? 'ring-2 ring-purple-400 ring-offset-2' : ''}`}>
           {phase.status === 'completed' ? '✓' : phase.num}
         </div>
-        <span className={`text-xs mt-1 
-          ${phase.status === 'completed' ? 'font-semibold text-green-600' : 
-            phase.status === 'active' ? 'font-semibold text-blue-600' : 
-            'text-gray-500'}`}>
-          {phase.name}
-        </span>
-        {phase.status === 'completed' && (
-          <span className="text-xs text-green-500">Click to review</span>
+        <span className="text-xs mt-1">{phase.name}</span>
+        {phase.num === 5 && (
+          <span className="text-xs text-purple-600 font-semibold">Demo →</span>
         )}
       </div>
     ))}
