@@ -88,22 +88,7 @@ export default function CommercialTermsPhase() {
     }
   ])
 
-// ========== SECTION 4: USE EFFECTS ==========
-useEffect(() => {
-  const auth = localStorage.getItem('clarence_auth')
-  if (!auth) {
-    router.push('/auth/login')
-    return
-  }
-
-  const urlParams = new URLSearchParams(window.location.search)
-  const sessionParam = urlParams.get('session') || localStorage.getItem('currentSessionId') || ''
-  setSessionId(sessionParam)
-  
-  calculateAlignment()
-}, [schedulePositions, calculateAlignment, router])  // Added all dependencies
-
-// ========== SECTION 5: FUNCTIONS ==========
+// ========== SECTION 4: FUNCTIONS (MOVED UP) ==========
 const calculateAlignment = useCallback(() => {
   const alignedItems = schedulePositions.filter(s => s.aligned).length
   const totalItems = schedulePositions.length
@@ -147,6 +132,22 @@ const phases = [
   { num: 5, name: 'Commercial', status: 'active' },
   { num: 6, name: 'Final Review', status: 'pending' }
 ]
+
+// ========== SECTION 5: USE EFFECTS (MOVED DOWN) ==========
+useEffect(() => {
+  const auth = localStorage.getItem('clarence_auth')
+  if (!auth) {
+    router.push('/auth/login')
+    return
+  }
+
+  const urlParams = new URLSearchParams(window.location.search)
+  const sessionParam = urlParams.get('session') || localStorage.getItem('currentSessionId') || ''
+  setSessionId(sessionParam)
+  
+  calculateAlignment()
+}, [schedulePositions, calculateAlignment, router])
+
   // ========== SECTION 6: RENDER START ==========
   return (
     <div className="min-h-screen bg-gray-50">
