@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -61,7 +61,7 @@ interface LeverageFactors {
 }
 
 // ========== SECTION 2: MAIN COMPONENT START ==========
-export default function PreliminaryAssessment() {
+function PreliminaryAssessmentContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -108,6 +108,46 @@ export default function PreliminaryAssessment() {
   })
 
   // ========== SECTION 4: FUNCTIONS ==========
+  const selectProvider = (provider: Provider) => {
+    setSelectedProvider(provider)
+    // Pre-fill provider information in party fit
+    setPartyFit(prev => ({
+      ...prev,
+      providerName: provider.providerName || '',
+      providerAddress: provider.providerAddress || '',
+      providerEntity: provider.providerEntity || '',
+      providerIncorporation: provider.providerIncorporation || '',
+      providerTurnover: provider.providerTurnover || '',
+      providerEmployees: provider.providerEmployees || '',
+      providerExperience: provider.providerExperience || ''
+    }))
+  }
+
+  const loadProviders = useCallback(async (sessionId: string) => {
+    try {
+      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?sessionId=${sessionId}`
+      console.log('Loading providers from:', apiUrl)
+      
+      const response = await fetch(apiUrl)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Providers data received:', data)
+        
+        if (Array.isArray(data) && data.length > 0) {
+          setProviders(data)
+          // Auto-select first provider if only one exists
+          if (data.length === 1) {
+            selectProvider(data[0])
+          }
+        }
+      } else {
+        console.error('Failed to load providers:', response.status)
+      }
+    } catch (error) {
+      console.error('Error loading providers:', error)
+    }
+  }, [])
+
   const loadSessionData = useCallback(async () => {
     try {
       // Get session ID from URL params
@@ -144,9 +184,9 @@ export default function PreliminaryAssessment() {
     } finally {
       setLoading(false)
     }
-  }, [searchParams, router])
+  }, [searchParams, router, loadProviders])
 
-  const loadProviders = async (sessionId: string) => {
+  const loadProviders = useCallback(async (sessionId: string) => {
     try {
       const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?sessionId=${sessionId}`
       console.log('Loading providers from:', apiUrl)
@@ -169,7 +209,7 @@ export default function PreliminaryAssessment() {
     } catch (error) {
       console.error('Error loading providers:', error)
     }
-  }
+  }, [])
 
   const selectProvider = (provider: Provider) => {
     setSelectedProvider(provider)
@@ -732,5 +772,21 @@ export default function PreliminaryAssessment() {
         </div>
       </div>
     </div>
+  )
+}
+
+// Wrapper component with Suspense boundary
+export default function PreliminaryAssessment() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading assessment...</p>
+        </div>
+      </div>
+    }>
+      <PreliminaryAssessmentContent />
+    </Suspense>
   )
 }
