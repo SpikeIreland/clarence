@@ -3,6 +3,7 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <div className="container mx-auto px-4 py-16">
         <nav className="flex justify-between items-center mb-16">
+          <div>
             <h1 className="text-3xl font-bold text-white">CLARENCE</h1>
             <p className="text-sm text-white/70 mt-1">The Honest Broker</p>
           </div>
@@ -52,4 +53,3 @@ export default function Home() {
     </main>
   )
 }
-// Force rebuild Wed Oct  1 10:08:49 AWST 2025
