@@ -26,13 +26,46 @@ interface Session {
   phase?: number
 }
 
+interface DealProfile {
+  services: string
+  deliveryLocations: string[]
+  serviceLocations: string[]
+  pricingApproach: string
+  pricingExpectation: string
+}
+
+interface PartyFit {
+  customerName: string
+  customerAddress: string
+  customerEntity: string
+  customerIncorporation: string
+  customerTurnover: string
+  providerName: string
+  providerAddress: string
+  providerEntity: string
+  providerIncorporation: string
+  providerTurnover: string
+  providerEmployees: string
+  providerExperience: string
+  parentGuarantee: boolean
+  references: string[]
+}
+
+interface LeverageFactors {
+  dealSize: string
+  contractDuration: string
+  industrySector: string
+  serviceType: string
+  partyFitScore: number
+}
+
 interface AssessmentData {
   sessionId: string
   providerId: string
   providerName: string
-  dealProfile: any
-  partyFit: any
-  leverageFactors: any
+  dealProfile: DealProfile
+  partyFit: PartyFit
+  leverageFactors: LeverageFactors
   leverageScore: {
     customer: number
     provider: number
