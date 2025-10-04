@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'  // Added useCallback
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -88,60 +88,56 @@ export default function CommercialTermsPhase() {
     }
   ])
 
-  // ========== SECTION 4: USE EFFECTS ==========
-  useEffect(() => {
-    const auth = localStorage.getItem('clarence_auth')
-    if (!auth) {
-      router.push('/auth/login')
-      return
+// ========== SECTION 4: USE EFFECTS ==========
+useEffect(() => {
+  const auth = localStorage.getItem('clarence_auth')
+  if (!auth) {
+    router.push('/auth/login')
+    return
+  }
+
+  const urlParams = new URLSearchParams(window.location.search)
+  const sessionParam = urlParams.get('session') || localStorage.getItem('currentSessionId') || ''
+  setSessionId(sessionParam)
+  
+  calculateAlignment()
+}, [schedulePositions, calculateAlignment, router])  // Added all dependencies
+
+// ========== SECTION 5: FUNCTIONS ==========
+const calculateAlignment = useCallback(() => {
+  const alignedItems = schedulePositions.filter(s => s.aligned).length
+  const totalItems = schedulePositions.length
+  const alignment = Math.round((alignedItems / totalItems) * 100)
+  setOverallAlignment(alignment)
+}, [schedulePositions])  // Now wrapped with useCallback
+
+const updatePosition = (scheduleId: string, party: 'customer' | 'provider', value: string | number | boolean) => {  // Fixed: replaced 'any' with proper types
+  setSchedulePositions(prev => prev.map(item => {
+    if (item.scheduleId === scheduleId) {
+      const updated = { ...item }
+      if (party === 'customer') {
+        updated.customerPosition = value
+      } else {
+        updated.providerPosition = value
+      }
+      updated.aligned = updated.customerPosition === updated.providerPosition
+      return updated
     }
+    return item
+  }))
+}
 
-    const urlParams = new URLSearchParams(window.location.search)
-    const sessionParam = urlParams.get('session') || localStorage.getItem('currentSessionId') || ''
-    setSessionId(sessionParam)
-    
-    calculateAlignment()
-  }, [schedulePositions])
-
-  // ========== SECTION 5: FUNCTIONS ==========
-  const calculateAlignment = () => {
-    const alignedItems = schedulePositions.filter(s => s.aligned).length
-    const totalItems = schedulePositions.length
-    const alignment = Math.round((alignedItems / totalItems) * 100)
-    setOverallAlignment(alignment)
-  }
-
-  const updatePosition = (scheduleId: string, party: 'customer' | 'provider', value: any) => {
-    setSchedulePositions(prev => prev.map(item => {
-      if (item.scheduleId === scheduleId) {
-        const updated = { ...item }
-        if (party === 'customer') {
-          updated.customerPosition = value
-        } else {
-          updated.providerPosition = value
-        }
-        updated.aligned = updated.customerPosition === updated.providerPosition
-        return updated
+const updatePriority = (scheduleId: string, party: 'customer' | 'provider', priority: number) => {
+  setSchedulePositions(prev => prev.map(item => {
+    if (item.scheduleId === scheduleId) {
+      return {
+        ...item,
+        [party === 'customer' ? 'customerPriority' : 'providerPriority']: priority
       }
-      return item
-    }))
-  }
-
-  const updatePriority = (scheduleId: string, party: 'customer' | 'provider', priority: number) => {
-    setSchedulePositions(prev => prev.map(item => {
-      if (item.scheduleId === scheduleId) {
-        return {
-          ...item,
-          [party === 'customer' ? 'customerPriority' : 'providerPriority']: priority
-        }
-      }
-      return item
-    }))
-  }
-
-  const getScheduleItems = (scheduleName: string) => {
-    return schedulePositions.filter(s => s.scheduleName.toLowerCase().includes(scheduleName))
-  }
+    }
+    return item
+  }))
+}
 
   const phases = [
     { num: 1, name: 'Preliminary', status: 'completed' },
