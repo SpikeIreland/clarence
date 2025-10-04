@@ -108,7 +108,7 @@ function PreliminaryAssessmentContent() {
   })
 
   // ========== SECTION 4: FUNCTIONS ==========
-  const selectProvider = (provider: Provider) => {
+  const selectProvider = useCallback((provider: Provider) => {
     setSelectedProvider(provider)
     // Pre-fill provider information in party fit
     setPartyFit(prev => ({
@@ -121,7 +121,7 @@ function PreliminaryAssessmentContent() {
       providerEmployees: provider.providerEmployees || '',
       providerExperience: provider.providerExperience || ''
     }))
-  }
+  }, [])
 
   const loadProviders = useCallback(async (sessionId: string) => {
     try {
@@ -146,7 +146,7 @@ function PreliminaryAssessmentContent() {
     } catch (error) {
       console.error('Error loading providers:', error)
     }
-  }, [])
+  }, [selectProvider])
 
   const loadSessionData = useCallback(async () => {
     try {
@@ -185,46 +185,6 @@ function PreliminaryAssessmentContent() {
       setLoading(false)
     }
   }, [searchParams, router, loadProviders])
-
-  const loadProviders = useCallback(async (sessionId: string) => {
-    try {
-      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?sessionId=${sessionId}`
-      console.log('Loading providers from:', apiUrl)
-      
-      const response = await fetch(apiUrl)
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Providers data received:', data)
-        
-        if (Array.isArray(data) && data.length > 0) {
-          setProviders(data)
-          // Auto-select first provider if only one exists
-          if (data.length === 1) {
-            selectProvider(data[0])
-          }
-        }
-      } else {
-        console.error('Failed to load providers:', response.status)
-      }
-    } catch (error) {
-      console.error('Error loading providers:', error)
-    }
-  }, [])
-
-  const selectProvider = (provider: Provider) => {
-    setSelectedProvider(provider)
-    // Pre-fill provider information in party fit
-    setPartyFit(prev => ({
-      ...prev,
-      providerName: provider.providerName || '',
-      providerAddress: provider.providerAddress || '',
-      providerEntity: provider.providerEntity || '',
-      providerIncorporation: provider.providerIncorporation || '',
-      providerTurnover: provider.providerTurnover || '',
-      providerEmployees: provider.providerEmployees || '',
-      providerExperience: provider.providerExperience || ''
-    }))
-  }
 
   const calculateLeverage = () => {
     let customerLeverage = 50
