@@ -109,9 +109,9 @@ const calculateAlignment = useCallback(() => {
   const totalItems = schedulePositions.length
   const alignment = Math.round((alignedItems / totalItems) * 100)
   setOverallAlignment(alignment)
-}, [schedulePositions])  // Now wrapped with useCallback
+}, [schedulePositions])
 
-const updatePosition = (scheduleId: string, party: 'customer' | 'provider', value: string | number | boolean) => {  // Fixed: replaced 'any' with proper types
+const updatePosition = (scheduleId: string, party: 'customer' | 'provider', value: string | number | boolean) => {
   setSchedulePositions(prev => prev.map(item => {
     if (item.scheduleId === scheduleId) {
       const updated = { ...item }
@@ -139,15 +139,14 @@ const updatePriority = (scheduleId: string, party: 'customer' | 'provider', prio
   }))
 }
 
-  const phases = [
-    { num: 1, name: 'Preliminary', status: 'completed' },
-    { num: 2, name: 'Foundation', status: 'completed' },
-    { num: 3, name: 'Gap Narrowing', status: 'completed' },
-    { num: 4, name: 'Complex Issues', status: 'completed' },
-    { num: 5, name: 'Commercial', status: 'active' },
-    { num: 6, name: 'Final Review', status: 'pending' }
-  ]
-
+const phases = [
+  { num: 1, name: 'Preliminary', status: 'completed' },
+  { num: 2, name: 'Foundation', status: 'completed' },
+  { num: 3, name: 'Gap Narrowing', status: 'completed' },
+  { num: 4, name: 'Complex Issues', status: 'completed' },
+  { num: 5, name: 'Commercial', status: 'active' },
+  { num: 6, name: 'Final Review', status: 'pending' }
+]
   // ========== SECTION 6: RENDER START ==========
   return (
     <div className="min-h-screen bg-gray-50">
