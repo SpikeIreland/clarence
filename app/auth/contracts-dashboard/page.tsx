@@ -70,11 +70,15 @@ export default function ContractsDashboard() {
       const authData = JSON.parse(auth)
       const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/sessions-api?role=${authData.userInfo?.role || 'customer'}&email=${authData.userInfo?.email}`
       
+      console.log('Loading sessions from:', apiUrl) // Debug log
+      
       const response = await fetch(apiUrl)
       if (response.ok) {
         const data = await response.json()
+        console.log('Sessions data received:', data) // Debug log
         setSessions(Array.isArray(data) ? data : [])
       } else {
+        console.error('Failed to load sessions:', response.status)
         setSessions([])
       }
     } catch (error) {
@@ -124,13 +128,37 @@ export default function ContractsDashboard() {
     }
   }
 
-  function startAssessment(sessionId: string) {
-    localStorage.setItem('currentSessionId', sessionId)
-    router.push(`/auth/assessment?session=${sessionId}`)
-  }
-
-  function viewDetails(sessionId: string) {
-    continueWithClarence(sessionId)
+  function navigateToPhase(session: Session) {
+    // Store the full session data for the next page
+    localStorage.setItem('currentSessionId', session.sessionId)
+    localStorage.setItem('currentSession', JSON.stringify(session))
+    
+    const phase = session.phase || 1
+    
+    // Navigate based on actual implemented pages
+    switch(phase) {
+      case 1:
+        router.push(`/auth/assessment?session=${session.sessionId}`)
+        break
+      case 2:
+        router.push(`/auth/foundation?session=${session.sessionId}`)
+        break
+      case 3:
+      case 4:
+        // Phases 3-4 not implemented, skip to phase 5 for demo
+        console.log('Phases 3-4 not yet implemented, jumping to Phase 5')
+        router.push(`/auth/commercial?session=${session.sessionId}`)
+        break
+      case 5:
+        router.push(`/auth/commercial?session=${session.sessionId}`)
+        break
+      case 6:
+        // Phase 6 not implemented yet
+        continueWithClarence(session.sessionId)
+        break
+      default:
+        router.push(`/auth/assessment?session=${session.sessionId}`)
+    }
   }
 
   function getStatusBadgeClass(status: string) {
@@ -140,9 +168,68 @@ export default function ContractsDashboard() {
       'assessment_complete': 'bg-blue-100 text-blue-800',
       'completed': 'bg-green-100 text-green-800',
       'provider_matched': 'bg-purple-100 text-purple-800',
-      'mediation_pending': 'bg-orange-100 text-orange-800'
+      'mediation_pending': 'bg-orange-100 text-orange-800',
+      'in_progress': 'bg-indigo-100 text-indigo-800'
     }
     return statusClasses[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  function getPhaseActionButton(session: Session) {
+    const phase = session.phase || 1
+    
+    // Determine button text and style based on phase and status
+    if (session.status === 'completed') {
+      return {
+        text: '✓ Contract Completed',
+        className: 'bg-gray-400 cursor-not-allowed text-white',
+        disabled: true
+      }
+    }
+    
+    switch(phase) {
+      case 1:
+        return {
+          text: session.status === 'assessment_complete' 
+            ? 'Review Assessment' 
+            : 'Start Phase 1: Assessment',
+          className: session.status === 'assessment_complete'
+            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+            : 'bg-green-600 hover:bg-green-700 text-white',
+          disabled: false
+        }
+      case 2:
+        return {
+          text: 'Continue Phase 2: Foundation',
+          className: 'bg-blue-600 hover:bg-blue-700 text-white',
+          disabled: false
+        }
+      case 3:
+      case 4:
+        // For demo, skip to Phase 5
+        return {
+          text: 'Continue to Phase 5: Commercial Terms',
+          className: 'bg-purple-600 hover:bg-purple-700 text-white',
+          disabled: false
+        }
+      case 5:
+        return {
+          text: 'Continue Phase 5: Commercial Terms',
+          className: 'bg-purple-600 hover:bg-purple-700 text-white',
+          disabled: false
+        }
+      case 6:
+        return {
+          text: 'Final Review & Execution',
+          className: 'bg-green-600 hover:bg-green-700 text-white',
+          disabled: false
+        }
+      default:
+        return {
+          text: 'Start Assessment',
+          className: 'bg-blue-600 hover:bg-blue-700 text-white',
+          disabled: false
+        }
+    }
   }
 
   return (
@@ -299,6 +386,7 @@ export default function ContractsDashboard() {
             <div className="grid gap-6">
               {sessions.map(session => {
                 const phase = session.phase || 1;
+                const actionButton = getPhaseActionButton(session);
                 
                 return (
                   <div key={session.sessionId} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
@@ -310,7 +398,7 @@ export default function ContractsDashboard() {
                         <p className="text-gray-600">{session.serviceRequired}</p>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(session.status)}`}>
-                        Phase {phase}: {phases[phase].name}
+                        Phase {phase}: {phases[phase]?.name || 'Unknown'}
                       </span>
                     </div>
                     
@@ -343,78 +431,25 @@ export default function ContractsDashboard() {
                       </div>
                     </div>
 
-                    {/* Phase-based navigation buttons */}
+                    {/* Action buttons */}
                     <div className="flex gap-2">
-                      {phase === 1 ? (
-                        <>
-                          <button
-                            onClick={() => startAssessment(session.sessionId)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg"
-                          >
-                            Start Phase 1: Assessment
-                          </button>
-                          <button
-                            onClick={() => continueWithClarence(session.sessionId)}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                          >
-                            💬 Chat
-                          </button>
-                        </>
-                      ) : phase === 2 ? (
-                        <>
-                          <button
-                            onClick={() => router.push(`/auth/foundation?session=${session.sessionId}`)}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
-                          >
-                            Continue Phase 2: Foundation
-                          </button>
-                          <button
-                            onClick={() => continueWithClarence(session.sessionId)}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
-                          >
-                            💬 Chat
-                          </button>
-                        </>
-                      ) : phase >= 3 && phase <= 5 ? (
-                        <>
-                          <button
-                            onClick={() => continueWithClarence(session.sessionId)}
-                            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg"
-                          >
-                            Continue Phase {phase} Negotiation
-                          </button>
-                          <button
-                            onClick={() => continueWithClarence(session.sessionId)}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                          >
-                            💬 Chat
-                          </button>
-                        </>
-                      ) : phase === 6 ? (
-                        <>
-                          <button
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg"
-                          >
-                            Finalize Contract
-                          </button>
-                          <button
-                            onClick={() => continueWithClarence(session.sessionId)}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                          >
-                            💬 Chat
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => continueWithClarence(session.sessionId)}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg"
-                        >
-                          Continue with CLARENCE
-                        </button>
-                      )}
+                      <button
+                        onClick={() => navigateToPhase(session)}
+                        disabled={actionButton.disabled}
+                        className={`flex-1 py-2 px-4 rounded-lg ${actionButton.className}`}
+                      >
+                        {actionButton.text}
+                      </button>
                       
                       <button
-                        onClick={() => viewDetails(session.sessionId)}
+                        onClick={() => continueWithClarence(session.sessionId)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+                      >
+                        💬 Chat
+                      </button>
+                      
+                      <button
+                        onClick={() => continueWithClarence(session.sessionId)}
                         className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                       >
                         View Details

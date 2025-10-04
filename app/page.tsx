@@ -3,12 +3,14 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <div className="container mx-auto px-4 py-16">
         <nav className="flex justify-between items-center mb-16">
-          <h1 className="text-3xl font-bold text-white">CLARENCE</h1>
+            <h1 className="text-3xl font-bold text-white">CLARENCE</h1>
+            <p className="text-sm text-white/70 mt-1">The Honest Broker</p>
+          </div>
           <div className="space-x-6">
             <a href="/how-it-works" className="text-white/80 hover:text-white transition">How It Works</a>
             <a href="/phases" className="text-white/80 hover:text-white transition">6-Phase Process</a>
             <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition inline-block">
-            Sign In
+               Sign In
             </a>
           </div>
         </nav>

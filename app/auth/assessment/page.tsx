@@ -1,9 +1,32 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 // ========== SECTION 1: INTERFACES ==========
+interface Session {
+  sessionId: string
+  sessionNumber?: string
+  customerCompany: string
+  providerCompany?: string
+  serviceRequired: string
+  dealValue: string
+  status: string
+  phase?: number
+  phaseAlignment?: number
+}
+
+interface Provider {
+  providerId: string
+  providerName: string
+  providerAddress?: string
+  providerEntity?: string
+  providerIncorporation?: string
+  providerTurnover?: string
+  providerEmployees?: string
+  providerExperience?: string
+}
+
 interface DealProfile {
   services: string
   deliveryLocations: string[]
@@ -40,12 +63,13 @@ interface LeverageFactors {
 // ========== SECTION 2: MAIN COMPONENT START ==========
 export default function PreliminaryAssessment() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   
   // ========== SECTION 3: STATE DECLARATIONS ==========
-  const [currentPhase] = useState(1)
-  const [sessionId, setSessionId] = useState<string>('')
-  const [providerId, setProviderId] = useState<string>('')
-  const [providerName, setProviderName] = useState<string>('Provider Name')
+  const [loading, setLoading] = useState(true)
+  const [session, setSession] = useState<Session | null>(null)
+  const [providers, setProviders] = useState<Provider[]>([])
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [activeSection, setActiveSection] = useState<'profile' | 'fit' | 'leverage'>('profile')
   const [leverageScore, setLeverageScore] = useState({ customer: 50, provider: 50 })
   const [assessmentComplete, setAssessmentComplete] = useState(false)
@@ -83,25 +107,85 @@ export default function PreliminaryAssessment() {
     partyFitScore: 0
   })
 
-  // ========== SECTION 4: USE EFFECTS ==========
-  useEffect(() => {
-    const auth = localStorage.getItem('clarence_auth')
-    if (!auth) {
-      router.push('/auth/login')
-      return
+  // ========== SECTION 4: FUNCTIONS ==========
+  const loadSessionData = useCallback(async () => {
+    try {
+      // Get session ID from URL params
+      const sessionId = searchParams.get('session')
+      if (!sessionId) {
+        console.error('No session ID provided')
+        router.push('/auth/contracts-dashboard')
+        return
+      }
+
+      // First, try to get cached session data
+      const cachedSession = localStorage.getItem('currentSession')
+      if (cachedSession) {
+        const sessionData = JSON.parse(cachedSession)
+        if (sessionData.sessionId === sessionId) {
+          setSession(sessionData)
+          // Pre-fill some fields from session data
+          setDealProfile(prev => ({
+            ...prev,
+            services: sessionData.serviceRequired || ''
+          }))
+          setLeverageFactors(prev => ({
+            ...prev,
+            dealSize: sessionData.dealValue || ''
+          }))
+        }
+      }
+
+      // Load providers for this session
+      await loadProviders(sessionId)
+      
+    } catch (error) {
+      console.error('Error loading session data:', error)
+    } finally {
+      setLoading(false)
     }
+  }, [searchParams, router])
 
-    const urlParams = new URLSearchParams(window.location.search)
-    const sessionParam = urlParams.get('session') || localStorage.getItem('currentSessionId') || ''
-    const providerParam = urlParams.get('provider') || localStorage.getItem('currentProviderId') || ''
-    const providerNameParam = urlParams.get('providerName') || localStorage.getItem('currentProviderName') || 'Provider'
-    
-    setSessionId(sessionParam)
-    setProviderId(providerParam)
-    setProviderName(providerNameParam)
-  }, [router])
+  const loadProviders = async (sessionId: string) => {
+    try {
+      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?sessionId=${sessionId}`
+      console.log('Loading providers from:', apiUrl)
+      
+      const response = await fetch(apiUrl)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Providers data received:', data)
+        
+        if (Array.isArray(data) && data.length > 0) {
+          setProviders(data)
+          // Auto-select first provider if only one exists
+          if (data.length === 1) {
+            selectProvider(data[0])
+          }
+        }
+      } else {
+        console.error('Failed to load providers:', response.status)
+      }
+    } catch (error) {
+      console.error('Error loading providers:', error)
+    }
+  }
 
-  // ========== SECTION 5: FUNCTIONS ==========
+  const selectProvider = (provider: Provider) => {
+    setSelectedProvider(provider)
+    // Pre-fill provider information in party fit
+    setPartyFit(prev => ({
+      ...prev,
+      providerName: provider.providerName || '',
+      providerAddress: provider.providerAddress || '',
+      providerEntity: provider.providerEntity || '',
+      providerIncorporation: provider.providerIncorporation || '',
+      providerTurnover: provider.providerTurnover || '',
+      providerEmployees: provider.providerEmployees || '',
+      providerExperience: provider.providerExperience || ''
+    }))
+  }
+
   const calculateLeverage = () => {
     let customerLeverage = 50
     
@@ -125,10 +209,41 @@ export default function PreliminaryAssessment() {
   }
 
   const handleSubmitAssessment = async () => {
-    console.log('Submitting assessment:', { dealProfile, partyFit, leverageFactors })
+    if (!session || !selectedProvider) {
+      alert('Please select a provider before completing the assessment')
+      return
+    }
+
+    console.log('Submitting assessment:', { 
+      sessionId: session.sessionId,
+      providerId: selectedProvider.providerId,
+      dealProfile, 
+      partyFit, 
+      leverageFactors 
+    })
+    
     calculateLeverage()
+    
+    // Save assessment data for next phase
+    localStorage.setItem(`assessment_${session.sessionId}`, JSON.stringify({
+      sessionId: session.sessionId,
+      providerId: selectedProvider.providerId,
+      providerName: selectedProvider.providerName,
+      dealProfile,
+      partyFit,
+      leverageFactors,
+      leverageScore
+    }))
+    
     setAssessmentComplete(true)
-    localStorage.setItem(`phase1_complete_${sessionId}`, 'true')
+    
+    // TODO: Send assessment data to backend via n8n webhook
+    // const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/provider-assessmentresults', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ ... })
+    // })
+    
     alert('Assessment submitted successfully!')
   }
 
@@ -141,7 +256,45 @@ export default function PreliminaryAssessment() {
     { num: 6, name: 'Final Review', active: false }
   ]
 
+  // ========== SECTION 5: USE EFFECTS ==========
+  useEffect(() => {
+    const auth = localStorage.getItem('clarence_auth')
+    if (!auth) {
+      router.push('/auth/login')
+      return
+    }
+    
+    loadSessionData()
+  }, [loadSessionData, router])
+
   // ========== SECTION 6: RENDER START ==========
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading assessment...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Session not found</p>
+          <button
+            onClick={() => router.push('/auth/contracts-dashboard')}
+            className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ===== SECTION 7: NAVIGATION ===== */}
@@ -163,7 +316,7 @@ export default function PreliminaryAssessment() {
                 Dashboard
               </button>
               <button
-                onClick={() => router.push(`/chat?sessionId=${sessionId}`)}
+                onClick={() => router.push(`/chat?sessionId=${session.sessionId}`)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
               >
                 💬 Chat with CLARENCE
@@ -172,7 +325,6 @@ export default function PreliminaryAssessment() {
           </div>
         </div>
       </nav>
-      {/* ===== END SECTION 7 ===== */}
 
       {/* ===== SECTION 8: MAIN CONTENT CONTAINER ===== */}
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -181,8 +333,9 @@ export default function PreliminaryAssessment() {
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-2xl font-bold mb-2">Preliminary Assessment</h1>
-              <p className="text-blue-100">Session: {sessionId.substring(0, 8)}...</p>
-              <p className="text-blue-100">Provider: {providerName}</p>
+              <p className="text-blue-100">Session: {session.sessionNumber || session.sessionId.substring(0, 8)}...</p>
+              <p className="text-blue-100">Service: {session.serviceRequired}</p>
+              <p className="text-blue-100">Deal Value: £{parseInt(session.dealValue || '0').toLocaleString()}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-blue-200">Contract Phase</p>
@@ -190,6 +343,54 @@ export default function PreliminaryAssessment() {
             </div>
           </div>
         </div>
+
+        {/* Provider Selection (if multiple providers) */}
+        {providers.length > 1 && (
+          <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Select Provider for Assessment</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {providers.map(provider => (
+                <button
+                  key={provider.providerId}
+                  onClick={() => selectProvider(provider)}
+                  className={`p-4 border-2 rounded-lg text-left transition ${
+                    selectedProvider?.providerId === provider.providerId
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold">{provider.providerName}</div>
+                  {provider.providerTurnover && (
+                    <div className="text-sm text-gray-600">Turnover: {provider.providerTurnover}</div>
+                  )}
+                  {provider.providerEmployees && (
+                    <div className="text-sm text-gray-600">Employees: {provider.providerEmployees}</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Selected Provider Info */}
+        {selectedProvider && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-green-800 font-semibold">Selected Provider: </span>
+                <span className="text-green-900">{selectedProvider.providerName}</span>
+              </div>
+              {providers.length > 1 && (
+                <button
+                  onClick={() => setSelectedProvider(null)}
+                  className="text-sm text-green-600 hover:text-green-800"
+                >
+                  Change Provider
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Phase Progress Bar */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
@@ -210,248 +411,256 @@ export default function PreliminaryAssessment() {
         </div>
 
         {/* ===== SECTION 9: ASSESSMENT SECTIONS ===== */}
-        <div className="bg-white rounded-xl shadow-sm mb-6">
-          <div className="border-b">
-            <div className="flex">
-              <button
-                onClick={() => setActiveSection('profile')}
-                className={`px-6 py-4 font-semibold border-b-2 transition
-                  ${activeSection === 'profile' 
-                    ? 'text-blue-600 border-blue-600' 
-                    : 'text-gray-600 border-transparent hover:text-gray-900'}`}
-              >
-                Deal Profile
-              </button>
-              <button
-                onClick={() => setActiveSection('fit')}
-                className={`px-6 py-4 font-semibold border-b-2 transition
-                  ${activeSection === 'fit' 
-                    ? 'text-blue-600 border-blue-600' 
-                    : 'text-gray-600 border-transparent hover:text-gray-900'}`}
-              >
-                Party Fit
-              </button>
-              <button
-                onClick={() => setActiveSection('leverage')}
-                className={`px-6 py-4 font-semibold border-b-2 transition
-                  ${activeSection === 'leverage' 
-                    ? 'text-blue-600 border-blue-600' 
-                    : 'text-gray-600 border-transparent hover:text-gray-900'}`}
-              >
-                Leverage Assessment
-              </button>
+        {selectedProvider ? (
+          <div className="bg-white rounded-xl shadow-sm mb-6">
+            <div className="border-b">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveSection('profile')}
+                  className={`px-6 py-4 font-semibold border-b-2 transition
+                    ${activeSection === 'profile' 
+                      ? 'text-blue-600 border-blue-600' 
+                      : 'text-gray-600 border-transparent hover:text-gray-900'}`}
+                >
+                  Deal Profile
+                </button>
+                <button
+                  onClick={() => setActiveSection('fit')}
+                  className={`px-6 py-4 font-semibold border-b-2 transition
+                    ${activeSection === 'fit' 
+                      ? 'text-blue-600 border-blue-600' 
+                      : 'text-gray-600 border-transparent hover:text-gray-900'}`}
+                >
+                  Party Fit
+                </button>
+                <button
+                  onClick={() => setActiveSection('leverage')}
+                  className={`px-6 py-4 font-semibold border-b-2 transition
+                    ${activeSection === 'leverage' 
+                      ? 'text-blue-600 border-blue-600' 
+                      : 'text-gray-600 border-transparent hover:text-gray-900'}`}
+                >
+                  Leverage Assessment
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8">
+              {/* Deal Profile Section */}
+              {activeSection === 'profile' && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Deal Profile</h3>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Services to be Delivered
+                    </label>
+                    <textarea
+                      value={dealProfile.services}
+                      onChange={(e) => setDealProfile({...dealProfile, services: e.target.value})}
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      rows={3}
+                      placeholder="Describe the services..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Delivery Locations (Countries)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., UK, USA, Canada"
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => setDealProfile({
+                          ...dealProfile, 
+                          deliveryLocations: e.target.value.split(',').map(s => s.trim())
+                        })}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Service Locations (Countries)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., India, Philippines"
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        onChange={(e) => setDealProfile({
+                          ...dealProfile,
+                          serviceLocations: e.target.value.split(',').map(s => s.trim())
+                        })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Preferred Pricing Approach
+                      </label>
+                      <select
+                        value={dealProfile.pricingApproach}
+                        onChange={(e) => setDealProfile({...dealProfile, pricingApproach: e.target.value})}
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select approach...</option>
+                        <option value="per-fte">Per FTE</option>
+                        <option value="fixed-price">Fixed Price</option>
+                        <option value="time-materials">Time & Materials</option>
+                        <option value="outcome-based">Outcome Based</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Pricing Expectation
+                      </label>
+                      <input
+                        type="text"
+                        value={dealProfile.pricingExpectation}
+                        onChange={(e) => setDealProfile({...dealProfile, pricingExpectation: e.target.value})}
+                        placeholder="e.g., £50,000 per FTE"
+                        className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Party Fit Section */}
+              {activeSection === 'fit' && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Party Fit Assessment</h3>
+                  
+                  <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                    <h4 className="font-semibold text-blue-900 mb-3">Customer Information</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <input
+                        type="text"
+                        placeholder="Company Name"
+                        className="px-4 py-2 border rounded-lg"
+                        value={partyFit.customerName || session.customerCompany}
+                        onChange={(e) => setPartyFit({...partyFit, customerName: e.target.value})}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Annual Turnover"
+                        className="px-4 py-2 border rounded-lg"
+                        value={partyFit.customerTurnover}
+                        onChange={(e) => setPartyFit({...partyFit, customerTurnover: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-green-900 mb-3">Provider Information</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <input
+                        type="text"
+                        placeholder="Company Name"
+                        className="px-4 py-2 border rounded-lg bg-gray-100"
+                        value={partyFit.providerName}
+                        readOnly
+                      />
+                      <input
+                        type="text"
+                        placeholder="Number of Employees"
+                        className="px-4 py-2 border rounded-lg"
+                        value={partyFit.providerEmployees}
+                        onChange={(e) => setPartyFit({...partyFit, providerEmployees: e.target.value})}
+                      />
+                      <textarea
+                        placeholder="Experience with similar services"
+                        className="col-span-2 px-4 py-2 border rounded-lg"
+                        rows={3}
+                        value={partyFit.providerExperience}
+                        onChange={(e) => setPartyFit({...partyFit, providerExperience: e.target.value})}
+                      />
+                    </div>
+                    <label className="flex items-center mt-4">
+                      <input
+                        type="checkbox"
+                        className="mr-2"
+                        checked={partyFit.parentGuarantee}
+                        onChange={(e) => setPartyFit({...partyFit, parentGuarantee: e.target.checked})}
+                      />
+                      <span>Willing to provide parent company guarantee</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Leverage Assessment Section */}
+              {activeSection === 'leverage' && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Leverage Assessment</h3>
+                  
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Annual Contract Value
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., £2,000,000"
+                        className="w-full px-4 py-2 border rounded-lg"
+                        value={leverageFactors.dealSize || session.dealValue}
+                        onChange={(e) => setLeverageFactors({...leverageFactors, dealSize: e.target.value})}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Contract Duration (months)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., 36"
+                        className="w-full px-4 py-2 border rounded-lg"
+                        value={leverageFactors.contractDuration}
+                        onChange={(e) => setLeverageFactors({...leverageFactors, contractDuration: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-100 p-6 rounded-lg">
+                    <h4 className="font-semibold mb-4">Calculated Leverage</h4>
+                    <div className="relative h-12 bg-white rounded-full overflow-hidden">
+                      <div 
+                        className="absolute left-0 top-0 h-full bg-blue-600 flex items-center justify-center text-white font-bold"
+                        style={{ width: `${leverageScore.customer}%` }}
+                      >
+                        Customer {leverageScore.customer}%
+                      </div>
+                      <div 
+                        className="absolute right-0 top-0 h-full bg-gray-600 flex items-center justify-center text-white font-bold"
+                        style={{ width: `${leverageScore.provider}%` }}
+                      >
+                        Provider {leverageScore.provider}%
+                      </div>
+                    </div>
+                    <button
+                      onClick={calculateLeverage}
+                      className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                    >
+                      Recalculate Leverage
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          <div className="p-8">
-            {/* Deal Profile Section */}
-            {activeSection === 'profile' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">Deal Profile</h3>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Services to be Delivered
-                  </label>
-                  <textarea
-                    value={dealProfile.services}
-                    onChange={(e) => setDealProfile({...dealProfile, services: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    rows={3}
-                    placeholder="Describe the services..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Delivery Locations (Countries)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., UK, USA, Canada"
-                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                      onChange={(e) => setDealProfile({
-                        ...dealProfile, 
-                        deliveryLocations: e.target.value.split(',').map(s => s.trim())
-                      })}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Service Locations (Countries)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., India, Philippines"
-                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                      onChange={(e) => setDealProfile({
-                        ...dealProfile,
-                        serviceLocations: e.target.value.split(',').map(s => s.trim())
-                      })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Preferred Pricing Approach
-                    </label>
-                    <select
-                      value={dealProfile.pricingApproach}
-                      onChange={(e) => setDealProfile({...dealProfile, pricingApproach: e.target.value})}
-                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select approach...</option>
-                      <option value="per-fte">Per FTE</option>
-                      <option value="fixed-price">Fixed Price</option>
-                      <option value="time-materials">Time & Materials</option>
-                      <option value="outcome-based">Outcome Based</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pricing Expectation
-                    </label>
-                    <input
-                      type="text"
-                      value={dealProfile.pricingExpectation}
-                      onChange={(e) => setDealProfile({...dealProfile, pricingExpectation: e.target.value})}
-                      placeholder="e.g., £50,000 per FTE"
-                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Party Fit Section */}
-            {activeSection === 'fit' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">Party Fit Assessment</h3>
-                
-                <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                  <h4 className="font-semibold text-blue-900 mb-3">Customer Information</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <input
-                      type="text"
-                      placeholder="Company Name"
-                      className="px-4 py-2 border rounded-lg"
-                      value={partyFit.customerName}
-                      onChange={(e) => setPartyFit({...partyFit, customerName: e.target.value})}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Annual Turnover"
-                      className="px-4 py-2 border rounded-lg"
-                      value={partyFit.customerTurnover}
-                      onChange={(e) => setPartyFit({...partyFit, customerTurnover: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h4 className="font-semibold text-green-900 mb-3">Provider Information</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <input
-                      type="text"
-                      placeholder="Company Name"
-                      className="px-4 py-2 border rounded-lg"
-                      value={partyFit.providerName}
-                      onChange={(e) => setPartyFit({...partyFit, providerName: e.target.value})}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Number of Employees"
-                      className="px-4 py-2 border rounded-lg"
-                      value={partyFit.providerEmployees}
-                      onChange={(e) => setPartyFit({...partyFit, providerEmployees: e.target.value})}
-                    />
-                    <textarea
-                      placeholder="Experience with similar services"
-                      className="col-span-2 px-4 py-2 border rounded-lg"
-                      rows={3}
-                      value={partyFit.providerExperience}
-                      onChange={(e) => setPartyFit({...partyFit, providerExperience: e.target.value})}
-                    />
-                  </div>
-                  <label className="flex items-center mt-4">
-                    <input
-                      type="checkbox"
-                      className="mr-2"
-                      checked={partyFit.parentGuarantee}
-                      onChange={(e) => setPartyFit({...partyFit, parentGuarantee: e.target.checked})}
-                    />
-                    <span>Willing to provide parent company guarantee</span>
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {/* Leverage Assessment Section */}
-            {activeSection === 'leverage' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">Leverage Assessment</h3>
-                
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Annual Contract Value
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., £2,000,000"
-                      className="w-full px-4 py-2 border rounded-lg"
-                      value={leverageFactors.dealSize}
-                      onChange={(e) => setLeverageFactors({...leverageFactors, dealSize: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contract Duration (months)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., 36"
-                      className="w-full px-4 py-2 border rounded-lg"
-                      value={leverageFactors.contractDuration}
-                      onChange={(e) => setLeverageFactors({...leverageFactors, contractDuration: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-gray-100 p-6 rounded-lg">
-                  <h4 className="font-semibold mb-4">Calculated Leverage</h4>
-                  <div className="relative h-12 bg-white rounded-full overflow-hidden">
-                    <div 
-                      className="absolute left-0 top-0 h-full bg-blue-600 flex items-center justify-center text-white font-bold"
-                      style={{ width: `${leverageScore.customer}%` }}
-                    >
-                      Customer {leverageScore.customer}%
-                    </div>
-                    <div 
-                      className="absolute right-0 top-0 h-full bg-gray-600 flex items-center justify-center text-white font-bold"
-                      style={{ width: `${leverageScore.provider}%` }}
-                    >
-                      Provider {leverageScore.provider}%
-                    </div>
-                  </div>
-                  <button
-                    onClick={calculateLeverage}
-                    className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Recalculate Leverage
-                  </button>
-                </div>
-              </div>
+        ) : (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
+            <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
+            {providers.length === 0 && (
+              <p className="text-yellow-600 text-sm">No providers found for this session. Please check the session configuration.</p>
             )}
           </div>
-        </div>
-        {/* ===== END SECTION 9 ===== */}
+        )}
 
         {/* ===== SECTION 10: ACTION BUTTONS ===== */}
         <div className="bg-white rounded-xl shadow-sm p-6">
@@ -461,7 +670,12 @@ export default function PreliminaryAssessment() {
               {!assessmentComplete ? (
                 <button
                   onClick={handleSubmitAssessment}
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold"
+                  disabled={!selectedProvider}
+                  className={`px-6 py-3 rounded-lg font-semibold ${
+                    selectedProvider
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
                 >
                   Complete Assessment
                 </button>
@@ -475,8 +689,11 @@ export default function PreliminaryAssessment() {
                   </button>
                   <button
                     onClick={() => {
-                      console.log('Navigating to foundation with session:', sessionId)
-                      router.push(`/auth/foundation?session=${sessionId}&provider=${providerId}`)
+                      console.log('Navigating to foundation with:', {
+                        sessionId: session.sessionId,
+                        providerId: selectedProvider?.providerId
+                      })
+                      router.push(`/auth/foundation?session=${session.sessionId}&provider=${selectedProvider?.providerId}`)
                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold animate-pulse"
                   >
@@ -511,14 +728,9 @@ export default function PreliminaryAssessment() {
                 Save & Return Later
               </button>
             </div>
-          </div> {/* Closes space-y-4 */}
-        </div> {/* Closes action buttons section */}
-        {/* ===== END SECTION 10 ===== */}
-
-      </div> {/* Closes main content container - SECTION 8 */}
-      {/* ===== END SECTION 8 ===== */}
-
-    </div> /* Closes min-h-screen container - SECTION 6 */
-  ) /* Closes return statement - SECTION 6 */
-} /* Closes component function - SECTION 2 */
-/* ========== END OF COMPONENT ========== */
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
