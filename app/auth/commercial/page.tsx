@@ -390,75 +390,75 @@ useEffect(() => {
                 </div>
 
                 {/* At-Risk Percentage */}
-                <div className="border rounded-lg p-6 bg-gray-50">
-                  <div className="flex justify-between items-start mb-4">
-                    <h4 className="font-semibold text-lg">Maximum % of monthly fees at risk?</h4>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center
-                      ${schedulePositions[2].aligned ? 'bg-green-500' : 'bg-red-500'}`}>
-                      {schedulePositions[2].aligned ? '✓' : '✗'}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h5 className="font-semibold text-blue-900 mb-3">Customer Position</h5>
-                      <div className="mb-4">
-                        <label className="text-sm font-medium">At-Risk Percentage: {schedulePositions[2].customerPosition}%</label>
-                        <input
-                          type="range"
-                          min="5"
-                          max="20"
-                          value={schedulePositions[2].customerPosition}
-                          onChange={(e) => updatePosition('at-risk-percentage', 'customer', parseInt(e.target.value))}
-                          className="w-full mt-2"
-                        />
-                        <div className="flex justify-between text-xs text-gray-600">
-                          <span>5%</span>
-                          <span>20%</span>
-                        </div>
-                      </div>
-                      <label className="text-sm font-medium">Priority (1-10):</label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        value={schedulePositions[2].customerPriority}
-                        onChange={(e) => updatePriority('at-risk-percentage', 'customer', parseInt(e.target.value))}
-                        className="w-full mt-2"
-                      />
-                      <span className="text-sm font-bold text-blue-600">{schedulePositions[2].customerPriority}</span>
-                    </div>
-                    
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <h5 className="font-semibold text-green-900 mb-3">Provider Position</h5>
-                      <div className="mb-4">
-                        <label className="text-sm font-medium">At-Risk Percentage: {schedulePositions[2].providerPosition}%</label>
-                        <input
-                          type="range"
-                          min="5"
-                          max="20"
-                          value={schedulePositions[2].providerPosition}
-                          onChange={(e) => updatePosition('at-risk-percentage', 'provider', parseInt(e.target.value))}
-                          className="w-full mt-2"
-                        />
-                        <div className="flex justify-between text-xs text-gray-600">
-                          <span>5%</span>
-                          <span>20%</span>
-                        </div>
-                      </div>
-                      <label className="text-sm font-medium">Priority (1-10):</label>
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        value={schedulePositions[2].providerPriority}
-                        onChange={(e) => updatePriority('at-risk-percentage', 'provider', parseInt(e.target.value))}
-                        className="w-full mt-2"
-                      />
-                      <span className="text-sm font-bold text-green-600">{schedulePositions[2].providerPriority}</span>
-                    </div>
-                  </div>
-                </div>
+<div className="border rounded-lg p-6 bg-gray-50">
+  <div className="flex justify-between items-start mb-4">
+    <h4 className="font-semibold text-lg">Maximum % of monthly fees at risk?</h4>
+    <div className={`w-8 h-8 rounded-full flex items-center justify-center
+      ${schedulePositions[2].aligned ? 'bg-green-500' : 'bg-red-500'}`}>
+      {schedulePositions[2].aligned ? '✓' : '✗'}
+    </div>
+  </div>
+  
+  <div className="grid grid-cols-2 gap-6">
+    <div className="bg-blue-50 p-4 rounded-lg">
+      <h5 className="font-semibold text-blue-900 mb-3">Customer Position</h5>
+      <div className="mb-4">
+        <label className="text-sm font-medium">At-Risk Percentage: {schedulePositions[2].customerPosition}%</label>
+        <input
+          type="range"
+          min="5"
+          max="20"
+          value={typeof schedulePositions[2].customerPosition === 'number' ? schedulePositions[2].customerPosition : 15}  // FIX: Handle type
+          onChange={(e) => updatePosition('at-risk-percentage', 'customer', parseInt(e.target.value))}
+          className="w-full mt-2"
+        />
+        <div className="flex justify-between text-xs text-gray-600">
+          <span>5%</span>
+          <span>20%</span>
+        </div>
+      </div>
+      <label className="text-sm font-medium">Priority (1-10):</label>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        value={schedulePositions[2].customerPriority}
+        onChange={(e) => updatePriority('at-risk-percentage', 'customer', parseInt(e.target.value))}
+        className="w-full mt-2"
+      />
+      <span className="text-sm font-bold text-blue-600">{schedulePositions[2].customerPriority}</span>
+    </div>
+    
+    <div className="bg-green-50 p-4 rounded-lg">
+      <h5 className="font-semibold text-green-900 mb-3">Provider Position</h5>
+      <div className="mb-4">
+        <label className="text-sm font-medium">At-Risk Percentage: {schedulePositions[2].providerPosition}%</label>
+        <input
+          type="range"
+          min="5"
+          max="20"
+          value={typeof schedulePositions[2].providerPosition === 'number' ? schedulePositions[2].providerPosition : 5}  // FIX: Handle type
+          onChange={(e) => updatePosition('at-risk-percentage', 'provider', parseInt(e.target.value))}
+          className="w-full mt-2"
+        />
+        <div className="flex justify-between text-xs text-gray-600">
+          <span>5%</span>
+          <span>20%</span>
+        </div>
+      </div>
+      <label className="text-sm font-medium">Priority (1-10):</label>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        value={schedulePositions[2].providerPriority}
+        onChange={(e) => updatePriority('at-risk-percentage', 'provider', parseInt(e.target.value))}
+        className="w-full mt-2"
+      />
+      <span className="text-sm font-bold text-green-600">{schedulePositions[2].providerPriority}</span>
+    </div>
+  </div>
+</div>
               </div>
             )}
 
