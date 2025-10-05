@@ -364,7 +364,7 @@ function PreliminaryAssessmentContent() {
 
       // Load providers for this session
       if (sessionId) {
-        await loadProviders(sessionId, providerId)
+        await loadProviders(sessionId, providerId || undefined)
       }
       
     } catch (error) {
