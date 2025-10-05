@@ -123,9 +123,9 @@ function PreliminaryAssessmentContent() {
     }))
   }, [])
 
-  const loadProviders = useCallback(async (sessionId: string) => {
+  const loadProviders = useCallback(async (sessionId: string, targetProviderId?: string) => {
     try {
-      console.log('Loading providers for session:', sessionId)
+      console.log('Loading providers for session:', sessionId, 'targetProviderId:', targetProviderId)
       
       // For demo mode, use mock providers
       if (sessionId === 'demo-session') {
@@ -147,54 +147,120 @@ function PreliminaryAssessmentContent() {
           }
         ]
         setProviders(demoProviders)
-        // Don't auto-select in demo mode with multiple providers
         return
       }
 
-      // For real sessions, use 'session' parameter (not 'sessionId')
+      // For real sessions, use 'session' parameter
       const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?session=${sessionId}`
       console.log('Loading providers from API:', apiUrl)
       
       const response = await fetch(apiUrl)
       if (response.ok) {
         const data = await response.json()
-        console.log('Providers data received:', data)
+        console.log('Full providers data received:', data)
+        console.log('Data type:', typeof data)
+        console.log('Is array?', Array.isArray(data))
         
-        // Handle both array and single object responses
+        // The webhook seems to return an object, possibly with providers as a property
         let providersArray: Provider[] = []
         
         if (Array.isArray(data)) {
-          // If it's already an array, use it directly
-          providersArray = data
+          console.log('Data is an array with', data.length, 'items')
+          providersArray = data.map(item => ({
+            providerId: item.providerId || item.provider_id || item.id,
+            providerName: item.providerName || item.provider_name || item.name || 'Unknown Provider',
+            providerAddress: item.providerAddress || item.provider_address || item.address,
+            providerEntity: item.providerEntity || item.provider_entity || item.entity,
+            providerIncorporation: item.providerIncorporation || item.provider_incorporation || item.incorporation,
+            providerTurnover: item.providerTurnover || item.provider_turnover || item.turnover,
+            providerEmployees: item.providerEmployees || item.provider_employees || item.employees,
+            providerExperience: item.providerExperience || item.provider_experience || item.experience
+          }))
         } else if (data && typeof data === 'object') {
-          // If it's a single object, wrap it in an array
-          // Check if it has provider data structure
-          if (data.providerId || data.providerName || data.provider_id || data.provider_name) {
-            // Map the fields properly (handle both camelCase and snake_case)
-            const provider: Provider = {
-              providerId: data.providerId || data.provider_id || `provider-${sessionId}`,
-              providerName: data.providerName || data.provider_name || 'Provider',
-              providerAddress: data.providerAddress || data.provider_address,
-              providerEntity: data.providerEntity || data.provider_entity,
-              providerIncorporation: data.providerIncorporation || data.provider_incorporation,
-              providerTurnover: data.providerTurnover || data.provider_turnover,
-              providerEmployees: data.providerEmployees || data.provider_employees,
-              providerExperience: data.providerExperience || data.provider_experience
-            }
-            providersArray = [provider]
+          console.log('Data is an object, keys:', Object.keys(data))
+          
+          // Try different possible structures
+          if (data.providers && Array.isArray(data.providers)) {
+            console.log('Found providers array in data.providers')
+            providersArray = data.providers
+          } else if (data.data && Array.isArray(data.data)) {
+            console.log('Found providers array in data.data')
+            providersArray = data.data
+          } else if (data.items && Array.isArray(data.items)) {
+            console.log('Found providers array in data.items')
+            providersArray = data.items
           } else {
-            console.log('Unexpected data structure:', data)
+            // Check if the object itself looks like a single provider
+            const hasProviderFields = data.providerId || data.provider_id || 
+                                     data.providerName || data.provider_name ||
+                                     data.id || data.name
+            
+            if (hasProviderFields) {
+              console.log('Data appears to be a single provider object')
+              const provider: Provider = {
+                providerId: data.providerId || data.provider_id || data.id || `provider-${sessionId}`,
+                providerName: data.providerName || data.provider_name || data.name || 'Provider',
+                providerAddress: data.providerAddress || data.provider_address || data.address,
+                providerEntity: data.providerEntity || data.provider_entity || data.entity,
+                providerIncorporation: data.providerIncorporation || data.provider_incorporation || data.incorporation,
+                providerTurnover: data.providerTurnover || data.provider_turnover || data.turnover,
+                providerEmployees: data.providerEmployees || data.provider_employees || data.employees,
+                providerExperience: data.providerExperience || data.provider_experience || data.experience
+              }
+              providersArray = [provider]
+            } else {
+              // Try to find any array property that might contain providers
+              console.log('Looking for arrays in object properties...')
+              for (const [key, value] of Object.entries(data)) {
+                if (Array.isArray(value) && value.length > 0) {
+                  console.log(`Found array in property '${key}' with ${value.length} items`)
+                  // Check if first item looks like a provider
+                  const firstItem = value[0] as any
+                  if (firstItem && (firstItem.providerId || firstItem.provider_id || 
+                      firstItem.providerName || firstItem.provider_name ||
+                      firstItem.id || firstItem.name)) {
+                    console.log(`Using array from '${key}' as providers`)
+                    providersArray = value.map(item => ({
+                      providerId: item.providerId || item.provider_id || item.id,
+                      providerName: item.providerName || item.provider_name || item.name || 'Unknown Provider',
+                      providerAddress: item.providerAddress || item.provider_address || item.address,
+                      providerEntity: item.providerEntity || item.provider_entity || item.entity,
+                      providerIncorporation: item.providerIncorporation || item.provider_incorporation || item.incorporation,
+                      providerTurnover: item.providerTurnover || item.provider_turnover || item.turnover,
+                      providerEmployees: item.providerEmployees || item.provider_employees || item.employees,
+                      providerExperience: item.providerExperience || item.provider_experience || item.experience
+                    }))
+                    break
+                  }
+                }
+              }
+            }
           }
         }
         
+        console.log('Final processed providers array:', providersArray)
+        
         if (providersArray.length > 0) {
           setProviders(providersArray)
-          // Auto-select first provider if only one exists
-          if (providersArray.length === 1) {
+          
+          // If a specific provider was requested, auto-select it
+          if (targetProviderId) {
+            const targetProvider = providersArray.find(
+              p => p.providerId === targetProviderId || 
+                   p.provider_id === targetProviderId ||
+                   p.id === targetProviderId
+            )
+            if (targetProvider) {
+              console.log('Auto-selecting target provider:', targetProvider)
+              selectProvider(targetProvider)
+            }
+          } else if (providersArray.length === 1) {
+            // Auto-select if only one provider
+            console.log('Auto-selecting single provider')
             selectProvider(providersArray[0])
           }
         } else {
-          // If no valid providers, create default ones
+          // No valid providers found
           console.log('No valid providers found, creating defaults')
           const defaultProviders: Provider[] = [
             {
@@ -207,8 +273,12 @@ function PreliminaryAssessmentContent() {
           setProviders(defaultProviders)
         }
       } else {
-        console.error('Failed to load providers:', response.status, 'from URL:', apiUrl)
-        // Create a default provider on error
+        console.error('Failed to load providers - Status:', response.status)
+        // Try to read error message
+        const errorText = await response.text()
+        console.error('Error response:', errorText)
+        
+        // Create fallback provider
         const fallbackProvider: Provider[] = [{
           providerId: `provider-${sessionId}-fallback`,
           providerName: session?.providerCompany || 'Selected Provider',
@@ -219,7 +289,7 @@ function PreliminaryAssessmentContent() {
       }
     } catch (error) {
       console.error('Error loading providers:', error)
-      // Create a default provider on error
+      // Create fallback provider
       const fallbackProvider: Provider[] = [{
         providerId: `provider-${sessionId}-error`,
         providerName: session?.providerCompany || 'Available Provider',
@@ -232,8 +302,11 @@ function PreliminaryAssessmentContent() {
 
   const loadSessionData = useCallback(async () => {
     try {
-      // Get session ID from URL params
+      // Get session ID and provider ID from URL params
       let sessionId = searchParams.get('session')
+      const providerId = searchParams.get('provider')
+      
+      console.log('Loading session data - sessionId:', sessionId, 'providerId:', providerId)
       
       // If no session ID in URL, check localStorage
       if (!sessionId) {
@@ -285,9 +358,14 @@ function PreliminaryAssessmentContent() {
         }
       }
 
+      // Store provider ID if provided
+      if (providerId) {
+        localStorage.setItem('selectedProviderId', providerId)
+      }
+
       // Load providers for this session
       if (sessionId) {
-        await loadProviders(sessionId)
+        await loadProviders(sessionId, providerId)
       }
       
     } catch (error) {
@@ -467,30 +545,46 @@ function PreliminaryAssessmentContent() {
         </div>
 
         {/* Provider Selection (if multiple providers) */}
-        {providers.length > 1 && (
+        {providers.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-4">Select Provider for Assessment</h3>
+            <h3 className="text-lg font-semibold mb-4">
+              {providers.length > 1 
+                ? 'Select Provider to Assess' 
+                : 'Provider for Assessment'}
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {providers.map(provider => (
                 <button
-                  key={provider.providerId}
+                  key={provider.providerId || provider.provider_id}
                   onClick={() => selectProvider(provider)}
                   className={`p-4 border-2 rounded-lg text-left transition ${
-                    selectedProvider?.providerId === provider.providerId
+                    selectedProvider?.providerId === provider.providerId || 
+                    selectedProvider?.provider_id === provider.provider_id
                       ? 'border-blue-600 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="font-semibold">{provider.providerName}</div>
-                  {provider.providerTurnover && (
-                    <div className="text-sm text-gray-600">Turnover: {provider.providerTurnover}</div>
+                  <div className="font-semibold">{provider.providerName || provider.provider_name || 'Unknown Provider'}</div>
+                  {(provider.providerTurnover || provider.provider_turnover) && (
+                    <div className="text-sm text-gray-600">Turnover: {provider.providerTurnover || provider.provider_turnover}</div>
                   )}
-                  {provider.providerEmployees && (
-                    <div className="text-sm text-gray-600">Employees: {provider.providerEmployees}</div>
+                  {(provider.providerEmployees || provider.provider_employees) && (
+                    <div className="text-sm text-gray-600">Employees: {provider.providerEmployees || provider.provider_employees}</div>
                   )}
+                  <div className="mt-2 text-xs text-blue-600">
+                    {selectedProvider?.providerId === provider.providerId || 
+                     selectedProvider?.provider_id === provider.provider_id
+                      ? '✓ Currently Assessing' 
+                      : 'Click to Assess'}
+                  </div>
                 </button>
               ))}
             </div>
+            {providers.length > 1 && (
+              <p className="mt-4 text-sm text-gray-600">
+                Note: Each provider requires separate assessment. You can switch between providers at any time.
+              </p>
+            )}
           </div>
         )}
 

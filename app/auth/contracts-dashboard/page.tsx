@@ -126,37 +126,46 @@ export default function ContractsDashboard() {
     }
   }
 
-  function navigateToPhase(session: Session) {
+  function navigateToPhase(session: Session, providerId?: string) {
     // Store the full session data for the next page
     localStorage.setItem('currentSessionId', session.sessionId)
     localStorage.setItem('currentSession', JSON.stringify(session))
     
+    // Store selected provider if provided
+    if (providerId) {
+      localStorage.setItem('selectedProviderId', providerId)
+    }
+    
     const phase = session.phase || 1
     
+    // Build query string with both session and provider
+    const queryParams = providerId 
+      ? `?session=${session.sessionId}&provider=${providerId}`
+      : `?session=${session.sessionId}`
+    
     // Navigate based on actual implemented pages
-    // For now, always start at assessment if phase is 1-4
     switch(phase) {
       case 1:
-        router.push(`/auth/assessment?session=${session.sessionId}`)
+        router.push(`/auth/assessment${queryParams}`)
         break
       case 2:
-        router.push(`/auth/foundation?session=${session.sessionId}`)
+        router.push(`/auth/foundation${queryParams}`)
         break
       case 3:
       case 4:
         // For demo purposes, go to assessment first
         console.log('Starting from assessment page')
-        router.push(`/auth/assessment?session=${session.sessionId}`)
+        router.push(`/auth/assessment${queryParams}`)
         break
       case 5:
-        router.push(`/auth/commercial?session=${session.sessionId}`)
+        router.push(`/auth/commercial${queryParams}`)
         break
       case 6:
         // Phase 6 not implemented yet
         continueWithClarence(session.sessionId)
         break
       default:
-        router.push(`/auth/assessment?session=${session.sessionId}`)
+        router.push(`/auth/assessment${queryParams}`)
     }
   }
 
@@ -249,9 +258,11 @@ export default function ContractsDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/" className="flex flex-col">
-                <span className="text-2xl font-bold text-blue-600">CLARENCE</span>
-                <span className="text-xs text-gray-500">The Honest Broker</span>
+              <Link href="/" className="flex items-center">
+                <div>
+                  <div className="text-2xl font-bold text-blue-600">CLARENCE</div>
+                  <div className="text-xs text-gray-500 tracking-widest">THE HONEST BROKER</div>
+                </div>
               </Link>
               <span className="ml-4 text-gray-600">Contract Dashboard</span>
             </div>
