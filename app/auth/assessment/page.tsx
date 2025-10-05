@@ -215,20 +215,21 @@ function PreliminaryAssessmentContent() {
                 if (Array.isArray(value) && value.length > 0) {
                   console.log(`Found array in property '${key}' with ${value.length} items`)
                   // Check if first item looks like a provider
-                  const firstItem = value[0] as any
-                  if (firstItem && (firstItem.providerId || firstItem.provider_id || 
+                  const firstItem = value[0] as Record<string, unknown>
+                  if (firstItem && (
+                      firstItem.providerId || firstItem.provider_id || 
                       firstItem.providerName || firstItem.provider_name ||
                       firstItem.id || firstItem.name)) {
                     console.log(`Using array from '${key}' as providers`)
-                    providersArray = value.map(item => ({
-                      providerId: item.providerId || item.provider_id || item.id,
-                      providerName: item.providerName || item.provider_name || item.name || 'Unknown Provider',
-                      providerAddress: item.providerAddress || item.provider_address || item.address,
-                      providerEntity: item.providerEntity || item.provider_entity || item.entity,
-                      providerIncorporation: item.providerIncorporation || item.provider_incorporation || item.incorporation,
-                      providerTurnover: item.providerTurnover || item.provider_turnover || item.turnover,
-                      providerEmployees: item.providerEmployees || item.provider_employees || item.employees,
-                      providerExperience: item.providerExperience || item.provider_experience || item.experience
+                    providersArray = (value as Array<Record<string, unknown>>).map((item: Record<string, unknown>) => ({
+                      providerId: (item.providerId || item.provider_id || item.id) as string,
+                      providerName: (item.providerName || item.provider_name || item.name || 'Unknown Provider') as string,
+                      providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
+                      providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
+                      providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
+                      providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
+                      providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
+                      providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
                     }))
                     break
                   }
@@ -373,7 +374,7 @@ function PreliminaryAssessmentContent() {
     } finally {
       setLoading(false)
     }
-  }, [searchParams, router, loadProviders])
+  }, [searchParams, loadProviders])
 
   const calculateLeverage = () => {
     let customerLeverage = 50
@@ -453,17 +454,9 @@ function PreliminaryAssessmentContent() {
       return
     }
     
-    // Only load once
-    if (!loading) return
-    
+    // Only load once when component mounts
     loadSessionData()
-  }, []) // Remove dependencies to prevent re-runs
-  
-  // Separate useEffect for dependency tracking if needed
-  useEffect(() => {
-    // This will only run when loadSessionData changes
-    // But won't trigger the actual load
-  }, [loadSessionData, router])
+  }, [router, loadSessionData])
 
   // ========== SECTION 6: RENDER START ==========
   if (loading) {
