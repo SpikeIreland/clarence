@@ -247,9 +247,7 @@ function PreliminaryAssessmentContent() {
           // If a specific provider was requested, auto-select it
           if (targetProviderId) {
             const targetProvider = providersArray.find(
-              p => p.providerId === targetProviderId || 
-                   p.provider_id === targetProviderId ||
-                   p.id === targetProviderId
+              p => p.providerId === targetProviderId
             )
             if (targetProvider) {
               console.log('Auto-selecting target provider:', targetProvider)
@@ -548,25 +546,23 @@ function PreliminaryAssessmentContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {providers.map(provider => (
                 <button
-                  key={provider.providerId || provider.provider_id}
+                  key={provider.providerId}
                   onClick={() => selectProvider(provider)}
                   className={`p-4 border-2 rounded-lg text-left transition ${
-                    selectedProvider?.providerId === provider.providerId || 
-                    selectedProvider?.provider_id === provider.provider_id
+                    selectedProvider?.providerId === provider.providerId
                       ? 'border-blue-600 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  <div className="font-semibold">{provider.providerName || provider.provider_name || 'Unknown Provider'}</div>
-                  {(provider.providerTurnover || provider.provider_turnover) && (
-                    <div className="text-sm text-gray-600">Turnover: {provider.providerTurnover || provider.provider_turnover}</div>
+                  <div className="font-semibold">{provider.providerName || 'Unknown Provider'}</div>
+                  {provider.providerTurnover && (
+                    <div className="text-sm text-gray-600">Turnover: {provider.providerTurnover}</div>
                   )}
-                  {(provider.providerEmployees || provider.provider_employees) && (
-                    <div className="text-sm text-gray-600">Employees: {provider.providerEmployees || provider.provider_employees}</div>
+                  {provider.providerEmployees && (
+                    <div className="text-sm text-gray-600">Employees: {provider.providerEmployees}</div>
                   )}
                   <div className="mt-2 text-xs text-blue-600">
-                    {selectedProvider?.providerId === provider.providerId || 
-                     selectedProvider?.provider_id === provider.provider_id
+                    {selectedProvider?.providerId === provider.providerId
                       ? '✓ Currently Assessing' 
                       : 'Click to Assess'}
                   </div>
