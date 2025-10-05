@@ -73,6 +73,7 @@ function PreliminaryAssessmentContent() {
   const [activeSection, setActiveSection] = useState<'profile' | 'fit' | 'leverage'>('profile')
   const [leverageScore, setLeverageScore] = useState({ customer: 50, provider: 50 })
   const [assessmentComplete, setAssessmentComplete] = useState(false)
+  const [loadingCapabilities, setLoadingCapabilities] = useState(false)
   
   const [dealProfile, setDealProfile] = useState<DealProfile>({
     services: '',
@@ -108,9 +109,11 @@ function PreliminaryAssessmentContent() {
   })
 
   // ========== SECTION 4: FUNCTIONS ==========
-  const selectProvider = useCallback((provider: Provider) => {
+  const selectProvider = useCallback(async (provider: Provider) => {
     setSelectedProvider(provider)
-    // Pre-fill provider information in party fit
+    setLoadingCapabilities(true)
+    
+    // Pre-fill basic provider information in party fit
     setPartyFit(prev => ({
       ...prev,
       providerName: provider.providerName || '',
@@ -121,7 +124,94 @@ function PreliminaryAssessmentContent() {
       providerEmployees: provider.providerEmployees || '',
       providerExperience: provider.providerExperience || ''
     }))
-  }, [])
+    
+    // Load detailed provider capabilities
+    if (provider.providerId && session?.sessionId) {
+      console.log('Loading provider capabilities for:', provider.providerId)
+      try {
+        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?sessionId=${session.sessionId}&providerId=${provider.providerId}`
+        console.log('Fetching capabilities from:', apiUrl)
+        
+        const response = await fetch(apiUrl)
+        if (response.ok) {
+          const result = await response.json()
+          console.log('Capabilities response:', result)
+          
+          // Extract the data from the response structure
+          let capabilityData = null
+          if (Array.isArray(result) && result.length > 0) {
+            capabilityData = result[0].data
+          } else if (result.data) {
+            capabilityData = result.data
+          }
+          
+          if (capabilityData) {
+            console.log('Provider capability data:', capabilityData)
+            
+            // Update party fit with detailed provider information
+            if (capabilityData.provider) {
+              setPartyFit(prev => ({
+                ...prev,
+                providerName: capabilityData.provider.company || prev.providerName,
+                providerEntity: capabilityData.provider.industry || prev.providerEntity
+              }))
+            }
+            
+            // Update with company capabilities
+            if (capabilityData.capabilities?.company) {
+              const company = capabilityData.capabilities.company
+              setPartyFit(prev => ({
+                ...prev,
+                providerEmployees: company.numberOfEmployees?.toString() || company.size || prev.providerEmployees,
+                providerTurnover: company.annualRevenue || `Market ${company.marketShare}` || prev.providerTurnover,
+                providerExperience: company.yearsInBusiness || prev.providerExperience
+              }))
+            }
+            
+            // Update leverage scores if available
+            if (capabilityData.leverage) {
+              setLeverageScore({
+                customer: capabilityData.leverage.customerLeverage || 50,
+                provider: capabilityData.leverage.providerLeverage || 50
+              })
+            }
+            
+            // Update deal profile with service information
+            if (capabilityData.capabilities?.services) {
+              const services = capabilityData.capabilities.services
+              setDealProfile(prev => ({
+                ...prev,
+                services: prev.services || services.primary || ''
+              }))
+            }
+            
+            // Update leverage factors with commercial info
+            if (capabilityData.capabilities?.commercial) {
+              const commercial = capabilityData.capabilities.commercial
+              if (commercial.projectMin && commercial.projectMax) {
+                const avgValue = (commercial.projectMin + commercial.projectMax) / 2
+                setLeverageFactors(prev => ({
+                  ...prev,
+                  dealSize: prev.dealSize || avgValue.toString()
+                }))
+              }
+            }
+            
+            // Store full capability data for reference
+            localStorage.setItem(`provider_capabilities_${provider.providerId}`, JSON.stringify(capabilityData))
+          }
+        } else {
+          console.error('Failed to load provider capabilities:', response.status)
+        }
+      } catch (error) {
+        console.error('Error loading provider capabilities:', error)
+      } finally {
+        setLoadingCapabilities(false)
+      }
+    } else {
+      setLoadingCapabilities(false)
+    }
+  }, [session?.sessionId])
 
   const loadProviders = useCallback(async (sessionId: string, targetProviderId?: string) => {
     try {
@@ -616,6 +706,9 @@ function PreliminaryAssessmentContent() {
               <div>
                 <span className="text-green-800 font-semibold">Selected Provider: </span>
                 <span className="text-green-900">{selectedProvider.providerName}</span>
+                {loadingCapabilities && (
+                  <span className="ml-2 text-sm text-green-600">Loading capabilities...</span>
+                )}
               </div>
               {providers.length > 1 && (
                 <button
