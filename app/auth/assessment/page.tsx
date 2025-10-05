@@ -125,6 +125,31 @@ function PreliminaryAssessmentContent() {
 
   const loadProviders = useCallback(async (sessionId: string) => {
     try {
+      // For demo mode, use mock providers
+      if (sessionId === 'demo-session') {
+        const demoProviders: Provider[] = [
+          {
+            providerId: 'provider-1',
+            providerName: 'TechCorp Solutions',
+            providerTurnover: '£10M',
+            providerEmployees: '250',
+            providerExperience: 'Extensive experience in IT consulting'
+          },
+          {
+            providerId: 'provider-2',
+            providerName: 'Global Services Ltd',
+            providerTurnover: '£25M',
+            providerEmployees: '500',
+            providerExperience: 'Leading provider of managed services'
+          }
+        ]
+        setProviders(demoProviders)
+        if (demoProviders.length === 1) {
+          selectProvider(demoProviders[0])
+        }
+        return
+      }
+
       const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?sessionId=${sessionId}`
       console.log('Loading providers from:', apiUrl)
       
@@ -152,9 +177,29 @@ function PreliminaryAssessmentContent() {
     try {
       // Get session ID from URL params
       const sessionId = searchParams.get('session')
+      
+      // If no session ID in URL, try to get from localStorage
       if (!sessionId) {
-        console.error('No session ID provided')
-        router.push('/auth/contracts-dashboard')
+        const storedSessionId = localStorage.getItem('currentSessionId')
+        if (storedSessionId) {
+          // Redirect with the session ID in URL
+          router.push(`/auth/assessment?session=${storedSessionId}`)
+          return
+        }
+        
+        // For demo/testing, create a mock session
+        console.log('No session ID provided, using demo mode')
+        const demoSession: Session = {
+          sessionId: 'demo-session',
+          sessionNumber: 'DEMO-001',
+          customerCompany: 'Demo Customer Ltd',
+          serviceRequired: 'IT Consulting Services',
+          dealValue: '500000',
+          status: 'initiated',
+          phase: 1
+        }
+        setSession(demoSession)
+        setLoading(false)
         return
       }
 
