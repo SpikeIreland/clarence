@@ -137,69 +137,140 @@ function PreliminaryAssessmentContent() {
         if (response.ok) {
           const result = await response.json()
           console.log('Capabilities response:', result)
+          console.log('Response type:', typeof result)
+          console.log('Response keys:', Object.keys(result))
+          
+          // Log the full structure for debugging
+          console.log('Full response structure:', JSON.stringify(result, null, 2))
           
           // Extract the data from the response structure
           let capabilityData = null
+          
+          // The response you showed earlier was an array with one object
           if (Array.isArray(result) && result.length > 0) {
+            console.log('Response is array, extracting first item')
             capabilityData = result[0].data
           } else if (result.data) {
+            console.log('Response has data property')
             capabilityData = result.data
+          } else if (result.success && result.count > 0) {
+            console.log('Response has success flag but no data property')
+            // Maybe the whole result is the data?
+            capabilityData = result
+          } else {
+            console.log('Using entire response as capability data')
+            capabilityData = result
           }
           
           if (capabilityData) {
-            console.log('Provider capability data:', capabilityData)
+            console.log('Provider capability data structure:', capabilityData)
+            console.log('Capability data keys:', Object.keys(capabilityData))
             
             // Update party fit with detailed provider information
             if (capabilityData.provider) {
+              console.log('Updating from provider data:', capabilityData.provider)
               setPartyFit(prev => ({
                 ...prev,
                 providerName: capabilityData.provider.company || prev.providerName,
-                providerEntity: capabilityData.provider.industry || prev.providerEntity
+                providerEntity: capabilityData.provider.industry || prev.providerEntity,
+                providerAddress: capabilityData.provider.address || prev.providerAddress
               }))
             }
             
             // Update with company capabilities
             if (capabilityData.capabilities?.company) {
               const company = capabilityData.capabilities.company
+              console.log('Updating from company capabilities:', company)
               setPartyFit(prev => ({
                 ...prev,
                 providerEmployees: company.numberOfEmployees?.toString() || company.size || prev.providerEmployees,
-                providerTurnover: company.annualRevenue || `Market ${company.marketShare}` || prev.providerTurnover,
+                providerTurnover: company.annualRevenue || `Market: ${company.marketShare}` || prev.providerTurnover,
                 providerExperience: company.yearsInBusiness || prev.providerExperience
               }))
+              
+              // Add notable clients info if available
+              if (company.notableClients) {
+                setPartyFit(prev => ({
+                  ...prev,
+                  references: [company.notableClients]
+                }))
+              }
             }
             
             // Update leverage scores if available
             if (capabilityData.leverage) {
+              console.log('Updating leverage scores:', capabilityData.leverage)
+              const customerLev = parseInt(capabilityData.leverage.customerLeverage) || 50
+              const providerLev = parseInt(capabilityData.leverage.providerLeverage) || 50
               setLeverageScore({
-                customer: capabilityData.leverage.customerLeverage || 50,
-                provider: capabilityData.leverage.providerLeverage || 50
+                customer: customerLev,
+                provider: providerLev
               })
+              
+              // Also update leverage factors with alignment score
+              if (capabilityData.leverage.alignmentScore) {
+                setLeverageFactors(prev => ({
+                  ...prev,
+                  partyFitScore: parseFloat(capabilityData.leverage.alignmentScore) || 0
+                }))
+              }
             }
             
             // Update deal profile with service information
             if (capabilityData.capabilities?.services) {
               const services = capabilityData.capabilities.services
+              console.log('Updating services:', services)
               setDealProfile(prev => ({
                 ...prev,
-                services: prev.services || services.primary || ''
+                services: services.primary || prev.services || '',
+                serviceLocations: services.geographicCoverage ? 
+                  services.geographicCoverage.split(',').map((s: string) => s.trim()) : 
+                  prev.serviceLocations
               }))
             }
             
             // Update leverage factors with commercial info
             if (capabilityData.capabilities?.commercial) {
               const commercial = capabilityData.capabilities.commercial
+              console.log('Updating commercial info:', commercial)
+              
+              // Calculate average project value
               if (commercial.projectMin && commercial.projectMax) {
                 const avgValue = (commercial.projectMin + commercial.projectMax) / 2
                 setLeverageFactors(prev => ({
                   ...prev,
-                  dealSize: prev.dealSize || avgValue.toString()
+                  dealSize: avgValue.toString()
+                }))
+              }
+              
+              // Update pricing expectations
+              if (commercial.rateMin && commercial.rateMax) {
+                setDealProfile(prev => ({
+                  ...prev,
+                  pricingExpectation: `£${commercial.rateMin} - £${commercial.rateMax} per hour`
+                }))
+              }
+            }
+            
+            // Update operational preferences
+            if (capabilityData.capabilities?.operational) {
+              const operational = capabilityData.capabilities.operational
+              console.log('Updating operational info:', operational)
+              
+              // Update delivery locations
+              if (operational.geographicCoverage) {
+                setDealProfile(prev => ({
+                  ...prev,
+                  deliveryLocations: operational.geographicCoverage.split(',').map((s: string) => s.trim())
                 }))
               }
             }
             
             // Store full capability data for reference
             localStorage.setItem(`provider_capabilities_${provider.providerId}`, JSON.stringify(capabilityData))
+            console.log('Successfully stored capability data for provider:', provider.providerId)
+          } else {
+            console.log('No capability data found in response')
           }
         } else {
           console.error('Failed to load provider capabilities:', response.status)
