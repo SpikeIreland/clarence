@@ -160,15 +160,42 @@ function PreliminaryAssessmentContent() {
         const data = await response.json()
         console.log('Providers data received:', data)
         
-        if (Array.isArray(data) && data.length > 0) {
-          setProviders(data)
+        // Handle both array and single object responses
+        let providersArray: Provider[] = []
+        
+        if (Array.isArray(data)) {
+          // If it's already an array, use it directly
+          providersArray = data
+        } else if (data && typeof data === 'object') {
+          // If it's a single object, wrap it in an array
+          // Check if it has provider data structure
+          if (data.providerId || data.providerName || data.provider_id || data.provider_name) {
+            // Map the fields properly (handle both camelCase and snake_case)
+            const provider: Provider = {
+              providerId: data.providerId || data.provider_id || `provider-${sessionId}`,
+              providerName: data.providerName || data.provider_name || 'Provider',
+              providerAddress: data.providerAddress || data.provider_address,
+              providerEntity: data.providerEntity || data.provider_entity,
+              providerIncorporation: data.providerIncorporation || data.provider_incorporation,
+              providerTurnover: data.providerTurnover || data.provider_turnover,
+              providerEmployees: data.providerEmployees || data.provider_employees,
+              providerExperience: data.providerExperience || data.provider_experience
+            }
+            providersArray = [provider]
+          } else {
+            console.log('Unexpected data structure:', data)
+          }
+        }
+        
+        if (providersArray.length > 0) {
+          setProviders(providersArray)
           // Auto-select first provider if only one exists
-          if (data.length === 1) {
-            selectProvider(data[0])
+          if (providersArray.length === 1) {
+            selectProvider(providersArray[0])
           }
         } else {
-          // If no providers from API, create default ones
-          console.log('No providers from API, creating defaults')
+          // If no valid providers, create default ones
+          console.log('No valid providers found, creating defaults')
           const defaultProviders: Provider[] = [
             {
               providerId: `provider-${sessionId}-1`,
@@ -348,7 +375,16 @@ function PreliminaryAssessmentContent() {
       return
     }
     
+    // Only load once
+    if (!loading) return
+    
     loadSessionData()
+  }, []) // Remove dependencies to prevent re-runs
+  
+  // Separate useEffect for dependency tracking if needed
+  useEffect(() => {
+    // This will only run when loadSessionData changes
+    // But won't trigger the actual load
   }, [loadSessionData, router])
 
   // ========== SECTION 6: RENDER START ==========
