@@ -7,6 +7,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts'
 
+// ========== SECTION 1: INTERFACES ==========
 interface UserInfo {
   firstName?: string
   lastName?: string
@@ -39,13 +40,17 @@ const phases: Record<number, { name: string; description: string; color: string 
   6: { name: 'Final Review', description: 'Consistency & execution', color: '#28a745' }
 }
 
+// ========== SECTION 2: MAIN COMPONENT START ==========
 export default function ContractsDashboard() {
   const router = useRouter()
+  
+  // ========== SECTION 3: STATE DECLARATIONS ==========
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [showMetrics, setShowMetrics] = useState(true)
 
+  // ========== SECTION 4: FUNCTIONS ==========
   const loadUserInfo = useCallback(async () => {
     const auth = localStorage.getItem('clarence_auth')
     if (!auth) {
@@ -56,11 +61,6 @@ export default function ContractsDashboard() {
     const authData = JSON.parse(auth)
     setUserInfo(authData.userInfo)
   }, [router])
-
-  useEffect(() => {
-    loadUserInfo()
-    loadSessions()
-  }, [loadUserInfo])
 
   async function loadSessions() {
     try {
@@ -117,8 +117,6 @@ export default function ContractsDashboard() {
     }
   }
 
-  const metrics = getMetricsData()
-
   function continueWithClarence(sessionId?: string) {
     if (sessionId) {
       localStorage.setItem('currentSessionId', sessionId)
@@ -136,6 +134,7 @@ export default function ContractsDashboard() {
     const phase = session.phase || 1
     
     // Navigate based on actual implemented pages
+    // For now, always start at assessment if phase is 1-4
     switch(phase) {
       case 1:
         router.push(`/auth/assessment?session=${session.sessionId}`)
@@ -145,9 +144,9 @@ export default function ContractsDashboard() {
         break
       case 3:
       case 4:
-        // Phases 3-4 not implemented, skip to phase 5 for demo
-        console.log('Phases 3-4 not yet implemented, jumping to Phase 5')
-        router.push(`/auth/commercial?session=${session.sessionId}`)
+        // For demo purposes, go to assessment first
+        console.log('Starting from assessment page')
+        router.push(`/auth/assessment?session=${session.sessionId}`)
         break
       case 5:
         router.push(`/auth/commercial?session=${session.sessionId}`)
@@ -186,6 +185,7 @@ export default function ContractsDashboard() {
       }
     }
     
+    // For demo purposes, always allow starting from assessment
     switch(phase) {
       case 1:
         return {
@@ -205,10 +205,10 @@ export default function ContractsDashboard() {
         }
       case 3:
       case 4:
-        // For demo, skip to Phase 5
+        // For phases 3-4, start from assessment for demo
         return {
-          text: 'Continue to Phase 5: Commercial Terms',
-          className: 'bg-purple-600 hover:bg-purple-700 text-white',
+          text: 'Start Assessment Process',
+          className: 'bg-green-600 hover:bg-green-700 text-white',
           disabled: false
         }
       case 5:
@@ -232,9 +232,19 @@ export default function ContractsDashboard() {
     }
   }
 
+  // ========== SECTION 5: USE EFFECTS ==========
+  useEffect(() => {
+    loadUserInfo()
+    loadSessions()
+  }, [loadUserInfo])
+
+  // ========== SECTION 6: METRICS CALCULATION ==========
+  const metrics = getMetricsData()
+
+  // ========== SECTION 7: RENDER START ==========
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
+      {/* ========== SECTION 8: NAVIGATION BAR ========== */}
       <nav className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -262,9 +272,12 @@ export default function ContractsDashboard() {
           </div>
         </div>
       </nav>
+      {/* ========== END SECTION 8 ========== */}
 
+      {/* ========== SECTION 9: MAIN CONTENT CONTAINER ========== */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+        
+        {/* ========== SECTION 10: HEADER BANNER ========== */}
         <div className="bg-gradient-to-r from-blue-800 to-blue-600 text-white p-8 rounded-xl mb-8">
           <h1 className="text-3xl font-bold mb-2">
             Welcome back, {userInfo?.firstName || 'User'}
@@ -273,8 +286,9 @@ export default function ContractsDashboard() {
             {userInfo?.company || 'Your Company'} | {userInfo?.role === 'admin' ? 'Administrator' : 'Customer Portal'}
           </p>
         </div>
+        {/* ========== END SECTION 10 ========== */}
 
-        {/* Metrics Dashboard */}
+        {/* ========== SECTION 11: METRICS DASHBOARD ========== */}
         {showMetrics && sessions.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {/* Contract Status Pie Chart */}
@@ -336,8 +350,9 @@ export default function ContractsDashboard() {
             </div>
           </div>
         )}
+        {/* ========== END SECTION 11 ========== */}
 
-        {/* Quick Stats */}
+        {/* ========== SECTION 12: QUICK STATS CARDS ========== */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white p-6 rounded-xl shadow-sm">
             <div className="text-3xl font-bold text-blue-600">{sessions.length}</div>
@@ -362,16 +377,20 @@ export default function ContractsDashboard() {
             <div className="text-gray-600">Avg. Completion</div>
           </div>
         </div>
+        {/* ========== END SECTION 12 ========== */}
 
-        {/* Sessions */}
+        {/* ========== SECTION 13: SESSIONS LIST ========== */}
         <div>
           <h2 className="text-2xl font-bold mb-4">Active Contract Negotiations</h2>
+          
           {loading ? (
+            // Loading State
             <div className="bg-white p-12 rounded-xl text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
               <p className="mt-4 text-gray-600">Loading contracts...</p>
             </div>
           ) : sessions.length === 0 ? (
+            // Empty State
             <div className="bg-white p-12 rounded-xl text-center">
               <h3 className="text-xl font-semibold mb-2">Welcome to CLARENCE!</h3>
               <p className="text-gray-600 mb-6">{`You don't have any active contracts yet.`}</p>
@@ -383,6 +402,7 @@ export default function ContractsDashboard() {
               </button>
             </div>
           ) : (
+            // Sessions Grid
             <div className="grid gap-6">
               {sessions.map(session => {
                 const phase = session.phase || 1;
@@ -390,6 +410,7 @@ export default function ContractsDashboard() {
                 
                 return (
                   <div key={session.sessionId} className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow">
+                    {/* Session Header */}
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <h3 className="text-lg font-semibold">
@@ -402,6 +423,7 @@ export default function ContractsDashboard() {
                       </span>
                     </div>
                     
+                    {/* Session Details Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
                       <div>
                         <span className="text-gray-500">Customer:</span>
@@ -431,7 +453,7 @@ export default function ContractsDashboard() {
                       </div>
                     </div>
 
-                    {/* Action buttons */}
+                    {/* Action Buttons */}
                     <div className="flex gap-2">
                       <button
                         onClick={() => navigateToPhase(session)}
@@ -461,9 +483,12 @@ export default function ContractsDashboard() {
             </div>
           )}
         </div>
-      </div>
+        {/* ========== END SECTION 13 ========== */}
 
-      {/* Floating Chat Button */}
+      </div>
+      {/* ========== END SECTION 9 ========== */}
+
+      {/* ========== SECTION 14: FLOATING CHAT BUTTON ========== */}
       <button
         onClick={() => continueWithClarence()}
         className="fixed bottom-8 right-8 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all"
@@ -473,6 +498,11 @@ export default function ContractsDashboard() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
         </svg>
       </button>
+      {/* ========== END SECTION 14 ========== */}
+      
     </div>
+    /* End of min-h-screen container */
   )
+  /* End of component return */
 }
+/* ========== END OF COMPONENT ========== */
