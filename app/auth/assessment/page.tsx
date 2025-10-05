@@ -125,8 +125,11 @@ function PreliminaryAssessmentContent() {
 
   const loadProviders = useCallback(async (sessionId: string) => {
     try {
+      console.log('Loading providers for session:', sessionId)
+      
       // For demo mode, use mock providers
       if (sessionId === 'demo-session') {
+        console.log('Creating demo providers')
         const demoProviders: Provider[] = [
           {
             providerId: 'provider-1',
@@ -144,14 +147,13 @@ function PreliminaryAssessmentContent() {
           }
         ]
         setProviders(demoProviders)
-        if (demoProviders.length === 1) {
-          selectProvider(demoProviders[0])
-        }
+        // Don't auto-select in demo mode with multiple providers
         return
       }
 
+      // For real sessions, try to load from API
       const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?sessionId=${sessionId}`
-      console.log('Loading providers from:', apiUrl)
+      console.log('Loading providers from API:', apiUrl)
       
       const response = await fetch(apiUrl)
       if (response.ok) {
@@ -164,52 +166,87 @@ function PreliminaryAssessmentContent() {
           if (data.length === 1) {
             selectProvider(data[0])
           }
+        } else {
+          // If no providers from API, create default ones
+          console.log('No providers from API, creating defaults')
+          const defaultProviders: Provider[] = [
+            {
+              providerId: `provider-${sessionId}-1`,
+              providerName: session?.providerCompany || 'Provider Company A',
+              providerTurnover: 'Not specified',
+              providerEmployees: 'Not specified'
+            }
+          ]
+          setProviders(defaultProviders)
         }
       } else {
         console.error('Failed to load providers:', response.status)
+        // Create a default provider on error
+        const fallbackProvider: Provider[] = [{
+          providerId: `provider-${sessionId}-fallback`,
+          providerName: session?.providerCompany || 'Selected Provider',
+          providerTurnover: 'Not specified',
+          providerEmployees: 'Not specified'
+        }]
+        setProviders(fallbackProvider)
       }
     } catch (error) {
       console.error('Error loading providers:', error)
+      // Create a default provider on error
+      const fallbackProvider: Provider[] = [{
+        providerId: `provider-${sessionId}-error`,
+        providerName: session?.providerCompany || 'Available Provider',
+        providerTurnover: 'Not specified',
+        providerEmployees: 'Not specified'
+      }]
+      setProviders(fallbackProvider)
     }
-  }, [selectProvider])
+  }, [selectProvider, session?.providerCompany])
 
   const loadSessionData = useCallback(async () => {
     try {
       // Get session ID from URL params
-      const sessionId = searchParams.get('session')
+      let sessionId = searchParams.get('session')
       
-      // If no session ID in URL, try to get from localStorage
+      // If no session ID in URL, check localStorage
       if (!sessionId) {
         const storedSessionId = localStorage.getItem('currentSessionId')
-        if (storedSessionId) {
-          // Redirect with the session ID in URL
-          router.push(`/auth/assessment?session=${storedSessionId}`)
-          return
-        }
+        const storedSession = localStorage.getItem('currentSession')
         
-        // For demo/testing, create a mock session
-        console.log('No session ID provided, using demo mode')
-        const demoSession: Session = {
-          sessionId: 'demo-session',
-          sessionNumber: 'DEMO-001',
-          customerCompany: 'Demo Customer Ltd',
-          serviceRequired: 'IT Consulting Services',
-          dealValue: '500000',
-          status: 'initiated',
-          phase: 1
-        }
-        setSession(demoSession)
-        setLoading(false)
-        return
-      }
-
-      // First, try to get cached session data
-      const cachedSession = localStorage.getItem('currentSession')
-      if (cachedSession) {
-        const sessionData = JSON.parse(cachedSession)
-        if (sessionData.sessionId === sessionId) {
+        if (storedSessionId && storedSession) {
+          // Use stored session data
+          const sessionData = JSON.parse(storedSession)
           setSession(sessionData)
-          // Pre-fill some fields from session data
+          setDealProfile(prev => ({
+            ...prev,
+            services: sessionData.serviceRequired || ''
+          }))
+          setLeverageFactors(prev => ({
+            ...prev,
+            dealSize: sessionData.dealValue || ''
+          }))
+          sessionId = storedSessionId
+        } else {
+          // Demo mode
+          console.log('No session found, entering demo mode')
+          const demoSession: Session = {
+            sessionId: 'demo-session',
+            sessionNumber: 'DEMO-001',
+            customerCompany: 'Demo Customer Ltd',
+            serviceRequired: 'IT Consulting Services',
+            dealValue: '500000',
+            status: 'initiated',
+            phase: 1
+          }
+          setSession(demoSession)
+          sessionId = 'demo-session'
+        }
+      } else {
+        // Load session from localStorage if available
+        const cachedSession = localStorage.getItem('currentSession')
+        if (cachedSession) {
+          const sessionData = JSON.parse(cachedSession)
+          setSession(sessionData)
           setDealProfile(prev => ({
             ...prev,
             services: sessionData.serviceRequired || ''
@@ -222,7 +259,9 @@ function PreliminaryAssessmentContent() {
       }
 
       // Load providers for this session
-      await loadProviders(sessionId)
+      if (sessionId) {
+        await loadProviders(sessionId)
+      }
       
     } catch (error) {
       console.error('Error loading session data:', error)
@@ -347,9 +386,11 @@ function PreliminaryAssessmentContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/auth/contracts-dashboard" className="flex flex-col">
-                <span className="text-2xl font-bold text-blue-600">CLARENCE</span>
-                <span className="text-xs text-gray-500">The Honest Broker</span>
+              <Link href="/auth/contracts-dashboard" className="flex items-center">
+                <div>
+                  <div className="text-2xl font-bold text-blue-600">CLARENCE</div>
+                  <div className="text-xs text-gray-500 tracking-widest">THE HONEST BROKER</div>
+                </div>
               </Link>
               <span className="ml-4 text-gray-600">Phase 1: Preliminary Assessment</span>
             </div>
@@ -361,7 +402,7 @@ function PreliminaryAssessmentContent() {
                 Dashboard
               </button>
               <button
-                onClick={() => router.push(`/chat?sessionId=${session.sessionId}`)}
+                onClick={() => router.push(`/chat?sessionId=${session?.sessionId || 'demo'}`)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
               >
                 💬 Chat with CLARENCE

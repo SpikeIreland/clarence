@@ -290,9 +290,11 @@ export default function FoundationPhase() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link href="/auth/contracts-dashboard" className="flex flex-col">
-                <span className="text-2xl font-bold text-blue-600">CLARENCE</span>
-                <span className="text-xs text-gray-500">The Honest Broker</span>
+              <Link href="/auth/contracts-dashboard" className="flex items-center">
+                <div>
+                  <div className="text-2xl font-bold text-blue-600">CLARENCE</div>
+                  <div className="text-xs text-gray-500 tracking-widest">THE HONEST BROKER</div>
+                </div>
               </Link>
               <span className="ml-4 text-gray-600">Phase 2: Foundation</span>
             </div>
