@@ -182,13 +182,42 @@ function PreliminaryAssessmentContent() {
           // Try different possible structures
           if (data.providers && Array.isArray(data.providers)) {
             console.log('Found providers array in data.providers')
-            providersArray = data.providers
+            console.log('First provider in array:', data.providers[0])
+            // Map the providers from the nested array
+            providersArray = data.providers.map((item: Record<string, unknown>) => ({
+              providerId: (item.providerId || item.provider_id || item.id || `provider-${sessionId}-${Math.random()}`) as string,
+              providerName: (item.providerName || item.provider_name || item.name || item.providerCompany || item.provider_company || 'Unknown Provider') as string,
+              providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
+              providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
+              providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
+              providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
+              providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
+              providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
+            }))
           } else if (data.data && Array.isArray(data.data)) {
             console.log('Found providers array in data.data')
-            providersArray = data.data
+            providersArray = data.data.map((item: Record<string, unknown>) => ({
+              providerId: (item.providerId || item.provider_id || item.id || `provider-${sessionId}-${Math.random()}`) as string,
+              providerName: (item.providerName || item.provider_name || item.name || item.providerCompany || item.provider_company || 'Unknown Provider') as string,
+              providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
+              providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
+              providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
+              providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
+              providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
+              providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
+            }))
           } else if (data.items && Array.isArray(data.items)) {
             console.log('Found providers array in data.items')
-            providersArray = data.items
+            providersArray = data.items.map((item: Record<string, unknown>) => ({
+              providerId: (item.providerId || item.provider_id || item.id || `provider-${sessionId}-${Math.random()}`) as string,
+              providerName: (item.providerName || item.provider_name || item.name || item.providerCompany || item.provider_company || 'Unknown Provider') as string,
+              providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
+              providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
+              providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
+              providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
+              providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
+              providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
+            }))
           } else {
             // Check if the object itself looks like a single provider
             const hasProviderFields = data.providerId || data.provider_id || 
@@ -240,6 +269,9 @@ function PreliminaryAssessmentContent() {
         }
         
         console.log('Final processed providers array:', providersArray)
+        if (providersArray.length > 0) {
+          console.log('First provider details:', providersArray[0])
+        }
         
         if (providersArray.length > 0) {
           setProviders(providersArray)
