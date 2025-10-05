@@ -129,7 +129,8 @@ function PreliminaryAssessmentContent() {
     if (provider.providerId && session?.sessionId) {
       console.log('Loading provider capabilities for:', provider.providerId)
       try {
-        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?sessionId=${session.sessionId}&providerId=${provider.providerId}`
+        // Use parameter names that the webhook expects (session_id and provider_id)
+        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${session.sessionId}&provider_id=${provider.providerId}`
         console.log('Fetching capabilities from:', apiUrl)
         
         const response = await fetch(apiUrl)
