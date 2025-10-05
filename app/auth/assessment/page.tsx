@@ -151,8 +151,8 @@ function PreliminaryAssessmentContent() {
         return
       }
 
-      // For real sessions, try to load from API
-      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?sessionId=${sessionId}`
+      // For real sessions, use 'session' parameter (not 'sessionId')
+      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?session=${sessionId}`
       console.log('Loading providers from API:', apiUrl)
       
       const response = await fetch(apiUrl)
@@ -180,7 +180,7 @@ function PreliminaryAssessmentContent() {
           setProviders(defaultProviders)
         }
       } else {
-        console.error('Failed to load providers:', response.status)
+        console.error('Failed to load providers:', response.status, 'from URL:', apiUrl)
         // Create a default provider on error
         const fallbackProvider: Provider[] = [{
           providerId: `provider-${sessionId}-fallback`,
