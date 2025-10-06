@@ -110,6 +110,9 @@ function PreliminaryAssessmentContent() {
 
   // ========== SECTION 4: FUNCTIONS ==========
   const selectProvider = useCallback(async (provider: Provider) => {
+    console.log('selectProvider called with:', provider)
+    console.log('Current session:', session)
+    
     setSelectedProvider(provider)
     setLoadingCapabilities(true)
     
@@ -125,12 +128,20 @@ function PreliminaryAssessmentContent() {
       providerExperience: provider.providerExperience || ''
     }))
     
+    // Get session ID - check multiple sources
+    const currentSessionId = session?.sessionId || 
+                           searchParams.get('session') || 
+                           localStorage.getItem('currentSessionId')
+    
+    console.log('Using sessionId for capabilities:', currentSessionId)
+    console.log('Provider ID:', provider.providerId)
+    
     // Load detailed provider capabilities
-    if (provider.providerId && session?.sessionId) {
+    if (provider.providerId && currentSessionId) {
       console.log('Loading provider capabilities for:', provider.providerId)
       try {
         // Use parameter names that the webhook expects (session_id and provider_id)
-        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${session.sessionId}&provider_id=${provider.providerId}`
+        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${currentSessionId}&provider_id=${provider.providerId}`
         console.log('Fetching capabilities from:', apiUrl)
         
         const response = await fetch(apiUrl)
@@ -169,12 +180,17 @@ function PreliminaryAssessmentContent() {
             // Update party fit with detailed provider information
             if (capabilityData.provider) {
               console.log('Updating from provider data:', capabilityData.provider)
+              const updatedPartyFit = {
+                providerName: capabilityData.provider.company || prev.providerName,
+                providerEntity: capabilityData.provider.industry !== 'undefined' ? capabilityData.provider.industry : prev.providerEntity,
+                providerAddress: capabilityData.provider.address || prev.providerAddress
+              }
+              console.log('Setting party fit with:', updatedPartyFit)
               setPartyFit(prev => ({
                 ...prev,
-                providerName: capabilityData.provider.company || prev.providerName,
-                providerEntity: capabilityData.provider.industry || prev.providerEntity,
-                providerAddress: capabilityData.provider.address || prev.providerAddress
+                ...updatedPartyFit
               }))
+            }
             }
             
             // Update with company capabilities
@@ -283,7 +299,7 @@ function PreliminaryAssessmentContent() {
     } else {
       setLoadingCapabilities(false)
     }
-  }, [session?.sessionId])
+  }, [session?.sessionId, searchParams])
 
   const loadProviders = useCallback(async (sessionId: string, targetProviderId?: string) => {
     try {
@@ -741,7 +757,10 @@ function PreliminaryAssessmentContent() {
               {providers.map(provider => (
                 <button
                   key={provider.providerId}
-                  onClick={() => selectProvider(provider)}
+                  onClick={() => {
+                    console.log('Provider button clicked:', provider.providerName, provider.providerId)
+                    selectProvider(provider)
+                  }}
                   className={`p-4 border-2 rounded-lg text-left transition ${
                     selectedProvider?.providerId === provider.providerId
                       ? 'border-blue-600 bg-blue-50'
