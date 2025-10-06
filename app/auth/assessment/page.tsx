@@ -3,7 +3,37 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-// ========== SECTION 1: INTERFACES ==========
+/* ========================
+   SECTION 0: SAFE HELPERS
+   ======================== */
+
+type Json = unknown
+type JRec = Record<string, unknown>
+
+const isRecord = (v: unknown): v is JRec =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+const isArray = (v: unknown): v is unknown[] => Array.isArray(v)
+
+const getRec = (r: JRec, key: string): JRec | undefined => {
+  const v = r[key]
+  return isRecord(v) ? v : undefined
+}
+const getArr = (r: JRec, key: string): JRec[] | undefined => {
+  const v = r[key]
+  return Array.isArray(v) ? (v as JRec[]) : undefined
+}
+const s = (r: JRec, key: string): string | undefined => {
+  const v = r[key]
+  return typeof v === 'string' ? v : undefined
+}
+const toNum = (v: unknown): number | undefined =>
+  typeof v === 'number' ? v : undefined
+
+/* =================================
+   SECTION 1: DOMAIN INTERFACES
+   ================================= */
+
 interface Session {
   sessionId: string
   sessionNumber?: string
@@ -60,12 +90,66 @@ interface LeverageFactors {
   partyFitScore: number
 }
 
-// ========== SECTION 2: MAIN COMPONENT START ==========
+/* Optional shapes we expect from the webhook (loose on purpose) */
+
+interface CapabilityCompany {
+  numberOfEmployees?: number
+  size?: string
+  annualRevenue?: string
+  marketShare?: string
+  yearsInBusiness?: string
+  notableClients?: string
+}
+
+interface CapabilityServices {
+  primary?: string
+  geographicCoverage?: string
+}
+
+interface CapabilityCommercial {
+  projectMin?: number
+  projectMax?: number
+  rateMin?: number
+  rateMax?: number
+}
+
+interface CapabilityOperational {
+  geographicCoverage?: string
+}
+
+interface CapabilityLeverage {
+  customerLeverage?: string
+  providerLeverage?: string
+  alignmentScore?: string
+}
+
+interface CapabilityResponse {
+  provider?: {
+    company?: string
+    name?: string
+    industry?: string
+    address?: string
+  }
+  capabilities?: {
+    company?: CapabilityCompany
+    services?: CapabilityServices
+    commercial?: CapabilityCommercial
+    operational?: CapabilityOperational
+  }
+  leverage?: CapabilityLeverage
+}
+
+/* =====================================
+   SECTION 2: MAIN COMPONENT START
+   ===================================== */
+
 function PreliminaryAssessmentContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  
-  // ========== SECTION 3: STATE DECLARATIONS ==========
+
+  /* ===============================
+     SECTION 3: STATE DECLARATIONS
+     =============================== */
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<Session | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
@@ -74,7 +158,7 @@ function PreliminaryAssessmentContent() {
   const [leverageScore, setLeverageScore] = useState({ customer: 50, provider: 50 })
   const [assessmentComplete, setAssessmentComplete] = useState(false)
   const [loadingCapabilities, setLoadingCapabilities] = useState(false)
-  
+
   const [dealProfile, setDealProfile] = useState<DealProfile>({
     services: '',
     deliveryLocations: [],
@@ -108,423 +192,395 @@ function PreliminaryAssessmentContent() {
     partyFitScore: 0
   })
 
-  // ========== SECTION 4: FUNCTIONS ==========
-  const selectProvider = useCallback(async (provider: Provider) => {
-    console.log('selectProvider called with:', provider)
-    console.log('Current session:', session)
-    
-    setSelectedProvider(provider)
-    setLoadingCapabilities(true)
-    
-    // Pre-fill basic provider information in party fit
-    setPartyFit(prev => ({
-      ...prev,
-      providerName: provider.providerName || '',
-      providerAddress: provider.providerAddress || '',
-      providerEntity: provider.providerEntity || '',
-      providerIncorporation: provider.providerIncorporation || '',
-      providerTurnover: provider.providerTurnover || '',
-      providerEmployees: provider.providerEmployees || '',
-      providerExperience: provider.providerExperience || ''
-    }))
-    
-    // Get session ID - check multiple sources
-    const currentSessionId = session?.sessionId || 
-                           searchParams.get('session') || 
-                           localStorage.getItem('currentSessionId')
-    
-    console.log('Using sessionId for capabilities:', currentSessionId)
-    console.log('Provider ID:', provider.providerId)
-    
-    // Load detailed provider capabilities
-    if (provider.providerId && currentSessionId) {
-      console.log('Loading provider capabilities for:', provider.providerId)
-      try {
-        // Use parameter names that the webhook expects (session_id and provider_id)
-        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${currentSessionId}&provider_id=${provider.providerId}`
-        console.log('Fetching capabilities from:', apiUrl)
-        
-        const response = await fetch(apiUrl)
-        if (response.ok) {
-          const result = await response.json()
-          console.log('Capabilities response:', result)
-          console.log('Response type:', typeof result)
-          console.log('Response keys:', Object.keys(result))
-          
-          // Log the full structure for debugging
-          console.log('Full response structure:', JSON.stringify(result, null, 2))
-          
-          // Extract the data from the response structure
-          let capabilityData = null
-          
-          // The response you showed earlier was an array with one object
-          if (Array.isArray(result) && result.length > 0) {
-            console.log('Response is array, extracting first item')
-            capabilityData = result[0].data
-          } else if (result.data) {
-            console.log('Response has data property')
-            capabilityData = result.data
-          } else if (result.success && result.count > 0) {
-            console.log('Response has success flag but no data property')
-            // Maybe the whole result is the data?
-            capabilityData = result
-          } else {
-            console.log('Using entire response as capability data')
-            capabilityData = result
-          }
-          
-          if (capabilityData) {
-            console.log('Provider capability data structure:', capabilityData)
-            console.log('Capability data keys:', Object.keys(capabilityData))
-            
-            // Update party fit with detailed provider information
-            if (capabilityData.provider) {
-              console.log('Updating from provider data:', capabilityData.provider)
-              const updatedPartyFit = {
-                providerName: capabilityData.provider.company || prev.providerName,
-                providerEntity: capabilityData.provider.industry !== 'undefined' ? capabilityData.provider.industry : prev.providerEntity,
-                providerAddress: capabilityData.provider.address || prev.providerAddress
-              }
-              console.log('Setting party fit with:', updatedPartyFit)
-              setPartyFit(prev => ({
-                ...prev,
-                ...updatedPartyFit
-              }))
-            }
-            }
-            
-            // Update with company capabilities
-            if (capabilityData.capabilities?.company) {
-              const company = capabilityData.capabilities.company
-              console.log('Updating from company capabilities:', company)
-              setPartyFit(prev => ({
-                ...prev,
-                providerEmployees: company.numberOfEmployees?.toString() || company.size || prev.providerEmployees,
-                providerTurnover: company.annualRevenue || `Market: ${company.marketShare}` || prev.providerTurnover,
-                providerExperience: company.yearsInBusiness || prev.providerExperience
-              }))
-              
-              // Add notable clients info if available
-              if (company.notableClients) {
+  /* =========================
+     SECTION 4: FUNCTIONS
+     ========================= */
+
+  const normalizeCapabilityData = (result: Json): CapabilityResponse | undefined => {
+    if (isArray(result) && result.length > 0) {
+      const first = result[0]
+      if (isRecord(first)) {
+        const d = (getRec(first, 'data') ?? first) as JRec
+        return d as unknown as CapabilityResponse
+      }
+      return undefined
+    }
+    if (isRecord(result)) {
+      const dataRec = getRec(result, 'data')
+      return (dataRec ?? result) as unknown as CapabilityResponse
+    }
+    return undefined
+  }
+
+  const mapProviderFromRecord = (item: JRec, fallbackId: string, fallbackName = 'Unknown Provider'): Provider => {
+    const providerId =
+      (s(item, 'providerId') ||
+        s(item, 'provider_id') ||
+        s(item, 'id') ||
+        `provider-${fallbackId}`)!
+
+    const providerName =
+      s(item, 'providerName') ||
+      s(item, 'provider_name') ||
+      s(item, 'name') ||
+      s(item, 'providerCompany') ||
+      s(item, 'provider_company') ||
+      fallbackName
+
+    return {
+      providerId,
+      providerName,
+      providerAddress: s(item, 'providerAddress') || s(item, 'provider_address') || s(item, 'address'),
+      providerEntity: s(item, 'providerEntity') || s(item, 'provider_entity') || s(item, 'entity'),
+      providerIncorporation:
+        s(item, 'providerIncorporation') || s(item, 'provider_incorporation') || s(item, 'incorporation'),
+      providerTurnover: s(item, 'providerTurnover') || s(item, 'provider_turnover') || s(item, 'turnover'),
+      providerEmployees: s(item, 'providerEmployees') || s(item, 'provider_employees') || s(item, 'employees'),
+      providerExperience:
+        s(item, 'providerExperience') || s(item, 'provider_experience') || s(item, 'experience')
+    }
+  }
+
+  const selectProvider = useCallback(
+    async (provider: Provider) => {
+      console.log('selectProvider called with:', provider)
+      console.log('Current session:', session)
+
+      setSelectedProvider(provider)
+      setLoadingCapabilities(true)
+
+      // Pre-fill basic provider information in party fit
+      setPartyFit(prev => ({
+        ...prev,
+        providerName: provider.providerName || '',
+        providerAddress: provider.providerAddress || '',
+        providerEntity: provider.providerEntity || '',
+        providerIncorporation: provider.providerIncorporation || '',
+        providerTurnover: provider.providerTurnover || '',
+        providerEmployees: provider.providerEmployees || '',
+        providerExperience: provider.providerExperience || ''
+      }))
+
+      // Get session ID - check multiple sources
+      const currentSessionId =
+        session?.sessionId ||
+        searchParams.get('session') ||
+        (typeof window !== 'undefined' ? localStorage.getItem('currentSessionId') : null)
+
+      console.log('Using sessionId for capabilities:', currentSessionId)
+      console.log('Provider ID:', provider.providerId)
+
+      // Load detailed provider capabilities
+      if (provider.providerId && currentSessionId) {
+        console.log('Loading provider capabilities for:', provider.providerId)
+        try {
+          const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${encodeURIComponent(
+            currentSessionId
+          )}&provider_id=${encodeURIComponent(provider.providerId)}`
+          console.log('Fetching capabilities from:', apiUrl)
+
+          const response = await fetch(apiUrl)
+
+          if (response.ok) {
+            const result: Json = await response.json()
+            console.log('Capabilities response:', result)
+
+            const capabilityData = normalizeCapabilityData(result)
+
+            if (capabilityData) {
+              // --- Provider basics
+              if (capabilityData.provider) {
+                const prov = capabilityData.provider
                 setPartyFit(prev => ({
                   ...prev,
-                  references: [company.notableClients]
+                  providerName: prov.company ?? prov.name ?? prev.providerName,
+                  providerEntity:
+                    prov.industry && prov.industry !== 'undefined' ? prov.industry : prev.providerEntity,
+                  providerAddress: prov.address || prev.providerAddress
                 }))
               }
-            }
-            
-            // Update leverage scores if available
-            if (capabilityData.leverage) {
-              console.log('Updating leverage scores:', capabilityData.leverage)
-              const customerLev = parseInt(capabilityData.leverage.customerLeverage) || 50
-              const providerLev = parseInt(capabilityData.leverage.providerLeverage) || 50
-              setLeverageScore({
-                customer: customerLev,
-                provider: providerLev
-              })
-              
-              // Also update leverage factors with alignment score
-              if (capabilityData.leverage.alignmentScore) {
-                setLeverageFactors(prev => ({
+
+              // --- Company capabilities
+              const company = capabilityData.capabilities?.company
+              if (company) {
+                setPartyFit(prev => ({
                   ...prev,
-                  partyFitScore: parseFloat(capabilityData.leverage.alignmentScore) || 0
+                  providerEmployees:
+                    toNum(company.numberOfEmployees)?.toString() ??
+                    company.size ??
+                    prev.providerEmployees,
+                  providerTurnover:
+                    company.annualRevenue ??
+                    (company.marketShare ? `Market: ${company.marketShare}` : prev.providerTurnover) ??
+                    prev.providerTurnover,
+                  providerExperience: company.yearsInBusiness ?? prev.providerExperience
                 }))
+                if (company.notableClients) {
+                  setPartyFit(prev => ({
+                    ...prev,
+                    references: [company.notableClients as string]
+                  }))
+                }
               }
-            }
-            
-            // Update deal profile with service information
-            if (capabilityData.capabilities?.services) {
-              const services = capabilityData.capabilities.services
-              console.log('Updating services:', services)
-              setDealProfile(prev => ({
-                ...prev,
-                services: services.primary || prev.services || '',
-                serviceLocations: services.geographicCoverage ? 
-                  services.geographicCoverage.split(',').map((s: string) => s.trim()) : 
-                  prev.serviceLocations
-              }))
-            }
-            
-            // Update leverage factors with commercial info
-            if (capabilityData.capabilities?.commercial) {
-              const commercial = capabilityData.capabilities.commercial
-              console.log('Updating commercial info:', commercial)
-              
-              // Calculate average project value
-              if (commercial.projectMin && commercial.projectMax) {
-                const avgValue = (commercial.projectMin + commercial.projectMax) / 2
-                setLeverageFactors(prev => ({
-                  ...prev,
-                  dealSize: avgValue.toString()
-                }))
+
+              // --- Leverage
+              const lev = capabilityData.leverage
+              if (lev) {
+                const customerLev = parseInt(lev.customerLeverage ?? '', 10)
+                const providerLev = parseInt(lev.providerLeverage ?? '', 10)
+                setLeverageScore({
+                  customer: Number.isFinite(customerLev) ? customerLev : 50,
+                  provider: Number.isFinite(providerLev) ? providerLev : 50
+                })
+
+                const align = parseFloat(lev.alignmentScore ?? '')
+                if (Number.isFinite(align)) {
+                  setLeverageFactors(prev => ({
+                    ...prev,
+                    partyFitScore: align
+                  }))
+                }
               }
-              
-              // Update pricing expectations
-              if (commercial.rateMin && commercial.rateMax) {
+
+              // --- Services
+              const services = capabilityData.capabilities?.services
+              if (services) {
                 setDealProfile(prev => ({
                   ...prev,
-                  pricingExpectation: `£${commercial.rateMin} - £${commercial.rateMax} per hour`
+                  services: services.primary || prev.services || '',
+                  serviceLocations: services.geographicCoverage
+                    ? services.geographicCoverage.split(',').map(s => s.trim())
+                    : prev.serviceLocations
                 }))
               }
-            }
-            
-            // Update operational preferences
-            if (capabilityData.capabilities?.operational) {
-              const operational = capabilityData.capabilities.operational
-              console.log('Updating operational info:', operational)
-              
-              // Update delivery locations
-              if (operational.geographicCoverage) {
-                setDealProfile(prev => ({
-                  ...prev,
-                  deliveryLocations: operational.geographicCoverage.split(',').map((s: string) => s.trim())
-                }))
+
+              // --- Commercials
+              const commercial = capabilityData.capabilities?.commercial
+              if (commercial) {
+                if (
+                  typeof commercial.projectMin === 'number' &&
+                  typeof commercial.projectMax === 'number'
+                ) {
+                  const avgValue = (commercial.projectMin + commercial.projectMax) / 2
+                  setLeverageFactors(prev => ({
+                    ...prev,
+                    dealSize: String(avgValue)
+                  }))
+                }
+
+                if (typeof commercial.rateMin !== 'undefined' && typeof commercial.rateMax !== 'undefined') {
+                  setDealProfile(prev => ({
+                    ...prev,
+                    pricingExpectation: `£${commercial.rateMin} - £${commercial.rateMax} per hour`
+                  }))
+                }
               }
+
+// --- Operational
+const operational = capabilityData.capabilities?.operational
+if (operational) {
+  const coverage = operational.geographicCoverage ?? ''
+  if (coverage) {
+    setDealProfile(prev => ({
+      ...prev,
+      deliveryLocations: coverage.split(',').map(s => s.trim())
+    }))
+  }
+}
+
+
+              // Persist for reference
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(
+                  `provider_capabilities_${provider.providerId}`,
+                  JSON.stringify(capabilityData)
+                )
+              }
+              console.log('Successfully stored capability data for provider:', provider.providerId)
+            } else {
+              console.log('No capability data found in response')
             }
-            
-            // Store full capability data for reference
-            localStorage.setItem(`provider_capabilities_${provider.providerId}`, JSON.stringify(capabilityData))
-            console.log('Successfully stored capability data for provider:', provider.providerId)
           } else {
-            console.log('No capability data found in response')
+            console.error('Failed to load provider capabilities:', response.status)
           }
-        } else {
-          console.error('Failed to load provider capabilities:', response.status)
+        } catch (error) {
+          console.error('Error loading provider capabilities:', error)
+        } finally {
+          setLoadingCapabilities(false)
         }
-      } catch (error) {
-        console.error('Error loading provider capabilities:', error)
-      } finally {
+      } else {
         setLoadingCapabilities(false)
       }
-    } else {
-      setLoadingCapabilities(false)
-    }
-  }, [session?.sessionId, searchParams])
+    },
+    // include `session` fully to satisfy exhaustive-deps; it is stable enough for this usage
+    [session, searchParams]
+  )
 
-  const loadProviders = useCallback(async (sessionId: string, targetProviderId?: string) => {
-    try {
-      console.log('Loading providers for session:', sessionId, 'targetProviderId:', targetProviderId)
-      
-      // For demo mode, use mock providers
-      if (sessionId === 'demo-session') {
-        console.log('Creating demo providers')
-        const demoProviders: Provider[] = [
-          {
-            providerId: 'provider-1',
-            providerName: 'TechCorp Solutions',
-            providerTurnover: '£10M',
-            providerEmployees: '250',
-            providerExperience: 'Extensive experience in IT consulting'
-          },
-          {
-            providerId: 'provider-2',
-            providerName: 'Global Services Ltd',
-            providerTurnover: '£25M',
-            providerEmployees: '500',
-            providerExperience: 'Leading provider of managed services'
-          }
-        ]
-        setProviders(demoProviders)
-        return
-      }
+  const loadProviders = useCallback(
+    async (sessionId: string, targetProviderId?: string) => {
+      try {
+        console.log('Loading providers for session:', sessionId, 'targetProviderId:', targetProviderId)
 
-      // For real sessions, use 'session' parameter
-      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?session=${sessionId}`
-      console.log('Loading providers from API:', apiUrl)
-      
-      const response = await fetch(apiUrl)
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Full providers data received:', data)
-        console.log('Data type:', typeof data)
-        console.log('Is array?', Array.isArray(data))
-        
-        // The webhook seems to return an object, possibly with providers as a property
-        let providersArray: Provider[] = []
-        
-        if (Array.isArray(data)) {
-          console.log('Data is an array with', data.length, 'items')
-          providersArray = data.map(item => ({
-            providerId: item.providerId || item.provider_id || item.id,
-            providerName: item.providerName || item.provider_name || item.name || 'Unknown Provider',
-            providerAddress: item.providerAddress || item.provider_address || item.address,
-            providerEntity: item.providerEntity || item.provider_entity || item.entity,
-            providerIncorporation: item.providerIncorporation || item.provider_incorporation || item.incorporation,
-            providerTurnover: item.providerTurnover || item.provider_turnover || item.turnover,
-            providerEmployees: item.providerEmployees || item.provider_employees || item.employees,
-            providerExperience: item.providerExperience || item.provider_experience || item.experience
-          }))
-        } else if (data && typeof data === 'object') {
-          console.log('Data is an object, keys:', Object.keys(data))
-          
-          // Try different possible structures
-          if (data.providers && Array.isArray(data.providers)) {
-            console.log('Found providers array in data.providers')
-            console.log('First provider in array:', data.providers[0])
-            // Map the providers from the nested array
-            providersArray = data.providers.map((item: Record<string, unknown>) => ({
-              providerId: (item.providerId || item.provider_id || item.id || `provider-${sessionId}-${Math.random()}`) as string,
-              providerName: (item.providerName || item.provider_name || item.name || item.providerCompany || item.provider_company || 'Unknown Provider') as string,
-              providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
-              providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
-              providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
-              providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
-              providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
-              providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
-            }))
-          } else if (data.data && Array.isArray(data.data)) {
-            console.log('Found providers array in data.data')
-            providersArray = data.data.map((item: Record<string, unknown>) => ({
-              providerId: (item.providerId || item.provider_id || item.id || `provider-${sessionId}-${Math.random()}`) as string,
-              providerName: (item.providerName || item.provider_name || item.name || item.providerCompany || item.provider_company || 'Unknown Provider') as string,
-              providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
-              providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
-              providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
-              providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
-              providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
-              providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
-            }))
-          } else if (data.items && Array.isArray(data.items)) {
-            console.log('Found providers array in data.items')
-            providersArray = data.items.map((item: Record<string, unknown>) => ({
-              providerId: (item.providerId || item.provider_id || item.id || `provider-${sessionId}-${Math.random()}`) as string,
-              providerName: (item.providerName || item.provider_name || item.name || item.providerCompany || item.provider_company || 'Unknown Provider') as string,
-              providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
-              providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
-              providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
-              providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
-              providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
-              providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
-            }))
-          } else {
-            // Check if the object itself looks like a single provider
-            const hasProviderFields = data.providerId || data.provider_id || 
-                                     data.providerName || data.provider_name ||
-                                     data.id || data.name
-            
-            if (hasProviderFields) {
-              console.log('Data appears to be a single provider object')
-              const provider: Provider = {
-                providerId: data.providerId || data.provider_id || data.id || `provider-${sessionId}`,
-                providerName: data.providerName || data.provider_name || data.name || 'Provider',
-                providerAddress: data.providerAddress || data.provider_address || data.address,
-                providerEntity: data.providerEntity || data.provider_entity || data.entity,
-                providerIncorporation: data.providerIncorporation || data.provider_incorporation || data.incorporation,
-                providerTurnover: data.providerTurnover || data.provider_turnover || data.turnover,
-                providerEmployees: data.providerEmployees || data.provider_employees || data.employees,
-                providerExperience: data.providerExperience || data.provider_experience || data.experience
-              }
-              providersArray = [provider]
+        if (sessionId === 'demo-session') {
+          const demoProviders: Provider[] = [
+            {
+              providerId: 'provider-1',
+              providerName: 'TechCorp Solutions',
+              providerTurnover: '£10M',
+              providerEmployees: '250',
+              providerExperience: 'Extensive experience in IT consulting'
+            },
+            {
+              providerId: 'provider-2',
+              providerName: 'Global Services Ltd',
+              providerTurnover: '£25M',
+              providerEmployees: '500',
+              providerExperience: 'Leading provider of managed services'
+            }
+          ]
+          setProviders(demoProviders)
+          return
+        }
+
+        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?session=${encodeURIComponent(
+          sessionId
+        )}`
+        console.log('Loading providers from API:', apiUrl)
+
+        const response = await fetch(apiUrl)
+        if (response.ok) {
+          const data: Json = await response.json()
+          console.log('Full providers data received:', data)
+
+          let providersArray: Provider[] = []
+
+          if (isArray(data)) {
+            providersArray = (data as unknown[]).flatMap((raw): Provider[] => {
+              if (!isRecord(raw)) return []
+              return [mapProviderFromRecord(raw, sessionId)]
+            })
+          } else if (isRecord(data)) {
+            const providersInProviders = getArr(data, 'providers')
+            const providersInData = getArr(data, 'data')
+            const providersInItems = getArr(data, 'items')
+
+            if (providersInProviders) {
+              providersArray = providersInProviders
+                .filter(isRecord)
+                .map((item) => mapProviderFromRecord(item, sessionId))
+            } else if (providersInData) {
+              providersArray = providersInData
+                .filter(isRecord)
+                .map((item) => mapProviderFromRecord(item, sessionId))
+            } else if (providersInItems) {
+              providersArray = providersInItems
+                .filter(isRecord)
+                .map((item) => mapProviderFromRecord(item, sessionId))
             } else {
-              // Try to find any array property that might contain providers
-              console.log('Looking for arrays in object properties...')
-              for (const [key, value] of Object.entries(data)) {
-                if (Array.isArray(value) && value.length > 0) {
-                  console.log(`Found array in property '${key}' with ${value.length} items`)
-                  // Check if first item looks like a provider
-                  const firstItem = value[0] as Record<string, unknown>
-                  if (firstItem && (
-                      firstItem.providerId || firstItem.provider_id || 
-                      firstItem.providerName || firstItem.provider_name ||
-                      firstItem.id || firstItem.name)) {
-                    console.log(`Using array from '${key}' as providers`)
-                    providersArray = (value as Array<Record<string, unknown>>).map((item: Record<string, unknown>) => ({
-                      providerId: (item.providerId || item.provider_id || item.id) as string,
-                      providerName: (item.providerName || item.provider_name || item.name || 'Unknown Provider') as string,
-                      providerAddress: (item.providerAddress || item.provider_address || item.address) as string | undefined,
-                      providerEntity: (item.providerEntity || item.provider_entity || item.entity) as string | undefined,
-                      providerIncorporation: (item.providerIncorporation || item.provider_incorporation || item.incorporation) as string | undefined,
-                      providerTurnover: (item.providerTurnover || item.provider_turnover || item.turnover) as string | undefined,
-                      providerEmployees: (item.providerEmployees || item.provider_employees || item.employees) as string | undefined,
-                      providerExperience: (item.providerExperience || item.provider_experience || item.experience) as string | undefined
-                    }))
-                    break
+              // Maybe it's a single provider-like object
+              const looksLikeProvider =
+                s(data, 'providerId') ||
+                s(data, 'provider_id') ||
+                s(data, 'providerName') ||
+                s(data, 'provider_name') ||
+                s(data, 'id') ||
+                s(data, 'name')
+
+              if (looksLikeProvider) {
+                providersArray = [mapProviderFromRecord(data, sessionId, 'Provider')]
+              } else {
+                // Scan for any array that looks like providers
+                for (const [, value] of Object.entries(data)) {
+                  if (Array.isArray(value) && value.length > 0) {
+                    const first = value[0]
+                    if (isRecord(first)) {
+                      const provish =
+                        s(first, 'providerId') ||
+                        s(first, 'provider_id') ||
+                        s(first, 'providerName') ||
+                        s(first, 'provider_name') ||
+                        s(first, 'id') ||
+                        s(first, 'name')
+                      if (provish) {
+                        providersArray = (value as unknown[])
+                          .filter(isRecord)
+                          .map((item) => mapProviderFromRecord(item, sessionId))
+                        break
+                      }
+                    }
                   }
                 }
               }
             }
           }
-        }
-        
-        console.log('Final processed providers array:', providersArray)
-        if (providersArray.length > 0) {
-          console.log('First provider details:', providersArray[0])
-        }
-        
-        if (providersArray.length > 0) {
-          setProviders(providersArray)
-          
-          // If a specific provider was requested, auto-select it
-          if (targetProviderId) {
-            const targetProvider = providersArray.find(
-              p => p.providerId === targetProviderId
-            )
-            if (targetProvider) {
-              console.log('Auto-selecting target provider:', targetProvider)
-              selectProvider(targetProvider)
+
+          if (providersArray.length > 0) {
+            setProviders(providersArray)
+
+            if (targetProviderId) {
+              const targetProvider = providersArray.find(p => p.providerId === targetProviderId)
+              if (targetProvider) {
+                selectProvider(targetProvider)
+              }
+            } else if (providersArray.length === 1) {
+              selectProvider(providersArray[0])
             }
-          } else if (providersArray.length === 1) {
-            // Auto-select if only one provider
-            console.log('Auto-selecting single provider')
-            selectProvider(providersArray[0])
+          } else {
+            const defaultProviders: Provider[] = [
+              {
+                providerId: `provider-${sessionId}-1`,
+                providerName: session?.providerCompany || 'Provider Company A',
+                providerTurnover: 'Not specified',
+                providerEmployees: 'Not specified'
+              }
+            ]
+            setProviders(defaultProviders)
           }
         } else {
-          // No valid providers found
-          console.log('No valid providers found, creating defaults')
-          const defaultProviders: Provider[] = [
+          console.error('Failed to load providers - Status:', response.status)
+          const errorText = await response.text()
+          console.error('Error response:', errorText)
+
+          const fallbackProvider: Provider[] = [
             {
-              providerId: `provider-${sessionId}-1`,
-              providerName: session?.providerCompany || 'Provider Company A',
+              providerId: `provider-${sessionId}-fallback`,
+              providerName: session?.providerCompany || 'Selected Provider',
               providerTurnover: 'Not specified',
               providerEmployees: 'Not specified'
             }
           ]
-          setProviders(defaultProviders)
+          setProviders(fallbackProvider)
         }
-      } else {
-        console.error('Failed to load providers - Status:', response.status)
-        // Try to read error message
-        const errorText = await response.text()
-        console.error('Error response:', errorText)
-        
-        // Create fallback provider
-        const fallbackProvider: Provider[] = [{
-          providerId: `provider-${sessionId}-fallback`,
-          providerName: session?.providerCompany || 'Selected Provider',
-          providerTurnover: 'Not specified',
-          providerEmployees: 'Not specified'
-        }]
+      } catch (error) {
+        console.error('Error loading providers:', error)
+        const fallbackProvider: Provider[] = [
+          {
+            providerId: `provider-${sessionId}-error`,
+            providerName: session?.providerCompany || 'Available Provider',
+            providerTurnover: 'Not specified',
+            providerEmployees: 'Not specified'
+          }
+        ]
         setProviders(fallbackProvider)
       }
-    } catch (error) {
-      console.error('Error loading providers:', error)
-      // Create fallback provider
-      const fallbackProvider: Provider[] = [{
-        providerId: `provider-${sessionId}-error`,
-        providerName: session?.providerCompany || 'Available Provider',
-        providerTurnover: 'Not specified',
-        providerEmployees: 'Not specified'
-      }]
-      setProviders(fallbackProvider)
-    }
-  }, [selectProvider, session?.providerCompany])
+    },
+    [selectProvider, session]
+  )
 
   const loadSessionData = useCallback(async () => {
     try {
-      // Get session ID and provider ID from URL params
       let sessionId = searchParams.get('session')
       const providerId = searchParams.get('provider')
-      
-      console.log('Loading session data - sessionId:', sessionId, 'providerId:', providerId)
-      
+
       // If no session ID in URL, check localStorage
       if (!sessionId) {
-        const storedSessionId = localStorage.getItem('currentSessionId')
-        const storedSession = localStorage.getItem('currentSession')
-        
+        const storedSessionId =
+          typeof window !== 'undefined' ? localStorage.getItem('currentSessionId') : null
+        const storedSession =
+          typeof window !== 'undefined' ? localStorage.getItem('currentSession') : null
+
         if (storedSessionId && storedSession) {
-          // Use stored session data
-          const sessionData = JSON.parse(storedSession)
+          const sessionData: Session = JSON.parse(storedSession)
           setSession(sessionData)
           setDealProfile(prev => ({
             ...prev,
@@ -536,8 +592,6 @@ function PreliminaryAssessmentContent() {
           }))
           sessionId = storedSessionId
         } else {
-          // Demo mode
-          console.log('No session found, entering demo mode')
           const demoSession: Session = {
             sessionId: 'demo-session',
             sessionNumber: 'DEMO-001',
@@ -551,10 +605,10 @@ function PreliminaryAssessmentContent() {
           sessionId = 'demo-session'
         }
       } else {
-        // Load session from localStorage if available
-        const cachedSession = localStorage.getItem('currentSession')
+        const cachedSession =
+          typeof window !== 'undefined' ? localStorage.getItem('currentSession') : null
         if (cachedSession) {
-          const sessionData = JSON.parse(cachedSession)
+          const sessionData: Session = JSON.parse(cachedSession)
           setSession(sessionData)
           setDealProfile(prev => ({
             ...prev,
@@ -567,16 +621,13 @@ function PreliminaryAssessmentContent() {
         }
       }
 
-      // Store provider ID if provided
       if (providerId) {
         localStorage.setItem('selectedProviderId', providerId)
       }
 
-      // Load providers for this session
       if (sessionId) {
         await loadProviders(sessionId, providerId || undefined)
       }
-      
     } catch (error) {
       console.error('Error loading session data:', error)
     } finally {
@@ -586,20 +637,21 @@ function PreliminaryAssessmentContent() {
 
   const calculateLeverage = () => {
     let customerLeverage = 50
-    
-    const dealValue = parseInt(leverageFactors.dealSize.replace(/\D/g, '')) || 0
-    if (dealValue > 5000000) customerLeverage += 10
-    else if (dealValue > 1000000) customerLeverage += 5
-    
-    const duration = parseInt(leverageFactors.contractDuration) || 0
+
+    const numericDealValue = (leverageFactors.dealSize || '').toString().replace(/\D/g, '')
+    const dealValue = parseInt(numericDealValue, 10) || 0
+    if (dealValue > 5_000_000) customerLeverage += 10
+    else if (dealValue > 1_000_000) customerLeverage += 5
+
+    const duration = parseInt(leverageFactors.contractDuration, 10) || 0
     if (duration > 36) customerLeverage += 5
     else if (duration < 12) customerLeverage -= 5
-    
+
     if (leverageFactors.partyFitScore > 80) customerLeverage += 10
     else if (leverageFactors.partyFitScore < 50) customerLeverage -= 10
-    
+
     customerLeverage = Math.max(20, Math.min(80, customerLeverage))
-    
+
     setLeverageScore({
       customer: customerLeverage,
       provider: 100 - customerLeverage
@@ -612,36 +664,24 @@ function PreliminaryAssessmentContent() {
       return
     }
 
-    console.log('Submitting assessment:', { 
-      sessionId: session.sessionId,
-      providerId: selectedProvider.providerId,
-      dealProfile, 
-      partyFit, 
-      leverageFactors 
-    })
-    
     calculateLeverage()
-    
-    // Save assessment data for next phase
-    localStorage.setItem(`assessment_${session.sessionId}`, JSON.stringify({
-      sessionId: session.sessionId,
-      providerId: selectedProvider.providerId,
-      providerName: selectedProvider.providerName,
-      dealProfile,
-      partyFit,
-      leverageFactors,
-      leverageScore
-    }))
-    
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(
+        `assessment_${session.sessionId}`,
+        JSON.stringify({
+          sessionId: session.sessionId,
+          providerId: selectedProvider.providerId,
+          providerName: selectedProvider.providerName,
+          dealProfile,
+          partyFit,
+          leverageFactors,
+          leverageScore
+        })
+      )
+    }
+
     setAssessmentComplete(true)
-    
-    // TODO: Send assessment data to backend via n8n webhook
-    // const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/provider-assessmentresults', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ ... })
-    // })
-    
     alert('Assessment submitted successfully!')
   }
 
@@ -654,19 +694,21 @@ function PreliminaryAssessmentContent() {
     { num: 6, name: 'Final Review', active: false }
   ]
 
-  // ========== SECTION 5: USE EFFECTS ==========
+  /* ================================
+     SECTION 5: USE EFFECTS
+     ================================ */
   useEffect(() => {
-    const auth = localStorage.getItem('clarence_auth')
+    const auth = typeof window !== 'undefined' ? localStorage.getItem('clarence_auth') : null
     if (!auth) {
       router.push('/auth/login')
       return
     }
-    
-    // Only load once when component mounts
     loadSessionData()
   }, [router, loadSessionData])
 
-  // ========== SECTION 6: RENDER START ==========
+  /* ================================
+     SECTION 6: RENDER START
+     ================================ */
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -734,9 +776,13 @@ function PreliminaryAssessmentContent() {
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-2xl font-bold mb-2">Preliminary Assessment</h1>
-              <p className="text-blue-100">Session: {session.sessionNumber || session.sessionId.substring(0, 8)}...</p>
+              <p className="text-blue-100">
+                Session: {(session.sessionNumber || session.sessionId).substring(0, 8)}...
+              </p>
               <p className="text-blue-100">Service: {session.serviceRequired}</p>
-              <p className="text-blue-100">Deal Value: £{parseInt(session.dealValue || '0').toLocaleString()}</p>
+              <p className="text-blue-100">
+                Deal Value: £{parseInt(session.dealValue || '0', 10).toLocaleString()}
+              </p>
             </div>
             <div className="text-right">
               <p className="text-sm text-blue-200">Contract Phase</p>
@@ -749,18 +795,13 @@ function PreliminaryAssessmentContent() {
         {providers.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
             <h3 className="text-lg font-semibold mb-4">
-              {providers.length > 1 
-                ? 'Select Provider to Assess' 
-                : 'Provider for Assessment'}
+              {providers.length > 1 ? 'Select Provider to Assess' : 'Provider for Assessment'}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {providers.map(provider => (
                 <button
                   key={provider.providerId}
-                  onClick={() => {
-                    console.log('Provider button clicked:', provider.providerName, provider.providerId)
-                    selectProvider(provider)
-                  }}
+                  onClick={() => selectProvider(provider)}
                   className={`p-4 border-2 rounded-lg text-left transition ${
                     selectedProvider?.providerId === provider.providerId
                       ? 'border-blue-600 bg-blue-50'
@@ -776,7 +817,7 @@ function PreliminaryAssessmentContent() {
                   )}
                   <div className="mt-2 text-xs text-blue-600">
                     {selectedProvider?.providerId === provider.providerId
-                      ? '✓ Currently Assessing' 
+                      ? '✓ Currently Assessing'
                       : 'Click to Assess'}
                   </div>
                 </button>
@@ -816,10 +857,12 @@ function PreliminaryAssessmentContent() {
         {/* Phase Progress Bar */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
-            {phases.map((phase) => (
+            {phases.map(phase => (
               <div key={phase.num} className="flex flex-col items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold
-                  ${phase.active ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold
+                  ${phase.active ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}`}
+                >
                   {phase.num}
                 </div>
                 <span className="text-xs mt-1">{phase.name}</span>
@@ -839,27 +882,21 @@ function PreliminaryAssessmentContent() {
                 <button
                   onClick={() => setActiveSection('profile')}
                   className={`px-6 py-4 font-semibold border-b-2 transition
-                    ${activeSection === 'profile' 
-                      ? 'text-blue-600 border-blue-600' 
-                      : 'text-gray-600 border-transparent hover:text-gray-900'}`}
+                    ${activeSection === 'profile' ? 'text-blue-600 border-blue-600' : 'text-gray-600 border-transparent hover:text-gray-900'}`}
                 >
                   Deal Profile
                 </button>
                 <button
                   onClick={() => setActiveSection('fit')}
                   className={`px-6 py-4 font-semibold border-b-2 transition
-                    ${activeSection === 'fit' 
-                      ? 'text-blue-600 border-blue-600' 
-                      : 'text-gray-600 border-transparent hover:text-gray-900'}`}
+                    ${activeSection === 'fit' ? 'text-blue-600 border-blue-600' : 'text-gray-600 border-transparent hover:text-gray-900'}`}
                 >
                   Party Fit
                 </button>
                 <button
                   onClick={() => setActiveSection('leverage')}
                   className={`px-6 py-4 font-semibold border-b-2 transition
-                    ${activeSection === 'leverage' 
-                      ? 'text-blue-600 border-blue-600' 
-                      : 'text-gray-600 border-transparent hover:text-gray-900'}`}
+                    ${activeSection === 'leverage' ? 'text-blue-600 border-blue-600' : 'text-gray-600 border-transparent hover:text-gray-900'}`}
                 >
                   Leverage Assessment
                 </button>
@@ -871,14 +908,14 @@ function PreliminaryAssessmentContent() {
               {activeSection === 'profile' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-4">Deal Profile</h3>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Services to be Delivered
                     </label>
                     <textarea
                       value={dealProfile.services}
-                      onChange={(e) => setDealProfile({...dealProfile, services: e.target.value})}
+                      onChange={e => setDealProfile({ ...dealProfile, services: e.target.value })}
                       className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       rows={3}
                       placeholder="Describe the services..."
@@ -894,13 +931,15 @@ function PreliminaryAssessmentContent() {
                         type="text"
                         placeholder="e.g., UK, USA, Canada"
                         className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                        onChange={(e) => setDealProfile({
-                          ...dealProfile, 
-                          deliveryLocations: e.target.value.split(',').map(s => s.trim())
-                        })}
+                        onChange={e =>
+                          setDealProfile({
+                            ...dealProfile,
+                            deliveryLocations: e.target.value.split(',').map(s => s.trim())
+                          })
+                        }
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Service Locations (Countries)
@@ -909,10 +948,12 @@ function PreliminaryAssessmentContent() {
                         type="text"
                         placeholder="e.g., India, Philippines"
                         className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                        onChange={(e) => setDealProfile({
-                          ...dealProfile,
-                          serviceLocations: e.target.value.split(',').map(s => s.trim())
-                        })}
+                        onChange={e =>
+                          setDealProfile({
+                            ...dealProfile,
+                            serviceLocations: e.target.value.split(',').map(s => s.trim())
+                          })
+                        }
                       />
                     </div>
                   </div>
@@ -924,7 +965,7 @@ function PreliminaryAssessmentContent() {
                       </label>
                       <select
                         value={dealProfile.pricingApproach}
-                        onChange={(e) => setDealProfile({...dealProfile, pricingApproach: e.target.value})}
+                        onChange={e => setDealProfile({ ...dealProfile, pricingApproach: e.target.value })}
                         className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="">Select approach...</option>
@@ -934,7 +975,7 @@ function PreliminaryAssessmentContent() {
                         <option value="outcome-based">Outcome Based</option>
                       </select>
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Pricing Expectation
@@ -942,7 +983,7 @@ function PreliminaryAssessmentContent() {
                       <input
                         type="text"
                         value={dealProfile.pricingExpectation}
-                        onChange={(e) => setDealProfile({...dealProfile, pricingExpectation: e.target.value})}
+                        onChange={e => setDealProfile({ ...dealProfile, pricingExpectation: e.target.value })}
                         placeholder="e.g., £50,000 per FTE"
                         className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                       />
@@ -955,7 +996,7 @@ function PreliminaryAssessmentContent() {
               {activeSection === 'fit' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-4">Party Fit Assessment</h3>
-                  
+
                   <div className="bg-blue-50 p-4 rounded-lg mb-6">
                     <h4 className="font-semibold text-blue-900 mb-3">Customer Information</h4>
                     <div className="grid grid-cols-2 gap-4">
@@ -964,14 +1005,14 @@ function PreliminaryAssessmentContent() {
                         placeholder="Company Name"
                         className="px-4 py-2 border rounded-lg"
                         value={partyFit.customerName || session.customerCompany}
-                        onChange={(e) => setPartyFit({...partyFit, customerName: e.target.value})}
+                        onChange={e => setPartyFit({ ...partyFit, customerName: e.target.value })}
                       />
                       <input
                         type="text"
                         placeholder="Annual Turnover"
                         className="px-4 py-2 border rounded-lg"
                         value={partyFit.customerTurnover}
-                        onChange={(e) => setPartyFit({...partyFit, customerTurnover: e.target.value})}
+                        onChange={e => setPartyFit({ ...partyFit, customerTurnover: e.target.value })}
                       />
                     </div>
                   </div>
@@ -991,14 +1032,14 @@ function PreliminaryAssessmentContent() {
                         placeholder="Number of Employees"
                         className="px-4 py-2 border rounded-lg"
                         value={partyFit.providerEmployees}
-                        onChange={(e) => setPartyFit({...partyFit, providerEmployees: e.target.value})}
+                        onChange={e => setPartyFit({ ...partyFit, providerEmployees: e.target.value })}
                       />
                       <textarea
                         placeholder="Experience with similar services"
                         className="col-span-2 px-4 py-2 border rounded-lg"
                         rows={3}
                         value={partyFit.providerExperience}
-                        onChange={(e) => setPartyFit({...partyFit, providerExperience: e.target.value})}
+                        onChange={e => setPartyFit({ ...partyFit, providerExperience: e.target.value })}
                       />
                     </div>
                     <label className="flex items-center mt-4">
@@ -1006,7 +1047,7 @@ function PreliminaryAssessmentContent() {
                         type="checkbox"
                         className="mr-2"
                         checked={partyFit.parentGuarantee}
-                        onChange={(e) => setPartyFit({...partyFit, parentGuarantee: e.target.checked})}
+                        onChange={e => setPartyFit({ ...partyFit, parentGuarantee: e.target.checked })}
                       />
                       <span>Willing to provide parent company guarantee</span>
                     </label>
@@ -1018,7 +1059,7 @@ function PreliminaryAssessmentContent() {
               {activeSection === 'leverage' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-4">Leverage Assessment</h3>
-                  
+
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1029,10 +1070,10 @@ function PreliminaryAssessmentContent() {
                         placeholder="e.g., £2,000,000"
                         className="w-full px-4 py-2 border rounded-lg"
                         value={leverageFactors.dealSize || session.dealValue}
-                        onChange={(e) => setLeverageFactors({...leverageFactors, dealSize: e.target.value})}
+                        onChange={e => setLeverageFactors({ ...leverageFactors, dealSize: e.target.value })}
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Contract Duration (months)
@@ -1042,7 +1083,9 @@ function PreliminaryAssessmentContent() {
                         placeholder="e.g., 36"
                         className="w-full px-4 py-2 border rounded-lg"
                         value={leverageFactors.contractDuration}
-                        onChange={(e) => setLeverageFactors({...leverageFactors, contractDuration: e.target.value})}
+                        onChange={e =>
+                          setLeverageFactors({ ...leverageFactors, contractDuration: e.target.value })
+                        }
                       />
                     </div>
                   </div>
@@ -1050,13 +1093,13 @@ function PreliminaryAssessmentContent() {
                   <div className="bg-gray-100 p-6 rounded-lg">
                     <h4 className="font-semibold mb-4">Calculated Leverage</h4>
                     <div className="relative h-12 bg-white rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="absolute left-0 top-0 h-full bg-blue-600 flex items-center justify-center text-white font-bold"
                         style={{ width: `${leverageScore.customer}%` }}
                       >
                         Customer {leverageScore.customer}%
                       </div>
-                      <div 
+                      <div
                         className="absolute right-0 top-0 h-full bg-gray-600 flex items-center justify-center text-white font-bold"
                         style={{ width: `${leverageScore.provider}%` }}
                       >
@@ -1078,7 +1121,9 @@ function PreliminaryAssessmentContent() {
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
             <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
             {providers.length === 0 && (
-              <p className="text-yellow-600 text-sm">No providers found for this session. Please check the session configuration.</p>
+              <p className="text-yellow-600 text-sm">
+                No providers found for this session. Please check the session configuration.
+              </p>
             )}
           </div>
         )}
@@ -1110,11 +1155,9 @@ function PreliminaryAssessmentContent() {
                   </button>
                   <button
                     onClick={() => {
-                      console.log('Navigating to foundation with:', {
-                        sessionId: session.sessionId,
-                        providerId: selectedProvider?.providerId
-                      })
-                      router.push(`/auth/foundation?session=${session.sessionId}&provider=${selectedProvider?.providerId}`)
+                      router.push(
+                        `/auth/foundation?session=${session.sessionId}&provider=${selectedProvider?.providerId}`
+                      )
                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold animate-pulse"
                   >
@@ -1156,17 +1199,21 @@ function PreliminaryAssessmentContent() {
   )
 }
 
-// Wrapper component with Suspense boundary
+/* ===================================
+   Wrapper component with Suspense
+   =================================== */
 export default function PreliminaryAssessment() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading assessment...</p>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading assessment...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <PreliminaryAssessmentContent />
     </Suspense>
   )
