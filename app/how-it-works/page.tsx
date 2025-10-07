@@ -153,13 +153,13 @@ export default function HowItWorksPage() {
                 How CLARENCE Works
               </h2>
               <p className="text-slate-300 font-light leading-relaxed">
-                Clarence is built to support the values of collaboration, transparency, impartiality and a desire to achieve balanced, optimal and durable outcomes (though ones that are realistic and take account of each party's leverage). Clarence takes the emotion and strain out of negotiation and facilitates stronger relationships. Clarence brings to each negotiation a level of expertise akin to (perhaps even surpassing!) a leading law partner who has specialized in the relevant field for decades.
+                Clarence is built to support the values of collaboration, transparency, impartiality and a desire to achieve balanced, optimal and durable outcomes (though ones that are realistic and take account of each party&apos;s leverage). Clarence takes the emotion and strain out of negotiation and facilitates stronger relationships. Clarence brings to each negotiation a level of expertise akin to (perhaps even surpassing!) a leading law partner who has specialized in the relevant field for decades.
               </p>
             </div>
 
             {/* Right Side - Process Steps (Smaller) */}
             <div className="space-y-2 animate-fade-in" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
-              {processSteps.map((step, index) => (
+              {processSteps.map((step) => (
                 <div
                   key={step.id}
                   className="bg-slate-800/30 backdrop-blur rounded-lg border border-slate-700/30 overflow-hidden transition-all duration-300 hover:bg-slate-800/50"
