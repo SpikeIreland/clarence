@@ -17,10 +17,19 @@ module.exports = {
             opacity: '1',
             transform: 'translateY(0)'
           }
+        },
+        fadeIn: {
+          '0%': {
+            opacity: '0'
+          },
+          '100%': {
+            opacity: '1'
+          }
         }
       },
       animation: {
         'fadeInUp': 'fadeInUp 0.8s ease-out forwards',
+        'fadeIn': 'fadeIn 0.8s ease-out forwards',
       }
     }
   },
