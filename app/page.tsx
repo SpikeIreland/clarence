@@ -34,7 +34,8 @@ export default function Home() {
         </nav>
         
         {/* Title & Tagline - Center Top */}
-        <div className="text-center mb-24 opacity-0 animate-[fadeInUp_0.8s_ease-out_forwards]">
+        {/* Using Tailwind's built-in fade animation */}
+        <div className="text-center mb-24 animate-fade-in">
           <h1 className="text-4xl font-medium text-white mb-2 tracking-wide">
             CLARENCE
           </h1>
@@ -45,7 +46,8 @@ export default function Home() {
         
         {/* Main Content - Center */}
         <div className="max-w-3xl mx-auto text-center">
-          <div className="opacity-0 animate-[fadeInUp_0.8s_ease-out_0.2s_forwards]">
+          {/* Using simple built-in animation with delay */}
+          <div className="animate-fade-in" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
             <h2 className="text-2xl font-normal text-white mb-8 tracking-wide uppercase">
               AI-Powered Contract Negotiation
             </h2>
@@ -66,6 +68,13 @@ export default function Home() {
             Start Demo
           </a>
         </div>
+      </div>
+
+      {/* Animation Test Box - Remove this after testing */}
+      <div className="fixed bottom-4 right-4 bg-white p-4 rounded shadow-lg">
+        <p className="text-black text-sm mb-2">Animation Test:</p>
+        <div className="animate-pulse bg-blue-500 w-20 h-20 rounded"></div>
+        <p className="text-xs mt-2 text-black">Should pulse</p>
       </div>
     </main>
   )
