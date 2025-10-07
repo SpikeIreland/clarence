@@ -294,7 +294,7 @@ if (capabilityData.provider) {
     } else {
       setLoadingCapabilities(false)
     }
-  }, [session?.sessionId, searchParams])
+  }, [session, searchParams])
 
   const loadProviders = useCallback(async (sessionId: string, targetProviderId?: string) => {
     try {
