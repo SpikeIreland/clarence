@@ -177,21 +177,16 @@ function PreliminaryAssessmentContent() {
             console.log('Provider capability data structure:', capabilityData)
             console.log('Capability data keys:', Object.keys(capabilityData))
             
-            // Update party fit with detailed provider information
-            if (capabilityData.provider) {
-              console.log('Updating from provider data:', capabilityData.provider)
-              const updatedPartyFit = {
-                providerName: capabilityData.provider.company || prev.providerName,
-                providerEntity: capabilityData.provider.industry !== 'undefined' ? capabilityData.provider.industry : prev.providerEntity,
-                providerAddress: capabilityData.provider.address || prev.providerAddress
-              }
-              console.log('Setting party fit with:', updatedPartyFit)
-              setPartyFit(prev => ({
-                ...prev,
-                ...updatedPartyFit
-              }))
-            }
-            }
+// Update party fit with detailed provider information
+if (capabilityData.provider) {
+  console.log('Updating from provider data:', capabilityData.provider)
+  setPartyFit(prev => ({
+    ...prev,
+    providerName: capabilityData.provider.company || prev.providerName,
+    providerEntity: capabilityData.provider.industry !== 'undefined' ? capabilityData.provider.industry : prev.providerEntity,
+    providerAddress: capabilityData.provider.address || prev.providerAddress
+  }))
+}
             
             // Update with company capabilities
             if (capabilityData.capabilities?.company) {
@@ -287,11 +282,12 @@ function PreliminaryAssessmentContent() {
             console.log('Successfully stored capability data for provider:', provider.providerId)
           } else {
             console.log('No capability data found in response')
-          }
+        }
         } else {
           console.error('Failed to load provider capabilities:', response.status)
-      } catch (error) {
-        console.error('Error loading provider capabilities:', error)
+        }
+        } catch (error) {
+      console.error('Error loading provider capabilities:', error)
       } finally {
         setLoadingCapabilities(false)
       }
