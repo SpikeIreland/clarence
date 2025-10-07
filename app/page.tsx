@@ -1,55 +1,94 @@
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      <div className="container mx-auto px-4 py-16">
-        <nav className="flex justify-between items-center mb-16">
-          <div>
-            <h1 className="text-3xl font-bold text-white">CLARENCE</h1>
-            <p className="text-sm text-white/70 mt-1">The Honest Broker</p>
-          </div>
-          <div className="space-x-6">
-            <a href="/how-it-works" className="text-white/80 hover:text-white transition">How It Works</a>
-            <a href="/phases" className="text-white/80 hover:text-white transition">6-Phase Process</a>
-            <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition inline-block">
-               Sign In
-            </a>
-          </div>
-        </nav>
-        
-        <div className="max-w-4xl mx-auto text-center mt-32">
-          <h2 className="text-5xl md:text-6xl font-bold text-white mb-6">
-            AI-Powered Contract Mediation
-          </h2>
-          <p className="text-xl text-white/80 mb-12 max-w-2xl mx-auto">
-            Transform complex B2B negotiations through intelligent mediation. 
-            CLARENCE facilitates faster agreements with better outcomes for all parties.
-          </p>
+    <>
+      {/* Add meta title for browser tab */}
+      <head>
+        <title>Clarence | AI-powered contract mediation</title>
+      </head>
+      
+      <main className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800">
+        <div className="container mx-auto px-6 py-8">
+          {/* Navigation Bar */}
+          <nav className="flex justify-between items-center mb-20">
+            {/* How Clarence Works - Top Left */}
+            <div>
+              <a 
+                href="/how-it-works" 
+                className="text-slate-300 hover:text-white text-sm font-medium transition-colors duration-300 relative group"
+              >
+                How Clarence Works
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-slate-400 transition-all duration-300 group-hover:w-full"></span>
+              </a>
+            </div>
+            
+            {/* Sign In - Top Right */}
+            <div>
+              <a 
+                href="/auth/login" 
+                className="text-slate-300 hover:text-white text-sm font-medium transition-colors duration-300"
+              >
+                Sign In
+              </a>
+            </div>
+          </nav>
           
-          <div className="flex gap-4 justify-center mb-16">
-            <a href="/chat" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition inline-block">
+          {/* Title & Tagline - Center Top */}
+          <div className="text-center mb-24 animate-fade-in">
+            <h1 className="text-4xl font-medium text-white mb-2 tracking-wide">
+              CLARENCE
+            </h1>
+            <p className="text-base text-slate-400 font-light tracking-wider">
+              The Honest Broker
+            </p>
+          </div>
+          
+          {/* Main Content - Center */}
+          <div className="max-w-3xl mx-auto text-center">
+            <div className="animate-fade-in-delay">
+              <h2 className="text-2xl font-normal text-white mb-8 tracking-wide uppercase">
+                AI-Powered Contract Negotiation
+              </h2>
+              <p className="text-base text-slate-300 leading-relaxed font-light max-w-2xl mx-auto">
+                Clarence leads parties through an intuitive and structured negotiation process, 
+                combining AI-powered insights with transparent brokering of compromises to 
+                efficiently agree optimal contracts.
+              </p>
+            </div>
+          </div>
+          
+          {/* Start Demo - Bottom */}
+          <div className="flex justify-center mt-32 mb-16">
+            <a 
+              href="/chat" 
+              className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-10 py-3 rounded-lg text-sm font-medium tracking-wide inline-block transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl"
+            >
               Start Demo
             </a>
-            <button className="border border-white/30 hover:border-white/50 text-white px-8 py-4 rounded-lg text-lg transition">
-              Learn More
-            </button>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-8 mt-24">
-            <div className="bg-white/10 backdrop-blur rounded-xl p-6">
-              <h3 className="text-white font-semibold text-lg mb-2">Preliminary Assessment</h3>
-              <p className="text-white/70">Quick analysis of contract terms and negotiation points</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-6">
-              <h3 className="text-white font-semibold text-lg mb-2">Intelligent Drafting</h3>
-              <p className="text-white/70">AI-assisted contract creation with balanced terms</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-6">
-              <h3 className="text-white font-semibold text-lg mb-2">Real-Time Mediation</h3>
-              <p className="text-white/70">Live negotiation support with CLARENCE AI</p>
-            </div>
           </div>
         </div>
-      </div>
-    </main>
+        
+        {/* Add styles for animations */}
+        <style jsx>{`
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          
+          .animate-fade-in {
+            animation: fadeIn 0.8s ease-out;
+          }
+          
+          .animate-fade-in-delay {
+            animation: fadeIn 0.8s ease-out 0.2s both;
+          }
+        `}</style>
+      </main>
+    </>
   )
 }
