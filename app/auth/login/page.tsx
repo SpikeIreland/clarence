@@ -104,8 +104,6 @@ export default function LoginPage() {
       userInfo: userData
     }))
     
-    // For now, redirect to the chat page we created
-    // Later you can create a dashboard page and redirect there
     router.push('/auth/contracts-dashboard')
   }
 
@@ -170,24 +168,35 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 flex items-center justify-center p-5">
-      <div className="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-lg relative overflow-hidden">
-        {/* Top gradient bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-600 to-purple-800"></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 flex items-center justify-center p-5">
+      {/* Back to Home Link - Top Left */}
+      <a 
+        href="/" 
+        className="absolute top-8 left-8 text-slate-400 hover:text-white text-sm font-medium transition-colors duration-300"
+      >
+        ← Back to Home
+      </a>
+
+      <div className="bg-slate-50 rounded-xl shadow-2xl p-10 w-full max-w-md relative overflow-hidden">
+        {/* Top accent bar */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-slate-600 to-slate-700"></div>
         
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">CLARENCE</h1>
-          <div className="text-lg font-semibold text-purple-600 mb-2">AI-Powered Mediation Portal</div>
-          <p className="text-gray-600">Sign in to access your negotiations</p>
+          <h1 className="text-3xl font-medium text-slate-800 mb-2 tracking-wide">CLARENCE</h1>
+          <p className="text-sm text-slate-500 font-light tracking-wider">The Honest Broker</p>
+          <div className="mt-6">
+            <h2 className="text-lg font-normal text-slate-700">Sign In</h2>
+            <p className="text-sm text-slate-500 mt-1">Access your contract negotiations</p>
+          </div>
         </div>
 
         {/* Message Display */}
         {message && (
-          <div className={`p-4 rounded-lg mb-6 text-center font-medium ${
-            message.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' :
-            message.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' :
-            'bg-blue-100 text-blue-800 border border-blue-200'
+          <div className={`p-3 rounded-lg mb-6 text-center text-sm ${
+            message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+            message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+            'bg-blue-50 text-blue-700 border border-blue-200'
           }`}>
             {message.text}
           </div>
@@ -196,28 +205,28 @@ export default function LoginPage() {
         {/* Login Form */}
         <form onSubmit={handleSubmit}>
           <div className="mb-5">
-            <label className="block mb-2 text-gray-700 font-semibold text-sm">
+            <label className="block mb-2 text-slate-600 font-medium text-sm">
               Email Address
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-base bg-gray-50 focus:outline-none focus:border-purple-600 focus:bg-white transition-all"
+              className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-all"
               placeholder="your.email@company.com"
               required
             />
           </div>
 
           <div className="mb-5">
-            <label className="block mb-2 text-gray-700 font-semibold text-sm">
+            <label className="block mb-2 text-slate-600 font-medium text-sm">
               Password
             </label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-base bg-gray-50 focus:outline-none focus:border-purple-600 focus:bg-white transition-all"
+              className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-all"
               placeholder="Enter your password"
               required
             />
@@ -229,9 +238,9 @@ export default function LoginPage() {
               id="rememberMe"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
-              className="mr-2 w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+              className="mr-2 w-4 h-4 text-slate-600 rounded border-slate-300 focus:ring-slate-500"
             />
-            <label htmlFor="rememberMe" className="text-gray-700 text-sm">
+            <label htmlFor="rememberMe" className="text-slate-600 text-sm">
               Keep me signed in
             </label>
           </div>
@@ -239,11 +248,11 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-xl font-semibold text-base transition-all hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed relative"
+            className="w-full py-3 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg font-medium text-sm transition-all duration-300 hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed relative"
           >
             {loading ? (
               <span className="flex items-center justify-center">
-                <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
+                <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
@@ -256,13 +265,20 @@ export default function LoginPage() {
         </form>
 
         {/* Sign up link */}
-        <div className="text-center mt-6 pt-6 border-t border-gray-200">
-          <p className="text-gray-600">
+        <div className="text-center mt-6 pt-6 border-t border-slate-200">
+          <p className="text-slate-600 text-sm">
             Don&apos;t have an account?{' '}
-            <a href="/auth/signup" className="text-purple-600 font-semibold hover:text-purple-800 hover:underline transition-colors">
+            <a href="/auth/signup" className="text-slate-700 font-medium hover:text-slate-900 hover:underline transition-colors">
               Create account
             </a>
           </p>
+        </div>
+
+        {/* Footer link */}
+        <div className="text-center mt-4">
+          <a href="/forgot-password" className="text-slate-500 text-sm hover:text-slate-700 transition-colors">
+            Forgot password?
+          </a>
         </div>
       </div>
     </div>
