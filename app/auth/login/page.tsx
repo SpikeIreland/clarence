@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 interface User {
   userId?: string
@@ -170,12 +171,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 flex items-center justify-center p-5">
       {/* Back to Home Link - Top Left */}
-      <a 
+      <Link 
         href="/" 
         className="absolute top-8 left-8 text-slate-400 hover:text-white text-sm font-medium transition-colors duration-300"
       >
         ← Back to Home
-      </a>
+      </Link>
 
       <div className="bg-slate-50 rounded-xl shadow-2xl p-10 w-full max-w-md relative overflow-hidden">
         {/* Top accent bar */}
