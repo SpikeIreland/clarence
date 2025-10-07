@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 interface Company {
   id: string
@@ -198,7 +199,7 @@ export default function SignupPage() {
         try {
           const error = await response.json()
           errorMessage = error.message || errorMessage
-        } catch {  // <- REMOVE THE 'e' HERE
+        } catch {
           // Could not parse error response
         }
         throw new Error(errorMessage)
@@ -232,91 +233,100 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-purple-800 flex items-center justify-center p-5">
-      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-2xl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 flex items-center justify-center p-5">
+      {/* Back to Home Link - Top Left */}
+      <Link 
+        href="/" 
+        className="absolute top-8 left-8 text-slate-400 hover:text-white text-sm font-medium transition-colors duration-300"
+      >
+        ← Back to Home
+      </Link>
+
+      <div className="bg-slate-50 rounded-xl shadow-2xl overflow-hidden w-full max-w-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-800 to-blue-600 text-white p-10 text-center">
-          <h1 className="text-4xl font-bold mb-2">CLARENCE</h1>
-          <p className="text-xl">Create Your Account</p>
+        <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-8 text-center">
+          <h1 className="text-3xl font-medium mb-2 tracking-wide">CLARENCE</h1>
+          <p className="text-sm text-slate-300 font-light tracking-wider mb-4">The Honest Broker</p>
+          <p className="text-lg font-normal">Create Your Account</p>
         </div>
 
         {/* Message Display */}
         {message && (
-          <div className={`mx-8 mt-6 p-4 rounded-lg text-center font-medium ${
-            message.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' :
-            message.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' :
-            'bg-blue-100 text-blue-800 border border-blue-200'
+          <div className={`mx-8 mt-6 p-3 rounded-lg text-center text-sm ${
+            message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+            message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+            'bg-blue-50 text-blue-700 border border-blue-200'
           }`}>
             {message.text}
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-10">
+        <form onSubmit={handleSubmit} className="p-8">
           {/* Account Information */}
-          <div className="bg-gray-50 rounded-xl p-6 mb-6 border-l-4 border-blue-500">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <span>👤</span> Account Information
+          <div className="bg-white rounded-lg p-5 mb-5 border-l-4 border-slate-500">
+            <h3 className="text-base font-medium text-slate-700 mb-4 flex items-center gap-2">
+              <span className="text-slate-500">👤</span> Account Information
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 mb-1">
                   First Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.firstName}
                   onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 mb-1">
                   Last Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.lastName}
                   onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 mb-1">
                   Email <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">This will be your login username</p>
+                <p className="text-xs text-slate-500 mt-1">This will be your login username</p>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 mb-1">
                   Phone Number
                 </label>
                 <input
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                 />
               </div>
             </div>
           </div>
 
           {/* Company Information */}
-          <div className="bg-gray-50 rounded-xl p-6 mb-6 border-l-4 border-blue-500">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <span>🏢</span> Company Information
+          <div className="bg-white rounded-lg p-5 mb-5 border-l-4 border-slate-500">
+            <h3 className="text-base font-medium text-slate-700 mb-4 flex items-center gap-2">
+              <span className="text-slate-500">🏢</span> Company Information
             </h3>
             <div className="relative mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1">
                 Company Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -324,21 +334,21 @@ export default function SignupPage() {
                 value={formData.companyName}
                 onChange={(e) => handleCompanySearch(e.target.value)}
                 onFocus={() => companies.length > 0 && setShowCompanyDropdown(true)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                 placeholder="Start typing to search or enter new company"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Select existing company or enter a new one</p>
+              <p className="text-xs text-slate-500 mt-1">Select existing company or enter a new one</p>
               
               {showCompanyDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   {companies
                     .filter(c => c.name.toLowerCase().includes(formData.companyName.toLowerCase()))
                     .map(company => (
                       <div
                         key={company.id}
                         onClick={() => selectCompany(company)}
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
+                        className="px-4 py-2 hover:bg-slate-100 cursor-pointer border-b border-slate-100 text-sm"
                       >
                         {company.name}
                       </div>
@@ -350,26 +360,26 @@ export default function SignupPage() {
             
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 mb-1">
                   Job Title <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.jobTitle}
                   onChange={(e) => setFormData(prev => ({ ...prev, jobTitle: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                   placeholder="e.g., Senior Partner, Manager"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-600 mb-1">
                   Department
                 </label>
                 <select
                   value={formData.department}
                   onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value }))}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                 >
                   <option value="">Select department</option>
                   <option value="Legal">Legal</option>
@@ -384,12 +394,12 @@ export default function SignupPage() {
           </div>
 
           {/* Security */}
-          <div className="bg-gray-50 rounded-xl p-6 mb-6 border-l-4 border-blue-500">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <span>🔐</span> Security
+          <div className="bg-white rounded-lg p-5 mb-5 border-l-4 border-slate-500">
+            <h3 className="text-base font-medium text-slate-700 mb-4 flex items-center gap-2">
+              <span className="text-slate-500">🔐</span> Security
             </h3>
             <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1">
                 Password <span className="text-red-500">*</span>
               </label>
               <input
@@ -399,48 +409,48 @@ export default function SignupPage() {
                   setFormData(prev => ({ ...prev, password: e.target.value }))
                   checkPasswordStrength(e.target.value)
                 }}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                 required
               />
               <div className="mt-2">
-                <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+                <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
                   <div 
                     className={`h-full transition-all ${passwordStrength.class}`}
                     style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
                   />
                 </div>
-                <p className="text-xs text-gray-600 mt-1">{passwordStrength.text}</p>
+                <p className="text-xs text-slate-600 mt-1">{passwordStrength.text}</p>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-600 mb-1">
                 Confirm Password <span className="text-red-500">*</span>
               </label>
               <input
                 type="password"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500"
                 required
               />
             </div>
           </div>
 
           {/* Terms */}
-          <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-5 mb-8">
+          <div className="bg-slate-100 border border-slate-300 rounded-lg p-4 mb-6">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.acceptTerms}
                 onChange={(e) => setFormData(prev => ({ ...prev, acceptTerms: e.target.checked }))}
-                className="mt-1"
+                className="mt-1 text-slate-600 border-slate-300 rounded focus:ring-slate-500"
                 required
               />
-              <span className="text-sm text-gray-700">
+              <span className="text-xs text-slate-700">
                 I agree to the{' '}
-                <a href="/terms" className="text-blue-600 font-semibold hover:underline">Terms of Service</a>
+                <Link href="/terms" className="text-slate-800 font-medium hover:underline">Terms of Service</Link>
                 {' '}and{' '}
-                <a href="/privacy" className="text-blue-600 font-semibold hover:underline">Privacy Policy</a>.
+                <Link href="/privacy" className="text-slate-800 font-medium hover:underline">Privacy Policy</Link>.
                 I understand that CLARENCE will use my information to facilitate contract negotiation and mediation services.
               </span>
             </label>
@@ -450,16 +460,16 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading || !formData.acceptTerms}
-            className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold transition-all hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full py-3 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg font-medium text-sm transition-all duration-300 hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? 'Creating Account...' : 'Create Account'}
           </button>
 
-          <p className="text-center mt-6 text-gray-600">
+          <p className="text-center mt-6 text-slate-600 text-sm">
             Already have an account?{' '}
-            <a href="/auth/login" className="text-blue-600 font-semibold hover:underline">
+            <Link href="/auth/login" className="text-slate-700 font-medium hover:text-slate-900 hover:underline">
               Sign in here
-            </a>
+            </Link>
           </p>
         </form>
       </div>
