@@ -1,5 +1,3 @@
-// Updated: Wed Oct  1 07:02:47 AWST 2025
-
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
@@ -115,15 +113,19 @@ export default function HowItWorksPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800">
       {/* Navigation */}
-      <div className="bg-black/20 backdrop-blur border-b border-white/10">
-        <div className="container mx-auto px-4 py-4">
+      <div className="bg-slate-900/50 backdrop-blur border-b border-slate-700/50">
+        <div className="container mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
-            <Link href="/" className="text-3xl font-bold text-white">CLARENCE</Link>
-            <div className="flex gap-6">
-              <Link href="/how-it-works" className="text-white font-semibold">How It Works</Link>
-              <Link href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition inline-block">
+            <Link href="/" className="text-2xl font-medium text-white tracking-wide">
+              CLARENCE
+            </Link>
+            <div className="flex gap-6 items-center">
+              <Link href="/phases" className="text-slate-300 hover:text-white text-sm font-medium transition-colors">
+                6-Phase Process
+              </Link>
+              <Link href="/auth/login" className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300">
                 Sign In
               </Link>
             </div>
@@ -132,12 +134,12 @@ export default function HowItWorksPage() {
       </div>
 
       {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
+      <div className="container mx-auto px-6 py-16">
         <div className="text-center mb-16">
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+          <h1 className="text-4xl md:text-5xl font-medium text-white mb-6 tracking-wide animate-fade-in">
             How CLARENCE Works
           </h1>
-          <p className="text-xl text-white/80 max-w-3xl mx-auto">
+          <p className="text-lg text-slate-300 max-w-3xl mx-auto font-light leading-relaxed animate-fade-in" style={{ animationDelay: '0.2s', animationFillMode: 'both' }}>
             CLARENCE leads parties through an intuitive and structured negotiation process,
             combining AI-powered insights with transparent compromise brokering to efficiently produce optimal outcomes.
           </p>
@@ -145,56 +147,56 @@ export default function HowItWorksPage() {
 
         {/* Process Steps */}
         <div className="max-w-4xl mx-auto">
-          <div className="space-y-4">
-            {processSteps.map((step) => (
+          <div className="space-y-3">
+            {processSteps.map((step, index) => (
               <div
                 key={step.id}
-                className="bg-white/10 backdrop-blur rounded-xl border border-white/20 overflow-hidden transition-all duration-300 hover:bg-white/15"
+                className="bg-slate-800/50 backdrop-blur rounded-lg border border-slate-700/50 overflow-hidden transition-all duration-300 hover:bg-slate-800/70 animate-fade-in"
+                style={{ animationDelay: `${0.1 * (index + 3)}s`, animationFillMode: 'both' }}
               >
                 <button
                   onClick={() => toggleStep(step.id)}
-                  className="w-full px-8 py-6 flex items-center justify-between text-left"
+                  className="w-full px-6 py-5 flex items-center justify-between text-left group"
                 >
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-xl">
-                      <span className="text-3xl">{step.icon}</span>
+                  <div className="flex items-center gap-5">
+                    <div className="flex items-center justify-center w-14 h-14 bg-slate-700/50 rounded-lg group-hover:bg-slate-700/70 transition-colors">
+                      <span className="text-2xl">{step.icon}</span>
                     </div>
                     <div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-blue-400 font-semibold">Step {step.id}</span>
-                        <h3 className="text-xl font-semibold text-white">{step.title}</h3>
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="text-slate-500 text-sm font-medium">Step {step.id}</span>
+                        <h3 className="text-lg font-medium text-white">{step.title}</h3>
                       </div>
-                      <p className="text-white/70">{step.description}</p>
+                      <p className="text-slate-400 text-sm font-light">{step.description}</p>
                     </div>
                   </div>
-                  <div className="text-white/60 text-2xl transition-transform duration-300"
+                  <div className="text-slate-500 text-xl transition-transform duration-300"
                        style={{ transform: expandedStep === step.id ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                     ▼
                   </div>
                 </button>
                 
                 {expandedStep === step.id && (
-                  <div className="px-8 pb-6 border-t border-white/10">
-                    <div className="pt-6 pl-22">
-                      <ul className="space-y-3">
+                  <div className="px-6 pb-5 border-t border-slate-700/50">
+                    <div className="pt-5 pl-19">
+                      <ul className="space-y-2">
                         {step.details.map((detail, index) => (
                           <li key={index} className="flex items-start gap-3">
-                            <span className="text-blue-400 mt-1">•</span>
-                            <span className="text-white/80">{detail}</span>
+                            <span className="text-slate-500 mt-1 text-sm">•</span>
+                            <span className="text-slate-300 text-sm font-light leading-relaxed">{detail}</span>
                           </li>
                         ))}
                       </ul>
                       {step.id === 4 && (
-                        <div className="mt-6 p-4 bg-blue-600/20 rounded-lg border border-blue-500/30">
-                          <p className="text-white/90 text-sm">
-                            <strong>Explore in detail:</strong> View the complete breakdown of each negotiation phase. 
-                            <Link href="/phases" className="text-blue-400 hover:text-blue-300 ml-2 font-semibold">
+                        <div className="mt-5 p-3 bg-slate-700/30 rounded-lg border border-slate-600/30">
+                          <p className="text-slate-300 text-sm">
+                            <strong className="font-medium">Explore in detail:</strong> View the complete breakdown of each negotiation phase. 
+                            <Link href="/phases" className="text-slate-400 hover:text-slate-200 ml-2 font-medium transition-colors">
                               See the 6-Phase Process →
                             </Link>
                           </p>
                         </div>
                       )}
-
                     </div>
                   </div>
                 )}
@@ -203,33 +205,12 @@ export default function HowItWorksPage() {
           </div>
         </div>
 
-        {/* CTA Section */}
-        <div className="mt-20 text-center">
-          <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 backdrop-blur rounded-2xl p-12 border border-white/20">
-            <h2 className="text-3xl font-bold text-white mb-4">
-              Ready to Transform Your Contract Negotiations?
-            </h2>
-            <p className="text-white/80 mb-8 max-w-2xl mx-auto">
-              Join forward-thinking companies using CLARENCE to negotiate better contracts with 
-              transparent compromise brokering and real-time contract generation.
-            </p>
-            <div className="flex gap-4 justify-center">
-              <Link href="/auth/signup" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition inline-block">
-                Get Started Free
-              </Link>
-              <Link href="/auth/login" className="border border-white/30 hover:border-white/50 text-white px-8 py-4 rounded-lg text-lg transition inline-block">
-                Sign In
-              </Link>
-            </div>
-          </div>
-        </div>
-
         {/* Bottom Navigation */}
-        <div className="mt-16 pt-8 border-t border-white/10">
+        <div className="mt-16 pt-8 border-t border-slate-700/50">
           <div className="flex justify-center gap-8">
-            <Link href="/" className="text-white/60 hover:text-white transition">Home</Link>
-            <Link href="/terms" className="text-white/60 hover:text-white transition">Terms</Link>
-            <Link href="/privacy" className="text-white/60 hover:text-white transition">Privacy</Link>
+            <Link href="/" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">Home</Link>
+            <Link href="/terms" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">Terms</Link>
+            <Link href="/privacy" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">Privacy</Link>
           </div>
         </div>
       </div>
