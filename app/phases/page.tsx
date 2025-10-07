@@ -90,30 +90,32 @@ export default function PhasesPage() {
   const [selectedPhase, setSelectedPhase] = useState<number>(1)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800">
       {/* Navigation */}
-      <div className="bg-black/20 backdrop-blur border-b border-white/10">
-        <div className="container mx-auto px-4 py-4">
+      <div className="bg-slate-900/50 backdrop-blur border-b border-slate-700/50">
+        <div className="container mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
-            <Link href="/" className="text-3xl font-bold text-white">CLARENCE</Link>
-            <div className="flex gap-6 items-center">  {/* Add items-center here */}
-              <Link href="/how-it-works" className="text-white/80 hover:text-white transition">How It Works</Link>
-              <Link href="/phases" className="text-white font-semibold">6-Phase Process</Link>
-              <Link href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition inline-block">
-                Sign In
-              </Link>
+            <div>
+              <h1 className="text-2xl font-medium text-white tracking-wide">CLARENCE</h1>
+              <p className="text-xs text-slate-400 font-light tracking-wider">The Honest Broker</p>
             </div>
+            <Link 
+              href="/how-it-works" 
+              className="text-slate-300 hover:text-white text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              ← Back to How It Works
+            </Link>
           </div>
         </div>
       </div>
 
       {/* Hero Section */}
-      <div className="container mx-auto px-4 py-12">
+      <div className="container mx-auto px-6 py-12">
         <div className="text-center mb-12">
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+          <h1 className="text-4xl md:text-5xl font-medium text-white mb-6 animate-fade-in">
             The 6-Phase Negotiation Process
           </h1>
-          <p className="text-xl text-white/80 max-w-3xl mx-auto">
+          <p className="text-lg text-slate-300 max-w-3xl mx-auto font-light leading-relaxed animate-fade-in" style={{ animationDelay: '0.2s', animationFillMode: 'both' }}>
             CLARENCE&apos;s structured approach guides parties through a proven negotiation framework,
             from initial profiling to final contract execution.
           </p>
@@ -123,9 +125,9 @@ export default function PhasesPage() {
         <div className="max-w-6xl mx-auto mb-12">
           <div className="flex justify-between items-center relative">
             {/* Progress Line */}
-            <div className="absolute top-8 left-0 right-0 h-1 bg-white/20 z-0" />
+            <div className="absolute top-8 left-0 right-0 h-1 bg-slate-700/50 z-0" />
             <div 
-              className="absolute top-8 left-0 h-1 bg-blue-500 z-0 transition-all duration-500"
+              className="absolute top-8 left-0 h-1 bg-slate-500 z-0 transition-all duration-500"
               style={{ width: `${((selectedPhase - 1) / 5) * 100}%` }}
             />
             
@@ -137,19 +139,19 @@ export default function PhasesPage() {
                 className="relative z-10 group"
               >
                 <div className={`
-                  w-16 h-16 rounded-full flex items-center justify-center font-bold text-lg
+                  w-16 h-16 rounded-full flex items-center justify-center font-medium text-lg
                   transition-all duration-300 transform hover:scale-110
                   ${selectedPhase === phase.number 
-                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/50' 
+                    ? 'bg-slate-600 text-white shadow-lg shadow-slate-600/30' 
                     : selectedPhase > phase.number
-                    ? 'bg-blue-600/50 text-white'
-                    : 'bg-white/20 text-white/60 hover:bg-white/30'
+                    ? 'bg-slate-700/70 text-slate-300'
+                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
                   }
                 `}>
                   {phase.number}
                 </div>
                 <div className="absolute top-20 left-1/2 transform -translate-x-1/2 w-32 text-center">
-                  <p className="text-xs text-white/80 font-medium whitespace-nowrap">
+                  <p className="text-xs text-slate-400 font-light whitespace-nowrap">
                     {phase.subtitle.split(' ').slice(0, 2).join(' ')}
                   </p>
                 </div>
@@ -160,37 +162,37 @@ export default function PhasesPage() {
 
         {/* Phase Details */}
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white/10 backdrop-blur rounded-2xl border border-white/20 p-8 md:p-12">
+          <div className="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700/50 p-8 md:p-10">
             <div className="mb-8">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-20 h-20 bg-blue-600/20 rounded-xl flex items-center justify-center">
-                  <span className="text-4xl font-bold text-blue-400">
+                <div className="w-20 h-20 bg-slate-700/30 rounded-xl flex items-center justify-center">
+                  <span className="text-4xl font-medium text-slate-400">
                     {phases[selectedPhase - 1].number}
                   </span>
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold text-white mb-2">
+                  <h2 className="text-2xl font-medium text-white mb-2">
                     {phases[selectedPhase - 1].title}
                   </h2>
-                  <p className="text-xl text-blue-400">
+                  <p className="text-lg text-slate-400 font-light">
                     {phases[selectedPhase - 1].subtitle}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-4 mb-8">
+            <div className="space-y-3 mb-8">
               {phases[selectedPhase - 1].description.map((desc, index) => (
                 <div key={index} className="flex items-start gap-3">
-                  <span className="text-blue-400 mt-1">▸</span>
-                  <p className="text-white/90 leading-relaxed">{desc}</p>
+                  <span className="text-slate-500 mt-1 text-sm">▸</span>
+                  <p className="text-slate-300 leading-relaxed text-sm font-light">{desc}</p>
                 </div>
               ))}
             </div>
 
-            <div className="bg-blue-600/20 rounded-xl p-6 border border-blue-500/30">
-              <h3 className="text-lg font-semibold text-blue-400 mb-2">Key Outcome</h3>
-              <p className="text-white/90">{phases[selectedPhase - 1].keyOutcome}</p>
+            <div className="bg-slate-700/30 rounded-lg p-5 border border-slate-600/30">
+              <h3 className="text-base font-medium text-slate-400 mb-2">Key Outcome</h3>
+              <p className="text-slate-300 text-sm font-light">{phases[selectedPhase - 1].keyOutcome}</p>
             </div>
 
             {/* Navigation Buttons */}
@@ -199,10 +201,10 @@ export default function PhasesPage() {
                 onClick={() => setSelectedPhase(Math.max(1, selectedPhase - 1))}
                 disabled={selectedPhase === 1}
                 className={`
-                  px-6 py-3 rounded-lg font-semibold transition
+                  px-5 py-2.5 rounded-lg font-medium text-sm transition-all
                   ${selectedPhase === 1 
-                    ? 'bg-white/10 text-white/30 cursor-not-allowed' 
-                    : 'bg-white/20 text-white hover:bg-white/30'
+                    ? 'bg-slate-800/30 text-slate-600 cursor-not-allowed' 
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700/70 hover:text-white'
                   }
                 `}
               >
@@ -213,31 +215,16 @@ export default function PhasesPage() {
                 onClick={() => setSelectedPhase(Math.min(6, selectedPhase + 1))}
                 disabled={selectedPhase === 6}
                 className={`
-                  px-6 py-3 rounded-lg font-semibold transition
+                  px-5 py-2.5 rounded-lg font-medium text-sm transition-all
                   ${selectedPhase === 6 
-                    ? 'bg-white/10 text-white/30 cursor-not-allowed' 
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                    ? 'bg-slate-800/30 text-slate-600 cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white'
                   }
                 `}
               >
                 Next Phase →
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* CTA Section */}
-        <div className="mt-16 text-center">
-          <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 backdrop-blur rounded-2xl p-12 border border-white/20 max-w-4xl mx-auto">
-            <h2 className="text-2xl font-bold text-white mb-4">
-              Experience the Complete Negotiation Process
-            </h2>
-            <p className="text-white/80 mb-8">
-              Start your first negotiation and let CLARENCE guide you through each phase.
-            </p>
-            <Link href="/auth/signup" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition inline-block">
-              Begin Your Negotiation
-            </Link>
           </div>
         </div>
       </div>
