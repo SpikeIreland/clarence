@@ -378,7 +378,7 @@ function ClarenceChatContent() {
     setArtifactPanelCollapsed(false)
   }
 
-  // Demo Triggers
+ // Demo Triggers
   const triggerDemo = (scenario: string) => {
     const demos: Record<string, {userMessage: string, response: string, alignmentIncrease?: number}> = {
       payment_stuck: {
@@ -427,13 +427,14 @@ function ClarenceChatContent() {
       
       if (demo.alignmentIncrease) {
         setCurrentAlignment(prev => Math.min(100, prev + demo.alignmentIncrease!))
+      }  // <-- THIS WAS MISSING!
       
       if (scenario === 'generate_contract') {
         generateContractArtifact()
       }
     }, 1500)
   }
-
+  
   // Auto-resize textarea
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(e.target.value)
