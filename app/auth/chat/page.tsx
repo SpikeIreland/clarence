@@ -379,9 +379,6 @@ function ClarenceChatContent() {
   }
 
   // Demo Triggers
-  // ========== REPLACE THE ENTIRE triggerDemo FUNCTION WITH THIS ==========
-  // This is the complete, correctly formatted triggerDemo function
-  
   const triggerDemo = (scenario: string) => {
     const demos: Record<string, {userMessage: string, response: string, alignmentIncrease?: number}> = {
       payment_stuck: {
@@ -406,38 +403,6 @@ function ClarenceChatContent() {
       }
     }
     
-    const demo = demos[scenario]
-    if (!demo) return
-    
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      sender: 'user',
-      content: demo.userMessage,
-      timestamp: new Date()
-    }
-    setMessages(prev => [...prev, userMessage])
-    
-    // Add response after delay
-    setTimeout(() => {
-      const responseMessage: Message = {
-        id: Date.now().toString(),
-        sender: 'assistant',
-        content: demo.response,
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, responseMessage])
-      
-      if (demo.alignmentIncrease) {
-        setCurrentAlignment(prev => Math.min(100, prev + demo.alignmentIncrease!))
-      }
-      
-      if (scenario === 'generate_contract') {
-        generateContractArtifact()
-      }
-    }, 1500)
-  }
-  
     const demo = demos[scenario]
     if (!demo) return
     
