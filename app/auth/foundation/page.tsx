@@ -6,15 +6,14 @@ import Link from 'next/link'
 // ========== INTERFACES ==========
 interface Clause {
   id: string
+  groupId: string
   title: string
-  description: string
   customerPosition: number
   providerPosition: number
-  priority: number
-  alignment: 'aligned' | 'close' | 'far'
-  notes?: string
-  clarenceRecommendation?: string
-  recommendedCompromise?: number
+  customerPriority: number
+  providerPriority: number
+  aligned: boolean
+  positions: string[]
 }
 
 interface Session {
@@ -33,167 +32,166 @@ export default function FoundationPhase() {
   const router = useRouter()
   
   const [session, setSession] = useState<Session | null>(null)
-  const [activeTab, setActiveTab] = useState<'positions' | 'priorities' | 'review'>('positions')
+  const [activeTab, setActiveTab] = useState<'payment' | 'liability' | 'termination'>('payment')
   const [overallAlignment, setOverallAlignment] = useState(0)
-  const [showDemo, setShowDemo] = useState(false)
-  const [loadingRecommendation, setLoadingRecommendation] = useState<string | null>(null)
+  const [showComplete, setShowComplete] = useState(false)
   
+  // Clause data organized by groups as per John's specification
   const [clauses, setClauses] = useState<Clause[]>([
+    // Payment and Invoicing Group
     {
-      id: '1',
-      title: 'Service Level Agreement',
-      description: 'Defines performance standards and uptime requirements',
-      customerPosition: 5,
-      providerPosition: 3,
-      priority: 8,
-      alignment: 'close',
-      notes: '',
-      clarenceRecommendation: '',
-      recommendedCompromise: 4
-    },
-    {
-      id: '2',
+      id: 'payment-terms',
+      groupId: 'payment',
       title: 'Payment Terms',
-      description: 'Specifies payment schedule and methods',
-      customerPosition: 7,
-      providerPosition: 6,
-      priority: 9,
-      alignment: 'aligned',
-      notes: '',
-      clarenceRecommendation: 'Parties are well-aligned. Consider net-30 terms with 2% early payment discount.',
-      recommendedCompromise: 6.5
+      customerPosition: 1, // 30 days
+      providerPosition: 2, // 60 days
+      customerPriority: 9,
+      providerPriority: 8,
+      aligned: false,
+      positions: [
+        '30 days from date of receipt by customer',
+        '60 days from date of receipt by customer',
+        '90 days from date of receipt by customer',
+        '120 days from date of receipt by customer'
+      ]
     },
     {
-      id: '3',
-      title: 'Liability Limitations',
-      description: 'Caps on liability and indemnification',
-      customerPosition: 3,
-      providerPosition: 8,
-      priority: 7,
-      alignment: 'far',
-      notes: '',
-      clarenceRecommendation: '',
-      recommendedCompromise: 5
+      id: 'late-payment',
+      groupId: 'payment',
+      title: 'Late Payment Interest',
+      customerPosition: 1, // 10% per annum
+      providerPosition: 5, // No late payment interest
+      customerPriority: 6,
+      providerPriority: 4,
+      aligned: false,
+      positions: [
+        '10% per annum calculated on a monthly basis',
+        'The lower of 10% or the legal rate of interest',
+        '4% above the base lending rate',
+        '2% above the base lending rate',
+        'No late payment interest'
+      ]
     },
     {
-      id: '4',
-      title: 'Intellectual Property',
-      description: 'Ownership of work product and IP rights',
-      customerPosition: 8,
-      providerPosition: 7,
-      priority: 8,
-      alignment: 'aligned',
-      notes: '',
-      clarenceRecommendation: 'Strong alignment. Standard work-for-hire with provider retaining methodologies.',
-      recommendedCompromise: 7.5
+      id: 'vat-liability',
+      groupId: 'payment',
+      title: 'Liability for VAT / Sales Tax',
+      customerPosition: 1, // Yes (exclusive)
+      providerPosition: 0, // No (inclusive)
+      customerPriority: 7,
+      providerPriority: 7,
+      aligned: false,
+      positions: ['No (prices include VAT)', 'Yes (prices exclude VAT)']
+    },
+    
+    // Limitation of Liability Group
+    {
+      id: 'liability-cap',
+      groupId: 'liability',
+      title: 'General Liability Cap',
+      customerPosition: 1, // 100% of annual fees
+      providerPosition: 4, // Annual cap = greater amount
+      customerPriority: 9,
+      providerPriority: 10,
+      aligned: false,
+      positions: [
+        'Aggregate cap (whole term) = 100% of the annual fees',
+        'Aggregate cap = 150% of the annual fees',
+        'Aggregate cap = greater of [agreed amount] and 150% of annual fees',
+        'Annual cap = 150% of the annual fees',
+        'Annual cap = greater of [agreed amount] and 150% of annual fees',
+        'Annual cap (per year) = 200% of the annual fees'
+      ]
     },
     {
-      id: '5',
-      title: 'Termination Rights',
-      description: 'Conditions and notice periods for termination',
-      customerPosition: 6,
-      providerPosition: 5,
-      priority: 6,
-      alignment: 'aligned',
-      notes: '',
-      clarenceRecommendation: '',
-      recommendedCompromise: 5.5
+      id: 'excluded-losses',
+      groupId: 'liability',
+      title: 'Excluded Losses (Indirect Damages)',
+      customerPosition: 1, // Exclude all indirect and consequential
+      providerPosition: 3, // Exclude indirect but not lost profits
+      customerPriority: 8,
+      providerPriority: 9,
+      aligned: false,
+      positions: [
+        'Exclude all indirect/consequential damages and lost profits (direct or indirect)',
+        'Exclude all indirect/consequential damages and lost profits',
+        'Exclude all indirect/consequential damages including lost profits',
+        'Exclude all indirect/consequential damages excluding lost profits',
+        'Exclude indirect/consequential but include reasonably foreseeable',
+        'No exclusion for indirect or consequential losses'
+      ]
     },
     {
-      id: '6',
-      title: 'Data Protection',
-      description: 'GDPR compliance and data handling procedures',
-      customerPosition: 9,
-      providerPosition: 8,
-      priority: 10,
-      alignment: 'aligned',
-      notes: '',
-      clarenceRecommendation: 'Excellent alignment on critical clause. Include standard GDPR provisions.',
-      recommendedCompromise: 8.5
+      id: 'unlimited-losses',
+      groupId: 'liability',
+      title: 'Unlimited Losses (UK Positions)',
+      customerPosition: 1, // Death, injury, fraud
+      providerPosition: 3, // Plus gross misconduct and negligence
+      customerPriority: 7,
+      providerPriority: 8,
+      aligned: false,
+      positions: [
+        'Death/injury by negligence, fraud, Sale of Goods Act',
+        'Death/injury by negligence, fraud, Sale of Goods Act, gross misconduct',
+        'Death/injury by negligence, fraud, Sale of Goods Act, gross misconduct, gross negligence',
+        'Death/injury by negligence, fraud, Sale of Goods Act, gross misconduct, gross negligence, willful default'
+      ]
+    },
+    
+    // Term and Termination Group
+    {
+      id: 'initial-term',
+      groupId: 'termination',
+      title: 'Length of Initial Term',
+      customerPosition: 3, // 2 years
+      providerPosition: 1, // 5 years
+      customerPriority: 8,
+      providerPriority: 9,
+      aligned: false,
+      positions: ['5 years', '3 years', '2 years', '1 year']
+    },
+    {
+      id: 'renewal-term',
+      groupId: 'termination',
+      title: 'Renewal Term',
+      customerPosition: 3, // Client right to extend 2 years
+      providerPosition: 1, // No renewal option
+      customerPriority: 6,
+      providerPriority: 5,
+      aligned: false,
+      positions: [
+        'No renewal option (mutual agreement required)',
+        'Client right to extend for up to 12 months on existing terms',
+        'Client right to extend for up to 2 years on existing terms',
+        'Client right to extend for up to 3 years on existing terms'
+      ]
+    },
+    {
+      id: 'termination-convenience',
+      groupId: 'termination',
+      title: 'Right to Terminate for Convenience',
+      customerPosition: 5, // Customer only - 60 days
+      providerPosition: 1, // Mutual - 180 days
+      customerPriority: 9,
+      providerPriority: 7,
+      aligned: false,
+      positions: [
+        'Mutual - 180 days notice',
+        'Customer only - 180 days notice',
+        'Customer only - 120 days notice',
+        'Customer only - 90 days notice',
+        'Customer only - 60 days notice',
+        'Customer only - 30 days notice'
+      ]
     }
   ])
 
-  // Request CLARENCE recommendation for a specific clause
-  const requestClarenceRecommendation = async (clauseId: string) => {
-    setLoadingRecommendation(clauseId)
-    
-    const clause = clauses.find(c => c.id === clauseId)
-    if (!clause) return
-    
-    // Simulate API call to CLARENCE webhook
-    // In production, this would call your actual webhook
-    try {
-      // Mock response for now
-      setTimeout(() => {
-        setClauses(prev => prev.map(c => {
-          if (c.id === clauseId) {
-            const gap = Math.abs(c.customerPosition - c.providerPosition)
-            let recommendation = ''
-            
-            if (gap <= 1) {
-              recommendation = `Strong alignment achieved. Minor adjustments could include ${
-                c.customerPosition > c.providerPosition ? 'provider accepting slightly higher standards' : 
-                'customer allowing reasonable flexibility'
-              }.`
-            } else if (gap <= 3) {
-              const compromise = (c.customerPosition + c.providerPosition) / 2
-              recommendation = `Consider middle ground at position ${compromise.toFixed(1)}. ${
-                c.title === 'Liability Limitations' ? 
-                'Perhaps cap at 12 months fees with carve-outs for gross negligence.' :
-                'Both parties showing flexibility can achieve win-win outcome.'
-              }`
-            } else {
-              recommendation = `Significant gap requires creative solution. Consider: 
-                1) Phased approach over contract term
-                2) Performance-based adjustments
-                3) Trade-off with other clauses where you have better alignment`
-            }
-            
-            return {
-              ...c,
-              clarenceRecommendation: recommendation,
-              recommendedCompromise: (c.customerPosition + c.providerPosition) / 2
-            }
-          }
-          return c
-        }))
-        setLoadingRecommendation(null)
-      }, 1500)
-      
-      /* ACTUAL API CALL (when webhook is active):
-      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/clarence-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: localStorage.getItem('userId'),
-          sessionId: session?.sessionId,
-          message: `Provide mediation recommendation for ${clause.title}. Customer position: ${clause.customerPosition}/10, Provider position: ${clause.providerPosition}/10. Priority: ${clause.priority}/10.`,
-          currentPhase: 2,
-          alignmentScore: overallAlignment,
-          negotiationContext: {
-            clauseDetails: clause,
-            session: session
-          }
-        })
-      })
-      
-      const data = await response.json()
-      // Update clause with CLARENCE recommendation
-      */
-      
-    } catch (error) {
-      console.error('Error getting CLARENCE recommendation:', error)
-      setLoadingRecommendation(null)
-    }
-  }
-
   const calculateAlignment = useCallback(() => {
     let alignedCount = 0
-    let totalCount = 0
+    let totalCount = clauses.length
     
     clauses.forEach(clause => {
-      totalCount++
-      if (Math.abs(clause.customerPosition - clause.providerPosition) <= 2) {
+      if (clause.customerPosition === clause.providerPosition) {
         alignedCount++
       }
     })
@@ -202,59 +200,36 @@ export default function FoundationPhase() {
     setOverallAlignment(percentage)
   }, [clauses])
 
-  const updateClausePosition = (clauseId: string, party: 'customer' | 'provider', value: number) => {
-    setClauses(prevClauses => 
+  const updatePosition = (clauseId: string, party: 'customer' | 'provider', position: number) => {
+    setClauses(prevClauses =>
       prevClauses.map(clause => {
         if (clause.id === clauseId) {
-          const updatedClause = { ...clause }
+          const updated = { ...clause }
           if (party === 'customer') {
-            updatedClause.customerPosition = value
+            updated.customerPosition = position
           } else {
-            updatedClause.providerPosition = value
+            updated.providerPosition = position
           }
-          
-          const diff = Math.abs(updatedClause.customerPosition - updatedClause.providerPosition)
-          if (diff <= 1) {
-            updatedClause.alignment = 'aligned'
-          } else if (diff <= 3) {
-            updatedClause.alignment = 'close'
-          } else {
-            updatedClause.alignment = 'far'
-          }
-          
-          // Clear recommendation when positions change
-          updatedClause.clarenceRecommendation = ''
-          
-          return updatedClause
+          updated.aligned = updated.customerPosition === updated.providerPosition
+          return updated
         }
         return clause
       })
     )
   }
 
-  const updateClausePriority = (clauseId: string, priority: number) => {
+  const updatePriority = (clauseId: string, party: 'customer' | 'provider', priority: number) => {
     setClauses(prevClauses =>
-      prevClauses.map(clause =>
-        clause.id === clauseId ? { ...clause, priority } : clause
-      )
+      prevClauses.map(clause => {
+        if (clause.id === clauseId) {
+          return {
+            ...clause,
+            [party === 'customer' ? 'customerPriority' : 'providerPriority']: priority
+          }
+        }
+        return clause
+      })
     )
-  }
-
-  const updateClauseNotes = (clauseId: string, notes: string) => {
-    setClauses(prevClauses =>
-      prevClauses.map(clause =>
-        clause.id === clauseId ? { ...clause, notes } : clause
-      )
-    )
-  }
-
-  const getAlignmentColor = (alignment: string) => {
-    switch(alignment) {
-      case 'aligned': return 'bg-green-500'
-      case 'close': return 'bg-yellow-500'
-      case 'far': return 'bg-red-500'
-      default: return 'bg-slate-500'
-    }
   }
 
   const handleCompleteFoundation = () => {
@@ -272,12 +247,9 @@ export default function FoundationPhase() {
     }
     
     alert('Foundation phase completed successfully!')
-    setShowDemo(true)
+    setShowComplete(true)
   }
 
- // ========== REPLACE YOUR ENTIRE useEffect SECTION (around lines 260-300) WITH THIS ==========
-  // This fixes the duplicate closing braces and merges the useEffects properly
-  
   useEffect(() => {
     const auth = localStorage.getItem('clarence_auth')
     if (!auth) {
@@ -285,7 +257,7 @@ export default function FoundationPhase() {
       return
     }
     
-    // Load session data from localStorage or URL params
+    // Load session data
     const urlParams = new URLSearchParams(window.location.search)
     const sessionId = urlParams.get('session')
     
@@ -322,9 +294,13 @@ export default function FoundationPhase() {
     { num: 6, name: 'Final Review', active: false, complete: false }
   ]
 
+  const getClausesByGroup = (groupId: string) => {
+    return clauses.filter(clause => clause.groupId === groupId)
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Navigation - Updated to Slate */}
+      {/* Navigation */}
       <nav className="bg-white shadow-sm border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -345,7 +321,7 @@ export default function FoundationPhase() {
                 Dashboard
               </button>
               <button
-                onClick={() => router.push(`/chat?sessionId=${session?.sessionId}`)}
+                onClick={() => router.push(`/auth/chat?sessionId=${session?.sessionId}`)}
                 className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg text-sm"
               >
                 💬 Chat with CLARENCE
@@ -356,7 +332,7 @@ export default function FoundationPhase() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header Card - Updated to Slate */}
+        {/* Header Card */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-6 rounded-xl mb-6">
           <div className="flex justify-between items-start">
             <div>
@@ -390,234 +366,122 @@ export default function FoundationPhase() {
             <div className="bg-gradient-to-r from-green-600 to-slate-700 h-2 rounded-full transition-all duration-500" 
                  style={{ width: '33.33%' }}></div>
           </div>
-          <p className="text-xs text-slate-500 mt-2 text-center">Phase 2 of 6: Contract Foundation</p>
         </div>
+
+        {/* Clause Grouping Tabs */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
           <div className="border-b border-slate-200">
             <div className="flex">
               <button
-                onClick={() => setActiveTab('positions')}
+                onClick={() => setActiveTab('payment')}
                 className={`px-6 py-4 font-medium text-sm border-b-2 transition
-                  ${activeTab === 'positions' 
+                  ${activeTab === 'payment' 
                     ? 'text-slate-700 border-slate-600' 
                     : 'text-slate-500 border-transparent hover:text-slate-700'}`}
               >
-                Position Alignment
+                Payment and Invoicing
               </button>
               <button
-                onClick={() => setActiveTab('priorities')}
+                onClick={() => setActiveTab('liability')}
                 className={`px-6 py-4 font-medium text-sm border-b-2 transition
-                  ${activeTab === 'priorities' 
+                  ${activeTab === 'liability' 
                     ? 'text-slate-700 border-slate-600' 
                     : 'text-slate-500 border-transparent hover:text-slate-700'}`}
               >
-                Priority Setting
+                Limitation of Liability
               </button>
               <button
-                onClick={() => setActiveTab('review')}
+                onClick={() => setActiveTab('termination')}
                 className={`px-6 py-4 font-medium text-sm border-b-2 transition
-                  ${activeTab === 'review' 
+                  ${activeTab === 'termination' 
                     ? 'text-slate-700 border-slate-600' 
                     : 'text-slate-500 border-transparent hover:text-slate-700'}`}
               >
-                Review and Notes
+                Term and Termination
               </button>
             </div>
           </div>
 
           <div className="p-8">
-            {/* Position Alignment Tab with CLARENCE Mediation */}
-            {activeTab === 'positions' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-medium mb-4 text-slate-800">Align Positions on Key Clauses</h3>
-                <p className="text-slate-600 mb-6 text-sm">
-                  Adjust positions and request CLARENCE mediation for misaligned clauses
-                </p>
-                
-                {clauses.map(clause => (
-                  <div key={clause.id} className="border border-slate-200 rounded-lg p-6 hover:shadow-md transition">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-lg text-slate-800">{clause.title}</h4>
-                        <p className="text-slate-600 text-sm mt-1">{clause.description}</p>
-                      </div>
-                      <div className={`w-3 h-3 rounded-full ${getAlignmentColor(clause.alignment)}`} 
-                           title={clause.alignment}></div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Customer Position: {clause.customerPosition}
-                        </label>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          value={clause.customerPosition}
-                          onChange={(e) => updateClausePosition(clause.id, 'customer', parseInt(e.target.value))}
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        />
-                        <div className="flex justify-between text-xs text-slate-500 mt-1">
-                          <span>Opposed</span>
-                          <span>Neutral</span>
-                          <span>Favorable</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Provider Position: {clause.providerPosition}
-                        </label>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          value={clause.providerPosition}
-                          onChange={(e) => updateClausePosition(clause.id, 'provider', parseInt(e.target.value))}
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        />
-                        <div className="flex justify-between text-xs text-slate-500 mt-1">
-                          <span>Opposed</span>
-                          <span>Neutral</span>
-                          <span>Favorable</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-slate-700">
-                          Alignment Gap: {Math.abs(clause.customerPosition - clause.providerPosition)} points
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {clause.alignment === 'aligned' && <span className="text-green-600 text-sm">✓ Aligned</span>}
-                          {clause.alignment === 'close' && <span className="text-yellow-600 text-sm">⚠ Close</span>}
-                          {clause.alignment === 'far' && <span className="text-red-600 text-sm">⚠ Far Apart</span>}
-                        </div>
-                      </div>
-                      
-                      {/* CLARENCE Mediation Section */}
-                      {clause.alignment !== 'aligned' && (
-                        <div className="mt-3 pt-3 border-t border-slate-200">
-                          {clause.clarenceRecommendation ? (
-                            <div className="bg-white p-3 rounded-lg">
-                              <div className="flex items-start gap-2">
-                                <span className="text-slate-600 text-sm font-medium">🤝 CLARENCE Mediation:</span>
-                              </div>
-                              <p className="text-slate-700 text-sm mt-1">{clause.clarenceRecommendation}</p>
-                              {clause.recommendedCompromise && (
-                                <p className="text-slate-500 text-xs mt-2">
-                                  Suggested position: {clause.recommendedCompromise.toFixed(1)}/10
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => requestClarenceRecommendation(clause.id)}
-                              disabled={loadingRecommendation === clause.id}
-                              className="w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white py-2 px-4 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
-                            >
-                              {loadingRecommendation === clause.id ? (
-                                <span className="flex items-center justify-center">
-                                  <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                  </svg>
-                                  Getting CLARENCE recommendation...
-                                </span>
-                              ) : (
-                                '🤝 Request CLARENCE Mediation'
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
+            {/* Render clauses for active tab */}
+            {getClausesByGroup(activeTab).map(clause => (
+              <div key={clause.id} className="mb-8 border border-slate-200 rounded-lg p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h4 className="font-medium text-lg text-slate-800">{clause.title}</h4>
+                  {/* Alignment Circle - as requested by John */}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-sm
+                    ${clause.aligned ? 'bg-green-500' : 'bg-red-500'}`}>
+                    {clause.aligned ? '✓' : '✗'}
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
 
-            {/* Priority Setting Tab */}
-            {activeTab === 'priorities' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-medium mb-4 text-slate-800">Set Clause Priorities</h3>
-                <p className="text-slate-600 mb-6 text-sm">
-                  Rate the importance of each clause (1 = Low Priority, 10 = Critical)
-                </p>
-                
-                {clauses.map(clause => (
-                  <div key={clause.id} className="border border-slate-200 rounded-lg p-6 hover:shadow-md transition">
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <h4 className="font-medium text-slate-800">{clause.title}</h4>
-                        <p className="text-slate-600 text-sm mt-1">{clause.description}</p>
-                      </div>
-                      <div className="w-48">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Priority Level: {clause.priority}
-                        </label>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          value={clause.priority}
-                          onChange={(e) => updateClausePriority(clause.id, parseInt(e.target.value))}
-                          className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                        />
-                        <div className="flex justify-between text-xs text-slate-500 mt-1">
-                          <span>Low</span>
-                          <span>High</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Review & Notes Tab */}
-            {activeTab === 'review' && (
-              <div className="space-y-6">
-                <h3 className="text-xl font-medium mb-4 text-slate-800">Review and Add Notes</h3>
-                
-                {clauses.map(clause => (
-                  <div key={clause.id} className="border border-slate-200 rounded-lg p-6 hover:shadow-md transition">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="font-medium text-slate-800">{clause.title}</h4>
-                        <div className="flex gap-4 mt-2 text-sm">
-                          <span className={`px-2 py-1 rounded ${getAlignmentColor(clause.alignment)} text-white`}>
-                            {clause.alignment}
-                          </span>
-                          <span className="text-slate-600">
-                            Priority: {clause.priority}/10
-                          </span>
-                          <span className="text-slate-600">
-                            Gap: {Math.abs(clause.customerPosition - clause.providerPosition)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {clause.clarenceRecommendation && (
-                      <div className="mb-4 p-3 bg-slate-50 rounded-lg">
-                        <p className="text-sm text-slate-700">
-                          <strong>CLARENCE Mediation:</strong> {clause.clarenceRecommendation}
-                        </p>
-                      </div>
-                    )}
-                    <textarea
-                      placeholder="Add notes or specific requirements..."
-                      value={clause.notes}
-                      onChange={(e) => updateClauseNotes(clause.id, e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                      rows={3}
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Customer Side */}
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h5 className="font-medium text-slate-800 mb-3">Customer Position</h5>
+                    <select
+                      value={clause.customerPosition}
+                      onChange={(e) => updatePosition(clause.id, 'customer', parseInt(e.target.value))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 mb-4"
+                    >
+                      {clause.positions.map((position, index) => (
+                        <option key={index} value={index}>
+                          {position}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Priority: {clause.customerPriority}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={clause.customerPriority}
+                      onChange={(e) => updatePriority(clause.id, 'customer', parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                     />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                      <span>Low</span>
+                      <span>High</span>
+                    </div>
                   </div>
-                ))}
+
+                  {/* Provider Side */}
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h5 className="font-medium text-green-900 mb-3">Provider Position</h5>
+                    <select
+                      value={clause.providerPosition}
+                      onChange={(e) => updatePosition(clause.id, 'provider', parseInt(e.target.value))}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg bg-white mb-4"
+                    >
+                      {clause.positions.map((position, index) => (
+                        <option key={index} value={index}>
+                          {position}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    <label className="block text-sm font-medium text-green-800 mb-2">
+                      Priority: {clause.providerPriority}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={clause.providerPriority}
+                      onChange={(e) => updatePriority(clause.id, 'provider', parseInt(e.target.value))}
+                      className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <div className="flex justify-between text-xs text-green-600 mt-1">
+                      <span>Low</span>
+                      <span>High</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
+            ))}
           </div>
         </div>
 
@@ -635,36 +499,33 @@ export default function FoundationPhase() {
           </div>
           
           <div className="flex gap-4">
-            {!showDemo ? (
+            {!showComplete ? (
+              <button
+                onClick={handleCompleteFoundation}
+                disabled={overallAlignment < 70}
+                className={`flex-1 py-3 px-6 rounded-lg font-medium text-sm transition
+                  ${overallAlignment >= 70 
+                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
+              >
+                {overallAlignment >= 70 ? 'Complete Foundation Phase' : `Need ${70 - overallAlignment}% More Alignment`}
+              </button>
+            ) : (
               <>
                 <button
-                  onClick={handleCompleteFoundation}
-                  disabled={overallAlignment < 70}
-                  className={`flex-1 py-3 px-6 rounded-lg font-medium text-sm transition
-                    ${overallAlignment >= 70 
-                      ? 'bg-green-600 hover:bg-green-700 text-white' 
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
+                  className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
+                  disabled
                 >
-                  {overallAlignment >= 70 ? 'Complete Foundation Phase' : `Need ${70 - overallAlignment}% More Alignment`}
+                  ✓ Foundation Complete
+                </button>
+                <button
+                  onClick={() => router.push(`/auth/gap-narrowing?session=${session?.sessionId}`)}
+                  className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm animate-pulse"
+                >
+                  Proceed to Phase 3: Gap Narrowing →
                 </button>
               </>
-            ) : (
-              <button
-                className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
-                disabled
-              >
-                ✓ Foundation Complete
-              </button>
             )}
-          </div>
-          
-          <div className="flex justify-end mt-4">
-            <button
-              onClick={() => router.push('/auth/contracts-dashboard')}
-              className="text-slate-600 hover:text-slate-900 font-medium text-sm"
-            >
-              Save & Return Later
-            </button>
           </div>
         </div>
       </div>
