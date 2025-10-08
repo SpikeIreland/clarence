@@ -434,7 +434,7 @@ function ClarenceChatContent() {
       }
     }, 1500)
   }
-  
+
   // Auto-resize textarea
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(e.target.value)
@@ -458,7 +458,18 @@ function ClarenceChatContent() {
   }, [messages])
 
   // ========== SECTION 5: USE EFFECTS ==========
+// ========== SECTION 5: USE EFFECTS ==========
+  // This is the complete Section 5 that fixes the infinite loop
+  
+  // Auto-scroll to bottom when messages update
   useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+  
+  // Main initialization effect - fixed to prevent infinite loop
+  useEffect(() => {
+    let mounted = true
+    
     const initializeChat = async () => {
       // Check authentication
       const auth = localStorage.getItem('clarence_auth')
@@ -470,25 +481,78 @@ function ClarenceChatContent() {
       // Get user ID
       const userId = await getCurrentUser()
       if (!userId) {
-        setMessages([{
-          id: '1',
-          sender: 'assistant',
-          content: 'Authentication required. Please log in to use CLARENCE.',
-          timestamp: new Date()
-        }])
+        if (mounted) {
+          setMessages([{
+            id: '1',
+            sender: 'assistant',
+            content: 'Authentication required. Please log in to use CLARENCE.',
+            timestamp: new Date()
+          }])
+        }
         return
       }
       
-      // Load sessions
-      await loadSessions()
+      // Store the user ID for use in the component
+      if (mounted) {
+        setCurrentUserId(userId)
+      }
+      
+      // Load sessions ONCE (not in a callback to avoid dependency issues)
+      try {
+        const userEmail = localStorage.getItem('userEmail')
+        let queryParams = 'role=customer'
+        if (userId) queryParams += `&userId=${userId}`
+        if (userEmail) queryParams += `&email=${encodeURIComponent(userEmail)}`
+        
+        const response = await fetch(
+          `https://spikeislandstudios.app.n8n.cloud/webhook/sessions-api?${queryParams}`
+        )
+        
+        if (response.ok && mounted) {
+          const data = await response.json()
+          setSessions(data)
+          localStorage.setItem('sessions', JSON.stringify(data))
+        }
+      } catch (error) {
+        console.error('Error loading sessions:', error)
+        // Try loading from localStorage as fallback
+        const stored = localStorage.getItem('sessions')
+        if (stored && mounted) {
+          setSessions(JSON.parse(stored))
+        }
+      }
       
       // Check for session/provider in URL
       const sessionId = searchParams.get('sessionId')
       const providerId = searchParams.get('providerId')
       
-      if (sessionId && providerId) {
-        await selectProvider(sessionId, providerId)
-      } else {
+      if (sessionId && providerId && mounted) {
+        // We need to load the provider data here
+        // Since selectProvider needs sessions to be loaded, we'll do it directly
+        const session = sessions.find(s => s.sessionId === sessionId)
+        const provider = session?.providers?.find(p => p.providerId === providerId)
+        
+        if (session && provider) {
+          setSelectedSession(session)
+          setSelectedProvider(provider)
+          setCurrentSessionId(sessionId)
+          setCurrentProviderId(providerId)
+          
+          // Load provider data
+          await loadProviderData(sessionId, providerId)
+          calculateLeverage()
+          
+          // Set welcome message
+          const welcomeMessage: Message = {
+            id: Date.now().toString(),
+            sender: 'assistant',
+            content: `Welcome to CLARENCE Contract Negotiation! I'm here to help you and ${provider.name} reach a mutually beneficial agreement.\n\nWe're currently in Phase 2: Foundational Drafting.\n\nWhat aspect of the contract would you like to focus on today?`,
+            timestamp: new Date()
+          }
+          setMessages([welcomeMessage])
+        }
+      } else if (mounted) {
+        // No session/provider in URL, show default message
         setMessages([{
           id: '1',
           sender: 'assistant',
@@ -499,7 +563,12 @@ function ClarenceChatContent() {
     }
     
     initializeChat()
-  }, [getCurrentUser, loadSessions, router, searchParams, selectProvider])
+    
+    // Cleanup function to prevent state updates on unmounted component
+    return () => {
+      mounted = false
+    }
+  }, [router, searchParams]) // Only essential dependencies - removed all callbacks to prevent loops
 
   // ========== SECTION 6: RENDER START ==========
   return (
