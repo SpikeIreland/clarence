@@ -112,8 +112,17 @@ function PreliminaryAssessmentContent() {
     partyFitScore: 0
   })
 
+  // Define phases for progress indicator
+  const phases = [
+    { num: 1, name: 'Preliminary', active: true, complete: false },
+    { num: 2, name: 'Foundation', active: false, complete: false },
+    { num: 3, name: 'Gap Narrowing', active: false, complete: false },
+    { num: 4, name: 'Complex Issues', active: false, complete: false },
+    { num: 5, name: 'Commercial', active: false, complete: false },
+    { num: 6, name: 'Final Review', active: false, complete: false }
+  ]
+
   // ========== SECTION 4: FUNCTIONS ==========
-  // Remove selectProvider from useCallback dependencies to prevent circular dependency
   const selectProvider = async (provider: Provider) => {
     console.log('selectProvider called with:', provider)
     
@@ -314,7 +323,7 @@ function PreliminaryAssessmentContent() {
     } finally {
       isLoadingRef.current = false
     }
-  }, []) // Empty dependencies to prevent re-creation
+  }, [])
 
   const loadSessionData = useCallback(async () => {
     try {
@@ -337,7 +346,7 @@ function PreliminaryAssessmentContent() {
           setLeverageFactors(prev => ({
             ...prev,
             dealSize: sessionData.dealValue || '',
-            contractDuration: '24' // Default 24 months
+            contractDuration: '24'
           }))
           sessionId = storedSessionId
         } else {
@@ -447,15 +456,6 @@ function PreliminaryAssessmentContent() {
     alert('Assessment submitted successfully!')
   }
 
-  const phases = [
-    { num: 1, name: 'Preliminary', active: true },
-    { num: 2, name: 'Foundation', active: false },
-    { num: 3, name: 'Gap Narrowing', active: false },
-    { num: 4, name: 'Complex Issues', active: false },
-    { num: 5, name: 'Commercial', active: false },
-    { num: 6, name: 'Final Review', active: false }
-  ]
-
   // ========== SECTION 5: USE EFFECTS ==========
   useEffect(() => {
     const auth = localStorage.getItem('clarence_auth')
@@ -465,7 +465,7 @@ function PreliminaryAssessmentContent() {
     }
     
     loadSessionData()
-  }, []) // Remove loadSessionData from dependencies
+  }, [])
 
   // ========== SECTION 6: RENDER START ==========
   if (loading) {
@@ -543,6 +543,28 @@ function PreliminaryAssessmentContent() {
               <p className="text-3xl font-medium">1 of 6</p>
             </div>
           </div>
+        </div>
+
+        {/* PHASE PROGRESS INDICATOR - PROMINENT PLACEMENT */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+          <h3 className="text-sm font-medium text-slate-700 mb-4">Contract Negotiation Progress</h3>
+          <div className="flex justify-between items-center mb-4">
+            {phases.map((phase) => (
+              <div key={phase.num} className="flex flex-col items-center">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm
+                  ${phase.active ? 'bg-slate-700 text-white shadow-lg' : 
+                    phase.complete ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  {phase.complete ? '✓' : phase.num}
+                </div>
+                <span className="text-xs mt-1 text-slate-600">{phase.name}</span>
+              </div>
+            ))}
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div className="bg-gradient-to-r from-slate-600 to-slate-700 h-2 rounded-full transition-all duration-500" 
+                 style={{ width: '16.66%' }}></div>
+          </div>
+          <p className="text-xs text-slate-500 mt-2 text-center">Phase 1 of 6: Gathering initial requirements and assessing party fit</p>
         </div>
 
         {/* Provider Selection */}
