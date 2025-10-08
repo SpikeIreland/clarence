@@ -77,7 +77,6 @@ function PreliminaryAssessmentContent() {
   const [activeSection, setActiveSection] = useState<'profile' | 'fit' | 'leverage'>('profile')
   const [leverageScore, setLeverageScore] = useState({ customer: 65, provider: 35 })
   const [assessmentComplete, setAssessmentComplete] = useState(false)
-  const [loadingCapabilities, setLoadingCapabilities] = useState(false)
   
   const [dealProfile, setDealProfile] = useState<DealProfile>({
     services: '',
@@ -123,11 +122,14 @@ function PreliminaryAssessmentContent() {
   ]
 
   // ========== SECTION 4: FUNCTIONS ==========
+  // ========== REPLACE THE ENTIRE selectProvider FUNCTION WITH THIS ==========
+  // This removes the unused loadingCapabilities state and its usage
+  
   const selectProvider = async (provider: Provider) => {
     console.log('selectProvider called with:', provider)
     
     setSelectedProvider(provider)
-    setLoadingCapabilities(true)
+    // Removed setLoadingCapabilities(true) - was unused
     
     // Pre-fill basic provider information in party fit
     setPartyFit(prev => ({
@@ -240,12 +242,10 @@ function PreliminaryAssessmentContent() {
         }
       } catch (error) {
         console.error('Error loading provider capabilities:', error)
-      } finally {
-        setLoadingCapabilities(false)
       }
-    } else {
-      setLoadingCapabilities(false)
+      // Removed finally block with setLoadingCapabilities(false)
     }
+    // Removed else block with setLoadingCapabilities(false)
   }
 
   const loadProviders = useCallback(async (sessionId: string, targetProviderId?: string) => {

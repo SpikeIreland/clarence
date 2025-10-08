@@ -426,8 +426,7 @@ function ClarenceChatContent() {
       setMessages(prev => [...prev, responseMessage])
       
       if (demo.alignmentIncrease) {
-        setCurrentAlignment(prev => Math.min(100, prev + demo.alignmentIncrease))
-      }
+        setCurrentAlignment(prev => Math.min(100, prev + demo.alignmentIncrease!))
       
       if (scenario === 'generate_contract') {
         generateContractArtifact()

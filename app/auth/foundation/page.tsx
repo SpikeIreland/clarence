@@ -282,6 +282,14 @@ export default function FoundationPhase() {
       return
     }
     
+    // ADD THIS to use setSession:
+    const storedSession = localStorage.getItem('currentSession')
+    if (storedSession) {
+      setSession(JSON.parse(storedSession))
+    }
+    
+    calculateAlignment()
+  }, [calculateAlignment, router])
     calculateAlignment()
   }, [calculateAlignment, router])
 
