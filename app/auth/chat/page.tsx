@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 
 // ========== SECTION 1: INTERFACES ==========
 interface Session {
@@ -29,10 +28,29 @@ interface Message {
   timestamp: Date
 }
 
+interface CustomerRequirements {
+  customer?: {
+    company?: string
+  }
+  [key: string]: unknown
+}
+
+interface ProviderCapabilities {
+  provider?: {
+    company?: string
+  }
+  assessment_score?: number
+  capabilities?: {
+    assessment_score?: number
+  }
+  sessionNumber?: string
+  [key: string]: unknown
+}
+
 interface NegotiationContext {
-  customerRequirements: any
-  providerCapabilities: any
-  providerDetails: any
+  customerRequirements: CustomerRequirements | null
+  providerCapabilities: ProviderCapabilities | null
+  providerDetails: unknown
   leverage: LeverageData
 }
 
@@ -65,7 +83,6 @@ function ClarenceChatContent() {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [artifactPanelCollapsed, setArtifactPanelCollapsed] = useState(true)
@@ -73,8 +90,8 @@ function ClarenceChatContent() {
   const [hasArtifact, setHasArtifact] = useState(false)
   
   // Negotiation data states
-  const [customerRequirements, setCustomerRequirements] = useState<any>(null)
-  const [providerCapabilities, setProviderCapabilities] = useState<any>(null)
+  const [customerRequirements, setCustomerRequirements] = useState<CustomerRequirements | null>(null)
+  const [providerCapabilities, setProviderCapabilities] = useState<ProviderCapabilities | null>(null)
   const [currentAlignment, setCurrentAlignment] = useState(0)
   const [leverageData, setLeverageData] = useState<LeverageData | null>(null)
 
@@ -443,8 +460,6 @@ function ClarenceChatContent() {
   // ========== SECTION 5: USE EFFECTS ==========
   useEffect(() => {
     const initializeChat = async () => {
-      setIsLoading(true)
-      
       // Check authentication
       const auth = localStorage.getItem('clarence_auth')
       if (!auth) {
@@ -461,7 +476,6 @@ function ClarenceChatContent() {
           content: 'Authentication required. Please log in to use CLARENCE.',
           timestamp: new Date()
         }])
-        setIsLoading(false)
         return
       }
       
@@ -482,12 +496,10 @@ function ClarenceChatContent() {
           timestamp: new Date()
         }])
       }
-      
-      setIsLoading(false)
     }
     
     initializeChat()
-  }, [])
+  }, [getCurrentUser, loadSessions, router, searchParams, selectProvider])
 
   // ========== SECTION 6: RENDER START ==========
   return (
