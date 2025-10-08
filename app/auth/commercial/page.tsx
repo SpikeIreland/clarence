@@ -285,7 +285,7 @@ export default function CommercialTermsPhase() {
                 Dashboard
               </button>
               <button
-                onClick={() => router.push(`/chat?sessionId=${session?.sessionId || 'demo'}`)}
+                onClick={() => router.push(`/auth/chat?sessionId=${session?.sessionId || 'demo'}`)}
                 className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg text-sm"
               >
                 💬 Chat with CLARENCE

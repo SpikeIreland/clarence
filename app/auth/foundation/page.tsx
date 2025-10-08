@@ -188,7 +188,7 @@ export default function FoundationPhase() {
 
   const calculateAlignment = useCallback(() => {
     let alignedCount = 0
-    let totalCount = clauses.length
+    const totalCount = clauses.length
     
     clauses.forEach(clause => {
       if (clause.customerPosition === clause.providerPosition) {

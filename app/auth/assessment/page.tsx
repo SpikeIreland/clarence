@@ -248,7 +248,7 @@ function PreliminaryAssessmentContent() {
     // Removed else block with setLoadingCapabilities(false)
   }
 
-  const loadProviders = useCallback(async (sessionId: string, targetProviderId?: string) => {
+    const loadProviders = useCallback(async (sessionId: string) => {
     // Prevent multiple simultaneous calls
     if (isLoadingRef.current || providersLoadedRef.current) {
       console.log('Providers already loading or loaded, skipping...')
@@ -323,7 +323,8 @@ function PreliminaryAssessmentContent() {
     } finally {
       isLoadingRef.current = false
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []) // Empty dependency array - selectProvider creates circular dependency
 
   const loadSessionData = useCallback(async () => {
     try {
@@ -465,7 +466,7 @@ function PreliminaryAssessmentContent() {
     }
     
     loadSessionData()
-  }, [])
+  }, [loadSessionData, router])
 
   // ========== SECTION 6: RENDER START ==========
   if (loading) {
@@ -518,7 +519,7 @@ function PreliminaryAssessmentContent() {
                 Dashboard
               </button>
               <button
-                onClick={() => router.push(`/chat?sessionId=${session?.sessionId || 'demo'}`)}
+                onClick={() => router.push(`/auth/chat?sessionId=${session?.sessionId || 'demo'}`)}
                 className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg text-sm"
               >
                 💬 Chat with CLARENCE
