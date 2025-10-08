@@ -628,82 +628,144 @@ function ClarenceChatContent() {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div className={`bg-slate-800 text-white transition-all duration-300 ${
-          sidebarCollapsed ? 'w-16' : 'w-64'
-        }`}>
-          <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-slate-600 to-slate-700 rounded-lg flex items-center justify-center font-bold">
-                C
-              </div>
-              {!sidebarCollapsed && (
-                <span className="font-semibold">CLARENCE</span>
-              )}
-            </div>
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-1 hover:bg-slate-700 rounded transition"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
-          
-          {!sidebarCollapsed && (
-            <div className="p-4 overflow-y-auto">
-              <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-                Active Negotiations
-              </div>
-              {sessions.map(session => (
-                <div key={session.sessionId} className="mb-2">
-                  <div 
-                    className={`p-3 rounded-lg cursor-pointer transition ${
-                      session.sessionId === currentSessionId 
-                        ? 'bg-gradient-to-r from-slate-600 to-slate-700' 
-                        : 'bg-slate-700 hover:bg-slate-600'
-                    }`}
-                    onClick={() => {
-                      const sessionEl = document.getElementById(`providers-${session.sessionId}`)
-                      if (sessionEl) {
-                        sessionEl.style.display = sessionEl.style.display === 'none' ? 'block' : 'none'
-                      }
-                    }}
-                  >
-                    <div className="font-medium text-sm">{session.customerCompany}</div>
-                    <div className="text-xs text-slate-400">{session.serviceRequired}</div>
-                  </div>
-                  
-                  <div 
-                    id={`providers-${session.sessionId}`}
-                    className="ml-4 mt-1"
-                    style={{ display: session.sessionId === currentSessionId ? 'block' : 'none' }}
-                  >
-                    {session.providers?.map(provider => (
-                      <div
-                        key={provider.providerId}
-                        className={`p-2 mb-1 rounded cursor-pointer text-sm transition ${
-                          provider.providerId === currentProviderId
-                            ? 'bg-slate-600 text-white'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                        }`}
-                        onClick={() => selectProvider(session.sessionId, provider.providerId)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span>{provider.name}</span>
-                          <span className="text-xs bg-slate-900 px-2 py-1 rounded">
-                            {provider.score}%
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        // ========== REPLACE THE SIDEBAR SECTION IN CHAT PAGE ==========
+  // This fixes the duplicate customer display issue
+  
+  {/* Sidebar */}
+  <div className={`bg-slate-800 text-white transition-all duration-300 ${
+    sidebarCollapsed ? 'w-16' : 'w-64'
+  }`}>
+    <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 bg-gradient-to-r from-slate-600 to-slate-700 rounded-lg flex items-center justify-center font-bold">
+          C
         </div>
+        {!sidebarCollapsed && (
+          <span className="font-semibold">CLARENCE</span>
+        )}
+      </div>
+      <button
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        className="p-1 hover:bg-slate-700 rounded transition"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+    </div>
+    
+    {!sidebarCollapsed && (
+      <div className="p-4 overflow-y-auto">
+        <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">
+          Active Negotiations
+        </div>
+        
+        {/* Group sessions properly - one contract with multiple providers */}
+        {sessions.length > 0 ? (
+          // Assuming sessions might have duplicates, we'll group them by sessionId
+          Object.values(
+            sessions.reduce((acc: any, session) => {
+              if (!acc[session.sessionId]) {
+                acc[session.sessionId] = {
+                  ...session,
+                  providers: session.providers || []
+                }
+              } else {
+                // Merge providers if this is a duplicate session
+                if (session.providers) {
+                  acc[session.sessionId].providers = [
+                    ...acc[session.sessionId].providers,
+                    ...session.providers
+                  ]
+                }
+              }
+              return acc
+            }, {})
+          ).map((session: any) => (
+            <div key={session.sessionId} className="mb-4">
+              {/* Contract/Session Header */}
+              <div 
+                className={`p-3 rounded-lg cursor-pointer transition ${
+                  session.sessionId === currentSessionId 
+                    ? 'bg-gradient-to-r from-slate-600 to-slate-700' 
+                    : 'bg-slate-700 hover:bg-slate-600'
+                }`}
+                onClick={() => {
+                  const sessionEl = document.getElementById(`providers-${session.sessionId}`)
+                  if (sessionEl) {
+                    sessionEl.style.display = sessionEl.style.display === 'none' ? 'block' : 'none'
+                  }
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-sm">{session.customerCompany}</div>
+                    <div className="text-xs text-slate-400">{session.sessionNumber || session.sessionId.substring(0, 13)}</div>
+                    <div className="text-xs text-slate-300 mt-1">{session.serviceRequired}</div>
+                  </div>
+                  <svg 
+                    className={`w-4 h-4 transition-transform ${
+                      session.sessionId === currentSessionId ? 'rotate-90' : ''
+                    }`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </div>
+              
+              {/* Providers List - Sub-items under the contract */}
+              <div 
+                id={`providers-${session.sessionId}`}
+                className="mt-2 ml-2 border-l-2 border-slate-600 pl-2"
+                style={{ display: session.sessionId === currentSessionId ? 'block' : 'none' }}
+              >
+                <div className="text-xs text-slate-400 mb-2 ml-2">Select Provider:</div>
+                {session.providers && session.providers.length > 0 ? (
+                  session.providers.map((provider: Provider) => (
+                    <div
+                      key={provider.providerId}
+                      className={`p-2 mb-1 ml-2 rounded cursor-pointer text-sm transition ${
+                        provider.providerId === currentProviderId
+                          ? 'bg-slate-600 text-white'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                      }`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        selectProvider(session.sessionId, provider.providerId)
+                      }}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="font-medium">{provider.name}</div>
+                          {provider.providerId === currentProviderId && (
+                            <div className="text-xs text-green-400 mt-1">● Currently negotiating</div>
+                          )}
+                        </div>
+                        <span className="text-xs bg-slate-900 px-2 py-1 rounded">
+                          {provider.score || 80}%
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-slate-500 italic ml-2 p-2">
+                    No providers available
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-slate-400 text-sm mt-4">
+            No active negotiations
+          </div>
+        )}
+      </div>
+    )}
+  </div>
 
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col">
