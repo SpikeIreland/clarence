@@ -177,9 +177,9 @@ export default function ContractsDashboard() {
   function continueWithClarence(sessionId?: string) {
     if (sessionId) {
       localStorage.setItem('currentSessionId', sessionId)
-      router.push(`/chat?sessionId=${sessionId}`)
+      router.push(`/auth/chat?sessionId=${sessionId}`)
     } else {
-      router.push('/chat')
+      router.push('/auth/chat')
     }
   }
 
