@@ -347,7 +347,27 @@ export default function FoundationPhase() {
           </div>
         </div>
 
-        {/* Tabs Navigation */}
+        {/* Phase Progress Bar */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+          <h3 className="text-sm font-medium text-slate-700 mb-4">Contract Negotiation Progress</h3>
+          <div className="flex justify-between items-center mb-4">
+            {phases.map((phase) => (
+              <div key={phase.num} className="flex flex-col items-center">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm
+                  ${phase.complete ? 'bg-green-600 text-white' : 
+                    phase.active ? 'bg-slate-700 text-white shadow-lg' : 'bg-slate-200 text-slate-600'}`}>
+                  {phase.complete ? '✓' : phase.num}
+                </div>
+                <span className="text-xs mt-1 text-slate-600">{phase.name}</span>
+              </div>
+            ))}
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div className="bg-gradient-to-r from-green-600 to-slate-700 h-2 rounded-full transition-all duration-500" 
+                 style={{ width: '33.33%' }}></div>
+          </div>
+          <p className="text-xs text-slate-500 mt-2 text-center">Phase 2 of 6: Contract Foundation</p>
+        </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
           <div className="border-b border-slate-200">
             <div className="flex">
