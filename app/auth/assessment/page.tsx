@@ -387,7 +387,7 @@ function PreliminaryAssessmentContent() {
 
       // Load providers ONLY ONCE
       if (sessionId && !providersLoadedRef.current) {
-        await loadProviders(sessionId, providerId || undefined)
+      await loadProviders(sessionId)
       }
       
     } catch (error) {
