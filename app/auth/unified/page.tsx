@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ========== INTERFACES ==========
@@ -64,7 +64,7 @@ interface ClauseStatus {
 }
 
 // ========== MAIN COMPONENT ==========
-export default function UnifiedClarenceInterface() {
+export default function UnifiedClarencePage() {
   const router = useRouter()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
@@ -73,9 +73,9 @@ export default function UnifiedClarenceInterface() {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [contracts, setContracts] = useState<Contract[]>([])
   const [moves, setMoves] = useState<Move[]>([])
-  const [tokens, setTokens] = useState({ used: 3, total: 5 })
+  const [tokens] = useState({ used: 3, total: 5 }) // removed setTokens as it's not used
   const [achievements, setAchievements] = useState<Achievement[]>([])
-  const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null)
+  // Removed activeChallenge and setActiveChallenge as they're not used
   const [clauseStatuses, setClauseStatuses] = useState<ClauseStatus[]>([])
   const [activeFilter, setActiveFilter] = useState<'active' | 'completed' | 'value' | 'phase'>('active')
   const [activeArtifactTab, setActiveArtifactTab] = useState<'draft' | 'clauses' | 'comparison' | 'history'>('draft')
@@ -123,7 +123,7 @@ export default function UnifiedClarenceInterface() {
       {
         id: '1',
         type: 'clarence',
-        content: "Welcome back! You're negotiating with TechFirst Solutions. Current alignment is at 65% - you're making good progress!\n\n🎯 Today's Focus: Liability caps have the biggest gap. Would you like to explore creative solutions there?",
+        content: "Welcome back! You&apos;re negotiating with TechFirst Solutions. Current alignment is at 65% - you&apos;re making good progress!\n\n🎯 Today&apos;s Focus: Liability caps have the biggest gap. Would you like to explore creative solutions there?",
         timestamp: new Date(Date.now() - 10 * 60000)
       },
       {
@@ -238,9 +238,13 @@ export default function UnifiedClarenceInterface() {
                 <div className="text-xs text-slate-400">The Honest Broker</div>
               </div>
             </div>
-            <button className="p-2 hover:bg-slate-700 rounded-lg transition">
+            <button 
+              onClick={() => router.push('/auth/contracts-dashboard')}
+              className="p-2 hover:bg-slate-700 rounded-lg transition"
+              title="Back to Dashboard"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
@@ -519,7 +523,7 @@ export default function UnifiedClarenceInterface() {
                     <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
                       P
                     </div>
-                    <span className="text-sm font-semibold text-blue-700">Provider's Move</span>
+                    <span className="text-sm font-semibold text-blue-700">Provider&apos;s Move</span>
                   </div>
                   <div className="text-sm text-gray-700">{move.content}</div>
                 </div>
