@@ -275,6 +275,9 @@ export default function FoundationPhase() {
     setShowDemo(true)
   }
 
+ // ========== REPLACE YOUR ENTIRE useEffect SECTION (around lines 260-300) WITH THIS ==========
+  // This fixes the duplicate closing braces and merges the useEffects properly
+  
   useEffect(() => {
     const auth = localStorage.getItem('clarence_auth')
     if (!auth) {
@@ -282,14 +285,27 @@ export default function FoundationPhase() {
       return
     }
     
-    // ADD THIS to use setSession:
-    const storedSession = localStorage.getItem('currentSession')
-    if (storedSession) {
-      setSession(JSON.parse(storedSession))
+    // Load session data from localStorage or URL params
+    const urlParams = new URLSearchParams(window.location.search)
+    const sessionId = urlParams.get('session')
+    
+    if (sessionId) {
+      const storedSession = localStorage.getItem('currentSession')
+      if (storedSession) {
+        const sessionData = JSON.parse(storedSession)
+        setSession(sessionData)
+      } else {
+        setSession({
+          sessionId: sessionId,
+          sessionNumber: 'SESS-001',
+          customerCompany: 'Customer Company',
+          serviceRequired: 'Contract Services',
+          dealValue: '1000000',
+          status: 'active'
+        })
+      }
     }
     
-    calculateAlignment()
-  }, [calculateAlignment, router])
     calculateAlignment()
   }, [calculateAlignment, router])
 
