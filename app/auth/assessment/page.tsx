@@ -1085,7 +1085,6 @@ function PreliminaryAssessmentContent() {
                       <span className="font-medium">{overallFitScore}% Overall Fit</span>
                       <span>Excellent Fit</span>
                     </div>
-                  </div>
 
                   {/* 1. Strategic Alignment */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
