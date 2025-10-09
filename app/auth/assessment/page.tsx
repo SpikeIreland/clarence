@@ -1071,7 +1071,22 @@ function PreliminaryAssessmentContent() {
                 >
                   <div className="font-medium text-slate-800">{provider.providerName || 'Unknown Provider'}</div>
                   {provider.providerTurnover && (
-
+                    <div className="text-sm text-slate-600">Turnover: {provider.providerTurnover}</div>
+                  )}
+                  {provider.providerEmployees && (
+                    <div className="text-sm text-slate-600">Employees: {provider.providerEmployees}</div>
+                  )}
+                  <div className="mt-2 text-xs text-slate-600">
+                    {selectedProvider?.providerId === provider.providerId
+                      ? '✓ Currently Assessing' 
+                      : 'Click to Assess'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
                   {/* 1. Strategic Alignment */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
                     <h4 className="font-medium text-slate-800 mb-4 flex items-center">
