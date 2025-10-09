@@ -120,6 +120,7 @@ function PreliminaryAssessmentContent() {
     { num: 5, name: 'Commercial', active: false, complete: false },
     { num: 6, name: 'Final Review', active: false, complete: false }
   ]
+// Add these to your state declarations section (around line 65)
 
 // Party Fit Enhanced Data Structure
 const [partyFitData, setPartyFitData] = useState({
@@ -162,7 +163,7 @@ const [partyFitScores, setPartyFitScores] = useState({
 const [overallFitScore, setOverallFitScore] = useState(0)
 
 // Helper function to update party fit data
-const updatePartyFit = (category: string, field: string, value: any) => {
+const updatePartyFit = (category: string, field: string, value: string | number | string[]) => {
   setPartyFitData(prev => ({
     ...prev,
     [category]: {
