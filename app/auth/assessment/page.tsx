@@ -1071,20 +1071,6 @@ function PreliminaryAssessmentContent() {
                 >
                   <div className="font-medium text-slate-800">{provider.providerName || 'Unknown Provider'}</div>
                   {provider.providerTurnover && (
-                    <div className="relative h-8 bg-white rounded-full overflow-hidden border border-slate-300">
-                      <div 
-                        className={`h-full transition-all duration-500 ${
-                          overallFitScore > 70 ? 'bg-green-500' : 
-                          overallFitScore > 40 ? 'bg-yellow-500' : 'bg-red-500'
-                        }`}
-                        style={{ width: `${overallFitScore}%` }}
-                      ></div>
-                    </div>
-                    <div className="flex justify-between text-xs text-slate-600 mt-2">
-                      <span>Poor Fit</span>
-                      <span className="font-medium">{overallFitScore}% Overall Fit</span>
-                      <span>Excellent Fit</span>
-                    </div>
 
                   {/* 1. Strategic Alignment */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
