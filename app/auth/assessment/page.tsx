@@ -121,6 +121,148 @@ function PreliminaryAssessmentContent() {
     { num: 6, name: 'Final Review', active: false, complete: false }
   ]
 
+// Party Fit Enhanced Data Structure
+const [partyFitData, setPartyFitData] = useState({
+  strategic: {
+    industryMatch: '',
+    deliveryModel: '',
+    objectives: '',
+    culturalFit: ''
+  },
+  capability: {
+    geographic: '',
+    language: '',
+    technology: '',
+    scalability: '',
+    domains: [] as string[]
+  },
+  relationship: {
+    communication: '',
+    transparency: '',
+    partnership: '',
+    trust: 50
+  },
+  risk: {
+    financial: '',
+    security: '',
+    compliance: '',
+    lockin: '',
+    redFlags: ''
+  }
+})
+
+// Party Fit Scores
+const [partyFitScores, setPartyFitScores] = useState({
+  strategic: 0,
+  capability: 0,
+  relationship: 0,
+  risk: 0
+})
+
+const [overallFitScore, setOverallFitScore] = useState(0)
+
+// Helper function to update party fit data
+const updatePartyFit = (category: string, field: string, value: any) => {
+  setPartyFitData(prev => ({
+    ...prev,
+    [category]: {
+      ...prev[category as keyof typeof prev],
+      [field]: value
+    }
+  }))
+  
+  // Recalculate scores when data changes
+  calculatePartyFitScores()
+}
+
+// Calculate party fit scores based on inputs
+const calculatePartyFitScores = () => {
+  // Strategic Score
+  let strategicScore = 0
+  if (partyFitData.strategic.industryMatch === 'exact') strategicScore += 30
+  else if (partyFitData.strategic.industryMatch === 'adjacent') strategicScore += 20
+  else if (partyFitData.strategic.industryMatch === 'similar') strategicScore += 10
+  
+  if (partyFitData.strategic.deliveryModel === 'perfect') strategicScore += 30
+  else if (partyFitData.strategic.deliveryModel === 'good') strategicScore += 20
+  else if (partyFitData.strategic.deliveryModel === 'moderate') strategicScore += 10
+  
+  if (partyFitData.strategic.culturalFit === 'excellent') strategicScore += 40
+  else if (partyFitData.strategic.culturalFit === 'good') strategicScore += 30
+  else if (partyFitData.strategic.culturalFit === 'fair') strategicScore += 15
+  
+  // Capability Score
+  let capabilityScore = 0
+  if (partyFitData.capability.geographic === 'full') capabilityScore += 25
+  else if (partyFitData.capability.geographic === 'most') capabilityScore += 18
+  else if (partyFitData.capability.geographic === 'partial') capabilityScore += 10
+  
+  if (partyFitData.capability.language === 'all') capabilityScore += 25
+  else if (partyFitData.capability.language === 'most') capabilityScore += 18
+  else if (partyFitData.capability.language === 'english') capabilityScore += 10
+  
+  if (partyFitData.capability.technology === 'same') capabilityScore += 25
+  else if (partyFitData.capability.technology === 'compatible') capabilityScore += 18
+  else if (partyFitData.capability.technology === 'different') capabilityScore += 10
+  
+  if (partyFitData.capability.scalability === 'excellent') capabilityScore += 25
+  else if (partyFitData.capability.scalability === 'good') capabilityScore += 18
+  else if (partyFitData.capability.scalability === 'moderate') capabilityScore += 10
+  
+  // Relationship Score
+  let relationshipScore = 0
+  if (partyFitData.relationship.communication === 'excellent') relationshipScore += 30
+  else if (partyFitData.relationship.communication === 'good') relationshipScore += 20
+  else if (partyFitData.relationship.communication === 'moderate') relationshipScore += 10
+  
+  if (partyFitData.relationship.transparency === 'full') relationshipScore += 30
+  else if (partyFitData.relationship.transparency === 'high') relationshipScore += 20
+  else if (partyFitData.relationship.transparency === 'moderate') relationshipScore += 10
+  
+  relationshipScore += (partyFitData.relationship.trust / 100) * 40
+  
+  // Risk Score (inverse - lower risk = higher score)
+  let riskScore = 100
+  if (partyFitData.risk.financial === 'weak') riskScore -= 30
+  else if (partyFitData.risk.financial === 'moderate') riskScore -= 15
+  else if (partyFitData.risk.financial === 'stable') riskScore -= 5
+  
+  if (partyFitData.risk.security === 'basic') riskScore -= 30
+  else if (partyFitData.risk.security === 'developing') riskScore -= 15
+  else if (partyFitData.risk.security === 'mature') riskScore -= 5
+  
+  if (partyFitData.risk.compliance === 'poor') riskScore -= 25
+  else if (partyFitData.risk.compliance === 'mixed') riskScore -= 15
+  else if (partyFitData.risk.compliance === 'good') riskScore -= 5
+  
+  if (partyFitData.risk.lockin === 'extreme') riskScore -= 15
+  else if (partyFitData.risk.lockin === 'high') riskScore -= 10
+  else if (partyFitData.risk.lockin === 'moderate') riskScore -= 5
+  
+  // Update scores
+  setPartyFitScores({
+    strategic: Math.round(strategicScore),
+    capability: Math.round(capabilityScore),
+    relationship: Math.round(relationshipScore),
+    risk: Math.round(riskScore)
+  })
+  
+  // Calculate overall score (weighted average)
+  const overall = Math.round(
+    (strategicScore * 0.3) + 
+    (capabilityScore * 0.25) + 
+    (relationshipScore * 0.25) + 
+    (riskScore * 0.2)
+  )
+  setOverallFitScore(overall)
+  
+  // Update leverage factors with the party fit score
+  setLeverageFactors(prev => ({
+    ...prev,
+    partyFitScore: overall
+  }))
+}
+
   // ========== SECTION 4: FUNCTIONS ==========
   // ========== REPLACE THE ENTIRE selectProvider FUNCTION WITH THIS ==========
   // This removes the unused loadingCapabilities state and its usage
@@ -728,117 +870,400 @@ function PreliminaryAssessmentContent() {
               )}
 
               {/* Party Fit Section - Fixed field labels */}
-              {activeSection === 'fit' && (
-                <div className="space-y-6">
-                  <h3 className="text-xl font-medium text-slate-900 mb-4">Party Fit Assessment</h3>
-                  
-                  <div className="bg-slate-50 p-4 rounded-lg mb-6 border border-slate-200">
-                    <h4 className="font-medium text-slate-800 mb-3">Customer Information</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Company Name</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                          value={partyFit.customerName || session.customerCompany}
-                          onChange={(e) => setPartyFit({...partyFit, customerName: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Annual Turnover</label>
-                        <input
-                          type="text"
-                          placeholder="e.g., £5M"
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                          value={partyFit.customerTurnover}
-                          onChange={(e) => setPartyFit({...partyFit, customerTurnover: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Company Address</label>
-                        <input
-                          type="text"
-                          placeholder="Head office address"
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                          value={partyFit.customerAddress}
-                          onChange={(e) => setPartyFit({...partyFit, customerAddress: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Entity Type</label>
-                        <input
-                          type="text"
-                          placeholder="e.g., Limited Company"
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                          value={partyFit.customerEntity}
-                          onChange={(e) => setPartyFit({...partyFit, customerEntity: e.target.value})}
-                        />
-                      </div>
-                    </div>
-                  </div>
+{activeSection === 'fit' && (
+  <div className="space-y-6">
+    <h3 className="text-xl font-medium text-slate-900 mb-4">Party Fit Assessment</h3>
+    
+    {/* Introduction */}
+    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+      <p className="text-sm text-blue-800">
+        Evaluating alignment and compatibility between {selectedProvider?.providerName || 'provider'} and {session.customerCompany || 'customer'} 
+        across strategic, capability, relationship, and risk dimensions.
+      </p>
+    </div>
 
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <h4 className="font-medium text-green-900 mb-3">Provider Information</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-green-800 mb-1">Company Name</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-green-300 rounded-lg bg-white"
-                          value={partyFit.providerName}
-                          readOnly
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-green-800 mb-1">Number of Employees</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-green-300 rounded-lg bg-white"
-                          value={partyFit.providerEmployees}
-                          onChange={(e) => setPartyFit({...partyFit, providerEmployees: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-green-800 mb-1">Annual Turnover</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-green-300 rounded-lg bg-white"
-                          value={partyFit.providerTurnover}
-                          onChange={(e) => setPartyFit({...partyFit, providerTurnover: e.target.value})}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-green-800 mb-1">Years in Business</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-green-300 rounded-lg bg-white"
-                          value={partyFit.providerExperience}
-                          onChange={(e) => setPartyFit({...partyFit, providerExperience: e.target.value})}
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-green-800 mb-1">Relevant Experience</label>
-                        <textarea
-                          placeholder="Experience with similar services"
-                          className="w-full px-3 py-2 border border-green-300 rounded-lg bg-white"
-                          rows={3}
-                          value={partyFit.providerExperience}
-                          onChange={(e) => setPartyFit({...partyFit, providerExperience: e.target.value})}
-                        />
-                      </div>
-                    </div>
-                    <label className="flex items-center mt-4">
-                      <input
-                        type="checkbox"
-                        className="mr-2 text-green-600 border-green-300 rounded focus:ring-green-500"
-                        checked={partyFit.parentGuarantee}
-                        onChange={(e) => setPartyFit({...partyFit, parentGuarantee: e.target.checked})}
-                      />
-                      <span className="text-sm text-green-800">Willing to provide parent company guarantee</span>
-                    </label>
-                  </div>
-                </div>
-              )}
+    {/* Party Fit Score Overview */}
+    <div className="bg-gradient-to-r from-slate-100 to-slate-50 p-6 rounded-lg border border-slate-300 mb-6">
+      <h4 className="font-medium text-slate-800 mb-4">Overall Party Fit Score</h4>
+      <div className="grid grid-cols-4 gap-4 mb-4">
+        <div className="text-center">
+          <div className="text-3xl font-bold text-slate-700">{partyFitScores.strategic || 0}%</div>
+          <div className="text-xs text-slate-600">Strategic Alignment</div>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl font-bold text-slate-700">{partyFitScores.capability || 0}%</div>
+          <div className="text-xs text-slate-600">Capability Match</div>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl font-bold text-slate-700">{partyFitScores.relationship || 0}%</div>
+          <div className="text-xs text-slate-600">Relationship Potential</div>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl font-bold text-slate-700">{partyFitScores.risk || 0}%</div>
+          <div className="text-xs text-slate-600">Risk Assessment</div>
+        </div>
+      </div>
+      <div className="relative h-8 bg-white rounded-full overflow-hidden border border-slate-300">
+        <div 
+          className={`h-full transition-all duration-500 ${
+            overallFitScore > 70 ? 'bg-green-500' : 
+            overallFitScore > 40 ? 'bg-yellow-500' : 'bg-red-500'
+          }`}
+          style={{ width: `${overallFitScore}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-xs text-slate-600 mt-2">
+        <span>Poor Fit</span>
+        <span className="font-medium">{overallFitScore}% Overall Fit</span>
+        <span>Excellent Fit</span>
+      </div>
+    </div>
+
+    {/* 1. Strategic Alignment */}
+    <div className="bg-white p-6 rounded-lg border border-slate-200">
+      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+        <span className="w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm mr-3">1</span>
+        Strategic Alignment
+      </h4>
+      
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Industry Expertise Match</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.strategic.industryMatch}
+            onChange={(e) => updatePartyFit('strategic', 'industryMatch', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="exact">Exact industry match</option>
+            <option value="adjacent">Adjacent industry experience</option>
+            <option value="similar">Similar industry characteristics</option>
+            <option value="limited">Limited relevant experience</option>
+            <option value="none">No industry experience</option>
+          </select>
+        </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Service Delivery Model Alignment</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.strategic.deliveryModel}
+            onChange={(e) => updatePartyFit('strategic', 'deliveryModel', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="perfect">Perfect alignment</option>
+            <option value="good">Good with minor adjustments</option>
+            <option value="moderate">Moderate - requires adaptation</option>
+            <option value="poor">Significant misalignment</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-slate-600 mb-1">Business Objectives Alignment</label>
+        <textarea
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          rows={2}
+          placeholder="How well do the provider's objectives align with your F&A transformation goals?"
+          value={partyFitData.strategic.objectives}
+          onChange={(e) => updatePartyFit('strategic', 'objectives', e.target.value)}
+        />
+      </div>
+
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-slate-600 mb-1">Cultural Fit Assessment</label>
+        <div className="flex gap-4">
+          {['Poor', 'Fair', 'Good', 'Excellent'].map((level) => (
+            <label key={level} className="flex items-center">
+              <input
+                type="radio"
+                name="culturalFit"
+                value={level.toLowerCase()}
+                checked={partyFitData.strategic.culturalFit === level.toLowerCase()}
+                onChange={(e) => updatePartyFit('strategic', 'culturalFit', e.target.value)}
+                className="mr-2"
+              />
+              <span className="text-sm">{level}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {/* 2. Capability Match */}
+    <div className="bg-white p-6 rounded-lg border border-slate-200">
+      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+        <span className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm mr-3">2</span>
+        Capability Match
+      </h4>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Geographic Coverage</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.capability.geographic}
+            onChange={(e) => updatePartyFit('capability', 'geographic', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="full">Full coverage of required locations</option>
+            <option value="most">Covers most required locations</option>
+            <option value="partial">Partial coverage</option>
+            <option value="limited">Limited coverage</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Language Capabilities</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.capability.language}
+            onChange={(e) => updatePartyFit('capability', 'language', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="all">All required languages</option>
+            <option value="most">Most required languages</option>
+            <option value="english">English only</option>
+            <option value="limited">Limited language support</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Technology Platform Compatibility</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.capability.technology}
+            onChange={(e) => updatePartyFit('capability', 'technology', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="same">Same platforms we use</option>
+            <option value="compatible">Compatible platforms</option>
+            <option value="different">Different but adaptable</option>
+            <option value="incompatible">Incompatible systems</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Scalability Assessment</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.capability.scalability}
+            onChange={(e) => updatePartyFit('capability', 'scalability', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="excellent">Can scale up/down easily</option>
+            <option value="good">Good scalability</option>
+            <option value="moderate">Some limitations</option>
+            <option value="poor">Limited scalability</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-600 mb-1">F&A Domain Expertise</label>
+        <div className="grid grid-cols-3 gap-2 mt-2">
+          {['Accounts Payable', 'Accounts Receivable', 'General Ledger', 'Fixed Assets', 'Tax', 'Treasury'].map((domain) => (
+            <label key={domain} className="flex items-center">
+              <input
+                type="checkbox"
+                className="mr-2"
+                checked={partyFitData.capability.domains?.includes(domain)}
+                onChange={(e) => {
+                  const domains = partyFitData.capability.domains || [];
+                  if (e.target.checked) {
+                    updatePartyFit('capability', 'domains', [...domains, domain]);
+                  } else {
+                    updatePartyFit('capability', 'domains', domains.filter(d => d !== domain));
+                  }
+                }}
+              />
+              <span className="text-sm">{domain}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {/* 3. Relationship Potential */}
+    <div className="bg-white p-6 rounded-lg border border-slate-200">
+      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+        <span className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm mr-3">3</span>
+        Relationship Potential
+      </h4>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Communication Style Compatibility</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.relationship.communication}
+            onChange={(e) => updatePartyFit('relationship', 'communication', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="excellent">Highly compatible</option>
+            <option value="good">Generally compatible</option>
+            <option value="moderate">Some differences</option>
+            <option value="poor">Significant differences</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Transparency Level</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.relationship.transparency}
+            onChange={(e) => updatePartyFit('relationship', 'transparency', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="full">Fully transparent</option>
+            <option value="high">High transparency</option>
+            <option value="moderate">Moderate transparency</option>
+            <option value="low">Limited transparency</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-slate-600 mb-1">Partnership Approach</label>
+        <textarea
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          rows={2}
+          placeholder="Describe the provider's approach to partnership and collaboration"
+          value={partyFitData.relationship.partnership}
+          onChange={(e) => updatePartyFit('relationship', 'partnership', e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-600 mb-1">Initial Trust Assessment</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={partyFitData.relationship.trust || 50}
+            onChange={(e) => updatePartyFit('relationship', 'trust', e.target.value)}
+            className="flex-1"
+          />
+          <span className="text-sm font-medium w-12 text-right">{partyFitData.relationship.trust || 50}%</span>
+        </div>
+      </div>
+    </div>
+
+    {/* 4. Risk Assessment */}
+    <div className="bg-white p-6 rounded-lg border border-red-200">
+      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+        <span className="w-8 h-8 bg-red-100 text-red-700 rounded-full flex items-center justify-center text-sm mr-3">4</span>
+        Risk Assessment
+      </h4>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Financial Stability</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.risk.financial}
+            onChange={(e) => updatePartyFit('risk', 'financial', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="strong">Strong financial position</option>
+            <option value="stable">Stable</option>
+            <option value="moderate">Some concerns</option>
+            <option value="weak">Significant concerns</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Information Security Maturity</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.risk.security}
+            onChange={(e) => updatePartyFit('risk', 'security', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="certified">ISO/SOC certified</option>
+            <option value="mature">Mature practices</option>
+            <option value="developing">Developing practices</option>
+            <option value="basic">Basic security only</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Compliance Track Record</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.risk.compliance}
+            onChange={(e) => updatePartyFit('risk', 'compliance', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="excellent">Excellent track record</option>
+            <option value="good">Generally compliant</option>
+            <option value="mixed">Mixed record</option>
+            <option value="poor">Compliance issues</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">Vendor Lock-in Risk</label>
+          <select
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            value={partyFitData.risk.lockin}
+            onChange={(e) => updatePartyFit('risk', 'lockin', e.target.value)}
+          >
+            <option value="">Select...</option>
+            <option value="low">Low - easy transition</option>
+            <option value="moderate">Moderate</option>
+            <option value="high">High - difficult to change</option>
+            <option value="extreme">Extreme lock-in</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-600 mb-1">Red Flags or Concerns</label>
+        <textarea
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+          rows={2}
+          placeholder="Note any specific concerns or red flags identified"
+          value={partyFitData.risk.redFlags}
+          onChange={(e) => updatePartyFit('risk', 'redFlags', e.target.value)}
+        />
+      </div>
+    </div>
+
+    {/* Summary and Recommendations */}
+    <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-6 rounded-lg border border-slate-300">
+      <h4 className="font-medium text-slate-800 mb-3">Party Fit Summary</h4>
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span>Overall Fit Score:</span>
+          <span className={`font-medium ${
+            overallFitScore > 70 ? 'text-green-700' : 
+            overallFitScore > 40 ? 'text-yellow-700' : 'text-red-700'
+          }`}>
+            {overallFitScore}% - {
+              overallFitScore > 70 ? 'Strong Fit' : 
+              overallFitScore > 40 ? 'Moderate Fit' : 'Poor Fit'
+            }
+          </span>
+        </div>
+        <div className="pt-2 border-t border-slate-300">
+          <p className="text-slate-600">
+            {overallFitScore > 70 
+              ? 'This provider shows strong alignment with your requirements. Proceed with detailed negotiations.'
+              : overallFitScore > 40
+              ? 'This provider shows moderate fit. Consider addressing gaps before proceeding.'
+              : 'Significant alignment issues identified. Consider alternative providers or major adjustments.'}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
               {/* Leverage Assessment Section - Added Contract Duration */}
               {activeSection === 'leverage' && (
