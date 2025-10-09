@@ -27,213 +27,75 @@ interface Provider {
   providerExperience?: string
 }
 
-interface DealProfile {
-  services: string
-  deliveryLocations: string[]
-  serviceLocations: string[]
-  pricingApproach: string
-  pricingExpectation: string
-}
-
-interface PartyFit {
-  customerName: string
-  customerAddress: string
-  customerEntity: string
-  customerIncorporation: string
-  customerTurnover: string
-  providerName: string
-  providerAddress: string
-  providerEntity: string
-  providerIncorporation: string
-  providerTurnover: string
-  providerEmployees: string
-  providerExperience: string
-  parentGuarantee: boolean
-  references: string[]
-}
-
-interface LeverageFactors {
-  dealSize: string
-  contractDuration: string
-  industrySector: string
-  serviceType: string
-  partyFitScore: number
-}
-
-// Add these to your interfaces section at the top of the file
-
-interface DealProfile {
-  // Contract basics
-  contractType: string
+interface UniversalDealProfile {
+  serviceCategory: string
+  engagementModel: string
   duration: string
   totalValue: string
-  annualValue: string
-  
-  // Processes in scope
-  processes: {
-    p2p: string[]      // Procure to Pay
-    o2c: string[]      // Order to Cash
-    r2r: string[]      // Record to Report
-    additional: string[]
+  pricingModel: string
+  serviceDescription: string
+  scaleIndicator: string
+  geographicCoverage: string
+  complexity: string
+  criticality: string
+  serviceLevelRequirement: string
+  transitionTimeline: string
+  kpis: string
+  businessDrivers: string[]
+  successCriteria: string
+}
+
+interface PartyFitData {
+  strategic: {
+    industryMatch: string
+    deliveryModel: string
+    objectives: string
+    culturalFit: string
   }
-  
-  // Volumes and complexity
-  volumes: {
-    invoices: string
-    journalEntries: string
-    legalEntities: string
-    countries: string
-    erpSystems: string
-    complexity: string
+  capability: {
+    geographic: string
+    language: string
+    technology: string
+    scalability: string
+    domains: string[]
   }
-  
-  // Service requirements
-  requirements: {
-    deliveryLocation: string
-    languages: string
-    serviceHours: string
-    kpis: string
-    transitionTimeline: string
+  relationship: {
+    communication: string
+    transparency: string
+    partnership: string
+    trust: number
   }
-  
-  // Business objectives
-  objectives: {
-    drivers: string[]
-    painPoints: string
-    successCriteria: string
+  risk: {
+    financial: string
+    security: string
+    compliance: string
+    lockin: string
+    redFlags: string
   }
 }
 
-// Replace your existing dealProfile state with this enhanced version
-const [dealProfile, setDealProfile] = useState<DealProfile>({
-  contractType: '',
-  duration: '36',  // Default to 3 years
-  totalValue: '',
-  annualValue: '',
-  processes: {
-    p2p: [],
-    o2c: [],
-    r2r: [],
-    additional: []
-  },
-  volumes: {
-    invoices: '',
-    journalEntries: '',
-    legalEntities: '',
-    countries: '',
-    erpSystems: '',
-    complexity: ''
-  },
-  requirements: {
-    deliveryLocation: '',
-    languages: '',
-    serviceHours: '',
-    kpis: '',
-    transitionTimeline: ''
-  },
-  objectives: {
-    drivers: [],
-    painPoints: '',
-    successCriteria: ''
+interface AdvancedLeverageFactors {
+  marketDynamics: {
+    alternatives: string
+    marketCondition: string
+    customerTimePresure: string
+    providerCapacity: string
   }
-})
-
-// Helper functions for Deal Profile
-const handleProcessChange = (category: 'p2p' | 'o2c' | 'r2r' | 'additional', process: string, checked: boolean) => {
-  setDealProfile(prev => ({
-    ...prev,
-    processes: {
-      ...prev.processes,
-      [category]: checked 
-        ? [...prev.processes[category], process]
-        : prev.processes[category].filter(p => p !== process)
-    }
-  }))
-}
-
-const updateVolumes = (field: string, value: string) => {
-  setDealProfile(prev => ({
-    ...prev,
-    volumes: {
-      ...prev.volumes,
-      [field]: value
-    }
-  }))
-}
-
-const updateRequirements = (field: string, value: string) => {
-  setDealProfile(prev => ({
-    ...prev,
-    requirements: {
-      ...prev.requirements,
-      [field]: value
-    }
-  }))
-}
-
-const updateObjectives = (field: string, value: string) => {
-  setDealProfile(prev => ({
-    ...prev,
-    objectives: {
-      ...prev.objectives,
-      [field]: value
-    }
-  }))
-}
-
-const handleDriverChange = (driver: string, checked: boolean) => {
-  setDealProfile(prev => ({
-    ...prev,
-    objectives: {
-      ...prev.objectives,
-      drivers: checked 
-        ? [...prev.objectives.drivers, driver]
-        : prev.objectives.drivers.filter(d => d !== driver)
-    }
-  }))
-}
-
-// Pre-populate function to call when provider is selected
-const prePopolateDealProfile = (sessionData: any, providerCapabilities: any) => {
-  // Pre-populate from session data
-  setDealProfile(prev => ({
-    ...prev,
-    totalValue: sessionData?.dealValue || prev.totalValue,
-    contractType: sessionData?.serviceRequired?.includes('BPO') ? 'full-outsource' : prev.contractType,
-    
-    // Calculate annual value if duration is set
-    annualValue: prev.duration && sessionData?.dealValue 
-      ? (parseInt(sessionData.dealValue) / (parseInt(prev.duration) / 12)).toString()
-      : prev.annualValue
-  }))
-  
-  // Pre-populate from provider capabilities if available
-  if (providerCapabilities?.capabilities?.services) {
-    const services = providerCapabilities.capabilities.services
-    
-    // Map provider services to processes
-    if (services.primary?.toLowerCase().includes('finance')) {
-      setDealProfile(prev => ({
-        ...prev,
-        processes: {
-          ...prev.processes,
-          p2p: ['Invoice Processing', 'Payment Processing'],
-          o2c: ['Billing & Invoicing', 'Collections'],
-          r2r: ['General Ledger', 'Financial Reporting']
-        }
-      }))
-    }
-    
-    // Set geographic coverage
-    if (services.geographicCoverage) {
-      setDealProfile(prev => ({
-        ...prev,
-        requirements: {
-          ...prev.requirements,
-          deliveryLocation: services.geographicCoverage.includes('Global') ? 'hybrid' : 'offshore'
-        }
-      }))
-    }
+  economic: {
+    dealSizeRatio: string
+    providerDependence: string
+    switchingCosts: string
+    budgetFlexibility: string
+  }
+  strategic: {
+    serviceCriticality: string
+    providerInterest: string
+    incumbentAdvantage: string
+    reputationalValue: string
+  }
+  batna: {
+    customerAlternative: string
+    providerPipeline: string
   }
 }
 
@@ -241,8 +103,6 @@ const prePopolateDealProfile = (sessionData: any, providerCapabilities: any) => 
 function PreliminaryAssessmentContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  
-  // Use ref to track if providers have been loaded to prevent infinite loop
   const providersLoadedRef = useRef(false)
   const isLoadingRef = useRef(false)
   
@@ -255,37 +115,89 @@ function PreliminaryAssessmentContent() {
   const [leverageScore, setLeverageScore] = useState({ customer: 65, provider: 35 })
   const [assessmentComplete, setAssessmentComplete] = useState(false)
   
-  const [dealProfile, setDealProfile] = useState<DealProfile>({
-    services: '',
-    deliveryLocations: [],
-    serviceLocations: [],
-    pricingApproach: '',
-    pricingExpectation: ''
+  // Universal Deal Profile State
+  const [dealProfile, setDealProfile] = useState<UniversalDealProfile>({
+    serviceCategory: '',
+    engagementModel: '',
+    duration: '36',
+    totalValue: '',
+    pricingModel: '',
+    serviceDescription: '',
+    scaleIndicator: '',
+    geographicCoverage: '',
+    complexity: '',
+    criticality: '',
+    serviceLevelRequirement: '',
+    transitionTimeline: '',
+    kpis: '',
+    businessDrivers: [],
+    successCriteria: ''
   })
 
-  const [partyFit, setPartyFit] = useState<PartyFit>({
-    customerName: '',
-    customerAddress: '',
-    customerEntity: '',
-    customerIncorporation: '',
-    customerTurnover: '',
-    providerName: '',
-    providerAddress: '',
-    providerEntity: '',
-    providerIncorporation: '',
-    providerTurnover: '',
-    providerEmployees: '',
-    providerExperience: '',
-    parentGuarantee: false,
-    references: []
+  // Party Fit Data State
+  const [partyFitData, setPartyFitData] = useState<PartyFitData>({
+    strategic: {
+      industryMatch: '',
+      deliveryModel: '',
+      objectives: '',
+      culturalFit: ''
+    },
+    capability: {
+      geographic: '',
+      language: '',
+      technology: '',
+      scalability: '',
+      domains: []
+    },
+    relationship: {
+      communication: '',
+      transparency: '',
+      partnership: '',
+      trust: 50
+    },
+    risk: {
+      financial: '',
+      security: '',
+      compliance: '',
+      lockin: '',
+      redFlags: ''
+    }
   })
 
-  const [leverageFactors, setLeverageFactors] = useState<LeverageFactors>({
-    dealSize: '',
-    contractDuration: '24',
-    industrySector: '',
-    serviceType: '',
-    partyFitScore: 0
+  // Party Fit Scores
+  const [partyFitScores, setPartyFitScores] = useState({
+    strategic: 0,
+    capability: 0,
+    relationship: 0,
+    risk: 0
+  })
+
+  const [overallFitScore, setOverallFitScore] = useState(0)
+
+  // Advanced Leverage Factors State
+  const [leverageFactors, setLeverageFactors] = useState<AdvancedLeverageFactors>({
+    marketDynamics: {
+      alternatives: '',
+      marketCondition: '',
+      customerTimePresure: '',
+      providerCapacity: ''
+    },
+    economic: {
+      dealSizeRatio: '',
+      providerDependence: '',
+      switchingCosts: '',
+      budgetFlexibility: ''
+    },
+    strategic: {
+      serviceCriticality: '',
+      providerInterest: '',
+      incumbentAdvantage: '',
+      reputationalValue: ''
+    },
+    batna: {
+      customerAlternative: '',
+      providerPipeline: ''
+    }
   })
 
   // Define phases for progress indicator
@@ -297,279 +209,550 @@ function PreliminaryAssessmentContent() {
     { num: 5, name: 'Commercial', active: false, complete: false },
     { num: 6, name: 'Final Review', active: false, complete: false }
   ]
-// Add these to your state declarations section (around line 65)
 
-// Party Fit Enhanced Data Structure
-const [partyFitData, setPartyFitData] = useState({
-  strategic: {
-    industryMatch: '',
-    deliveryModel: '',
-    objectives: '',
-    culturalFit: ''
-  },
-  capability: {
-    geographic: '',
-    language: '',
-    technology: '',
-    scalability: '',
-    domains: [] as string[]
-  },
-  relationship: {
-    communication: '',
-    transparency: '',
-    partnership: '',
-    trust: 50
-  },
-  risk: {
-    financial: '',
-    security: '',
-    compliance: '',
-    lockin: '',
-    redFlags: ''
-  }
-})
-
-// Party Fit Scores
-const [partyFitScores, setPartyFitScores] = useState({
-  strategic: 0,
-  capability: 0,
-  relationship: 0,
-  risk: 0
-})
-
-const [overallFitScore, setOverallFitScore] = useState(0)
-
-// Helper function to update party fit data
-const updatePartyFit = (category: string, field: string, value: string | number | string[]) => {
-  setPartyFitData(prev => ({
-    ...prev,
-    [category]: {
-      ...prev[category as keyof typeof prev],
-      [field]: value
+  // ========== SECTION 4: HELPER FUNCTIONS ==========
+  
+  // Generate assessment prompt for CLARENCE
+  const generateAssessmentPrompt = (type: string, data: any): string => {
+    switch(type) {
+      case 'party-fit-strategic':
+        return `Assess the strategic alignment between ${data.customerName} requiring ${data.serviceType} 
+                and ${data.providerName} offering ${data.providerServices}. 
+                Consider industry match, delivery model compatibility, and cultural fit. 
+                Return scores for: industryMatch, deliveryModel, objectives, culturalFit.`
+      
+      case 'party-fit-capability':
+        return `Evaluate ${data.providerName}'s capability to deliver ${data.serviceType} for ${data.customerName}.
+                Provider has ${data.employees} employees, operates in ${data.locations}, 
+                uses ${data.technology} systems. Customer needs ${data.requirements}.
+                Return scores for: geographic, language, technology, scalability.`
+      
+      case 'party-fit-risk':
+        return `Assess risks in engaging ${data.providerName} for ${data.serviceType}.
+                Provider: ${data.employees} employees, ${data.yearsInBusiness} years in business,
+                Revenue: ${data.revenue}. Service criticality: ${data.criticality}.
+                Return risk assessment for: financial, security, compliance, lockin.`
+      
+      case 'leverage-market':
+        return `Analyze market dynamics for ${data.serviceType} engagement.
+                Deal size: ${data.dealValue}, Market: ${data.location}, 
+                Timeline: ${data.timeline}, Providers available: ${data.providerCount}.
+                Return assessment of: alternatives, marketCondition, timePresure, providerCapacity.`
+      
+      case 'leverage-strategic':
+        return `Evaluate strategic leverage factors.
+                Service: ${data.serviceType} (${data.criticality} criticality),
+                Customer: ${data.customerRevenue} revenue, ${data.customerSize} size,
+                Provider interest level based on deal size ${data.dealValue} vs their revenue ${data.providerRevenue}.
+                Return: serviceCriticality, providerInterest, incumbentAdvantage, reputationalValue.`
+      
+      default:
+        return `Provide assessment for ${type} with context: ${JSON.stringify(data)}`
     }
-  }))
-  
-  // Recalculate scores when data changes
-  calculatePartyFitScores()
-}
+  }
 
-// Calculate party fit scores based on inputs
-const calculatePartyFitScores = () => {
-  // Strategic Score
-  let strategicScore = 0
-  if (partyFitData.strategic.industryMatch === 'exact') strategicScore += 30
-  else if (partyFitData.strategic.industryMatch === 'adjacent') strategicScore += 20
-  else if (partyFitData.strategic.industryMatch === 'similar') strategicScore += 10
-  
-  if (partyFitData.strategic.deliveryModel === 'perfect') strategicScore += 30
-  else if (partyFitData.strategic.deliveryModel === 'good') strategicScore += 20
-  else if (partyFitData.strategic.deliveryModel === 'moderate') strategicScore += 10
-  
-  if (partyFitData.strategic.culturalFit === 'excellent') strategicScore += 40
-  else if (partyFitData.strategic.culturalFit === 'good') strategicScore += 30
-  else if (partyFitData.strategic.culturalFit === 'fair') strategicScore += 15
-  
-  // Capability Score
-  let capabilityScore = 0
-  if (partyFitData.capability.geographic === 'full') capabilityScore += 25
-  else if (partyFitData.capability.geographic === 'most') capabilityScore += 18
-  else if (partyFitData.capability.geographic === 'partial') capabilityScore += 10
-  
-  if (partyFitData.capability.language === 'all') capabilityScore += 25
-  else if (partyFitData.capability.language === 'most') capabilityScore += 18
-  else if (partyFitData.capability.language === 'english') capabilityScore += 10
-  
-  if (partyFitData.capability.technology === 'same') capabilityScore += 25
-  else if (partyFitData.capability.technology === 'compatible') capabilityScore += 18
-  else if (partyFitData.capability.technology === 'different') capabilityScore += 10
-  
-  if (partyFitData.capability.scalability === 'excellent') capabilityScore += 25
-  else if (partyFitData.capability.scalability === 'good') capabilityScore += 18
-  else if (partyFitData.capability.scalability === 'moderate') capabilityScore += 10
-  
-  // Relationship Score
-  let relationshipScore = 0
-  if (partyFitData.relationship.communication === 'excellent') relationshipScore += 30
-  else if (partyFitData.relationship.communication === 'good') relationshipScore += 20
-  else if (partyFitData.relationship.communication === 'moderate') relationshipScore += 10
-  
-  if (partyFitData.relationship.transparency === 'full') relationshipScore += 30
-  else if (partyFitData.relationship.transparency === 'high') relationshipScore += 20
-  else if (partyFitData.relationship.transparency === 'moderate') relationshipScore += 10
-  
-  relationshipScore += (partyFitData.relationship.trust / 100) * 40
-  
-  // Risk Score (inverse - lower risk = higher score)
-  let riskScore = 100
-  if (partyFitData.risk.financial === 'weak') riskScore -= 30
-  else if (partyFitData.risk.financial === 'moderate') riskScore -= 15
-  else if (partyFitData.risk.financial === 'stable') riskScore -= 5
-  
-  if (partyFitData.risk.security === 'basic') riskScore -= 30
-  else if (partyFitData.risk.security === 'developing') riskScore -= 15
-  else if (partyFitData.risk.security === 'mature') riskScore -= 5
-  
-  if (partyFitData.risk.compliance === 'poor') riskScore -= 25
-  else if (partyFitData.risk.compliance === 'mixed') riskScore -= 15
-  else if (partyFitData.risk.compliance === 'good') riskScore -= 5
-  
-  if (partyFitData.risk.lockin === 'extreme') riskScore -= 15
-  else if (partyFitData.risk.lockin === 'high') riskScore -= 10
-  else if (partyFitData.risk.lockin === 'moderate') riskScore -= 5
-  
-  // Update scores
-  setPartyFitScores({
-    strategic: Math.round(strategicScore),
-    capability: Math.round(capabilityScore),
-    relationship: Math.round(relationshipScore),
-    risk: Math.round(riskScore)
-  })
-  
-  // Calculate overall score (weighted average)
-  const overall = Math.round(
-    (strategicScore * 0.3) + 
-    (capabilityScore * 0.25) + 
-    (relationshipScore * 0.25) + 
-    (riskScore * 0.2)
-  )
-  setOverallFitScore(overall)
-  
-  // Update leverage factors with the party fit score
-  setLeverageFactors(prev => ({
-    ...prev,
-    partyFitScore: overall
-  }))
-}
+  // Get CLARENCE AI Assessment
+  const getClarenceAssessment = async (
+    assessmentType: string,
+    data: any
+  ): Promise<any> => {
+    try {
+      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/clarence-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'assess',
+          type: assessmentType,
+          context: data,
+          prompt: generateAssessmentPrompt(assessmentType, data)
+        })
+      })
 
-  // ========== SECTION 4: FUNCTIONS ==========
-  // ========== REPLACE THE ENTIRE selectProvider FUNCTION WITH THIS ==========
-  // This removes the unused loadingCapabilities state and its usage
-  
-  const selectProvider = async (provider: Provider) => {
-    console.log('selectProvider called with:', provider)
-    
-    setSelectedProvider(provider)
-    // Removed setLoadingCapabilities(true) - was unused
-    
-    // Pre-fill basic provider information in party fit
-    setPartyFit(prev => ({
+      if (!response.ok) {
+        throw new Error(`Assessment failed: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('CLARENCE Assessment Error:', error)
+      return null
+    }
+  }
+
+  // Update party fit data helper
+  const updatePartyFit = (category: string, field: string, value: string | number | string[]) => {
+    setPartyFitData(prev => ({
       ...prev,
-      providerName: provider.providerName || '',
-      providerAddress: provider.providerAddress || '',
-      providerEntity: provider.providerEntity || '',
-      providerIncorporation: provider.providerIncorporation || '',
-      providerTurnover: provider.providerTurnover || '',
-      providerEmployees: provider.providerEmployees || '',
-      providerExperience: provider.providerExperience || ''
+      [category]: {
+        ...prev[category as keyof typeof prev],
+        [field]: value
+      }
     }))
     
-    // Get session ID - check multiple sources
-    const currentSessionId = session?.sessionId || 
-                           searchParams.get('session') || 
-                           localStorage.getItem('currentSessionId')
-    
-    // Load detailed provider capabilities
-    if (provider.providerId && currentSessionId) {
-      console.log('Loading provider capabilities for:', provider.providerId)
-      try {
-        const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${currentSessionId}&provider_id=${provider.providerId}`
-        console.log('Fetching capabilities from:', apiUrl)
-        
-        const response = await fetch(apiUrl)
-        if (response.ok) {
-          const result = await response.json()
-          console.log('Capabilities response received')
-          
-          // Extract the data from the response structure
-          let capabilityData = null
-          
-          if (Array.isArray(result) && result.length > 0) {
-            capabilityData = result[0].data || result[0]
-          } else if (result.data) {
-            capabilityData = result.data
-          } else {
-            capabilityData = result
-          }
-          
-          if (capabilityData) {
-            // Update party fit with detailed provider information
-            if (capabilityData.provider) {
-              setPartyFit(prev => ({
-                ...prev,
-                providerName: capabilityData.provider.company || prev.providerName,
-                providerEntity: capabilityData.provider.industry !== 'undefined' ? capabilityData.provider.industry : prev.providerEntity,
-                providerAddress: capabilityData.provider.address || prev.providerAddress
-              }))
-            }
-            
-            // Update with company capabilities
-            if (capabilityData.capabilities?.company) {
-              const company = capabilityData.capabilities.company
-              setPartyFit(prev => ({
-                ...prev,
-                providerEmployees: company.numberOfEmployees?.toString() || company.size || prev.providerEmployees,
-                providerTurnover: company.annualRevenue || prev.providerTurnover,
-                providerExperience: company.yearsInBusiness || prev.providerExperience
-              }))
-              
-              if (company.notableClients) {
-                setPartyFit(prev => ({
-                  ...prev,
-                  references: [company.notableClients]
-                }))
-              }
-            }
-            
-            // Calculate leverage based on John's algorithm concepts
-            if (capabilityData.leverage) {
-              const customerLev = parseInt(capabilityData.leverage.customerLeverage) || 65
-              const providerLev = parseInt(capabilityData.leverage.providerLeverage) || 35
-              setLeverageScore({
-                customer: customerLev,
-                provider: providerLev
-              })
-            }
-            
-            // Update deal profile with service information
-            if (capabilityData.capabilities?.services) {
-              const services = capabilityData.capabilities.services
-              setDealProfile(prev => ({
-                ...prev,
-                services: services.primary || prev.services || '',
-                serviceLocations: services.geographicCoverage ? 
-                  services.geographicCoverage.split(',').map((s: string) => s.trim()) : 
-                  prev.serviceLocations
-              }))
-            }
-            
-            // Update leverage factors with commercial info
-            if (capabilityData.capabilities?.commercial) {
-              const commercial = capabilityData.capabilities.commercial
-              
-              if (commercial.rateMin && commercial.rateMax) {
-                setDealProfile(prev => ({
-                  ...prev,
-                  pricingExpectation: `£${commercial.rateMin} - £${commercial.rateMax} per hour`
-                }))
-              }
-            }
-            
-            // Store full capability data for reference
-            localStorage.setItem(`provider_capabilities_${provider.providerId}`, JSON.stringify(capabilityData))
-          }
-        } else {
-          console.error('Failed to load provider capabilities:', response.status)
-        }
-      } catch (error) {
-        console.error('Error loading provider capabilities:', error)
-      }
-      // Removed finally block with setLoadingCapabilities(false)
-    }
-    // Removed else block with setLoadingCapabilities(false)
+    // Recalculate scores when data changes
+    calculatePartyFitScores()
   }
 
-    const loadProviders = useCallback(async (sessionId: string) => {
-    // Prevent multiple simultaneous calls
+  // Calculate party fit scores
+  const calculatePartyFitScores = () => {
+    // Strategic Score
+    let strategicScore = 0
+    if (partyFitData.strategic.industryMatch === 'exact') strategicScore += 30
+    else if (partyFitData.strategic.industryMatch === 'adjacent') strategicScore += 20
+    else if (partyFitData.strategic.industryMatch === 'similar') strategicScore += 10
+    
+    if (partyFitData.strategic.deliveryModel === 'perfect') strategicScore += 30
+    else if (partyFitData.strategic.deliveryModel === 'good') strategicScore += 20
+    else if (partyFitData.strategic.deliveryModel === 'moderate') strategicScore += 10
+    
+    if (partyFitData.strategic.culturalFit === 'excellent') strategicScore += 40
+    else if (partyFitData.strategic.culturalFit === 'good') strategicScore += 30
+    else if (partyFitData.strategic.culturalFit === 'fair') strategicScore += 15
+    
+    // Capability Score
+    let capabilityScore = 0
+    if (partyFitData.capability.geographic === 'full') capabilityScore += 25
+    else if (partyFitData.capability.geographic === 'most') capabilityScore += 18
+    else if (partyFitData.capability.geographic === 'partial') capabilityScore += 10
+    
+    if (partyFitData.capability.language === 'all') capabilityScore += 25
+    else if (partyFitData.capability.language === 'most') capabilityScore += 18
+    else if (partyFitData.capability.language === 'english') capabilityScore += 10
+    
+    if (partyFitData.capability.technology === 'same') capabilityScore += 25
+    else if (partyFitData.capability.technology === 'compatible') capabilityScore += 18
+    else if (partyFitData.capability.technology === 'different') capabilityScore += 10
+    
+    if (partyFitData.capability.scalability === 'excellent') capabilityScore += 25
+    else if (partyFitData.capability.scalability === 'good') capabilityScore += 18
+    else if (partyFitData.capability.scalability === 'moderate') capabilityScore += 10
+    
+    // Relationship Score
+    let relationshipScore = 0
+    if (partyFitData.relationship.communication === 'excellent') relationshipScore += 30
+    else if (partyFitData.relationship.communication === 'good') relationshipScore += 20
+    else if (partyFitData.relationship.communication === 'moderate') relationshipScore += 10
+    
+    if (partyFitData.relationship.transparency === 'full') relationshipScore += 30
+    else if (partyFitData.relationship.transparency === 'high') relationshipScore += 20
+    else if (partyFitData.relationship.transparency === 'moderate') relationshipScore += 10
+    
+    relationshipScore += (partyFitData.relationship.trust / 100) * 40
+    
+    // Risk Score (inverse - lower risk = higher score)
+    let riskScore = 100
+    if (partyFitData.risk.financial === 'weak') riskScore -= 30
+    else if (partyFitData.risk.financial === 'moderate') riskScore -= 15
+    else if (partyFitData.risk.financial === 'stable') riskScore -= 5
+    
+    if (partyFitData.risk.security === 'basic') riskScore -= 30
+    else if (partyFitData.risk.security === 'developing') riskScore -= 15
+    else if (partyFitData.risk.security === 'mature') riskScore -= 5
+    
+    if (partyFitData.risk.compliance === 'poor') riskScore -= 25
+    else if (partyFitData.risk.compliance === 'mixed') riskScore -= 15
+    else if (partyFitData.risk.compliance === 'good') riskScore -= 5
+    
+    if (partyFitData.risk.lockin === 'extreme') riskScore -= 15
+    else if (partyFitData.risk.lockin === 'high') riskScore -= 10
+    else if (partyFitData.risk.lockin === 'moderate') riskScore -= 5
+    
+    // Update scores
+    setPartyFitScores({
+      strategic: Math.round(strategicScore),
+      capability: Math.round(capabilityScore),
+      relationship: Math.round(relationshipScore),
+      risk: Math.round(riskScore)
+    })
+    
+    // Calculate overall score (weighted average)
+    const overall = Math.round(
+      (strategicScore * 0.3) + 
+      (capabilityScore * 0.25) + 
+      (relationshipScore * 0.25) + 
+      (riskScore * 0.2)
+    )
+    setOverallFitScore(overall)
+  }
+
+  // Update leverage factor helper
+  const updateLeverageFactor = (category: string, field: string, value: string) => {
+    setLeverageFactors(prev => ({
+      ...prev,
+      [category]: {
+        ...prev[category as keyof AdvancedLeverageFactors],
+        [field]: value
+      }
+    }))
+  }
+
+  // Advanced leverage calculation
+  const calculateAdvancedLeverage = () => {
+    let customerScore = 50 // Start at neutral
+    let factorsAnalyzed = 0
+    
+    // Market Dynamics Impact
+    if (leverageFactors.marketDynamics.alternatives === 'many') {
+      customerScore += 8
+      factorsAnalyzed++
+    } else if (leverageFactors.marketDynamics.alternatives === 'several') {
+      customerScore += 4
+      factorsAnalyzed++
+    } else if (leverageFactors.marketDynamics.alternatives === 'few') {
+      customerScore -= 4
+      factorsAnalyzed++
+    } else if (leverageFactors.marketDynamics.alternatives === 'sole') {
+      customerScore -= 10
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.marketDynamics.marketCondition === 'buyer') {
+      customerScore += 6
+      factorsAnalyzed++
+    } else if (leverageFactors.marketDynamics.marketCondition === 'seller') {
+      customerScore -= 6
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.marketDynamics.customerTimePresure === 'urgent') {
+      customerScore -= 8
+      factorsAnalyzed++
+    } else if (leverageFactors.marketDynamics.customerTimePresure === 'moderate') {
+      customerScore -= 3
+      factorsAnalyzed++
+    } else if (leverageFactors.marketDynamics.customerTimePresure === 'relaxed') {
+      customerScore += 3
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.marketDynamics.providerCapacity === 'constrained') {
+      customerScore -= 6
+      factorsAnalyzed++
+    } else if (leverageFactors.marketDynamics.providerCapacity === 'eager') {
+      customerScore += 6
+      factorsAnalyzed++
+    }
+    
+    // Economic Factors Impact
+    if (leverageFactors.economic.dealSizeRatio === 'minimal') {
+      customerScore += 5
+      factorsAnalyzed++
+    } else if (leverageFactors.economic.dealSizeRatio === 'major') {
+      customerScore -= 8
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.economic.providerDependence === 'critical') {
+      customerScore += 10
+      factorsAnalyzed++
+    } else if (leverageFactors.economic.providerDependence === 'important') {
+      customerScore += 5
+      factorsAnalyzed++
+    } else if (leverageFactors.economic.providerDependence === 'tiny') {
+      customerScore -= 5
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.economic.switchingCosts === 'prohibitive') {
+      customerScore -= 10
+      factorsAnalyzed++
+    } else if (leverageFactors.economic.switchingCosts === 'high') {
+      customerScore -= 5
+      factorsAnalyzed++
+    } else if (leverageFactors.economic.switchingCosts === 'minimal') {
+      customerScore += 5
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.economic.budgetFlexibility === 'flexible') {
+      customerScore += 4
+      factorsAnalyzed++
+    } else if (leverageFactors.economic.budgetFlexibility === 'fixed') {
+      customerScore -= 4
+      factorsAnalyzed++
+    }
+    
+    // Strategic Position Impact
+    if (leverageFactors.strategic.serviceCriticality === 'mission-critical') {
+      customerScore -= 8
+      factorsAnalyzed++
+    } else if (leverageFactors.strategic.serviceCriticality === 'non-core') {
+      customerScore += 5
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.strategic.providerInterest === 'critical') {
+      customerScore += 8
+      factorsAnalyzed++
+    } else if (leverageFactors.strategic.providerInterest === 'low') {
+      customerScore -= 4
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.strategic.incumbentAdvantage === 'strong') {
+      customerScore -= 8
+      factorsAnalyzed++
+    } else if (leverageFactors.strategic.incumbentAdvantage === 'none') {
+      customerScore += 3
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.strategic.reputationalValue === 'transformational') {
+      customerScore += 8
+      factorsAnalyzed++
+    } else if (leverageFactors.strategic.reputationalValue === 'minimal') {
+      customerScore -= 2
+      factorsAnalyzed++
+    }
+    
+    // BATNA Impact
+    if (leverageFactors.batna.customerAlternative === 'strong') {
+      customerScore += 10
+      factorsAnalyzed++
+    } else if (leverageFactors.batna.customerAlternative === 'none') {
+      customerScore -= 10
+      factorsAnalyzed++
+    }
+    
+    if (leverageFactors.batna.providerPipeline === 'full') {
+      customerScore -= 8
+      factorsAnalyzed++
+    } else if (leverageFactors.batna.providerPipeline === 'desperate') {
+      customerScore += 8
+      factorsAnalyzed++
+    }
+    
+    // Include Party Fit Score if available
+    if (overallFitScore > 0) {
+      if (overallFitScore > 70) {
+        customerScore += 5
+      } else if (overallFitScore < 40) {
+        customerScore -= 5
+      }
+    }
+    
+    // Normalize to 0-100 range and ensure bounds
+    customerScore = Math.max(20, Math.min(80, customerScore))
+    
+    // Update leverage scores
+    setLeverageScore({
+      customer: Math.round(customerScore),
+      provider: Math.round(100 - customerScore)
+    })
+    
+    // Store detailed calculation
+    const leverageDetails = {
+      score: customerScore,
+      factorsAnalyzed: factorsAnalyzed,
+      pointAllocation: {
+        customer: Math.floor(customerScore * 2),
+        provider: Math.floor((100 - customerScore) * 2)
+      }
+    }
+    
+    console.log('Leverage Calculation Details:', leverageDetails)
+    localStorage.setItem('leverageCalculation', JSON.stringify(leverageDetails))
+  }
+
+  // Auto-populate Deal Profile from data
+  const populateDealProfile = (capabilities: any, requirements: any, sessionData: any) => {
+    console.log('Auto-populating Deal Profile...')
+    
+    const serviceType = sessionData?.serviceRequired?.toLowerCase() || ''
+    let category = 'other'
+    
+    if (serviceType.includes('customer') || serviceType.includes('support')) {
+      category = 'customer-support'
+    } else if (serviceType.includes('technical') || serviceType.includes('it')) {
+      category = 'it-services'
+    } else if (serviceType.includes('financ') || serviceType.includes('f&a')) {
+      category = 'financial-support'
+    } else if (serviceType.includes('hr') || serviceType.includes('human')) {
+      category = 'hr-services'
+    } else if (serviceType.includes('data')) {
+      category = 'data-processing'
+    } else if (serviceType.includes('legal')) {
+      category = 'legal-process'
+    }
+    
+    setDealProfile(prev => ({
+      ...prev,
+      serviceCategory: category,
+      totalValue: sessionData?.dealValue || prev.totalValue,
+      serviceDescription: sessionData?.serviceRequired || prev.serviceDescription,
+      geographicCoverage: capabilities?.capabilities?.services?.geographicCoverage || prev.geographicCoverage,
+      scaleIndicator: capabilities?.capabilities?.company?.size || prev.scaleIndicator,
+      complexity: requirements?.complexity || prev.complexity,
+      criticality: requirements?.criticality || prev.criticality,
+      serviceLevelRequirement: requirements?.slaRequirement || prev.serviceLevelRequirement,
+      transitionTimeline: requirements?.timeline || prev.transitionTimeline,
+      kpis: requirements?.keyMetrics?.join(', ') || prev.kpis,
+      businessDrivers: requirements?.drivers || prev.businessDrivers,
+      successCriteria: requirements?.successCriteria || prev.successCriteria
+    }))
+  }
+
+  // Auto-populate Party Fit with AI assistance
+  const populatePartyFitWithAI = async (provider: any, capabilities: any, requirements: any) => {
+    console.log('Getting AI assessment for Party Fit...')
+    
+    const assessmentData = {
+      customerName: session?.customerCompany,
+      customerRequirements: requirements,
+      providerName: provider.providerName,
+      providerCapabilities: capabilities,
+      serviceType: session?.serviceRequired,
+      dealValue: session?.dealValue
+    }
+    
+    // Get strategic alignment assessment
+    const strategicAssessment = await getClarenceAssessment('party-fit-strategic', assessmentData)
+    if (strategicAssessment) {
+      setPartyFitData(prev => ({
+        ...prev,
+        strategic: {
+          industryMatch: strategicAssessment.industryMatch || prev.strategic.industryMatch,
+          deliveryModel: strategicAssessment.deliveryModel || prev.strategic.deliveryModel,
+          objectives: strategicAssessment.objectives || prev.strategic.objectives,
+          culturalFit: strategicAssessment.culturalFit || prev.strategic.culturalFit
+        }
+      }))
+    }
+    
+    // Get capability assessment
+    const capabilityAssessment = await getClarenceAssessment('party-fit-capability', assessmentData)
+    if (capabilityAssessment) {
+      setPartyFitData(prev => ({
+        ...prev,
+        capability: {
+          geographic: capabilityAssessment.geographic || prev.capability.geographic,
+          language: capabilityAssessment.language || prev.capability.language,
+          technology: capabilityAssessment.technology || prev.capability.technology,
+          scalability: capabilityAssessment.scalability || prev.capability.scalability,
+          domains: capabilityAssessment.domains || prev.capability.domains
+        }
+      }))
+    }
+    
+    // Get risk assessment
+    const riskAssessment = await getClarenceAssessment('party-fit-risk', assessmentData)
+    if (riskAssessment) {
+      setPartyFitData(prev => ({
+        ...prev,
+        risk: {
+          financial: riskAssessment.financial || prev.risk.financial,
+          security: riskAssessment.security || prev.risk.security,
+          compliance: riskAssessment.compliance || prev.risk.compliance,
+          lockin: riskAssessment.lockin || prev.risk.lockin,
+          redFlags: riskAssessment.redFlags || prev.risk.redFlags
+        }
+      }))
+    }
+    
+    calculatePartyFitScores()
+  }
+
+  // Auto-populate Leverage with AI assistance
+  const populateLeverageWithAI = async (provider: any, capabilities: any, requirements: any, sessionData: any) => {
+    console.log('Getting AI assessment for Leverage...')
+    
+    const leverageData = {
+      serviceType: sessionData?.serviceRequired,
+      dealValue: sessionData?.dealValue,
+      customerCompany: sessionData?.customerCompany,
+      providerName: provider.providerName,
+      providerSize: capabilities?.capabilities?.company?.numberOfEmployees,
+      providerRevenue: capabilities?.capabilities?.company?.annualRevenue,
+      timeline: requirements?.timeline,
+      criticality: requirements?.criticality,
+      location: requirements?.location || 'UK'
+    }
+    
+    // Get market dynamics assessment
+    const marketAssessment = await getClarenceAssessment('leverage-market', leverageData)
+    if (marketAssessment) {
+      setLeverageFactors(prev => ({
+        ...prev,
+        marketDynamics: {
+          alternatives: marketAssessment.alternatives || prev.marketDynamics.alternatives,
+          marketCondition: marketAssessment.marketCondition || prev.marketDynamics.marketCondition,
+          customerTimePresure: marketAssessment.timePresure || prev.marketDynamics.customerTimePresure,
+          providerCapacity: marketAssessment.providerCapacity || prev.marketDynamics.providerCapacity
+        }
+      }))
+    }
+    
+    // Get strategic position assessment
+    const strategicAssessment = await getClarenceAssessment('leverage-strategic', leverageData)
+    if (strategicAssessment) {
+      setLeverageFactors(prev => ({
+        ...prev,
+        strategic: {
+          serviceCriticality: strategicAssessment.serviceCriticality || prev.strategic.serviceCriticality,
+          providerInterest: strategicAssessment.providerInterest || prev.strategic.providerInterest,
+          incumbentAdvantage: strategicAssessment.incumbentAdvantage || prev.strategic.incumbentAdvantage,
+          reputationalValue: strategicAssessment.reputationalValue || prev.strategic.reputationalValue
+        }
+      }))
+    }
+    
+    // Auto-calculate economic factors
+    const dealSize = parseInt(sessionData?.dealValue || '0')
+    const providerRevenue = parseInt(capabilities?.capabilities?.company?.annualRevenue?.replace(/\D/g, '') || '0')
+    
+    if (dealSize && providerRevenue) {
+      const ratio = (dealSize / providerRevenue) * 100
+      let dependence = 'tiny'
+      if (ratio > 15) dependence = 'critical'
+      else if (ratio > 5) dependence = 'important'
+      else if (ratio > 1) dependence = 'small'
+      
+      setLeverageFactors(prev => ({
+        ...prev,
+        economic: {
+          ...prev.economic,
+          providerDependence: dependence
+        }
+      }))
+    }
+    
+    setTimeout(() => calculateAdvancedLeverage(), 500)
+  }
+
+  // Enhanced select provider with data integration
+  const selectProvider = async (provider: Provider) => {
+    console.log('Loading comprehensive provider data...', provider)
+    setSelectedProvider(provider)
+    
+    const sessionId = session?.sessionId || searchParams.get('session')
+    
+    try {
+      // Load Provider Capabilities
+      const capabilitiesResponse = await fetch(
+        `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${sessionId}&provider_id=${provider.providerId}`
+      )
+      const capabilities = await capabilitiesResponse.json()
+      
+      // Load Customer Requirements
+      const requirementsResponse = await fetch(
+        `https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sessionId}`
+      )
+      const requirements = await requirementsResponse.json()
+      
+      // Auto-populate all sections
+      populateDealProfile(capabilities, requirements, session)
+      await populatePartyFitWithAI(provider, capabilities, requirements)
+      await populateLeverageWithAI(provider, capabilities, requirements, session)
+      
+    } catch (error) {
+      console.error('Data integration error:', error)
+      // Fallback to manual entry
+    }
+  }
+
+  const loadProviders = useCallback(async (sessionId: string) => {
     if (isLoadingRef.current || providersLoadedRef.current) {
       console.log('Providers already loading or loaded, skipping...')
       return
@@ -580,7 +763,6 @@ const calculatePartyFitScores = () => {
     try {
       console.log('Loading providers for session:', sessionId)
       
-      // For demo mode, use mock providers
       if (sessionId === 'demo-session') {
         const demoProviders: Provider[] = [
           {
@@ -603,8 +785,7 @@ const calculatePartyFitScores = () => {
         return
       }
 
-      // TEMPORARY: Use mock data while webhook is deactivated
-      console.log('Using mock providers while webhook is deactivated')
+      // Use mock data temporarily
       const mockProviders: Provider[] = [
         {
           providerId: '3f126f60-561a-4f14-a847-70ac8138fecd',
@@ -624,19 +805,9 @@ const calculatePartyFitScores = () => {
       setProviders(mockProviders)
       providersLoadedRef.current = true
       
-      // Auto-select if only one provider
       if (mockProviders.length === 1) {
         selectProvider(mockProviders[0])
       }
-      
-      /* REACTIVATE WHEN WEBHOOK IS FIXED:
-      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/session-providers?session=${sessionId}`
-      const response = await fetch(apiUrl)
-      if (response.ok) {
-        const data = await response.json()
-        // Process providers data...
-      }
-      */
       
     } catch (error) {
       console.error('Error loading providers:', error)
@@ -644,7 +815,7 @@ const calculatePartyFitScores = () => {
       isLoadingRef.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []) // Empty dependency array - selectProvider creates circular dependency
+  }, [])
 
   const loadSessionData = useCallback(async () => {
     try {
@@ -662,12 +833,8 @@ const calculatePartyFitScores = () => {
           setSession(sessionData)
           setDealProfile(prev => ({
             ...prev,
-            services: sessionData.serviceRequired || ''
-          }))
-          setLeverageFactors(prev => ({
-            ...prev,
-            dealSize: sessionData.dealValue || '',
-            contractDuration: '24'
+            serviceDescription: sessionData.serviceRequired || '',
+            totalValue: sessionData.dealValue || ''
           }))
           sessionId = storedSessionId
         } else {
@@ -691,12 +858,8 @@ const calculatePartyFitScores = () => {
           setSession(sessionData)
           setDealProfile(prev => ({
             ...prev,
-            services: sessionData.serviceRequired || ''
-          }))
-          setLeverageFactors(prev => ({
-            ...prev,
-            dealSize: sessionData.dealValue || '',
-            contractDuration: '24'
+            serviceDescription: sessionData.serviceRequired || '',
+            totalValue: sessionData.dealValue || ''
           }))
         }
       }
@@ -705,9 +868,8 @@ const calculatePartyFitScores = () => {
         localStorage.setItem('selectedProviderId', providerId)
       }
 
-      // Load providers ONLY ONCE
       if (sessionId && !providersLoadedRef.current) {
-      await loadProviders(sessionId)
+        await loadProviders(sessionId)
       }
       
     } catch (error) {
@@ -717,64 +879,64 @@ const calculatePartyFitScores = () => {
     }
   }, [searchParams, loadProviders])
 
-  // John's leverage calculation algorithm
-  const calculateLeverage = () => {
-    // Base leverage from deal size
-    const dealValue = parseInt(leverageFactors.dealSize.replace(/\D/g, '')) || 0
-    let customerLeverage = 50
-    
-    // Deal size impact (larger deals = more customer leverage)
-    if (dealValue > 5000000) customerLeverage += 15
-    else if (dealValue > 2000000) customerLeverage += 10
-    else if (dealValue > 1000000) customerLeverage += 5
-    else if (dealValue < 250000) customerLeverage -= 10
-    
-    // Contract duration impact
-    const duration = parseInt(leverageFactors.contractDuration) || 24
-    if (duration > 36) customerLeverage += 10
-    else if (duration > 24) customerLeverage += 5
-    else if (duration < 12) customerLeverage -= 10
-    
-    // Party fit impact
-    if (leverageFactors.partyFitScore > 80) customerLeverage += 5
-    else if (leverageFactors.partyFitScore < 50) customerLeverage -= 5
-    
-    // Provider size impact (smaller provider = more customer leverage)
-    const employees = parseInt(partyFit.providerEmployees) || 0
-    if (employees < 50) customerLeverage += 10
-    else if (employees < 200) customerLeverage += 5
-    else if (employees > 1000) customerLeverage -= 10
-    
-    // Ensure bounds
-    customerLeverage = Math.max(20, Math.min(80, customerLeverage))
-    
-    setLeverageScore({
-      customer: customerLeverage,
-      provider: 100 - customerLeverage
-    })
-  }
-
   const handleSubmitAssessment = async () => {
     if (!session || !selectedProvider) {
       alert('Please select a provider before completing the assessment')
       return
     }
 
-    calculateLeverage()
+    calculateAdvancedLeverage()
     
-    // Save assessment data for next phase
-    localStorage.setItem(`assessment_${session.sessionId}`, JSON.stringify({
-      sessionId: session.sessionId,
-      providerId: selectedProvider.providerId,
-      providerName: selectedProvider.providerName,
+    const assessmentData = {
+      sessionId: session?.sessionId,
+      providerId: selectedProvider?.providerId,
+      timestamp: new Date().toISOString(),
       dealProfile,
-      partyFit,
+      partyFitData,
+      partyFitScores,
+      overallFitScore,
       leverageFactors,
-      leverageScore
-    }))
+      leverageScore,
+      clarenceRecommendations: {
+        partyFitSummary: overallFitScore > 70 ? 'Strong fit - proceed with confidence' : 
+                         overallFitScore > 40 ? 'Moderate fit - address gaps before proceeding' :
+                         'Poor fit - consider alternatives',
+        leverageSummary: leverageScore.customer > 60 ? 'Customer has strong negotiating position' :
+                         leverageScore.customer > 40 ? 'Balanced negotiating position' :
+                         'Provider has stronger position - manage expectations',
+        nextSteps: 'Proceed to Phase 2: Foundation Drafting with allocated negotiation points'
+      }
+    }
+    
+    localStorage.setItem(`assessment_${session?.sessionId}_${selectedProvider?.providerId}`, JSON.stringify(assessmentData))
     
     setAssessmentComplete(true)
     alert('Assessment submitted successfully!')
+  }
+
+  // Helper functions for Deal Profile
+  const handleProcessChange = (category: 'p2p' | 'o2c' | 'r2r' | 'additional', process: string, checked: boolean) => {
+    // This function would be used if we had process checkboxes
+    console.log('Process change:', category, process, checked)
+  }
+
+  // Get color classes for Party Fit
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'aligned': return 'bg-emerald-500'
+      case 'negotiating': return 'bg-yellow-500'
+      case 'disputed': return 'bg-red-500'
+      default: return 'bg-gray-300'
+    }
+  }
+
+  const getStatusBgColor = (status: string) => {
+    switch (status) {
+      case 'aligned': return 'bg-emerald-50 text-emerald-700'
+      case 'negotiating': return 'bg-yellow-50 text-yellow-700'
+      case 'disputed': return 'bg-red-50 text-red-700'
+      default: return 'bg-gray-50 text-gray-700'
+    }
   }
 
   // ========== SECTION 5: USE EFFECTS ==========
@@ -818,7 +980,7 @@ const calculatePartyFitScores = () => {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* ===== NAVIGATION - Updated to Slate theme ===== */}
+      {/* ===== NAVIGATION ===== */}
       <nav className="bg-white shadow-sm border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -850,7 +1012,7 @@ const calculatePartyFitScores = () => {
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Contract Header - Updated to Slate */}
+        {/* Contract Header */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-6 rounded-xl mb-6">
           <div className="flex justify-between items-start">
             <div>
@@ -866,7 +1028,7 @@ const calculatePartyFitScores = () => {
           </div>
         </div>
 
-        {/* PHASE PROGRESS INDICATOR - PROMINENT PLACEMENT */}
+        {/* PHASE PROGRESS INDICATOR */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <h3 className="text-sm font-medium text-slate-700 mb-4">Contract Negotiation Progress</h3>
           <div className="flex justify-between items-center mb-4">
@@ -909,881 +1071,690 @@ const calculatePartyFitScores = () => {
                 >
                   <div className="font-medium text-slate-800">{provider.providerName || 'Unknown Provider'}</div>
                   {provider.providerTurnover && (
-                    <div className="text-sm text-slate-600">Turnover: {provider.providerTurnover}</div>
-                  )}
-                  {provider.providerEmployees && (
-                    <div className="text-sm text-slate-600">Employees: {provider.providerEmployees}</div>
-                  )}
-                  <div className="mt-2 text-xs text-slate-600">
-                    {selectedProvider?.providerId === provider.providerId
-                      ? '✓ Currently Assessing' 
-                      : 'Click to Assess'}
+                    <div className="relative h-8 bg-white rounded-full overflow-hidden border border-slate-300">
+                      <div 
+                        className={`h-full transition-all duration-500 ${
+                          overallFitScore > 70 ? 'bg-green-500' : 
+                          overallFitScore > 40 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${overallFitScore}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-600 mt-2">
+                      <span>Poor Fit</span>
+                      <span className="font-medium">{overallFitScore}% Overall Fit</span>
+                      <span>Excellent Fit</span>
+                    </div>
                   </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Assessment Sections */}
-        {selectedProvider ? (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
-            <div className="border-b border-slate-200">
-              <div className="flex">
-                <button
-                  onClick={() => setActiveSection('profile')}
-                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
-                    ${activeSection === 'profile' 
-                      ? 'text-slate-700 border-slate-600' 
-                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
-                >
-                  Deal Profile
-                </button>
-                <button
-                  onClick={() => setActiveSection('fit')}
-                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
-                    ${activeSection === 'fit' 
-                      ? 'text-slate-700 border-slate-600' 
-                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
-                >
-                  Party Fit
-                </button>
-                <button
-                  onClick={() => setActiveSection('leverage')}
-                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
-                    ${activeSection === 'leverage' 
-                      ? 'text-slate-700 border-slate-600' 
-                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
-                >
-                  Leverage Assessment
-                </button>
-              </div>
-            </div>
+                  {/* 1. Strategic Alignment */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm mr-3">1</span>
+                      Strategic Alignment
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Industry Expertise Match</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.strategic.industryMatch}
+                          onChange={(e) => updatePartyFit('strategic', 'industryMatch', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="exact">Exact industry match</option>
+                          <option value="adjacent">Adjacent industry experience</option>
+                          <option value="similar">Similar industry characteristics</option>
+                          <option value="limited">Limited relevant experience</option>
+                          <option value="none">No industry experience</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Service Delivery Model Alignment</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.strategic.deliveryModel}
+                          onChange={(e) => updatePartyFit('strategic', 'deliveryModel', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="perfect">Perfect alignment</option>
+                          <option value="good">Good with minor adjustments</option>
+                          <option value="moderate">Moderate - requires adaptation</option>
+                          <option value="poor">Significant misalignment</option>
+                        </select>
+                      </div>
+                    </div>
 
-            <div className="p-8">
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-slate-600 mb-1">Business Objectives Alignment</label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        rows={2}
+                        placeholder="How well do the provider's objectives align with your transformation goals?"
+                        value={partyFitData.strategic.objectives}
+                        onChange={(e) => updatePartyFit('strategic', 'objectives', e.target.value)}
+                      />
+                    </div>
 
-              {/* Deal Profile Section */}
-{activeSection === 'profile' && (
-  <div className="space-y-6">
-    <h3 className="text-xl font-medium text-slate-900 mb-4">Deal Profile</h3>
-    
-    {/* Deal Overview */}
-    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-      <h4 className="font-medium text-blue-900 mb-3">Contract Overview</h4>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-blue-800 mb-1">Contract Type</label>
-          <select
-            className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-            value={dealProfile.contractType}
-            onChange={(e) => setDealProfile({...dealProfile, contractType: e.target.value})}
-          >
-            <option value="">Select type...</option>
-            <option value="full-outsource">Full F&A Outsourcing</option>
-            <option value="partial-outsource">Partial Process Outsourcing</option>
-            <option value="co-source">Co-sourcing Model</option>
-            <option value="managed-service">Managed Service</option>
-            <option value="transformation">Transformation & Outsourcing</option>
-          </select>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-blue-800 mb-1">Contract Duration</label>
-          <select
-            className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-            value={dealProfile.duration}
-            onChange={(e) => setDealProfile({...dealProfile, duration: e.target.value})}
-          >
-            <option value="">Select duration...</option>
-            <option value="12">12 months</option>
-            <option value="24">24 months</option>
-            <option value="36">36 months</option>
-            <option value="48">48 months</option>
-            <option value="60">60 months</option>
-            <option value="60+">More than 5 years</option>
-          </select>
-        </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-slate-600 mb-1">Cultural Fit Assessment</label>
+                      <div className="flex gap-4">
+                        {['Poor', 'Fair', 'Good', 'Excellent'].map((level) => (
+                          <label key={level} className="flex items-center">
+                            <input
+                              type="radio"
+                              name="culturalFit"
+                              value={level.toLowerCase()}
+                              checked={partyFitData.strategic.culturalFit === level.toLowerCase()}
+                              onChange={(e) => updatePartyFit('strategic', 'culturalFit', e.target.value)}
+                              className="mr-2"
+                            />
+                            <span className="text-sm">{level}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
 
-        <div>
-          <label className="block text-sm font-medium text-blue-800 mb-1">Total Contract Value</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-            placeholder="e.g., £5,000,000"
-            value={dealProfile.totalValue || session?.dealValue}
-            onChange={(e) => setDealProfile({...dealProfile, totalValue: e.target.value})}
-          />
-        </div>
+                  {/* 2. Capability Match */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm mr-3">2</span>
+                      Capability Match
+                    </h4>
 
-        <div>
-          <label className="block text-sm font-medium text-blue-800 mb-1">Annual Contract Value</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-            placeholder="Auto-calculated or enter manually"
-            value={dealProfile.annualValue}
-            onChange={(e) => setDealProfile({...dealProfile, annualValue: e.target.value})}
-          />
-        </div>
-      </div>
-    </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Geographic Coverage</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.capability.geographic}
+                          onChange={(e) => updatePartyFit('capability', 'geographic', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="full">Full coverage of required locations</option>
+                          <option value="most">Covers most required locations</option>
+                          <option value="partial">Partial coverage</option>
+                          <option value="limited">Limited coverage</option>
+                        </select>
+                      </div>
 
-    {/* F&A Processes in Scope */}
-    <div className="bg-white p-6 rounded-lg border border-slate-200">
-      <h4 className="font-medium text-slate-800 mb-3">F&A Processes in Scope</h4>
-      
-      <div className="space-y-4">
-        {/* Procure to Pay */}
-        <div>
-          <div className="font-medium text-sm text-slate-700 mb-2">Procure to Pay (P2P)</div>
-          <div className="grid grid-cols-3 gap-2 ml-4">
-            {['Vendor Master Management', 'Purchase Order Processing', 'Invoice Processing', 
-              'Payment Processing', 'Vendor Query Management', 'Expense Management'].map((process) => (
-              <label key={process} className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="mr-2"
-                  checked={dealProfile.processes?.p2p?.includes(process)}
-                  onChange={(e) => handleProcessChange('p2p', process, e.target.checked)}
-                />
-                <span className="text-sm">{process}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Language Capabilities</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.capability.language}
+                          onChange={(e) => updatePartyFit('capability', 'language', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="all">All required languages</option>
+                          <option value="most">Most required languages</option>
+                          <option value="english">English only</option>
+                          <option value="limited">Limited language support</option>
+                        </select>
+                      </div>
+                    </div>
 
-        {/* Order to Cash */}
-        <div>
-          <div className="font-medium text-sm text-slate-700 mb-2">Order to Cash (O2C)</div>
-          <div className="grid grid-cols-3 gap-2 ml-4">
-            {['Customer Master Management', 'Order Management', 'Billing & Invoicing', 
-              'Collections', 'Cash Application', 'Credit Management'].map((process) => (
-              <label key={process} className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="mr-2"
-                  checked={dealProfile.processes?.o2c?.includes(process)}
-                  onChange={(e) => handleProcessChange('o2c', process, e.target.checked)}
-                />
-                <span className="text-sm">{process}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Technology Platform Compatibility</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.capability.technology}
+                          onChange={(e) => updatePartyFit('capability', 'technology', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="same">Same platforms we use</option>
+                          <option value="compatible">Compatible platforms</option>
+                          <option value="different">Different but adaptable</option>
+                          <option value="incompatible">Incompatible systems</option>
+                        </select>
+                      </div>
 
-        {/* Record to Report */}
-        <div>
-          <div className="font-medium text-sm text-slate-700 mb-2">Record to Report (R2R)</div>
-          <div className="grid grid-cols-3 gap-2 ml-4">
-            {['General Ledger', 'Fixed Assets', 'Intercompany Reconciliation', 
-              'Bank Reconciliation', 'Month-end Close', 'Financial Reporting'].map((process) => (
-              <label key={process} className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="mr-2"
-                  checked={dealProfile.processes?.r2r?.includes(process)}
-                  onChange={(e) => handleProcessChange('r2r', process, e.target.checked)}
-                />
-                <span className="text-sm">{process}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Scalability Assessment</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.capability.scalability}
+                          onChange={(e) => updatePartyFit('capability', 'scalability', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="excellent">Can scale up/down easily</option>
+                          <option value="good">Good scalability</option>
+                          <option value="moderate">Some limitations</option>
+                          <option value="poor">Limited scalability</option>
+                        </select>
+                      </div>
+                    </div>
 
-        {/* Additional Processes */}
-        <div>
-          <div className="font-medium text-sm text-slate-700 mb-2">Additional Processes</div>
-          <div className="grid grid-cols-3 gap-2 ml-4">
-            {['Tax Compliance', 'Treasury Operations', 'Payroll', 
-              'Management Reporting', 'Budgeting & Forecasting', 'Audit Support'].map((process) => (
-              <label key={process} className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="mr-2"
-                  checked={dealProfile.processes?.additional?.includes(process)}
-                  onChange={(e) => handleProcessChange('additional', process, e.target.checked)}
-                />
-                <span className="text-sm">{process}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 mb-1">Domain Expertise (check all that apply)</label>
+                      <div className="grid grid-cols-3 gap-2 mt-2">
+                        {['Customer Service', 'Technical Support', 'Finance & Accounting', 'HR Services', 'IT Services', 'Data Processing'].map((domain) => (
+                          <label key={domain} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              className="mr-2"
+                              checked={partyFitData.capability.domains?.includes(domain)}
+                              onChange={(e) => {
+                                const domains = partyFitData.capability.domains || []
+                                if (e.target.checked) {
+                                  updatePartyFit('capability', 'domains', [...domains, domain])
+                                } else {
+                                  updatePartyFit('capability', 'domains', domains.filter(d => d !== domain))
+                                }
+                              }}
+                            />
+                            <span className="text-sm">{domain}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
 
-    {/* Volume & Complexity */}
-    <div className="bg-white p-6 rounded-lg border border-slate-200">
-      <h4 className="font-medium text-slate-800 mb-3">Transaction Volumes & Complexity</h4>
-      
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Annual Invoice Volume</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            placeholder="e.g., 50,000"
-            value={dealProfile.volumes?.invoices}
-            onChange={(e) => updateVolumes('invoices', e.target.value)}
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Monthly Journal Entries</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            placeholder="e.g., 1,500"
-            value={dealProfile.volumes?.journalEntries}
-            onChange={(e) => updateVolumes('journalEntries', e.target.value)}
-          />
-        </div>
+                  {/* 3. Relationship Potential */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm mr-3">3</span>
+                      Relationship Potential
+                    </h4>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Number of Legal Entities</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            placeholder="e.g., 25"
-            value={dealProfile.volumes?.legalEntities}
-            onChange={(e) => updateVolumes('legalEntities', e.target.value)}
-          />
-        </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Communication Style Compatibility</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.relationship.communication}
+                          onChange={(e) => updatePartyFit('relationship', 'communication', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="excellent">Highly compatible</option>
+                          <option value="good">Generally compatible</option>
+                          <option value="moderate">Some differences</option>
+                          <option value="poor">Significant differences</option>
+                        </select>
+                      </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Countries of Operation</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            placeholder="e.g., UK, US, Germany, France"
-            value={dealProfile.volumes?.countries}
-            onChange={(e) => updateVolumes('countries', e.target.value)}
-          />
-        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Transparency Level</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.relationship.transparency}
+                          onChange={(e) => updatePartyFit('relationship', 'transparency', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="full">Fully transparent</option>
+                          <option value="high">High transparency</option>
+                          <option value="moderate">Moderate transparency</option>
+                          <option value="low">Limited transparency</option>
+                        </select>
+                      </div>
+                    </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">ERP Systems in Use</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            placeholder="e.g., SAP, Oracle, NetSuite"
-            value={dealProfile.volumes?.erpSystems}
-            onChange={(e) => updateVolumes('erpSystems', e.target.value)}
-          />
-        </div>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-slate-600 mb-1">Partnership Approach</label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        rows={2}
+                        placeholder="Describe the provider's approach to partnership and collaboration"
+                        value={partyFitData.relationship.partnership}
+                        onChange={(e) => updatePartyFit('relationship', 'partnership', e.target.value)}
+                      />
+                    </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Process Complexity</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            value={dealProfile.volumes?.complexity}
-            onChange={(e) => updateVolumes('complexity', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="low">Low - Standard processes</option>
-            <option value="medium">Medium - Some customization</option>
-            <option value="high">High - Significant complexity</option>
-            <option value="very-high">Very High - Highly customized</option>
-          </select>
-        </div>
-      </div>
-    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 mb-1">Initial Trust Assessment</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={partyFitData.relationship.trust || 50}
+                          onChange={(e) => updatePartyFit('relationship', 'trust', parseInt(e.target.value))}
+                          className="flex-1"
+                        />
+                        <span className="text-sm font-medium w-12 text-right">{partyFitData.relationship.trust || 50}%</span>
+                      </div>
+                    </div>
+                  </div>
 
-    {/* Service Requirements */}
-    <div className="bg-white p-6 rounded-lg border border-slate-200">
-      <h4 className="font-medium text-slate-800 mb-3">Service Requirements & Expectations</h4>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Primary Delivery Location</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            value={dealProfile.requirements?.deliveryLocation}
-            onChange={(e) => updateRequirements('deliveryLocation', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="onshore">Onshore (Same country)</option>
-            <option value="nearshore">Nearshore (nearby country)</option>
-            <option value="offshore">Offshore (remote location)</option>
-            <option value="hybrid">Hybrid model</option>
-          </select>
-        </div>
+                  {/* 4. Risk Assessment */}
+                  <div className="bg-white p-6 rounded-lg border border-red-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-red-100 text-red-700 rounded-full flex items-center justify-center text-sm mr-3">4</span>
+                      Risk Assessment
+                    </h4>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Language Requirements</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-              placeholder="e.g., English, French, German"
-              value={dealProfile.requirements?.languages}
-              onChange={(e) => updateRequirements('languages', e.target.value)}
-            />
-          </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Financial Stability</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.risk.financial}
+                          onChange={(e) => updatePartyFit('risk', 'financial', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="strong">Strong financial position</option>
+                          <option value="stable">Stable</option>
+                          <option value="moderate">Some concerns</option>
+                          <option value="weak">Significant concerns</option>
+                        </select>
+                      </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Service Hours</label>
-            <select
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-              value={dealProfile.requirements?.serviceHours}
-              onChange={(e) => updateRequirements('serviceHours', e.target.value)}
-            >
-              <option value="">Select...</option>
-              <option value="business">Business hours only</option>
-              <option value="extended">Extended hours</option>
-              <option value="24x5">24x5 support</option>
-              <option value="24x7">24x7 support</option>
-            </select>
-          </div>
-        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Information Security Maturity</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.risk.security}
+                          onChange={(e) => updatePartyFit('risk', 'security', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="certified">ISO/SOC certified</option>
+                          <option value="mature">Mature practices</option>
+                          <option value="developing">Developing practices</option>
+                          <option value="basic">Basic security only</option>
+                        </select>
+                      </div>
+                    </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Key Performance Indicators</label>
-          <textarea
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            rows={2}
-            placeholder="e.g., 99% invoice accuracy, 2-day invoice processing, 95% first-call resolution"
-            value={dealProfile.requirements?.kpis}
-            onChange={(e) => updateRequirements('kpis', e.target.value)}
-          />
-        </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Compliance Track Record</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.risk.compliance}
+                          onChange={(e) => updatePartyFit('risk', 'compliance', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="excellent">Excellent track record</option>
+                          <option value="good">Generally compliant</option>
+                          <option value="mixed">Mixed record</option>
+                          <option value="poor">Compliance issues</option>
+                        </select>
+                      </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Transition Timeline</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-            value={dealProfile.requirements?.transitionTimeline}
-            onChange={(e) => updateRequirements('transitionTimeline', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="3">3 months</option>
-            <option value="6">6 months</option>
-            <option value="9">9 months</option>
-            <option value="12">12 months</option>
-            <option value="phased">Phased approach</option>
-          </select>
-        </div>
-      </div>
-    </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Vendor Lock-in Risk</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                          value={partyFitData.risk.lockin}
+                          onChange={(e) => updatePartyFit('risk', 'lockin', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="low">Low - easy transition</option>
+                          <option value="moderate">Moderate</option>
+                          <option value="high">High - difficult to change</option>
+                          <option value="extreme">Extreme lock-in</option>
+                        </select>
+                      </div>
+                    </div>
 
-    {/* Current Pain Points */}
-    <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-      <h4 className="font-medium text-yellow-900 mb-3">Current Challenges & Objectives</h4>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-yellow-800 mb-1">Primary Business Drivers</label>
-          <div className="grid grid-cols-2 gap-2">
-            {['Cost Reduction', 'Process Improvement', 'Scalability', 
-              'Access to Expertise', 'Technology Upgrade', 'Risk Mitigation'].map((driver) => (
-              <label key={driver} className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="mr-2"
-                  checked={dealProfile.objectives?.drivers?.includes(driver)}
-                  onChange={(e) => handleDriverChange(driver, e.target.checked)}
-                />
-                <span className="text-sm">{driver}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 mb-1">Red Flags or Concerns</label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        rows={2}
+                        placeholder="Note any specific concerns or red flags identified"
+                        value={partyFitData.risk.redFlags}
+                        onChange={(e) => updatePartyFit('risk', 'redFlags', e.target.value)}
+                      />
+                    </div>
+                  </div>
 
-        <div>
-          <label className="block text-sm font-medium text-yellow-800 mb-1">Current Pain Points</label>
-          <textarea
-            className="w-full px-3 py-2 border border-yellow-300 rounded-lg bg-white"
-            rows={3}
-            placeholder="Describe current challenges with F&A processes..."
-            value={dealProfile.objectives?.painPoints}
-            onChange={(e) => updateObjectives('painPoints', e.target.value)}
-          />
-        </div>
+                  {/* Summary and Recommendations */}
+                  <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-6 rounded-lg border border-slate-300">
+                    <h4 className="font-medium text-slate-800 mb-3">Party Fit Summary</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Overall Fit Score:</span>
+                        <span className={`font-medium ${
+                          overallFitScore > 70 ? 'text-green-700' : 
+                          overallFitScore > 40 ? 'text-yellow-700' : 'text-red-700'
+                        }`}>
+                          {overallFitScore}% - {
+                            overallFitScore > 70 ? 'Strong Fit' : 
+                            overallFitScore > 40 ? 'Moderate Fit' : 'Poor Fit'
+                          }
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-slate-300">
+                        <p className="text-slate-600">
+                          {overallFitScore > 70 
+                            ? 'This provider shows strong alignment with your requirements. Proceed with detailed negotiations.'
+                            : overallFitScore > 40
+                            ? 'This provider shows moderate fit. Consider addressing gaps before proceeding.'
+                            : 'Significant alignment issues identified. Consider alternative providers or major adjustments.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-        <div>
-          <label className="block text-sm font-medium text-yellow-800 mb-1">Success Criteria</label>
-          <textarea
-            className="w-full px-3 py-2 border border-yellow-300 rounded-lg bg-white"
-            rows={2}
-            placeholder="What would make this engagement successful?"
-            value={dealProfile.objectives?.successCriteria}
-            onChange={(e) => updateObjectives('successCriteria', e.target.value)}
-          />
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-              {/* Party Fit Section - Fixed field labels */}
-{activeSection === 'fit' && (
-  <div className="space-y-6">
-    <h3 className="text-xl font-medium text-slate-900 mb-4">Party Fit Assessment</h3>
-    
-    {/* Introduction */}
-    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
-      <p className="text-sm text-blue-800">
-        Evaluating alignment and compatibility between {selectedProvider?.providerName || 'provider'} and {session.customerCompany || 'customer'} 
-        across strategic, capability, relationship, and risk dimensions.
-      </p>
-    </div>
-
-    {/* Party Fit Score Overview */}
-    <div className="bg-gradient-to-r from-slate-100 to-slate-50 p-6 rounded-lg border border-slate-300 mb-6">
-      <h4 className="font-medium text-slate-800 mb-4">Overall Party Fit Score</h4>
-      <div className="grid grid-cols-4 gap-4 mb-4">
-        <div className="text-center">
-          <div className="text-3xl font-bold text-slate-700">{partyFitScores.strategic || 0}%</div>
-          <div className="text-xs text-slate-600">Strategic Alignment</div>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl font-bold text-slate-700">{partyFitScores.capability || 0}%</div>
-          <div className="text-xs text-slate-600">Capability Match</div>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl font-bold text-slate-700">{partyFitScores.relationship || 0}%</div>
-          <div className="text-xs text-slate-600">Relationship Potential</div>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl font-bold text-slate-700">{partyFitScores.risk || 0}%</div>
-          <div className="text-xs text-slate-600">Risk Assessment</div>
-        </div>
-      </div>
-      <div className="relative h-8 bg-white rounded-full overflow-hidden border border-slate-300">
-        <div 
-          className={`h-full transition-all duration-500 ${
-            overallFitScore > 70 ? 'bg-green-500' : 
-            overallFitScore > 40 ? 'bg-yellow-500' : 'bg-red-500'
-          }`}
-          style={{ width: `${overallFitScore}%` }}
-        />
-      </div>
-      <div className="flex justify-between text-xs text-slate-600 mt-2">
-        <span>Poor Fit</span>
-        <span className="font-medium">{overallFitScore}% Overall Fit</span>
-        <span>Excellent Fit</span>
-      </div>
-    </div>
-
-    {/* 1. Strategic Alignment */}
-    <div className="bg-white p-6 rounded-lg border border-slate-200">
-      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
-        <span className="w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm mr-3">1</span>
-        Strategic Alignment
-      </h4>
-      
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Industry Expertise Match</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.strategic.industryMatch}
-            onChange={(e) => updatePartyFit('strategic', 'industryMatch', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="exact">Exact industry match</option>
-            <option value="adjacent">Adjacent industry experience</option>
-            <option value="similar">Similar industry characteristics</option>
-            <option value="limited">Limited relevant experience</option>
-            <option value="none">No industry experience</option>
-          </select>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Service Delivery Model Alignment</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.strategic.deliveryModel}
-            onChange={(e) => updatePartyFit('strategic', 'deliveryModel', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="perfect">Perfect alignment</option>
-            <option value="good">Good with minor adjustments</option>
-            <option value="moderate">Moderate - requires adaptation</option>
-            <option value="poor">Significant misalignment</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-slate-600 mb-1">Business Objectives Alignment</label>
-        <textarea
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-          rows={2}
-          placeholder="How well do the provider's objectives align with your F&A transformation goals?"
-          value={partyFitData.strategic.objectives}
-          onChange={(e) => updatePartyFit('strategic', 'objectives', e.target.value)}
-        />
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-slate-600 mb-1">Cultural Fit Assessment</label>
-        <div className="flex gap-4">
-          {['Poor', 'Fair', 'Good', 'Excellent'].map((level) => (
-            <label key={level} className="flex items-center">
-              <input
-                type="radio"
-                name="culturalFit"
-                value={level.toLowerCase()}
-                checked={partyFitData.strategic.culturalFit === level.toLowerCase()}
-                onChange={(e) => updatePartyFit('strategic', 'culturalFit', e.target.value)}
-                className="mr-2"
-              />
-              <span className="text-sm">{level}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-    </div>
-
-    {/* 2. Capability Match */}
-    <div className="bg-white p-6 rounded-lg border border-slate-200">
-      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
-        <span className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm mr-3">2</span>
-        Capability Match
-      </h4>
-
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Geographic Coverage</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.capability.geographic}
-            onChange={(e) => updatePartyFit('capability', 'geographic', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="full">Full coverage of required locations</option>
-            <option value="most">Covers most required locations</option>
-            <option value="partial">Partial coverage</option>
-            <option value="limited">Limited coverage</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Language Capabilities</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.capability.language}
-            onChange={(e) => updatePartyFit('capability', 'language', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="all">All required languages</option>
-            <option value="most">Most required languages</option>
-            <option value="english">English only</option>
-            <option value="limited">Limited language support</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Technology Platform Compatibility</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.capability.technology}
-            onChange={(e) => updatePartyFit('capability', 'technology', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="same">Same platforms we use</option>
-            <option value="compatible">Compatible platforms</option>
-            <option value="different">Different but adaptable</option>
-            <option value="incompatible">Incompatible systems</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Scalability Assessment</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.capability.scalability}
-            onChange={(e) => updatePartyFit('capability', 'scalability', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="excellent">Can scale up/down easily</option>
-            <option value="good">Good scalability</option>
-            <option value="moderate">Some limitations</option>
-            <option value="poor">Limited scalability</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-600 mb-1">F&A Domain Expertise</label>
-        <div className="grid grid-cols-3 gap-2 mt-2">
-          {['Accounts Payable', 'Accounts Receivable', 'General Ledger', 'Fixed Assets', 'Tax', 'Treasury'].map((domain) => (
-            <label key={domain} className="flex items-center">
-              <input
-                type="checkbox"
-                className="mr-2"
-                checked={partyFitData.capability.domains?.includes(domain)}
-                onChange={(e) => {
-                  const domains = partyFitData.capability.domains || [];
-                  if (e.target.checked) {
-                    updatePartyFit('capability', 'domains', [...domains, domain]);
-                  } else {
-                    updatePartyFit('capability', 'domains', domains.filter(d => d !== domain));
-                  }
-                }}
-              />
-              <span className="text-sm">{domain}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-    </div>
-
-    {/* 3. Relationship Potential */}
-    <div className="bg-white p-6 rounded-lg border border-slate-200">
-      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
-        <span className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm mr-3">3</span>
-        Relationship Potential
-      </h4>
-
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Communication Style Compatibility</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.relationship.communication}
-            onChange={(e) => updatePartyFit('relationship', 'communication', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="excellent">Highly compatible</option>
-            <option value="good">Generally compatible</option>
-            <option value="moderate">Some differences</option>
-            <option value="poor">Significant differences</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Transparency Level</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.relationship.transparency}
-            onChange={(e) => updatePartyFit('relationship', 'transparency', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="full">Fully transparent</option>
-            <option value="high">High transparency</option>
-            <option value="moderate">Moderate transparency</option>
-            <option value="low">Limited transparency</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-slate-600 mb-1">Partnership Approach</label>
-        <textarea
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-          rows={2}
-          placeholder="Describe the provider's approach to partnership and collaboration"
-          value={partyFitData.relationship.partnership}
-          onChange={(e) => updatePartyFit('relationship', 'partnership', e.target.value)}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-600 mb-1">Initial Trust Assessment</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={partyFitData.relationship.trust || 50}
-            onChange={(e) => updatePartyFit('relationship', 'trust', e.target.value)}
-            className="flex-1"
-          />
-          <span className="text-sm font-medium w-12 text-right">{partyFitData.relationship.trust || 50}%</span>
-        </div>
-      </div>
-    </div>
-
-    {/* 4. Risk Assessment */}
-    <div className="bg-white p-6 rounded-lg border border-red-200">
-      <h4 className="font-medium text-slate-800 mb-4 flex items-center">
-        <span className="w-8 h-8 bg-red-100 text-red-700 rounded-full flex items-center justify-center text-sm mr-3">4</span>
-        Risk Assessment
-      </h4>
-
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Financial Stability</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.risk.financial}
-            onChange={(e) => updatePartyFit('risk', 'financial', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="strong">Strong financial position</option>
-            <option value="stable">Stable</option>
-            <option value="moderate">Some concerns</option>
-            <option value="weak">Significant concerns</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Information Security Maturity</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.risk.security}
-            onChange={(e) => updatePartyFit('risk', 'security', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="certified">ISO/SOC certified</option>
-            <option value="mature">Mature practices</option>
-            <option value="developing">Developing practices</option>
-            <option value="basic">Basic security only</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Compliance Track Record</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.risk.compliance}
-            onChange={(e) => updatePartyFit('risk', 'compliance', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="excellent">Excellent track record</option>
-            <option value="good">Generally compliant</option>
-            <option value="mixed">Mixed record</option>
-            <option value="poor">Compliance issues</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-600 mb-1">Vendor Lock-in Risk</label>
-          <select
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-            value={partyFitData.risk.lockin}
-            onChange={(e) => updatePartyFit('risk', 'lockin', e.target.value)}
-          >
-            <option value="">Select...</option>
-            <option value="low">Low - easy transition</option>
-            <option value="moderate">Moderate</option>
-            <option value="high">High - difficult to change</option>
-            <option value="extreme">Extreme lock-in</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-slate-600 mb-1">Red Flags or Concerns</label>
-        <textarea
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-          rows={2}
-          placeholder="Note any specific concerns or red flags identified"
-          value={partyFitData.risk.redFlags}
-          onChange={(e) => updatePartyFit('risk', 'redFlags', e.target.value)}
-        />
-      </div>
-    </div>
-
-    {/* Summary and Recommendations */}
-    <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-6 rounded-lg border border-slate-300">
-      <h4 className="font-medium text-slate-800 mb-3">Party Fit Summary</h4>
-      <div className="space-y-2 text-sm">
-        <div className="flex justify-between">
-          <span>Overall Fit Score:</span>
-          <span className={`font-medium ${
-            overallFitScore > 70 ? 'text-green-700' : 
-            overallFitScore > 40 ? 'text-yellow-700' : 'text-red-700'
-          }`}>
-            {overallFitScore}% - {
-              overallFitScore > 70 ? 'Strong Fit' : 
-              overallFitScore > 40 ? 'Moderate Fit' : 'Poor Fit'
-            }
-          </span>
-        </div>
-        <div className="pt-2 border-t border-slate-300">
-          <p className="text-slate-600">
-            {overallFitScore > 70 
-              ? 'This provider shows strong alignment with your requirements. Proceed with detailed negotiations.'
-              : overallFitScore > 40
-              ? 'This provider shows moderate fit. Consider addressing gaps before proceeding.'
-              : 'Significant alignment issues identified. Consider alternative providers or major adjustments.'}
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-              {/* Leverage Assessment Section - Added Contract Duration */}
+              {/* ADVANCED LEVERAGE ASSESSMENT SECTION */}
               {activeSection === 'leverage' && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-medium text-slate-900 mb-4">Leverage Assessment</h3>
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Advanced Leverage Assessment</h3>
                   
-                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-6">
-                    <p className="text-sm text-slate-600 mb-3">
-                      Leverage calculation considers deal size, contract duration, party fit, and provider characteristics 
-                      to determine negotiating power distribution.
+                  {/* Introduction */}
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200 mb-6">
+                    <p className="text-sm text-purple-900">
+                      This assessment determines the negotiating power balance and point allocation for the negotiation phases. 
+                      The leverage ratio directly impacts how many priority points each party receives to allocate across contract clauses.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Annual Contract Value
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g., £2,000,000"
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                        value={leverageFactors.dealSize || session.dealValue}
-                        onChange={(e) => setLeverageFactors({...leverageFactors, dealSize: e.target.value})}
-                      />
-                    </div>
+                  {/* Market Dynamics */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm mr-3">1</span>
+                      Market Dynamics
+                    </h4>
                     
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Contract Duration (months)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g., 36"
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
-                        value={leverageFactors.contractDuration}
-                        onChange={(e) => setLeverageFactors({...leverageFactors, contractDuration: e.target.value})}
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Alternative Providers Available</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.marketDynamics.alternatives}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'alternatives', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="many">Many (10+ qualified providers)</option>
+                          <option value="several">Several (5-9 providers)</option>
+                          <option value="few">Few (2-4 providers)</option>
+                          <option value="sole">Sole source</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Market Conditions</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.marketDynamics.marketCondition}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'marketCondition', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="buyer">Strong buyer&apos;s market</option>
+                          <option value="balanced">Balanced market</option>
+                          <option value="seller">Strong seller&apos;s market</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Time Pressure - Customer</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.marketDynamics.customerTimePresure}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'customerTimePresure', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="urgent">Urgent (&lt; 1 month)</option>
+                          <option value="moderate">Moderate (1-3 months)</option>
+                          <option value="relaxed">Relaxed (3+ months)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider Capacity</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.marketDynamics.providerCapacity}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'providerCapacity', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="constrained">Highly constrained</option>
+                          <option value="limited">Limited availability</option>
+                          <option value="available">Good availability</option>
+                          <option value="eager">Eager for business</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="bg-slate-100 p-6 rounded-lg border border-slate-200">
-                    <h4 className="font-medium mb-4 text-slate-800">Calculated Leverage Distribution</h4>
-                    <div className="mb-4">
-                      <div className="text-sm text-slate-600 mb-2">Current Assessment:</div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>Deal Size: £{parseInt(leverageFactors.dealSize || '0').toLocaleString()}</div>
-                        <div>Duration: {leverageFactors.contractDuration} months</div>
-                        <div>Provider Size: {partyFit.providerEmployees || 'Unknown'} employees</div>
-                        <div>Provider Experience: {partyFit.providerExperience || 'Not specified'}</div>
+                  {/* Economic Factors */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm mr-3">2</span>
+                      Economic Factors
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Deal Size vs Customer Revenue</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.dealSizeRatio}
+                          onChange={(e) => updateLeverageFactor('economic', 'dealSizeRatio', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="minimal">Minimal (&lt; 1% of revenue)</option>
+                          <option value="small">Small (1-5% of revenue)</option>
+                          <option value="significant">Significant (5-10% of revenue)</option>
+                          <option value="major">Major (&gt; 10% of revenue)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Deal Size vs Provider Revenue</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.providerDependence}
+                          onChange={(e) => updateLeverageFactor('economic', 'providerDependence', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="tiny">Tiny (&lt; 1% of provider revenue)</option>
+                          <option value="small">Small (1-5% of provider revenue)</option>
+                          <option value="important">Important (5-15% of provider revenue)</option>
+                          <option value="critical">Critical (&gt; 15% of provider revenue)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Switching Costs for Customer</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.switchingCosts}
+                          onChange={(e) => updateLeverageFactor('economic', 'switchingCosts', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="minimal">Minimal</option>
+                          <option value="moderate">Moderate</option>
+                          <option value="high">High</option>
+                          <option value="prohibitive">Prohibitive</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Budget Flexibility</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.budgetFlexibility}
+                          onChange={(e) => updateLeverageFactor('economic', 'budgetFlexibility', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="fixed">Fixed budget</option>
+                          <option value="limited">Limited flexibility</option>
+                          <option value="moderate">Moderate flexibility</option>
+                          <option value="flexible">Very flexible</option>
+                        </select>
                       </div>
                     </div>
-                    <div className="relative h-12 bg-white rounded-full overflow-hidden border border-slate-300">
+                  </div>
+
+                  {/* Strategic Position */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm mr-3">3</span>
+                      Strategic Position
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Service Criticality to Customer</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.strategic.serviceCriticality}
+                          onChange={(e) => updateLeverageFactor('strategic', 'serviceCriticality', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="non-core">Non-core activity</option>
+                          <option value="supporting">Supporting function</option>
+                          <option value="important">Important function</option>
+                          <option value="mission-critical">Mission critical</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider&apos;s Strategic Interest</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.strategic.providerInterest}
+                          onChange={(e) => updateLeverageFactor('strategic', 'providerInterest', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="low">Low - just another deal</option>
+                          <option value="moderate">Moderate interest</option>
+                          <option value="high">High - strategic account</option>
+                          <option value="critical">Critical - must win</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Incumbent Advantage</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.strategic.incumbentAdvantage}
+                          onChange={(e) => updateLeverageFactor('strategic', 'incumbentAdvantage', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="none">No incumbent</option>
+                          <option value="weak">Weak incumbent position</option>
+                          <option value="moderate">Moderate advantage</option>
+                          <option value="strong">Strong incumbent advantage</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Reputational Value</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.strategic.reputationalValue}
+                          onChange={(e) => updateLeverageFactor('strategic', 'reputationalValue', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="minimal">Minimal</option>
+                          <option value="moderate">Moderate</option>
+                          <option value="significant">Significant</option>
+                          <option value="transformational">Transformational</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BATNA Analysis */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-red-100 text-red-700 rounded-full flex items-center justify-center text-sm mr-3">4</span>
+                      BATNA (Best Alternative to Negotiated Agreement)
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Customer&apos;s Best Alternative</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.batna.customerAlternative}
+                          onChange={(e) => updateLeverageFactor('batna', 'customerAlternative', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="strong">Strong alternative (in-house/other provider)</option>
+                          <option value="viable">Viable alternative exists</option>
+                          <option value="weak">Weak alternatives only</option>
+                          <option value="none">No real alternative</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider&apos;s Pipeline Strength</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.batna.providerPipeline}
+                          onChange={(e) => updateLeverageFactor('batna', 'providerPipeline', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="full">Full pipeline - can walk away</option>
+                          <option value="healthy">Healthy pipeline</option>
+                          <option value="light">Light pipeline</option>
+                          <option value="desperate">Desperate for deals</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Calculated Leverage Score */}
+                  <div className="bg-gradient-to-r from-slate-100 to-slate-50 p-6 rounded-lg border border-slate-300">
+                    <h4 className="font-medium text-slate-800 mb-4">Calculated Leverage Distribution</h4>
+                    
+                    <div className="mb-4">
+                      <div className="grid grid-cols-2 gap-8">
+                        <div>
+                          <div className="text-center mb-2">
+                            <div className="text-3xl font-bold text-slate-700">{leverageScore.customer}%</div>
+                            <div className="text-sm text-slate-600">Customer Leverage</div>
+                          </div>
+                          <div className="text-xs text-slate-500 space-y-1">
+                            <div>• {Math.floor(leverageScore.customer * 2)} total negotiation points</div>
+                            <div>• Stronger position in {leverageScore.customer > 50 ? 'most' : 'some'} clauses</div>
+                            <div>• {leverageScore.customer > 60 ? 'Can push for favorable terms' : 'Balanced negotiation expected'}</div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="text-center mb-2">
+                            <div className="text-3xl font-bold text-slate-700">{leverageScore.provider}%</div>
+                            <div className="text-sm text-slate-600">Provider Leverage</div>
+                          </div>
+                          <div className="text-xs text-slate-500 space-y-1">
+                            <div>• {Math.floor(leverageScore.provider * 2)} total negotiation points</div>
+                            <div>• Stronger position in {leverageScore.provider > 50 ? 'most' : 'some'} clauses</div>
+                            <div>• {leverageScore.provider > 60 ? 'Can maintain firm positions' : 'Will need to compromise'}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="relative h-16 bg-white rounded-lg overflow-hidden border border-slate-300">
                       <div 
-                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-slate-600 to-slate-700 flex items-center justify-center text-white font-medium"
+                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white font-medium transition-all duration-500"
                         style={{ width: `${leverageScore.customer}%` }}
                       >
                         Customer {leverageScore.customer}%
                       </div>
                       <div 
-                        className="absolute right-0 top-0 h-full bg-slate-500 flex items-center justify-center text-white font-medium"
+                        className="absolute right-0 top-0 h-full bg-gradient-to-l from-green-500 to-green-600 flex items-center justify-center text-white font-medium transition-all duration-500"
                         style={{ width: `${leverageScore.provider}%` }}
                       >
                         Provider {leverageScore.provider}%
                       </div>
                     </div>
+
                     <button
-                      onClick={calculateLeverage}
-                      className="mt-4 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg text-sm"
+                      onClick={calculateAdvancedLeverage}
+                      className="mt-4 w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg text-sm"
                     >
-                      Recalculate Leverage
+                      Recalculate Leverage Score
                     </button>
-                    <p className="text-xs text-slate-500 mt-2">
-                      This leverage ratio will determine point allocation in negotiation phases.
-                    </p>
+
+                    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-xs text-yellow-800">
+                        <strong>How this impacts negotiation:</strong> This leverage ratio determines how many points each party 
+                        gets to allocate to prioritize clauses during negotiation. CLARENCE will use these points along with 
+                        party positions to calculate optimal compromise positions in real-time.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1795,7 +1766,7 @@ const calculatePartyFitScores = () => {
           </div>
         )}
 
-        {/* Action Buttons - Updated styling */}
+        {/* Action Buttons */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="space-y-4">
             <div className="flex gap-4">
@@ -1857,4 +1828,351 @@ export default function PreliminaryAssessment() {
       <PreliminaryAssessmentContent />
     </Suspense>
   )
-}
+} className="text-sm text-slate-600">Turnover: {provider.providerTurnover}</div>
+                  )}
+                  {provider.providerEmployees && (
+                    <div className="text-sm text-slate-600">Employees: {provider.providerEmployees}</div>
+                  )}
+                  <div className="mt-2 text-xs text-slate-600">
+                    {selectedProvider?.providerId === provider.providerId
+                      ? '✓ Currently Assessing' 
+                      : 'Click to Assess'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Assessment Sections */}
+        {selectedProvider ? (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
+            <div className="border-b border-slate-200">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveSection('profile')}
+                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
+                    ${activeSection === 'profile' 
+                      ? 'text-slate-700 border-slate-600' 
+                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
+                >
+                  Deal Profile
+                </button>
+                <button
+                  onClick={() => setActiveSection('fit')}
+                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
+                    ${activeSection === 'fit' 
+                      ? 'text-slate-700 border-slate-600' 
+                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
+                >
+                  Party Fit
+                </button>
+                <button
+                  onClick={() => setActiveSection('leverage')}
+                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
+                    ${activeSection === 'leverage' 
+                      ? 'text-slate-700 border-slate-600' 
+                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
+                >
+                  Leverage Assessment
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8">
+              {/* UNIVERSAL DEAL PROFILE SECTION */}
+              {activeSection === 'profile' && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Deal Profile</h3>
+                  
+                  {/* Service Type Selector */}
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-6">
+                    <label className="block text-sm font-medium text-purple-900 mb-2">Service Category</label>
+                    <select
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg bg-white"
+                      value={dealProfile.serviceCategory}
+                      onChange={(e) => setDealProfile({...dealProfile, serviceCategory: e.target.value})}
+                    >
+                      <option value="">Select service type...</option>
+                      <option value="customer-support">Customer Support</option>
+                      <option value="technical-support">Technical Support</option>
+                      <option value="data-processing">Data Processing</option>
+                      <option value="financial-support">Financial Support (F&A)</option>
+                      <option value="hr-services">HR Services</option>
+                      <option value="it-services">IT Services</option>
+                      <option value="legal-process">Legal Process Outsourcing</option>
+                      <option value="other">Other Services</option>
+                    </select>
+                  </div>
+
+                  {/* Contract Overview */}
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-3">Contract Overview</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Engagement Model</label>
+                        <select
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          value={dealProfile.engagementModel}
+                          onChange={(e) => setDealProfile({...dealProfile, engagementModel: e.target.value})}
+                        >
+                          <option value="">Select model...</option>
+                          <option value="full-outsource">Full Outsourcing</option>
+                          <option value="co-managed">Co-Managed Service</option>
+                          <option value="staff-augmentation">Staff Augmentation</option>
+                          <option value="project-based">Project Based</option>
+                          <option value="managed-service">Managed Service</option>
+                          <option value="hybrid">Hybrid Model</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Contract Duration</label>
+                        <select
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          value={dealProfile.duration}
+                          onChange={(e) => setDealProfile({...dealProfile, duration: e.target.value})}
+                        >
+                          <option value="">Select duration...</option>
+                          <option value="6">6 months</option>
+                          <option value="12">12 months</option>
+                          <option value="24">24 months</option>
+                          <option value="36">36 months</option>
+                          <option value="48">48 months</option>
+                          <option value="60">60 months</option>
+                          <option value="60+">More than 5 years</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Total Contract Value</label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          placeholder="e.g., £2,000,000"
+                          value={dealProfile.totalValue}
+                          onChange={(e) => setDealProfile({...dealProfile, totalValue: e.target.value})}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Pricing Model</label>
+                        <select
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          value={dealProfile.pricingModel}
+                          onChange={(e) => setDealProfile({...dealProfile, pricingModel: e.target.value})}
+                        >
+                          <option value="">Select pricing...</option>
+                          <option value="fixed-price">Fixed Price</option>
+                          <option value="time-materials">Time & Materials</option>
+                          <option value="per-fte">Per FTE</option>
+                          <option value="per-transaction">Per Transaction</option>
+                          <option value="outcome-based">Outcome Based</option>
+                          <option value="hybrid-pricing">Hybrid Pricing</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scope & Scale */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-3">Scope & Scale</h4>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Service Description</label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          rows={3}
+                          placeholder="Describe the services required..."
+                          value={dealProfile.serviceDescription}
+                          onChange={(e) => setDealProfile({...dealProfile, serviceDescription: e.target.value})}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Scale Indicator</label>
+                          <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            placeholder="e.g., 50,000 transactions/month"
+                            value={dealProfile.scaleIndicator}
+                            onChange={(e) => setDealProfile({...dealProfile, scaleIndicator: e.target.value})}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Geographic Coverage</label>
+                          <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            placeholder="e.g., UK, EU, Global"
+                            value={dealProfile.geographicCoverage}
+                            onChange={(e) => setDealProfile({...dealProfile, geographicCoverage: e.target.value})}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Service Complexity</label>
+                          <select
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            value={dealProfile.complexity}
+                            onChange={(e) => setDealProfile({...dealProfile, complexity: e.target.value})}
+                          >
+                            <option value="">Select...</option>
+                            <option value="standard">Standard - Routine processes</option>
+                            <option value="moderate">Moderate - Some customization</option>
+                            <option value="complex">Complex - Significant customization</option>
+                            <option value="highly-complex">Highly Complex - Bespoke solution</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Critical Service?</label>
+                          <select
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            value={dealProfile.criticality}
+                            onChange={(e) => setDealProfile({...dealProfile, criticality: e.target.value})}
+                          >
+                            <option value="">Select...</option>
+                            <option value="mission-critical">Mission Critical</option>
+                            <option value="business-critical">Business Critical</option>
+                            <option value="important">Important</option>
+                            <option value="standard">Standard</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Requirements & Expectations */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-3">Requirements & Expectations</h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Service Level Requirements</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={dealProfile.serviceLevelRequirement}
+                          onChange={(e) => setDealProfile({...dealProfile, serviceLevelRequirement: e.target.value})}
+                        >
+                          <option value="">Select...</option>
+                          <option value="premium">Premium (99.9%+ availability)</option>
+                          <option value="standard">Standard (99% availability)</option>
+                          <option value="basic">Basic (95% availability)</option>
+                          <option value="best-effort">Best Effort</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Transition Timeline</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={dealProfile.transitionTimeline}
+                          onChange={(e) => setDealProfile({...dealProfile, transitionTimeline: e.target.value})}
+                        >
+                          <option value="">Select...</option>
+                          <option value="immediate">Immediate (&lt; 1 month)</option>
+                          <option value="fast">Fast (1-3 months)</option>
+                          <option value="standard">Standard (3-6 months)</option>
+                          <option value="gradual">Gradual (6-12 months)</option>
+                          <option value="phased">Phased approach</option>
+                        </select>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Key Performance Indicators</label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          rows={2}
+                          placeholder="List the main KPIs for this service..."
+                          value={dealProfile.kpis}
+                          onChange={(e) => setDealProfile({...dealProfile, kpis: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Strategic Context */}
+                  <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+                    <h4 className="font-medium text-yellow-900 mb-3">Strategic Context</h4>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-yellow-800 mb-1">Primary Business Drivers</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {['Cost Reduction', 'Quality Improvement', 'Scalability', 
+                            'Access to Expertise', 'Technology Enablement', 'Risk Mitigation',
+                            'Focus on Core Business', 'Speed to Market'].map((driver) => (
+                            <label key={driver} className="flex items-center">
+                              <input
+                                type="checkbox"
+                                className="mr-2"
+                                checked={dealProfile.businessDrivers?.includes(driver)}
+                                onChange={(e) => {
+                                  const drivers = dealProfile.businessDrivers || []
+                                  if (e.target.checked) {
+                                    setDealProfile({...dealProfile, businessDrivers: [...drivers, driver]})
+                                  } else {
+                                    setDealProfile({...dealProfile, businessDrivers: drivers.filter(d => d !== driver)})
+                                  }
+                                }}
+                              />
+                              <span className="text-sm">{driver}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-yellow-800 mb-1">Success Criteria</label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-yellow-300 rounded-lg bg-white"
+                          rows={2}
+                          placeholder="What would make this engagement successful?"
+                          value={dealProfile.successCriteria}
+                          onChange={(e) => setDealProfile({...dealProfile, successCriteria: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ENHANCED PARTY FIT SECTION */}
+              {activeSection === 'fit' && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Party Fit Assessment</h3>
+                  
+                  {/* Introduction */}
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+                    <p className="text-sm text-blue-800">
+                      Evaluating alignment and compatibility between {selectedProvider?.providerName || 'provider'} and {session.customerCompany || 'customer'} 
+                      across strategic, capability, relationship, and risk dimensions.
+                    </p>
+                  </div>
+
+                  {/* Party Fit Score Overview */}
+                  <div className="bg-gradient-to-r from-slate-100 to-slate-50 p-6 rounded-lg border border-slate-300 mb-6">
+                    <h4 className="font-medium text-slate-800 mb-4">Overall Party Fit Score</h4>
+                    <div className="grid grid-cols-4 gap-4 mb-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-slate-700">{partyFitScores.strategic || 0}%</div>
+                        <div className="text-xs text-slate-600">Strategic Alignment</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-slate-700">{partyFitScores.capability || 0}%</div>
+                        <div className="text-xs text-slate-600">Capability Match</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-slate-700">{partyFitScores.relationship || 0}%</div>
+                        <div className="text-xs text-slate-600">Relationship Potential</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-slate-700">{partyFitScores.risk || 0}%</div>
+                        <div className="text-xs text-slate-600">Risk Assessment</div>
+                      </div>
+                    </div>
+                    <div
