@@ -1078,7 +1078,7 @@ function PreliminaryAssessmentContent() {
                           overallFitScore > 40 ? 'bg-yellow-500' : 'bg-red-500'
                         }`}
                         style={{ width: `${overallFitScore}%` }}
-                      />
+                      ></div>
                     </div>
                     <div className="flex justify-between text-xs text-slate-600 mt-2">
                       <span>Poor Fit</span>
