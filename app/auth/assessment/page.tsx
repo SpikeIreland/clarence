@@ -1087,6 +1087,47 @@ function PreliminaryAssessmentContent() {
           </div>
         )}
         
+        {/* Assessment Sections */}
+        {selectedProvider ? (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
+            <div className="border-b border-slate-200">
+              <div className="flex">
+                <button
+                  onClick={() => setActiveSection('profile')}
+                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
+                    ${activeSection === 'profile' 
+                      ? 'text-slate-700 border-slate-600' 
+                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
+                >
+                  Deal Profile
+                </button>
+                <button
+                  onClick={() => setActiveSection('fit')}
+                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
+                    ${activeSection === 'fit' 
+                      ? 'text-slate-700 border-slate-600' 
+                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
+                >
+                  Party Fit
+                </button>
+                <button
+                  onClick={() => setActiveSection('leverage')}
+                  className={`px-6 py-4 font-medium text-sm border-b-2 transition
+                    ${activeSection === 'leverage' 
+                      ? 'text-slate-700 border-slate-600' 
+                      : 'text-slate-500 border-transparent hover:text-slate-700'}`}
+                >
+                  Leverage Assessment
+                </button>
+              </div>
+            </div>
+
+            <div className="p-8">
+              {/* ENHANCED PARTY FIT SECTION */}
+              {activeSection === 'fit' && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Party Fit Assessment</h3>
+
                   {/* 1. Strategic Alignment */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
                     <h4 className="font-medium text-slate-800 mb-4 flex items-center">
@@ -1319,119 +1360,6 @@ function PreliminaryAssessmentContent() {
                       </div>
                     </div>
                   </div>
-
-                  {/* 4. Risk Assessment */}
-                  <div className="bg-white p-6 rounded-lg border border-red-200">
-                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
-                      <span className="w-8 h-8 bg-red-100 text-red-700 rounded-full flex items-center justify-center text-sm mr-3">4</span>
-                      Risk Assessment
-                    </h4>
-
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Financial Stability</label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                          value={partyFitData.risk.financial}
-                          onChange={(e) => updatePartyFit('risk', 'financial', e.target.value)}
-                        >
-                          <option value="">Select...</option>
-                          <option value="strong">Strong financial position</option>
-                          <option value="stable">Stable</option>
-                          <option value="moderate">Some concerns</option>
-                          <option value="weak">Significant concerns</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Information Security Maturity</label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                          value={partyFitData.risk.security}
-                          onChange={(e) => updatePartyFit('risk', 'security', e.target.value)}
-                        >
-                          <option value="">Select...</option>
-                          <option value="certified">ISO/SOC certified</option>
-                          <option value="mature">Mature practices</option>
-                          <option value="developing">Developing practices</option>
-                          <option value="basic">Basic security only</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Compliance Track Record</label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                          value={partyFitData.risk.compliance}
-                          onChange={(e) => updatePartyFit('risk', 'compliance', e.target.value)}
-                        >
-                          <option value="">Select...</option>
-                          <option value="excellent">Excellent track record</option>
-                          <option value="good">Generally compliant</option>
-                          <option value="mixed">Mixed record</option>
-                          <option value="poor">Compliance issues</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-600 mb-1">Vendor Lock-in Risk</label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                          value={partyFitData.risk.lockin}
-                          onChange={(e) => updatePartyFit('risk', 'lockin', e.target.value)}
-                        >
-                          <option value="">Select...</option>
-                          <option value="low">Low - easy transition</option>
-                          <option value="moderate">Moderate</option>
-                          <option value="high">High - difficult to change</option>
-                          <option value="extreme">Extreme lock-in</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-600 mb-1">Red Flags or Concerns</label>
-                      <textarea
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                        rows={2}
-                        placeholder="Note any specific concerns or red flags identified"
-                        value={partyFitData.risk.redFlags}
-                        onChange={(e) => updatePartyFit('risk', 'redFlags', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Summary and Recommendations */}
-                  <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-6 rounded-lg border border-slate-300">
-                    <h4 className="font-medium text-slate-800 mb-3">Party Fit Summary</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Overall Fit Score:</span>
-                        <span className={`font-medium ${
-                          overallFitScore > 70 ? 'text-green-700' : 
-                          overallFitScore > 40 ? 'text-yellow-700' : 'text-red-700'
-                        }`}>
-                          {overallFitScore}% - {
-                            overallFitScore > 70 ? 'Strong Fit' : 
-                            overallFitScore > 40 ? 'Moderate Fit' : 'Poor Fit'
-                          }
-                        </span>
-                      </div>
-                      <div className="pt-2 border-t border-slate-300">
-                        <p className="text-slate-600">
-                          {overallFitScore > 70 
-                            ? 'This provider shows strong alignment with your requirements. Proceed with detailed negotiations.'
-                            : overallFitScore > 40
-                            ? 'This provider shows moderate fit. Consider addressing gaps before proceeding.'
-                            : 'Significant alignment issues identified. Consider alternative providers or major adjustments.'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* ADVANCED LEVERAGE ASSESSMENT SECTION */}
               {activeSection === 'leverage' && (
