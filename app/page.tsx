@@ -527,7 +527,7 @@ export default function UnifiedClarencePage() {
                     <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
                       P
                     </div>
-                    <span className="text-sm font-semibold text-blue-700">Provider's Move</span>
+                    <span className="text-sm font-semibold text-blue-700">Provider&apos;s Move</span>
                   </div>
                   <div className="text-sm text-gray-700">{move.content}</div>
                 </div>
