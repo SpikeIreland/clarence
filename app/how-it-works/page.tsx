@@ -140,10 +140,10 @@ export default function HowItWorksPage() {
       </div>
 
       {/* ========== MAIN CONTENT SECTION ========== */}
-      <div className="container mx-auto px-6 py-12">
+      <div className="container mx-auto px-6 py-8">
         
         {/* ========== TITLE SECTION ========== */}
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <h1 className="text-3xl font-medium text-white tracking-wide mb-2 animate-fade-in">
             CLARENCE
           </h1>
@@ -154,7 +154,7 @@ export default function HowItWorksPage() {
 
         {/* ========== SPLIT LAYOUT CONTENT SECTION ========== */}
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-12">
+          <div className="grid md:grid-cols-2 gap-12 mb-12">
             
             {/* ========== LEFT SIDE - HERO TEXT SECTION ========== */}
             <div className="animate-fade-in" style={{ animationDelay: '0.2s', animationFillMode: 'both' }}>
@@ -179,7 +179,7 @@ export default function HowItWorksPage() {
             </div>
 
             {/* ========== RIGHT SIDE - PROCESS STEPS SECTION ========== */}
-            <div className="space-y-2 animate-fade-in" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
+            <div className="space-y-2 animate-fade-in max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
               {processSteps.map((step) => (
                 <div
                   key={step.id}
@@ -196,7 +196,6 @@ export default function HowItWorksPage() {
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-slate-500 text-xs">Step {step.id}</span>
                           <h3 className="text-sm font-medium text-white">{step.title}</h3>
                         </div>
                         <p className="text-slate-400 text-xs font-light mt-0.5">{step.description}</p>
@@ -242,7 +241,7 @@ export default function HowItWorksPage() {
         </div>
 
         {/* ========== BOTTOM NAVIGATION SECTION ========== */}
-        <div className="mt-16 pt-8 border-t border-slate-700/50">
+        <div className="mt-8 pt-6 border-t border-slate-700/50">
           <div className="flex justify-center gap-8">
             <Link href="/" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">Home</Link>
             <Link href="/terms" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">Terms</Link>
