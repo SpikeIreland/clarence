@@ -91,12 +91,34 @@ export default function PhasesPage() {
   const [selectedPhase, setSelectedPhase] = useState<number | null>(null)
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set())
 
+  // Handle clicking on phase indicator circles
+  const handlePhaseIndicatorClick = (phaseNumber: number) => {
+    setSelectedPhase(phaseNumber)
+    
+    // Also expand/collapse the corresponding phase card
+    const newExpanded = new Set(expandedPhases)
+    if (newExpanded.has(phaseNumber)) {
+      newExpanded.delete(phaseNumber)
+      setSelectedPhase(null) // Deselect if collapsing
+    } else {
+      // Close all others and open only this one
+      newExpanded.clear()
+      newExpanded.add(phaseNumber)
+    }
+    setExpandedPhases(newExpanded)
+  }
+
+  // Handle clicking on phase cards
   const togglePhaseExpansion = (phaseNumber: number) => {
     const newExpanded = new Set(expandedPhases)
     if (newExpanded.has(phaseNumber)) {
       newExpanded.delete(phaseNumber)
+      setSelectedPhase(null) // Deselect when closing
     } else {
+      // Close all others and open only this one
+      newExpanded.clear()
       newExpanded.add(phaseNumber)
+      setSelectedPhase(phaseNumber) // Select when opening
     }
     setExpandedPhases(newExpanded)
   }
@@ -155,14 +177,14 @@ export default function PhasesPage() {
             {phases.map((phase) => (
               <button
                 key={phase.number}
-                onClick={() => setSelectedPhase(phase.number)}
+                onClick={() => handlePhaseIndicatorClick(phase.number)}
                 className="relative z-10 group"
               >
                 <div className={`
                   w-16 h-16 rounded-full flex items-center justify-center font-medium text-lg
                   transition-all duration-300 transform hover:scale-110
-                  ${selectedPhase === phase.number 
-                    ? 'bg-slate-600 text-white shadow-lg shadow-slate-600/30' 
+                  ${selectedPhase === phase.number && expandedPhases.has(phase.number)
+                    ? 'bg-slate-600 text-white shadow-lg shadow-slate-600/30 scale-110' 
                     : selectedPhase && selectedPhase > phase.number
                     ? 'bg-slate-700/70 text-slate-300'
                     : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
@@ -185,7 +207,11 @@ export default function PhasesPage() {
           {phases.map((phase) => (
             <div 
               key={phase.number}
-              className="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700/50 overflow-hidden"
+              className={`bg-slate-800/50 backdrop-blur rounded-xl border overflow-hidden transition-all duration-300 ${
+                expandedPhases.has(phase.number) 
+                  ? 'border-slate-600/70 shadow-lg' 
+                  : 'border-slate-700/50'
+              }`}
             >
               {/* Phase Header - Always Visible */}
               <button
@@ -237,18 +263,16 @@ export default function PhasesPage() {
           ))}
         </div>
 
-        {/* ========== SELECTED PHASE DETAIL (Optional Alternative View) ========== */}
-        {selectedPhase && (
+        {/* ========== SELECTED PHASE NAVIGATION (Bottom Controls) ========== */}
+        {selectedPhase && expandedPhases.has(selectedPhase) && (
           <div className="max-w-4xl mx-auto mt-8">
-            <div className="bg-slate-900/50 backdrop-blur rounded-xl border border-slate-600/50 p-8">
-              <h3 className="text-lg font-medium text-slate-300 mb-4">
-                Currently Viewing: {phases[selectedPhase - 1].title}
-              </h3>
-              
-              {/* Navigation Buttons */}
+            <div className="bg-slate-900/50 backdrop-blur rounded-xl border border-slate-600/50 p-6">
               <div className="flex justify-between items-center">
                 <button
-                  onClick={() => setSelectedPhase(Math.max(1, selectedPhase - 1))}
+                  onClick={() => {
+                    const prevPhase = Math.max(1, selectedPhase - 1)
+                    handlePhaseIndicatorClick(prevPhase)
+                  }}
                   disabled={selectedPhase === 1}
                   className={`
                     px-5 py-2.5 rounded-lg font-medium text-sm transition-all
@@ -261,15 +285,15 @@ export default function PhasesPage() {
                   ← Previous Phase
                 </button>
                 
-                <button
-                  onClick={() => setSelectedPhase(null)}
-                  className="px-5 py-2.5 rounded-lg font-medium text-sm bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white transition-all"
-                >
-                  Clear Selection
-                </button>
+                <span className="text-slate-400 text-sm">
+                  Viewing Phase {selectedPhase} of 6
+                </span>
                 
                 <button
-                  onClick={() => setSelectedPhase(Math.min(6, selectedPhase + 1))}
+                  onClick={() => {
+                    const nextPhase = Math.min(6, selectedPhase + 1)
+                    handlePhaseIndicatorClick(nextPhase)
+                  }}
                   disabled={selectedPhase === 6}
                   className={`
                     px-5 py-2.5 rounded-lg font-medium text-sm transition-all
