@@ -828,20 +828,233 @@ function PreliminaryAssessmentContent() {
   }
 
   const loadProviders = useCallback(async (sessionId: string) => {
-    // ... rest of loadProviders code stays the same ...
+    if (isLoadingRef.current || providersLoadedRef.current) {
+      console.log('Providers already loading or loaded, skipping...')
+      return
+    }
+
+    isLoadingRef.current = true
+
+    try {
+      console.log('Loading providers for session:', sessionId)
+
+      if (sessionId === 'demo-session') {
+        const demoProviders: Provider[] = [
+          {
+            providerId: 'provider-1',
+            providerName: 'TechCorp Solutions',
+            providerTurnover: '£10M',
+            providerEmployees: '250',
+            providerExperience: 'Extensive experience in IT consulting'
+          },
+          {
+            providerId: 'provider-2',
+            providerName: 'Global Services Ltd',
+            providerTurnover: '£25M',
+            providerEmployees: '500',
+            providerExperience: 'Leading provider of managed services'
+          }
+        ]
+        setProviders(demoProviders)
+        providersLoadedRef.current = true
+        setLoading(false)
+        return
+      }
+
+      // Try to load providers from API
+      const providersUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/providers-api?session_id=${sessionId}`
+      console.log('Fetching providers from:', providersUrl)
+
+      const response = await fetch(providersUrl)
+      console.log('Provider API response status:', response.status)
+
+      if (!response.ok) {
+        throw new Error(`Provider API failed with status: ${response.status}`)
+      }
+
+      const responseText = await response.text()
+      console.log('Provider API raw response:', responseText)
+
+      if (!responseText) {
+        console.log('Empty response from providers API, using mock data')
+        // Use mock data as fallback
+        const mockProviders: Provider[] = [
+          {
+            providerId: '3f126f60-561a-4f14-a847-70ac8138fecd',
+            providerName: 'TechFirst Solutions',
+            providerTurnover: '£5M',
+            providerEmployees: '48',
+            providerExperience: '6-10 years'
+          },
+          {
+            providerId: 'a266dd75-7d2e-4c57-afc6-2a5e1daed66e',
+            providerName: 'Global Support Solutions Ltd',
+            providerTurnover: '£15M',
+            providerEmployees: '450',
+            providerExperience: '15+ years'
+          }
+        ]
+        setProviders(mockProviders)
+        providersLoadedRef.current = true
+        setLoading(false)
+        return
+      }
+
+      const providersData = JSON.parse(responseText)
+      console.log('Parsed providers data:', providersData)
+
+      if (Array.isArray(providersData) && providersData.length > 0) {
+        setProviders(providersData)
+        if (providersData.length === 1) {
+          selectProvider(providersData[0])
+        }
+      } else {
+        // Fallback to mock data
+        console.log('No providers in response, using mock data')
+        const mockProviders: Provider[] = [
+          {
+            providerId: '3f126f60-561a-4f14-a847-70ac8138fecd',
+            providerName: 'TechFirst Solutions',
+            providerTurnover: '£5M',
+            providerEmployees: '48',
+            providerExperience: '6-10 years'
+          }
+        ]
+        setProviders(mockProviders)
+      }
+
+      providersLoadedRef.current = true
+
+    } catch (error) {
+      console.error('Error loading providers:', error)
+      // Use mock data on error
+      const mockProviders: Provider[] = [
+        {
+          providerId: '3f126f60-561a-4f14-a847-70ac8138fecd',
+          providerName: 'TechFirst Solutions',
+          providerTurnover: '£5M',
+          providerEmployees: '48',
+          providerExperience: '6-10 years'
+        }
+      ]
+      setProviders(mockProviders)
+      providersLoadedRef.current = true
+    } finally {
+      isLoadingRef.current = false
+      setLoading(false)  // Make sure to stop loading
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadSessionData = useCallback(async () => {
-    // ... rest of loadSessionData code stays the same ...
+    try {
+      let sessionId = searchParams.get('session')
+      const providerId = searchParams.get('provider')
+
+      console.log('Loading session data - sessionId:', sessionId)
+
+      if (!sessionId) {
+        const storedSessionId = localStorage.getItem('currentSessionId')
+        const storedSession = localStorage.getItem('currentSession')
+
+        if (storedSessionId && storedSession) {
+          const sessionData = JSON.parse(storedSession)
+          setSession(sessionData)
+          setDealProfile(prev => ({
+            ...prev,
+            serviceDescription: sessionData.serviceRequired || '',
+            totalValue: sessionData.dealValue || ''
+          }))
+          sessionId = storedSessionId
+        } else {
+          // Demo mode
+          const demoSession: Session = {
+            sessionId: 'demo-session',
+            sessionNumber: 'DEMO-001',
+            customerCompany: 'Demo Customer Ltd',
+            serviceRequired: 'IT Consulting Services',
+            dealValue: '500000',
+            status: 'initiated',
+            phase: 1
+          }
+          setSession(demoSession)
+          sessionId = 'demo-session'
+        }
+      } else {
+        const cachedSession = localStorage.getItem('currentSession')
+        if (cachedSession) {
+          const sessionData = JSON.parse(cachedSession)
+          setSession(sessionData)
+          setDealProfile(prev => ({
+            ...prev,
+            serviceDescription: sessionData.serviceRequired || '',
+            totalValue: sessionData.dealValue || ''
+          }))
+        } else {
+          // If no cached session, create a basic one
+          const basicSession: Session = {
+            sessionId: sessionId,
+            sessionNumber: sessionId.substring(0, 8),
+            customerCompany: 'Customer Company',
+            serviceRequired: 'Services',
+            dealValue: '0',
+            status: 'initiated',
+            phase: 1
+          }
+          setSession(basicSession)
+        }
+      }
+
+      if (providerId) {
+        localStorage.setItem('selectedProviderId', providerId)
+      }
+
+      if (sessionId && !providersLoadedRef.current) {
+        await loadProviders(sessionId)
+      } else {
+        setLoading(false)  // Stop loading if we don't need to load providers
+      }
+
+    } catch (error) {
+      console.error('Error loading session data:', error)
+      setLoading(false)  // Make sure to stop loading on error
+    }
   }, [searchParams, loadProviders])
 
   const handleSubmitAssessment = async () => {
-    // ... rest of handleSubmitAssessment code stays the same ...
+    if (!session || !selectedProvider) {
+      alert('Please select a provider before completing the assessment')
+      return
+    }
+
+    calculateAdvancedLeverage()
+
+    const assessmentData = {
+      sessionId: session?.sessionId,
+      providerId: selectedProvider?.providerId,
+      timestamp: new Date().toISOString(),
+      dealProfile,
+      partyFitData,
+      partyFitScores,
+      overallFitScore,
+      leverageFactors,
+      leverageScore,
+      clarenceRecommendations: {
+        partyFitSummary: overallFitScore > 70 ? 'Strong fit - proceed with confidence' :
+          overallFitScore > 40 ? 'Moderate fit - address gaps before proceeding' :
+            'Poor fit - consider alternatives',
+        leverageSummary: leverageScore.customer > 60 ? 'Customer has strong negotiating position' :
+          leverageScore.customer > 40 ? 'Balanced negotiating position' :
+            'Provider has stronger position - manage expectations',
+        nextSteps: 'Proceed to Phase 2: Foundation Drafting with allocated negotiation points'
+      }
+    }
+
+    localStorage.setItem(`assessment_${session?.sessionId}_${selectedProvider?.providerId}`, JSON.stringify(assessmentData))
+
+    setAssessmentComplete(true)
+    alert('Assessment submitted successfully!')
   }
-
-  // Helper functions for Deal Profile (removed as unused)
-
-  // Get color classes for Party Fit (removed as unused)
 
   // ========== SECTION 5: USE EFFECTS ==========
   useEffect(() => {
