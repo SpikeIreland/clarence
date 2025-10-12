@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 
+// ========== INTERFACES SECTION ==========
 interface ProcessStep {
   id: number
   title: string
@@ -10,6 +11,7 @@ interface ProcessStep {
   details: string[]
 }
 
+// ========== DATA SECTION ==========
 const processSteps: ProcessStep[] = [
   {
     id: 1,
@@ -105,16 +107,20 @@ const processSteps: ProcessStep[] = [
   }
 ]
 
+// ========== MAIN COMPONENT SECTION ==========
 export default function HowItWorksPage() {
   const [expandedStep, setExpandedStep] = useState<number | null>(null)
 
+  // ========== HANDLERS SECTION ==========
   const toggleStep = (stepId: number) => {
     setExpandedStep(expandedStep === stepId ? null : stepId)
   }
 
+  // ========== RENDER SECTION ==========
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800">
-      {/* Navigation */}
+      
+      {/* ========== NAVIGATION HEADER SECTION ========== */}
       <div className="bg-slate-900/50 backdrop-blur border-b border-slate-700/50">
         <div className="container mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
@@ -133,8 +139,10 @@ export default function HowItWorksPage() {
         </div>
       </div>
 
-      {/* Title Section - Centered */}
+      {/* ========== MAIN CONTENT SECTION ========== */}
       <div className="container mx-auto px-6 py-12">
+        
+        {/* ========== TITLE SECTION ========== */}
         <div className="text-center mb-12">
           <h1 className="text-3xl font-medium text-white tracking-wide mb-2 animate-fade-in">
             CLARENCE
@@ -144,26 +152,40 @@ export default function HowItWorksPage() {
           </p>
         </div>
 
-        {/* Split Layout Content */}
+        {/* ========== SPLIT LAYOUT CONTENT SECTION ========== */}
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-2 gap-12">
-            {/* Left Side - Hero Text */}
+            
+            {/* ========== LEFT SIDE - HERO TEXT SECTION ========== */}
             <div className="animate-fade-in" style={{ animationDelay: '0.2s', animationFillMode: 'both' }}>
               <h2 className="text-3xl font-medium text-white mb-6">
                 How CLARENCE Works
               </h2>
-              <p className="text-slate-300 font-light leading-relaxed">
-                Clarence is built to support the values of collaboration, transparency, impartiality and a desire to achieve balanced, optimal and durable outcomes (though ones that are realistic and take account of each party&apos;s leverage). Clarence takes the emotion and strain out of negotiation and facilitates stronger relationships. Clarence brings to each negotiation a level of expertise akin to (perhaps even surpassing!) a leading law partner who has specialized in the relevant field for decades.
-              </p>
+              
+              {/* ========== UPDATED THREE PARAGRAPHS SECTION ========== */}
+              <div className="space-y-4">
+                <p className="text-slate-300 font-light leading-relaxed">
+                  Clarence supports the values of collaboration, transparency, impartiality and a desire to achieve balanced, optimal and durable contracts though ones that are realistic and take account of each party&apos;s leverage.
+                </p>
+                
+                <p className="text-slate-300 font-light leading-relaxed">
+                  Clarence takes the emotion and strain out of negotiation and facilitates stronger relationships.
+                </p>
+                
+                <p className="text-slate-300 font-light leading-relaxed">
+                  Clarence brings to each negotiation a level of expertise akin to a leading practitioner who has specialized in the relevant field for decades.
+                </p>
+              </div>
             </div>
 
-            {/* Right Side - Process Steps (Smaller) */}
+            {/* ========== RIGHT SIDE - PROCESS STEPS SECTION ========== */}
             <div className="space-y-2 animate-fade-in" style={{ animationDelay: '0.3s', animationFillMode: 'both' }}>
               {processSteps.map((step) => (
                 <div
                   key={step.id}
                   className="bg-slate-800/30 backdrop-blur rounded-lg border border-slate-700/30 overflow-hidden transition-all duration-300 hover:bg-slate-800/50"
                 >
+                  {/* ========== STEP HEADER BUTTON ========== */}
                   <button
                     onClick={() => toggleStep(step.id)}
                     className="w-full px-4 py-3 flex items-center justify-between text-left group"
@@ -186,6 +208,7 @@ export default function HowItWorksPage() {
                     </div>
                   </button>
                   
+                  {/* ========== EXPANDED STEP DETAILS ========== */}
                   {expandedStep === step.id && (
                     <div className="px-4 pb-3 border-t border-slate-700/30">
                       <div className="pt-3 pl-13">
@@ -197,6 +220,8 @@ export default function HowItWorksPage() {
                             </li>
                           ))}
                         </ul>
+                        
+                        {/* ========== PHASE 4 SPECIAL CALLOUT ========== */}
                         {step.id === 4 && (
                           <div className="mt-3 p-2 bg-slate-700/20 rounded border border-slate-600/20">
                             <p className="text-slate-300 text-xs">
@@ -216,7 +241,7 @@ export default function HowItWorksPage() {
           </div>
         </div>
 
-        {/* Bottom Navigation */}
+        {/* ========== BOTTOM NAVIGATION SECTION ========== */}
         <div className="mt-16 pt-8 border-t border-slate-700/50">
           <div className="flex justify-center gap-8">
             <Link href="/" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">Home</Link>
