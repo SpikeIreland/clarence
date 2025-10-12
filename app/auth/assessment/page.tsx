@@ -212,7 +212,7 @@ function PreliminaryAssessmentContent() {
 
   // ========== SECTION 4: HELPER FUNCTIONS ==========
 
- // ========== SECTION 4: HELPER FUNCTIONS ==========
+  // ========== SECTION 4: HELPER FUNCTIONS ==========
 
   // Define types for assessment data
   interface AssessmentData {
@@ -840,7 +840,7 @@ function PreliminaryAssessmentContent() {
   }
 
   // Helper functions for Deal Profile (removed as unused)
-  
+
   // Get color classes for Party Fit (removed as unused)
 
   // ========== SECTION 5: USE EFFECTS ==========
