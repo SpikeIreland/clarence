@@ -210,13 +210,13 @@ function PreliminaryAssessmentContent() {
     { num: 6, name: 'Final Review', active: false, complete: false }
   ]
 
-  // ========== SECTION 4: HELPER FUNCTIONS ==========
 
   // ========== SECTION 4: HELPER FUNCTIONS ==========
 
   // Define types for assessment data
   interface AssessmentData {
     customerName?: string
+    customerCompany?: string
     serviceType?: string
     providerName?: string
     providerServices?: string
@@ -234,8 +234,8 @@ function PreliminaryAssessmentContent() {
     customerRevenue?: string
     customerSize?: string
     providerRevenue?: string
-    customerRequirements?: Record<string, unknown>
-    providerCapabilities?: Record<string, unknown>
+    customerRequirements?: RequirementsData
+    providerCapabilities?: CapabilitiesData
   }
 
   interface AssessmentResponse {
@@ -736,7 +736,7 @@ function PreliminaryAssessmentContent() {
     const leverageData: AssessmentData = {
       serviceType: sessionData?.serviceRequired,
       dealValue: sessionData?.dealValue,
-      customerCompany: sessionData?.customerCompany,
+      customerName: sessionData?.customerCompany,
       providerName: provider.providerName,
       employees: capabilities?.capabilities?.company?.numberOfEmployees,
       providerRevenue: capabilities?.capabilities?.company?.annualRevenue,
