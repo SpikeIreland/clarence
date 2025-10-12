@@ -914,31 +914,6 @@ function PreliminaryAssessmentContent() {
     alert('Assessment submitted successfully!')
   }
 
-  // Helper functions for Deal Profile
-  const handleProcessChange = (category: 'p2p' | 'o2c' | 'r2r' | 'additional', process: string, checked: boolean) => {
-    // This function would be used if we had process checkboxes
-    console.log('Process change:', category, process, checked)
-  }
-
-  // Get color classes for Party Fit
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'aligned': return 'bg-emerald-500'
-      case 'negotiating': return 'bg-yellow-500'
-      case 'disputed': return 'bg-red-500'
-      default: return 'bg-gray-300'
-    }
-  }
-
-  const getStatusBgColor = (status: string) => {
-    switch (status) {
-      case 'aligned': return 'bg-emerald-50 text-emerald-700'
-      case 'negotiating': return 'bg-yellow-50 text-yellow-700'
-      case 'disputed': return 'bg-red-50 text-red-700'
-      default: return 'bg-gray-50 text-gray-700'
-    }
-  }
-
   // ========== SECTION 5: USE EFFECTS ==========
   useEffect(() => {
     const auth = localStorage.getItem('clarence_auth')
@@ -980,7 +955,7 @@ function PreliminaryAssessmentContent() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* ===== NAVIGATION ===== */}
+      {/* ========== SECTION 7: NAVIGATION ========== */}
       <nav className="bg-white shadow-sm border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -1012,7 +987,7 @@ function PreliminaryAssessmentContent() {
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Contract Header */}
+        {/* ========== SECTION 8: CONTRACT HEADER ========== */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-6 rounded-xl mb-6">
           <div className="flex justify-between items-start">
             <div>
@@ -1028,7 +1003,7 @@ function PreliminaryAssessmentContent() {
           </div>
         </div>
 
-        {/* PHASE PROGRESS INDICATOR */}
+        {/* ========== SECTION 9: PHASE PROGRESS INDICATOR ========== */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <h3 className="text-sm font-medium text-slate-700 mb-4">Contract Negotiation Progress</h3>
           <div className="flex justify-between items-center mb-4">
@@ -1050,7 +1025,7 @@ function PreliminaryAssessmentContent() {
           <p className="text-xs text-slate-500 mt-2 text-center">Phase 1 of 6: Gathering initial requirements and assessing party fit</p>
         </div>
 
-        {/* Provider Selection */}
+        {/* ========== SECTION 10: PROVIDER SELECTION ========== */}
         {providers.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
             <h3 className="text-lg font-medium mb-4 text-slate-800">
@@ -1086,7 +1061,7 @@ function PreliminaryAssessmentContent() {
           </div>
         )}
 
-        {/* Assessment Sections */}
+        {/* ========== SECTION 11: ASSESSMENT SECTIONS ========== */}
         {selectedProvider ? (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6">
             <div className="border-b border-slate-200">
@@ -1122,8 +1097,268 @@ function PreliminaryAssessmentContent() {
             </div>
 
             <div className="p-8">
-              
-              {/* ENHANCED PARTY FIT SECTION */}
+              {/* ========== SECTION 12: DEAL PROFILE CONTENT ========== */}
+              {activeSection === 'profile' && (
+                <div className="space-y-6">
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Deal Profile</h3>
+
+                  {/* Service Type Selector */}
+                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-6">
+                    <label className="block text-sm font-medium text-purple-900 mb-2">Service Category</label>
+                    <select
+                      className="w-full px-3 py-2 border border-purple-300 rounded-lg bg-white"
+                      value={dealProfile.serviceCategory}
+                      onChange={(e) => setDealProfile({ ...dealProfile, serviceCategory: e.target.value })}
+                    >
+                      <option value="">Select service type...</option>
+                      <option value="customer-support">Customer Support</option>
+                      <option value="technical-support">Technical Support</option>
+                      <option value="data-processing">Data Processing</option>
+                      <option value="financial-support">Financial Support (F&A)</option>
+                      <option value="hr-services">HR Services</option>
+                      <option value="it-services">IT Services</option>
+                      <option value="legal-process">Legal Process Outsourcing</option>
+                      <option value="other">Other Services</option>
+                    </select>
+                  </div>
+
+                  {/* Contract Overview */}
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-3">Contract Overview</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Engagement Model</label>
+                        <select
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          value={dealProfile.engagementModel}
+                          onChange={(e) => setDealProfile({ ...dealProfile, engagementModel: e.target.value })}
+                        >
+                          <option value="">Select model...</option>
+                          <option value="full-outsource">Full Outsourcing</option>
+                          <option value="co-managed">Co-Managed Service</option>
+                          <option value="staff-augmentation">Staff Augmentation</option>
+                          <option value="project-based">Project Based</option>
+                          <option value="managed-service">Managed Service</option>
+                          <option value="hybrid">Hybrid Model</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Contract Duration</label>
+                        <select
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          value={dealProfile.duration}
+                          onChange={(e) => setDealProfile({ ...dealProfile, duration: e.target.value })}
+                        >
+                          <option value="">Select duration...</option>
+                          <option value="6">6 months</option>
+                          <option value="12">12 months</option>
+                          <option value="24">24 months</option>
+                          <option value="36">36 months</option>
+                          <option value="48">48 months</option>
+                          <option value="60">60 months</option>
+                          <option value="60+">More than 5 years</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Total Contract Value</label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          placeholder="e.g., £2,000,000"
+                          value={dealProfile.totalValue}
+                          onChange={(e) => setDealProfile({ ...dealProfile, totalValue: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Pricing Model</label>
+                        <select
+                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
+                          value={dealProfile.pricingModel}
+                          onChange={(e) => setDealProfile({ ...dealProfile, pricingModel: e.target.value })}
+                        >
+                          <option value="">Select pricing...</option>
+                          <option value="fixed-price">Fixed Price</option>
+                          <option value="time-materials">Time & Materials</option>
+                          <option value="per-fte">Per FTE</option>
+                          <option value="per-transaction">Per Transaction</option>
+                          <option value="outcome-based">Outcome Based</option>
+                          <option value="hybrid-pricing">Hybrid Pricing</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Scope & Scale */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-3">Scope & Scale</h4>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Service Description</label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          rows={3}
+                          placeholder="Describe the services required..."
+                          value={dealProfile.serviceDescription}
+                          onChange={(e) => setDealProfile({ ...dealProfile, serviceDescription: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Scale Indicator</label>
+                          <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            placeholder="e.g., 50,000 transactions/month"
+                            value={dealProfile.scaleIndicator}
+                            onChange={(e) => setDealProfile({ ...dealProfile, scaleIndicator: e.target.value })}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Geographic Coverage</label>
+                          <input
+                            type="text"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            placeholder="e.g., UK, EU, Global"
+                            value={dealProfile.geographicCoverage}
+                            onChange={(e) => setDealProfile({ ...dealProfile, geographicCoverage: e.target.value })}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Service Complexity</label>
+                          <select
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            value={dealProfile.complexity}
+                            onChange={(e) => setDealProfile({ ...dealProfile, complexity: e.target.value })}
+                          >
+                            <option value="">Select...</option>
+                            <option value="standard">Standard - Routine processes</option>
+                            <option value="moderate">Moderate - Some customization</option>
+                            <option value="complex">Complex - Significant customization</option>
+                            <option value="highly-complex">Highly Complex - Bespoke solution</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Critical Service?</label>
+                          <select
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            value={dealProfile.criticality}
+                            onChange={(e) => setDealProfile({ ...dealProfile, criticality: e.target.value })}
+                          >
+                            <option value="">Select...</option>
+                            <option value="mission-critical">Mission Critical</option>
+                            <option value="business-critical">Business Critical</option>
+                            <option value="important">Important</option>
+                            <option value="standard">Standard</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Requirements & Expectations */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-3">Requirements & Expectations</h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Service Level Requirements</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={dealProfile.serviceLevelRequirement}
+                          onChange={(e) => setDealProfile({ ...dealProfile, serviceLevelRequirement: e.target.value })}
+                        >
+                          <option value="">Select...</option>
+                          <option value="premium">Premium (99.9%+ availability)</option>
+                          <option value="standard">Standard (99% availability)</option>
+                          <option value="basic">Basic (95% availability)</option>
+                          <option value="best-effort">Best Effort</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Transition Timeline</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={dealProfile.transitionTimeline}
+                          onChange={(e) => setDealProfile({ ...dealProfile, transitionTimeline: e.target.value })}
+                        >
+                          <option value="">Select...</option>
+                          <option value="immediate">Immediate (&lt; 1 month)</option>
+                          <option value="fast">Fast (1-3 months)</option>
+                          <option value="standard">Standard (3-6 months)</option>
+                          <option value="gradual">Gradual (6-12 months)</option>
+                          <option value="phased">Phased approach</option>
+                        </select>
+                      </div>
+
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Key Performance Indicators</label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          rows={2}
+                          placeholder="List the main KPIs for this service..."
+                          value={dealProfile.kpis}
+                          onChange={(e) => setDealProfile({ ...dealProfile, kpis: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Strategic Context */}
+                  <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+                    <h4 className="font-medium text-yellow-900 mb-3">Strategic Context</h4>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-yellow-800 mb-1">Primary Business Drivers</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {['Cost Reduction', 'Quality Improvement', 'Scalability',
+                            'Access to Expertise', 'Technology Enablement', 'Risk Mitigation',
+                            'Focus on Core Business', 'Speed to Market'].map((driver) => (
+                              <label key={driver} className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  className="mr-2"
+                                  checked={dealProfile.businessDrivers?.includes(driver)}
+                                  onChange={(e) => {
+                                    const drivers = dealProfile.businessDrivers || []
+                                    if (e.target.checked) {
+                                      setDealProfile({ ...dealProfile, businessDrivers: [...drivers, driver] })
+                                    } else {
+                                      setDealProfile({ ...dealProfile, businessDrivers: drivers.filter(d => d !== driver) })
+                                    }
+                                  }}
+                                />
+                                <span className="text-sm">{driver}</span>
+                              </label>
+                            ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-yellow-800 mb-1">Success Criteria</label>
+                        <textarea
+                          className="w-full px-3 py-2 border border-yellow-300 rounded-lg bg-white"
+                          rows={2}
+                          placeholder="What would make this engagement successful?"
+                          value={dealProfile.successCriteria}
+                          onChange={(e) => setDealProfile({ ...dealProfile, successCriteria: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ========== SECTION 13: PARTY FIT CONTENT ========== */}
               {activeSection === 'fit' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-medium text-slate-900 mb-4">Party Fit Assessment</h3>
@@ -1363,7 +1598,7 @@ function PreliminaryAssessmentContent() {
                 </div>
               )}
 
-              {/* ADVANCED LEVERAGE ASSESSMENT SECTION */}
+              {/* ========== SECTION 14: LEVERAGE CONTENT ========== */}
               {activeSection === 'leverage' && (
                 <div className="space-y-6">
                   <h3 className="text-xl font-medium text-slate-900 mb-4">Advanced Leverage Assessment</h3>
@@ -1690,17 +1925,13 @@ function PreliminaryAssessmentContent() {
               )}
             </div>
           </div>
-        )
-
-        {/* End of selectedProvider conditional */}
         ) : (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
-          <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
-        </div>
-        )
-        }
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
+            <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
+          </div>
+        )}
 
-        {/* Action Buttons */}
+        {/* ========== SECTION 15: ACTION BUTTONS ========== */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
           <div className="space-y-4">
             <div className="flex gap-4">
@@ -1745,8 +1976,10 @@ function PreliminaryAssessmentContent() {
         </div>
       </div>
     </div>
+  )
 }
 
+// ========== SECTION 16: MAIN EXPORT WITH SUSPENSE ========== 
 export default function PreliminaryAssessment() {
   return (
     <Suspense fallback={
@@ -1761,265 +1994,3 @@ export default function PreliminaryAssessment() {
     </Suspense>
   )
 }
-
-<div className="p-8">
-  {/* UNIVERSAL DEAL PROFILE SECTION */}
-  {activeSection === 'profile' && (
-    <div className="space-y-6">
-      <h3 className="text-xl font-medium text-slate-900 mb-4">Deal Profile</h3>
-
-      {/* Service Type Selector */}
-      <div className="bg-purple-50 p-4 rounded-lg border border-purple-200 mb-6">
-        <label className="block text-sm font-medium text-purple-900 mb-2">Service Category</label>
-        <select
-          className="w-full px-3 py-2 border border-purple-300 rounded-lg bg-white"
-          value={dealProfile.serviceCategory}
-          onChange={(e) => setDealProfile({ ...dealProfile, serviceCategory: e.target.value })}
-        >
-          <option value="">Select service type...</option>
-          <option value="customer-support">Customer Support</option>
-          <option value="technical-support">Technical Support</option>
-          <option value="data-processing">Data Processing</option>
-          <option value="financial-support">Financial Support (F&A)</option>
-          <option value="hr-services">HR Services</option>
-          <option value="it-services">IT Services</option>
-          <option value="legal-process">Legal Process Outsourcing</option>
-          <option value="other">Other Services</option>
-        </select>
-      </div>
-
-      {/* Contract Overview */}
-      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h4 className="font-medium text-blue-900 mb-3">Contract Overview</h4>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-blue-800 mb-1">Engagement Model</label>
-            <select
-              className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-              value={dealProfile.engagementModel}
-              onChange={(e) => setDealProfile({ ...dealProfile, engagementModel: e.target.value })}
-            >
-              <option value="">Select model...</option>
-              <option value="full-outsource">Full Outsourcing</option>
-              <option value="co-managed">Co-Managed Service</option>
-              <option value="staff-augmentation">Staff Augmentation</option>
-              <option value="project-based">Project Based</option>
-              <option value="managed-service">Managed Service</option>
-              <option value="hybrid">Hybrid Model</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-blue-800 mb-1">Contract Duration</label>
-            <select
-              className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-              value={dealProfile.duration}
-              onChange={(e) => setDealProfile({ ...dealProfile, duration: e.target.value })}
-            >
-              <option value="">Select duration...</option>
-              <option value="6">6 months</option>
-              <option value="12">12 months</option>
-              <option value="24">24 months</option>
-              <option value="36">36 months</option>
-              <option value="48">48 months</option>
-              <option value="60">60 months</option>
-              <option value="60+">More than 5 years</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-blue-800 mb-1">Total Contract Value</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-              placeholder="e.g., £2,000,000"
-              value={dealProfile.totalValue}
-              onChange={(e) => setDealProfile({ ...dealProfile, totalValue: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-blue-800 mb-1">Pricing Model</label>
-            <select
-              className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-              value={dealProfile.pricingModel}
-              onChange={(e) => setDealProfile({ ...dealProfile, pricingModel: e.target.value })}
-            >
-              <option value="">Select pricing...</option>
-              <option value="fixed-price">Fixed Price</option>
-              <option value="time-materials">Time & Materials</option>
-              <option value="per-fte">Per FTE</option>
-              <option value="per-transaction">Per Transaction</option>
-              <option value="outcome-based">Outcome Based</option>
-              <option value="hybrid-pricing">Hybrid Pricing</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Scope & Scale */}
-      <div className="bg-white p-6 rounded-lg border border-slate-200">
-        <h4 className="font-medium text-slate-800 mb-3">Scope & Scale</h4>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Service Description</label>
-            <textarea
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-              rows={3}
-              placeholder="Describe the services required..."
-              value={dealProfile.serviceDescription}
-              onChange={(e) => setDealProfile({ ...dealProfile, serviceDescription: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Scale Indicator</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                placeholder="e.g., 50,000 transactions/month"
-                value={dealProfile.scaleIndicator}
-                onChange={(e) => setDealProfile({ ...dealProfile, scaleIndicator: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Geographic Coverage</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                placeholder="e.g., UK, EU, Global"
-                value={dealProfile.geographicCoverage}
-                onChange={(e) => setDealProfile({ ...dealProfile, geographicCoverage: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Service Complexity</label>
-              <select
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                value={dealProfile.complexity}
-                onChange={(e) => setDealProfile({ ...dealProfile, complexity: e.target.value })}
-              >
-                <option value="">Select...</option>
-                <option value="standard">Standard - Routine processes</option>
-                <option value="moderate">Moderate - Some customization</option>
-                <option value="complex">Complex - Significant customization</option>
-                <option value="highly-complex">Highly Complex - Bespoke solution</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Critical Service?</label>
-              <select
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                value={dealProfile.criticality}
-                onChange={(e) => setDealProfile({ ...dealProfile, criticality: e.target.value })}
-              >
-                <option value="">Select...</option>
-                <option value="mission-critical">Mission Critical</option>
-                <option value="business-critical">Business Critical</option>
-                <option value="important">Important</option>
-                <option value="standard">Standard</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Requirements & Expectations */}
-      <div className="bg-white p-6 rounded-lg border border-slate-200">
-        <h4 className="font-medium text-slate-800 mb-3">Requirements & Expectations</h4>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Service Level Requirements</label>
-            <select
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-              value={dealProfile.serviceLevelRequirement}
-              onChange={(e) => setDealProfile({ ...dealProfile, serviceLevelRequirement: e.target.value })}
-            >
-              <option value="">Select...</option>
-              <option value="premium">Premium (99.9%+ availability)</option>
-              <option value="standard">Standard (99% availability)</option>
-              <option value="basic">Basic (95% availability)</option>
-              <option value="best-effort">Best Effort</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Transition Timeline</label>
-            <select
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-              value={dealProfile.transitionTimeline}
-              onChange={(e) => setDealProfile({ ...dealProfile, transitionTimeline: e.target.value })}
-            >
-              <option value="">Select...</option>
-              <option value="immediate">Immediate (&lt; 1 month)</option>
-              <option value="fast">Fast (1-3 months)</option>
-              <option value="standard">Standard (3-6 months)</option>
-              <option value="gradual">Gradual (6-12 months)</option>
-              <option value="phased">Phased approach</option>
-            </select>
-          </div>
-
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Key Performance Indicators</label>
-            <textarea
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-              rows={2}
-              placeholder="List the main KPIs for this service..."
-              value={dealProfile.kpis}
-              onChange={(e) => setDealProfile({ ...dealProfile, kpis: e.target.value })}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Strategic Context */}
-      <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-        <h4 className="font-medium text-yellow-900 mb-3">Strategic Context</h4>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-yellow-800 mb-1">Primary Business Drivers</label>
-            <div className="grid grid-cols-2 gap-2">
-              {['Cost Reduction', 'Quality Improvement', 'Scalability',
-                'Access to Expertise', 'Technology Enablement', 'Risk Mitigation',
-                'Focus on Core Business', 'Speed to Market'].map((driver) => (
-                  <label key={driver} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      className="mr-2"
-                      checked={dealProfile.businessDrivers?.includes(driver)}
-                      onChange={(e) => {
-                        const drivers = dealProfile.businessDrivers || []
-                        if (e.target.checked) {
-                          setDealProfile({ ...dealProfile, businessDrivers: [...drivers, driver] })
-                        } else {
-                          setDealProfile({ ...dealProfile, businessDrivers: drivers.filter(d => d !== driver) })
-                        }
-                      }}
-                    />
-                    <span className="text-sm">{driver}</span>
-                  </label>
-                ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-yellow-800 mb-1">Success Criteria</label>
-            <textarea
-              className="w-full px-3 py-2 border border-yellow-300 rounded-lg bg-white"
-              rows={2}
-              placeholder="What would make this engagement successful?"
-              value={dealProfile.successCriteria}
-              onChange={(e) => setDealProfile({ ...dealProfile, successCriteria: e.target.value })}
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  )}
