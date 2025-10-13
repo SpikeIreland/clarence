@@ -235,7 +235,7 @@ function PreliminaryAssessmentContent() {
           action: 'assess',
           type: assessmentType,
           context: { session, provider: selectedProvider },
-          prompt: generateAssessmentPrompt(assessmentType, { 
+          prompt: generateAssessmentPrompt(assessmentType, {
             customerName: session?.customerCompany,
             providerName: selectedProvider?.providerName,
             serviceType: session?.serviceRequired
@@ -282,11 +282,11 @@ function PreliminaryAssessmentContent() {
     // Capability Score calculation  
     let capabilityScore = partyFitScores.capability
     if (partyFitData.capability.geographic === 'full') capabilityScore = Math.min(100, capabilityScore + 10)
-    
+
     // Relationship Score includes trust
     let relationshipScore = (partyFitData.relationship.trust / 100) * 40
     if (partyFitData.relationship.communication === 'excellent') relationshipScore += 30
-    
+
     // Risk Score (inverse)
     let riskScore = 100
     if (partyFitData.risk.financial === 'weak') riskScore -= 30
@@ -315,7 +315,7 @@ function PreliminaryAssessmentContent() {
   // Advanced leverage calculation (aligned with algorithm document)
   const calculateAdvancedLeverage = () => {
     let customerScore = 50 // Start at neutral
-    
+
     // Market Dynamics Impact (25% weight)
     if (leverageFactors.marketDynamics.alternatives === 'many') customerScore += 8
     else if (leverageFactors.marketDynamics.alternatives === 'several') customerScore += 4
@@ -372,13 +372,13 @@ function PreliminaryAssessmentContent() {
   // Auto-populate Deal Profile from data
   const populateDealProfile = (capabilities: Record<string, unknown>, requirements: Record<string, unknown>, sessionData: Session | null) => {
     console.log('Auto-populating Deal Profile...')
-    
+
     const serviceType = sessionData?.serviceRequired?.toLowerCase() || ''
     let category = 'it-services'
-    
+
     if (serviceType.includes('customer')) category = 'customer-support'
     else if (serviceType.includes('financ')) category = 'financial-support'
-    
+
     setDealProfile(prev => ({
       ...prev,
       serviceCategory: category,
@@ -394,24 +394,24 @@ function PreliminaryAssessmentContent() {
   const selectProvider = async (provider: Provider) => {
     console.log('Loading provider data...', provider)
     setSelectedProvider(provider)
-    
+
     const sessionId = session?.sessionId || searchParams.get('session')
-    
+
     try {
       // Try to load capabilities
       const capResponse = await fetch(
         `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${sessionId}&provider_id=${provider.providerId}`
       )
       const capabilities = capResponse.ok ? await capResponse.json() : {}
-      
+
       // Try to load requirements
       const reqResponse = await fetch(
         `https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sessionId}`
       )
       const requirements = reqResponse.ok ? await reqResponse.json() : {}
-      
+
       populateDealProfile(capabilities, requirements, session)
-      
+
       // Run CLARENCE assessment if needed
       if (activeSection === 'fit') {
         runClarenceAssessment('party-fit-strategic')
@@ -424,15 +424,15 @@ function PreliminaryAssessmentContent() {
 
   const loadProviders = useCallback(async (sessionId: string) => {
     if (isLoadingRef.current || providersLoadedRef.current) return
-    
+
     isLoadingRef.current = true
-    
+
     try {
       // Try API first
       const response = await fetch(
         `https://spikeislandstudios.app.n8n.cloud/webhook/providers-api?session_id=${sessionId}`
       )
-      
+
       if (response.ok) {
         const data = await response.json()
         if (data && data.length > 0) {
@@ -445,7 +445,7 @@ function PreliminaryAssessmentContent() {
     } catch {
       console.log('API failed, using mock data')
     }
-    
+
     // Use mock data as fallback
     const mockProviders: Provider[] = [
       {
@@ -472,11 +472,11 @@ function PreliminaryAssessmentContent() {
   const loadSessionData = useCallback(async () => {
     try {
       const sessionId = searchParams.get('session') || searchParams.get('session_id')
-      
+
       if (sessionId) {
         await loadProviders(sessionId)
       }
-      
+
       // Set demo session
       const demoSession: Session = {
         sessionId: sessionId || 'demo-session',
@@ -487,7 +487,7 @@ function PreliminaryAssessmentContent() {
         phase: 1
       }
       setSession(demoSession)
-      
+
     } catch {
       console.error('Error loading session')
     } finally {
@@ -500,9 +500,9 @@ function PreliminaryAssessmentContent() {
       alert('Please select a provider')
       return
     }
-    
+
     calculateAdvancedLeverage()
-    
+
     const assessmentData = {
       sessionId: session?.sessionId,
       providerId: selectedProvider?.providerId,
@@ -515,7 +515,7 @@ function PreliminaryAssessmentContent() {
       leverageScore,
       clarenceAssessments
     }
-    
+
     localStorage.setItem(`assessment_${session?.sessionId}_${selectedProvider?.providerId}`, JSON.stringify(assessmentData))
     setAssessmentComplete(true)
     alert('Assessment submitted successfully!')
@@ -538,7 +538,7 @@ function PreliminaryAssessmentContent() {
 
   useEffect(() => {
     const hasFactors = Object.values(leverageFactors.marketDynamics).some(v => v) ||
-                      Object.values(leverageFactors.economic).some(v => v)
+      Object.values(leverageFactors.economic).some(v => v)
     if (hasFactors) {
       calculateAdvancedLeverage()
     }
@@ -639,11 +639,10 @@ function PreliminaryAssessmentContent() {
                 <button
                   key={provider.providerId}
                   onClick={() => selectProvider(provider)}
-                  className={`p-4 border-2 rounded-lg text-left transition ${
-                    selectedProvider?.providerId === provider.providerId
+                  className={`p-4 border-2 rounded-lg text-left transition ${selectedProvider?.providerId === provider.providerId
                       ? 'border-slate-600 bg-slate-50'
                       : 'border-slate-200 hover:border-slate-300'
-                  }`}
+                    }`}
                 >
                   <div className="font-medium text-slate-800">{provider.providerName}</div>
                   {provider.providerTurnover && (
@@ -807,7 +806,7 @@ function PreliminaryAssessmentContent() {
                     <div className="flex items-center gap-4">
                       <div className="flex-1">
                         <div className="h-4 bg-white rounded-full overflow-hidden border border-purple-300">
-                          <div 
+                          <div
                             className="h-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 transition-all duration-500"
                             style={{ width: `${overallFitScore}%` }}
                           />
@@ -822,7 +821,7 @@ function PreliminaryAssessmentContent() {
                         {overallFitScore}%
                       </div>
                     </div>
-                    
+
                     {clarenceAssessments['party-fit-strategic'] && (
                       <div className="mt-4 p-3 bg-white rounded-lg border border-purple-200">
                         <p className="text-sm text-purple-800">
@@ -835,7 +834,7 @@ function PreliminaryAssessmentContent() {
                   {/* Strategic Alignment with Slider */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
                     <h4 className="font-medium text-slate-800 mb-4">1. Strategic Alignment</h4>
-                    
+
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-slate-600 mb-2">
                         Strategic Score: <span className="text-purple-700 font-bold">{partyFitScores.strategic}%</span>
@@ -888,7 +887,7 @@ function PreliminaryAssessmentContent() {
                   {/* Capability with Slider */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
                     <h4 className="font-medium text-slate-800 mb-4">2. Capability Match</h4>
-                    
+
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-slate-600 mb-2">
                         Capability Score: <span className="text-blue-700 font-bold">{partyFitScores.capability}%</span>
@@ -909,7 +908,7 @@ function PreliminaryAssessmentContent() {
                   {/* Relationship with Trust Slider */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
                     <h4 className="font-medium text-slate-800 mb-4">3. Relationship Potential</h4>
-                    
+
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-slate-600 mb-2">
                         Relationship Score: <span className="text-green-700 font-bold">{partyFitScores.relationship}%</span>
@@ -944,7 +943,7 @@ function PreliminaryAssessmentContent() {
                   {/* Risk with Slider */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
                     <h4 className="font-medium text-slate-800 mb-4">4. Risk Assessment</h4>
-                    
+
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-slate-600 mb-2">
                         Risk Mitigation Score: <span className="text-red-700 font-bold">{partyFitScores.risk}%</span>
@@ -964,201 +963,200 @@ function PreliminaryAssessmentContent() {
                 </div>
               )}
 
-              {/* ========== SECTION 15: LEVERAGE CONTENT ========== */}
+              {/* ========== SECTION 15: LEVERAGE CONTENT (SIMPLIFIED FOR DEMO) ========== */}
               {activeSection === 'leverage' && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-medium text-slate-900 mb-4">Advanced Leverage Assessment</h3>
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Leverage Assessment</h3>
 
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
-                    <p className="text-sm text-purple-900">
-                      Algorithm-based calculation: Each factor category has 25% weight. 
-                      Point allocation: Customer gets X*2 points, Provider gets Y*2 points.
+                  {/* Leverage Score Display */}
+                  <div className="bg-gradient-to-r from-blue-50 to-green-50 p-6 rounded-lg border border-slate-300">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium text-slate-800">Negotiation Power Balance</h4>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${leverageScore.customer >= 55
+                          ? 'bg-blue-100 text-blue-700'
+                          : leverageScore.customer >= 45
+                            ? 'bg-slate-100 text-slate-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                        {leverageScore.customer >= 55
+                          ? 'Customer Advantage'
+                          : leverageScore.customer >= 45
+                            ? 'Balanced Position'
+                            : 'Provider Advantage'}
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-slate-600 mb-4">
+                      {leverageScore.customer >= 60
+                        ? 'Customer has strong negotiating position. Can push for favorable terms across most contract clauses.'
+                        : leverageScore.customer >= 40
+                          ? 'Relatively balanced negotiation expected. Success will depend on negotiation skill and compromise.'
+                          : 'Provider has stronger leverage. Customer should focus on protecting critical requirements.'}
                     </p>
+
+                    {/* Visual Leverage Bar */}
+                    <div className="relative h-14 bg-white rounded-lg overflow-hidden border-2 border-slate-300 mb-4">
+                      <div
+                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-start px-3 text-white font-medium transition-all duration-700 ease-out"
+                        style={{ width: `${leverageScore.customer}%` }}
+                      >
+                        <span>Customer {leverageScore.customer}%</span>
+                      </div>
+                      <div
+                        className="absolute right-0 top-0 h-full bg-gradient-to-l from-green-500 to-green-600 flex items-center justify-end px-3 text-white font-medium transition-all duration-700 ease-out"
+                        style={{ width: `${leverageScore.provider}%` }}
+                      >
+                        <span>Provider {leverageScore.provider}%</span>
+                      </div>
+                    </div>
+
+                    {/* Point Allocation Display */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-blue-700">{leverageScore.customer * 2}</div>
+                          <div className="text-sm text-blue-600">Customer Points</div>
+                          <div className="text-xs text-blue-500 mt-1">For prioritizing contract clauses</div>
+                        </div>
+                      </div>
+                      <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-green-700">{leverageScore.provider * 2}</div>
+                          <div className="text-sm text-green-600">Provider Points</div>
+                          <div className="text-xs text-green-500 mt-1">For prioritizing contract clauses</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Market Dynamics (25%) */}
+                  {/* Quick Factor Input (Optional - can hide for demo) */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
-                    <h4 className="font-medium text-slate-800 mb-4">Market Dynamics (25% weight)</h4>
+                    <h4 className="font-medium text-slate-800 mb-4">Key Leverage Factors</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Alternative Providers</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Number of Competing Providers</label>
                         <select
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                           value={leverageFactors.marketDynamics.alternatives}
-                          onChange={(e) => updateLeverageFactor('marketDynamics', 'alternatives', e.target.value)}
+                          onChange={(e) => {
+                            updateLeverageFactor('marketDynamics', 'alternatives', e.target.value)
+                            // Auto-calculate on change
+                            setTimeout(calculateAdvancedLeverage, 100)
+                          }}
                         >
                           <option value="">Select...</option>
-                          <option value="many">Many (10+ providers)</option>
-                          <option value="several">Several (5-9)</option>
-                          <option value="few">Few (2-4)</option>
+                          <option value="many">Many (7+ providers)</option>
+                          <option value="several">Several (4-6 providers)</option>
+                          <option value="few">Few (2-3 providers)</option>
                           <option value="sole">Sole source</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Market Conditions</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Service Criticality</label>
                         <select
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                          value={leverageFactors.marketDynamics.marketCondition}
-                          onChange={(e) => updateLeverageFactor('marketDynamics', 'marketCondition', e.target.value)}
+                          value={leverageFactors.strategic.serviceCriticality}
+                          onChange={(e) => {
+                            updateLeverageFactor('strategic', 'serviceCriticality', e.target.value)
+                            setTimeout(calculateAdvancedLeverage, 100)
+                          }}
                         >
                           <option value="">Select...</option>
-                          <option value="buyer">Buyer&apos;s market</option>
-                          <option value="balanced">Balanced</option>
-                          <option value="seller">Seller&apos;s market</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Economic Factors (25%) */}
-                  <div className="bg-white p-6 rounded-lg border border-slate-200">
-                    <h4 className="font-medium text-slate-800 mb-4">Economic Factors (25% weight)</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Deal Size Ratio</label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                          value={leverageFactors.economic.dealSizeRatio}
-                          onChange={(e) => updateLeverageFactor('economic', 'dealSizeRatio', e.target.value)}
-                        >
-                          <option value="">Select...</option>
-                          <option value="minimal">Minimal (&lt;1%)</option>
-                          <option value="small">Small (1-5%)</option>
-                          <option value="significant">Significant (5-10%)</option>
-                          <option value="major">Major (&gt;10%)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider Dependence</label>
-                        <select
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                          value={leverageFactors.economic.providerDependence}
-                          onChange={(e) => updateLeverageFactor('economic', 'providerDependence', e.target.value)}
-                        >
-                          <option value="">Select...</option>
-                          <option value="tiny">Tiny</option>
-                          <option value="small">Small</option>
+                          <option value="mission-critical">Mission Critical</option>
+                          <option value="business-critical">Business Critical</option>
                           <option value="important">Important</option>
-                          <option value="critical">Critical</option>
+                          <option value="non-core">Non-core</option>
                         </select>
                       </div>
                     </div>
                   </div>
 
-                  {/* Calculated Leverage Score */}
-                  <div className="bg-gradient-to-r from-slate-100 to-slate-50 p-6 rounded-lg border border-slate-300">
-                    <h4 className="font-medium text-slate-800 mb-4">Calculated Leverage Distribution</h4>
-                    
-                    <div className="grid grid-cols-2 gap-8 mb-4">
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-slate-700">{leverageScore.customer}%</div>
-                        <div className="text-sm text-slate-600">Customer Leverage</div>
-                        <div className="text-xs text-slate-500 mt-2">
-                          {Math.floor(leverageScore.customer * 2)} negotiation points
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-3xl font-bold text-slate-700">{leverageScore.provider}%</div>
-                        <div className="text-sm text-slate-600">Provider Leverage</div>
-                        <div className="text-xs text-slate-500 mt-2">
-                          {Math.floor(leverageScore.provider * 2)} negotiation points
-                        </div>
+                  {/* Algorithm Explanation */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-amber-900">How CLARENCE Uses This</p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          The leverage percentage determines negotiation points allocation. During contract negotiation,
+                          each party uses their points to prioritize which clauses matter most to them. CLARENCE's algorithm
+                          then calculates optimal compromise positions based on these priorities and the leverage balance.
+                        </p>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="relative h-16 bg-white rounded-lg overflow-hidden border border-slate-300">
-                      <div
-                        className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white font-medium"
-                        style={{ width: `${leverageScore.customer}%` }}
-                      >
-                        {leverageScore.customer}%
-                      </div>
-                      <div
-                        className="absolute right-0 top-0 h-full bg-gradient-to-l from-green-500 to-green-600 flex items-center justify-center text-white font-medium"
-                        style={{ width: `${leverageScore.provider}%` }}
-                      >
-                        {leverageScore.provider}%
-                      </div>
-                    </div>
+                  <button
+                    onClick={calculateAdvancedLeverage}
+                    className="w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-3 rounded-lg font-medium"
+                  >
+                    Recalculate Leverage
+                  </button>
+                </div>
+              )}
 
+              {/* ========== SECTION 16: ACTION BUTTONS ========== */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    {!assessmentComplete ? (
+                      <button
+                        onClick={handleSubmitAssessment}
+                        disabled={!selectedProvider}
+                        className={`px-6 py-3 rounded-lg font-medium text-sm ${selectedProvider
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                          }`}
+                      >
+                        Complete Assessment
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
+                          disabled
+                        >
+                          ✓ Assessment Complete
+                        </button>
+                        <button
+                          onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
+                          className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm"
+                        >
+                          Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points) →
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end">
                     <button
-                      onClick={calculateAdvancedLeverage}
-                      className="mt-4 w-full bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg text-sm"
+                      onClick={() => router.push('/auth/contracts-dashboard')}
+                      className="text-slate-600 hover:text-slate-900 font-medium text-sm"
                     >
-                      Recalculate Leverage Score
+                      Save & Return Later
                     </button>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
-        ) : (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
-            <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
-          </div>
-        )}
-
-        {/* ========== SECTION 16: ACTION BUTTONS ========== */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              {!assessmentComplete ? (
-                <button
-                  onClick={handleSubmitAssessment}
-                  disabled={!selectedProvider}
-                  className={`px-6 py-3 rounded-lg font-medium text-sm ${
-                    selectedProvider
-                      ? 'bg-green-600 hover:bg-green-700 text-white'
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                  }`}
-                >
-                  Complete Assessment
-                </button>
-              ) : (
-                <>
-                  <button
-                    className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
-                    disabled
-                  >
-                    ✓ Assessment Complete
-                  </button>
-                  <button
-                    onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
-                    className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm"
-                  >
-                    Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points) →
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => router.push('/auth/contracts-dashboard')}
-                className="text-slate-600 hover:text-slate-900 font-medium text-sm"
-              >
-                Save & Return Later
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+        )
 }
 
 // ========== SECTION 17: MAIN EXPORT WITH SUSPENSE ==========
-export default function PreliminaryAssessment() {
+        export default function PreliminaryAssessment() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Loading assessment...</p>
-        </div>
-      </div>
-    }>
-      <PreliminaryAssessmentContent />
-    </Suspense>
-  )
+        <Suspense fallback={
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
+              <p className="mt-4 text-slate-600">Loading assessment...</p>
+            </div>
+          </div>
+        }>
+          <PreliminaryAssessmentContent />
+        </Suspense>
+        )
 }
