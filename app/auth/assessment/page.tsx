@@ -1081,7 +1081,7 @@ function PreliminaryAssessmentContent() {
                         <p className="text-sm font-medium text-amber-900">How CLARENCE Uses This</p>
                         <p className="text-xs text-amber-700 mt-1">
                           The leverage percentage determines negotiation points allocation. During contract negotiation,
-                          each party uses their points to prioritize which clauses matter most to them. CLARENCE's algorithm
+                          each party uses their points to prioritize which clauses matter most to them. CLARENCE algorithm
                           then calculates optimal compromise positions based on these priorities and the leverage balance.
                         </p>
                       </div>
