@@ -640,8 +640,8 @@ function PreliminaryAssessmentContent() {
                   key={provider.providerId}
                   onClick={() => selectProvider(provider)}
                   className={`p-4 border-2 rounded-lg text-left transition ${selectedProvider?.providerId === provider.providerId
-                      ? 'border-slate-600 bg-slate-50'
-                      : 'border-slate-200 hover:border-slate-300'
+                    ? 'border-slate-600 bg-slate-50'
+                    : 'border-slate-200 hover:border-slate-300'
                     }`}
                 >
                   <div className="font-medium text-slate-800">{provider.providerName}</div>
@@ -973,10 +973,10 @@ function PreliminaryAssessmentContent() {
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-medium text-slate-800">Negotiation Power Balance</h4>
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${leverageScore.customer >= 55
-                          ? 'bg-blue-100 text-blue-700'
-                          : leverageScore.customer >= 45
-                            ? 'bg-slate-100 text-slate-700'
-                            : 'bg-green-100 text-green-700'
+                        ? 'bg-blue-100 text-blue-700'
+                        : leverageScore.customer >= 45
+                          ? 'bg-slate-100 text-slate-700'
+                          : 'bg-green-100 text-green-700'
                         }`}>
                         {leverageScore.customer >= 55
                           ? 'Customer Advantage'
@@ -1096,67 +1096,118 @@ function PreliminaryAssessmentContent() {
                   </button>
                 </div>
               )}
-
-              {/* ========== SECTION 16: ACTION BUTTONS ========== */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                <div className="space-y-4">
-                  <div className="flex gap-4">
-                    {!assessmentComplete ? (
-                      <button
-                        onClick={handleSubmitAssessment}
-                        disabled={!selectedProvider}
-                        className={`px-6 py-3 rounded-lg font-medium text-sm ${selectedProvider
-                            ? 'bg-green-600 hover:bg-green-700 text-white'
-                            : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                          }`}
-                      >
-                        Complete Assessment
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
-                          disabled
-                        >
-                          ✓ Assessment Complete
-                        </button>
-                        <button
-                          onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
-                          className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm"
-                        >
-                          Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points) →
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => router.push('/auth/contracts-dashboard')}
-                      className="text-slate-600 hover:text-slate-900 font-medium text-sm"
-                    >
-                      Save & Return Later
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
-        )
+        ) : (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
+            <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
+          </div>
+        )}
+
+        {/* ========== SECTION 16: ACTION BUTTONS ========== */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              {!assessmentComplete ? (
+                <button
+                  onClick={handleSubmitAssessment}
+                  disabled={!selectedProvider}
+                  className={`px-6 py-3 rounded-lg font-medium text-sm ${selectedProvider
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    }`}
+                >
+                  Complete Assessment
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
+                    disabled
+                  >
+                    ✓ Assessment Complete
+                  </button>
+                  <button
+                    onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
+                    className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm"
+                  >
+                    Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points) →
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => router.push('/auth/contracts-dashboard')}
+                className="text-slate-600 hover:text-slate-900 font-medium text-sm"
+              >
+                Save & Return Later
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ========== SECTION 16: ACTION BUTTONS ========== */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              {!assessmentComplete ? (
+                <button
+                  onClick={handleSubmitAssessment}
+                  disabled={!selectedProvider}
+                  className={`px-6 py-3 rounded-lg font-medium text-sm ${selectedProvider
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    }`}
+                >
+                  Complete Assessment
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
+                    disabled
+                  >
+                    ✓ Assessment Complete
+                  </button>
+                  <button
+                    onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
+                    className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm"
+                  >
+                    Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points) →
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => router.push('/auth/contracts-dashboard')}
+                className="text-slate-600 hover:text-slate-900 font-medium text-sm"
+              >
+                Save & Return Later
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ========== SECTION 17: MAIN EXPORT WITH SUSPENSE ==========
-        export default function PreliminaryAssessment() {
+export default function PreliminaryAssessment() {
   return (
-        <Suspense fallback={
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
-              <p className="mt-4 text-slate-600">Loading assessment...</p>
-            </div>
-          </div>
-        }>
-          <PreliminaryAssessmentContent />
-        </Suspense>
-        )
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading assessment...</p>
+        </div>
+      </div>
+    }>
+      <PreliminaryAssessmentContent />
+    </Suspense>
+  )
 }
