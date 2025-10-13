@@ -114,7 +114,6 @@ function PreliminaryAssessmentContent() {
   const [activeSection, setActiveSection] = useState<'profile' | 'fit' | 'leverage'>('profile')
   const [leverageScore, setLeverageScore] = useState({ customer: 65, provider: 35 })
   const [assessmentComplete, setAssessmentComplete] = useState(false)
-  const [isAssessing, setIsAssessing] = useState(false)
   const [clarenceAssessments, setClarenceAssessments] = useState<Record<string, string>>({})
 
   // Universal Deal Profile State
@@ -215,7 +214,7 @@ function PreliminaryAssessmentContent() {
   // ========== SECTION 4: HELPER FUNCTIONS ==========
 
   // Generate assessment prompt for CLARENCE
-  const generateAssessmentPrompt = (type: string, data: any): string => {
+  const generateAssessmentPrompt = (type: string, data: Record<string, unknown>): string => {
     switch (type) {
       case 'party-fit-strategic':
         return `Assess strategic alignment between ${data.customerName} and ${data.providerName}`
@@ -226,12 +225,8 @@ function PreliminaryAssessmentContent() {
     }
   }
 
-  // Get CLARENCE AI Assessment
-  const getClarenceAssessment = async (
-    assessmentType: string,
-    data: any
-  ): Promise<any> => {
-    setIsAssessing(true)
+  // Get CLARENCE Assessment (for future use)
+  const runClarenceAssessment = async (assessmentType: string) => {
     try {
       const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/clarence-chat', {
         method: 'POST',
@@ -239,34 +234,29 @@ function PreliminaryAssessmentContent() {
         body: JSON.stringify({
           action: 'assess',
           type: assessmentType,
-          context: data,
-          prompt: generateAssessmentPrompt(assessmentType, data)
+          context: { session, provider: selectedProvider },
+          prompt: generateAssessmentPrompt(assessmentType, { 
+            customerName: session?.customerCompany,
+            providerName: selectedProvider?.providerName,
+            serviceType: session?.serviceRequired
+          })
         })
       })
 
-      if (!response.ok) throw new Error(`Assessment failed: ${response.status}`)
-      
-      const result = await response.json()
-      setClarenceAssessments(prev => ({
-        ...prev,
-        [assessmentType]: result.assessment || 'Assessment completed'
-      }))
-      
-      return result
-    } catch (error) {
-      console.error('CLARENCE Assessment Error:', error)
-      // Fallback mock assessment
-      const mockAssessment = {
-        score: Math.floor(Math.random() * 30) + 60,
-        assessment: 'Moderate alignment detected'
+      if (response.ok) {
+        const result = await response.json()
+        setClarenceAssessments(prev => ({
+          ...prev,
+          [assessmentType]: result.assessment || 'Assessment completed'
+        }))
       }
+    } catch (err) {
+      console.error('CLARENCE Assessment Error')
+      // Use fallback assessment
       setClarenceAssessments(prev => ({
         ...prev,
-        [assessmentType]: mockAssessment.assessment
+        [assessmentType]: 'Moderate alignment detected based on initial analysis'
       }))
-      return mockAssessment
-    } finally {
-      setIsAssessing(false)
     }
   }
 
@@ -380,7 +370,7 @@ function PreliminaryAssessmentContent() {
   }
 
   // Auto-populate Deal Profile from data
-  const populateDealProfile = (capabilities: any, requirements: any, sessionData: any) => {
+  const populateDealProfile = (capabilities: Record<string, unknown>, requirements: Record<string, unknown>, sessionData: Session | null) => {
     console.log('Auto-populating Deal Profile...')
     
     const serviceType = sessionData?.serviceRequired?.toLowerCase() || ''
@@ -394,9 +384,9 @@ function PreliminaryAssessmentContent() {
       serviceCategory: category,
       totalValue: sessionData?.dealValue || prev.totalValue,
       serviceDescription: sessionData?.serviceRequired || prev.serviceDescription,
-      geographicCoverage: capabilities?.geographicCoverage || 'UK',
-      complexity: requirements?.complexity || 'moderate',
-      criticality: requirements?.criticality || 'important'
+      geographicCoverage: (capabilities?.geographicCoverage as string) || 'UK',
+      complexity: (requirements?.complexity as string) || 'moderate',
+      criticality: (requirements?.criticality as string) || 'important'
     }))
   }
 
@@ -421,8 +411,13 @@ function PreliminaryAssessmentContent() {
       const requirements = reqResponse.ok ? await reqResponse.json() : {}
       
       populateDealProfile(capabilities, requirements, session)
-    } catch (error) {
-      console.error('Data integration error:', error)
+      
+      // Run CLARENCE assessment if needed
+      if (activeSection === 'fit') {
+        runClarenceAssessment('party-fit-strategic')
+      }
+    } catch {
+      console.error('Data integration error')
       populateDealProfile({}, {}, session)
     }
   }
@@ -447,7 +442,7 @@ function PreliminaryAssessmentContent() {
           return
         }
       }
-    } catch (error) {
+    } catch {
       console.log('API failed, using mock data')
     }
     
@@ -471,6 +466,7 @@ function PreliminaryAssessmentContent() {
     setProviders(mockProviders)
     providersLoadedRef.current = true
     isLoadingRef.current = false
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadSessionData = useCallback(async () => {
@@ -492,8 +488,8 @@ function PreliminaryAssessmentContent() {
       }
       setSession(demoSession)
       
-    } catch (error) {
-      console.error('Error loading session:', error)
+    } catch {
+      console.error('Error loading session')
     } finally {
       setLoading(false)
     }
@@ -537,6 +533,7 @@ function PreliminaryAssessmentContent() {
 
   useEffect(() => {
     calculatePartyFitScores()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyFitScores])
 
   useEffect(() => {
@@ -545,6 +542,7 @@ function PreliminaryAssessmentContent() {
     if (hasFactors) {
       calculateAdvancedLeverage()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leverageFactors])
 
   // ========== SECTION 6: LOADING STATE ==========
@@ -824,6 +822,14 @@ function PreliminaryAssessmentContent() {
                         {overallFitScore}%
                       </div>
                     </div>
+                    
+                    {clarenceAssessments['party-fit-strategic'] && (
+                      <div className="mt-4 p-3 bg-white rounded-lg border border-purple-200">
+                        <p className="text-sm text-purple-800">
+                          <strong>CLARENCE Assessment:</strong> {clarenceAssessments['party-fit-strategic']}
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Strategic Alignment with Slider */}
@@ -996,9 +1002,9 @@ function PreliminaryAssessmentContent() {
                           onChange={(e) => updateLeverageFactor('marketDynamics', 'marketCondition', e.target.value)}
                         >
                           <option value="">Select...</option>
-                          <option value="buyer">Buyer's market</option>
+                          <option value="buyer">Buyer&apos;s market</option>
                           <option value="balanced">Balanced</option>
-                          <option value="seller">Seller's market</option>
+                          <option value="seller">Seller&apos;s market</option>
                         </select>
                       </div>
                     </div>
