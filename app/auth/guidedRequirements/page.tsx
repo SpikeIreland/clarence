@@ -9,7 +9,7 @@ interface ConversationMessage {
   content: string
   timestamp: Date
   dataPoint?: string // Which data field this message relates to
-  value?: any // The extracted value
+  value?: string | number | boolean // The extracted value with proper types
 }
 
 interface RequirementsData {
@@ -44,6 +44,14 @@ interface RequirementsData {
     customerLeverage?: number
     providerLeverage?: number
   }
+  priorities?: {
+    cost: number
+    quality: number
+    speed: number
+    risk: number
+    flexibility: number
+  }
+  status?: string
 }
 
 // Conversation flow states
@@ -56,6 +64,23 @@ type ConversationStage =
   | 'contract-priorities'
   | 'review'
   | 'complete'
+
+// Type for updateRequirements path parameter
+type RequirementsPath = 
+  | keyof RequirementsData 
+  | 'companyInfo.name' 
+  | 'companyInfo.size' 
+  | 'companyInfo.revenue'
+  | 'marketContext.numberOfBidders'
+  | 'marketContext.dealValue'
+  | 'marketContext.decisionTimeline'
+  | 'serviceNeeds.category'
+  | 'serviceNeeds.criticality'
+  | 'batna.alternatives'
+  | 'batna.walkAwayPoint'
+  | 'leverageFactors'
+  | 'priorities'
+  | 'status'
 
 // ========== SECTION 2: CONVERSATION PROMPTS ==========
 const CLARENCE_PROMPTS = {
@@ -170,7 +195,7 @@ export default function ClarenceGuidedRequirements() {
     setMessages(prev => [...prev, message])
   }
 
-  const addUserMessage = (content: string, value?: any) => {
+  const addUserMessage = (content: string, value?: string | number | boolean) => {
     const message: ConversationMessage = {
       id: Date.now().toString(),
       type: 'user',
@@ -319,7 +344,7 @@ export default function ClarenceGuidedRequirements() {
     return 'Normal'
   }
 
-  const extractPriorities = (input: string): any => {
+  const extractPriorities = (input: string): { cost: number; quality: number; speed: number; risk: number; flexibility: number } | null => {
     // Try to extract 5 numbers from the input
     const numbers = input.match(/\d+/g)?.map(Number)
     if (numbers && numbers.length >= 5) {
@@ -372,15 +397,16 @@ export default function ClarenceGuidedRequirements() {
   }
 
   // ========== SECTION 10: UPDATE HELPERS ==========
-  const updateRequirements = (path: string, value: any) => {
+  const updateRequirements = (path: RequirementsPath, value: string | number | { customerLeverage: number; providerLeverage: number } | { cost: number; quality: number; speed: number; risk: number; flexibility: number }) => {
     setRequirementsData(prev => {
       const updated = { ...prev }
       const keys = path.split('.')
-      let current: any = updated
+      let current: Record<string, unknown> = updated
       
       for (let i = 0; i < keys.length - 1; i++) {
-        if (!current[keys[i]]) current[keys[i]] = {}
-        current = current[keys[i]]
+        const key = keys[i]
+        if (!current[key]) current[key] = {}
+        current = current[key] as Record<string, unknown>
       }
       
       current[keys[keys.length - 1]] = value
