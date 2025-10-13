@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ========== SECTION 1: INTERFACES ==========
@@ -61,6 +61,24 @@ interface CustomerRequirements {
   }
 }
 
+// Type for nested keys in CustomerRequirements
+type NestedKeyOf<T> = keyof T | 'contractPositions' | 'priorities'
+
+// Props interfaces for step components
+interface StepComponentProps {
+  formData: Partial<CustomerRequirements>
+  updateFormData: (field: keyof CustomerRequirements, value: string | number) => void
+}
+
+interface NestedStepComponentProps {
+  formData: Partial<CustomerRequirements>
+  updateNestedData: (section: NestedKeyOf<CustomerRequirements>, field: string, value: string | number) => void
+}
+
+interface PrioritiesStepProps extends NestedStepComponentProps {
+  priorityPoints: number
+}
+
 // ========== SECTION 2: MAIN COMPONENT ==========
 export default function CustomerRequirementsForm() {
   const router = useRouter()
@@ -88,30 +106,30 @@ export default function CustomerRequirementsForm() {
   })
 
   // ========== SECTION 4: VALIDATION FUNCTIONS ==========
-  const validatePriorityPoints = () => {
+  const validatePriorityPoints = useCallback(() => {
     const total = Object.values(formData.priorities || {}).reduce((sum, val) => sum + val, 0)
     const remaining = 25 - total
     setPriorityPoints(remaining)
     return remaining >= 0
-  }
+  }, [formData.priorities])
 
   useEffect(() => {
     validatePriorityPoints()
-  }, [formData.priorities])
+  }, [validatePriorityPoints])
 
   // ========== SECTION 5: FORM HANDLERS ==========
-  const updateFormData = (field: string, value: any) => {
+  const updateFormData = (field: keyof CustomerRequirements, value: string | number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }))
   }
 
-  const updateNestedData = (section: string, field: string, value: any) => {
+  const updateNestedData = (section: NestedKeyOf<CustomerRequirements>, field: string, value: string | number) => {
     setFormData(prev => ({
       ...prev,
       [section]: {
-        ...prev[section as keyof CustomerRequirements] as any,
+        ...(prev[section as keyof CustomerRequirements] as Record<string, unknown>),
         [field]: value
       }
     }))
@@ -250,7 +268,7 @@ export default function CustomerRequirementsForm() {
 // ========== SECTION 9: STEP COMPONENTS ==========
 
 // Step 1: Company Information
-function CompanyInfoStep({ formData, updateFormData }: any) {
+function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Company Information</h2>
@@ -347,14 +365,14 @@ function CompanyInfoStep({ formData, updateFormData }: any) {
 }
 
 // Step 2: Market Context & Leverage
-function MarketContextStep({ formData, updateFormData }: any) {
+function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Market Context & Leverage</h2>
       
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <p className="text-sm text-blue-800">
-          This information is critical for CLARENCE's leverage calculation algorithm, which determines negotiation dynamics.
+          This information is critical for CLARENCE&apos;s leverage calculation algorithm, which determines negotiation dynamics.
         </p>
       </div>
 
@@ -466,7 +484,7 @@ function MarketContextStep({ formData, updateFormData }: any) {
 }
 
 // Step 3: Service Requirements
-function ServiceRequirementsStep({ formData, updateFormData }: any) {
+function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Service Requirements</h2>
@@ -540,7 +558,7 @@ function ServiceRequirementsStep({ formData, updateFormData }: any) {
 }
 
 // Step 4: BATNA Assessment (NEW)
-function BATNAStep({ formData, updateFormData }: any) {
+function BATNAStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Alternative Options (BATNA)</h2>
@@ -624,7 +642,7 @@ function BATNAStep({ formData, updateFormData }: any) {
 }
 
 // Step 5: Contract Positions
-function ContractPositionsStep({ formData, updateNestedData }: any) {
+function ContractPositionsStep({ formData, updateNestedData }: NestedStepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Initial Contract Positions</h2>
@@ -701,7 +719,7 @@ function ContractPositionsStep({ formData, updateNestedData }: any) {
 }
 
 // Step 6: Priorities with Point System
-function PrioritiesStep({ formData, updateNestedData, priorityPoints }: any) {
+function PrioritiesStep({ formData, updateNestedData, priorityPoints }: PrioritiesStepProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Priority Allocation</h2>
@@ -727,7 +745,7 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: any) {
         }).map(([key, label]) => (
           <div key={key}>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              {label}: {formData.priorities?.[key]} points
+              {label}: {(formData.priorities as Record<string, number>)?.[key]} points
             </label>
             <input
               type="range"
@@ -735,7 +753,7 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: any) {
               max="10"
               step="1"
               className="w-full"
-              value={formData.priorities?.[key] || 5}
+              value={(formData.priorities as Record<string, number>)?.[key] || 5}
               onChange={(e) => updateNestedData('priorities', key, parseInt(e.target.value))}
             />
             <div className="flex justify-between text-xs text-slate-500">

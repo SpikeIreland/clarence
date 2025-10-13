@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 // ========== SECTION 1: INTERFACES ==========
@@ -57,6 +57,20 @@ interface ProviderCapabilities {
   }
 }
 
+// Type for nested keys in ProviderCapabilities
+type NestedKeyOf<T> = keyof T | 'contractPositions' | 'flexibility'
+
+// Props interfaces for step components
+interface StepComponentProps {
+  formData: Partial<ProviderCapabilities>
+  updateFormData: (field: keyof ProviderCapabilities, value: string | number) => void
+}
+
+interface NestedStepComponentProps {
+  formData: Partial<ProviderCapabilities>
+  updateNestedData: (section: NestedKeyOf<ProviderCapabilities>, field: string, value: string | number) => void
+}
+
 // ========== SECTION 2: MAIN COMPONENT ==========
 export default function ProviderCapabilitiesForm() {
   const router = useRouter()
@@ -102,25 +116,26 @@ export default function ProviderCapabilitiesForm() {
     else if (formData.demandLevel === 'Seeking Growth') leverage -= 10
     
     // Win rate factor
-    if (formData.winRate >= 70) leverage += 10
-    else if (formData.winRate <= 30) leverage -= 10
+    const winRate = formData.winRate || 50
+    if (winRate >= 70) leverage += 10
+    else if (winRate <= 30) leverage -= 10
     
     return Math.max(20, Math.min(80, leverage))
   }
 
   // ========== SECTION 5: FORM HANDLERS ==========
-  const updateFormData = (field: string, value: any) => {
+  const updateFormData = (field: keyof ProviderCapabilities, value: string | number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }))
   }
 
-  const updateNestedData = (section: string, field: string, value: any) => {
+  const updateNestedData = (section: NestedKeyOf<ProviderCapabilities>, field: string, value: string | number) => {
     setFormData(prev => ({
       ...prev,
       [section]: {
-        ...prev[section as keyof ProviderCapabilities] as any,
+        ...(prev[section as keyof ProviderCapabilities] as Record<string, unknown>),
         [field]: value
       }
     }))
@@ -277,7 +292,7 @@ export default function ProviderCapabilitiesForm() {
 // ========== SECTION 9: STEP COMPONENTS ==========
 
 // Step 1: Company Information
-function CompanyInfoStep({ formData, updateFormData }: any) {
+function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Company Information</h2>
@@ -378,14 +393,14 @@ function CompanyInfoStep({ formData, updateFormData }: any) {
 }
 
 // Step 2: Market Position
-function MarketPositionStep({ formData, updateFormData }: any) {
+function MarketPositionStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Market Position & Leverage</h2>
       
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <p className="text-sm text-blue-800">
-          This information determines your leverage position in CLARENCE's negotiation algorithm.
+          This information determines your leverage position in CLARENCE&apos;s negotiation algorithm.
         </p>
       </div>
 
@@ -483,7 +498,7 @@ function MarketPositionStep({ formData, updateFormData }: any) {
 }
 
 // Step 3: Service Capabilities
-function ServiceCapabilitiesStep({ formData, updateFormData }: any) {
+function ServiceCapabilitiesStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Service Capabilities</h2>
@@ -567,7 +582,7 @@ function ServiceCapabilitiesStep({ formData, updateFormData }: any) {
 }
 
 // Step 4: Commercial Terms
-function CommercialTermsStep({ formData, updateFormData }: any) {
+function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Commercial Terms</h2>
@@ -669,7 +684,7 @@ function CommercialTermsStep({ formData, updateFormData }: any) {
 }
 
 // Step 5: Contract Positions
-function ContractPositionsStep({ formData, updateNestedData }: any) {
+function ContractPositionsStep({ formData, updateNestedData }: NestedStepComponentProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-medium text-slate-800 mb-4">Standard Contract Positions</h2>
@@ -746,8 +761,9 @@ function ContractPositionsStep({ formData, updateNestedData }: any) {
 }
 
 // Step 6: Flexibility Indicators
-function FlexibilityStep({ formData, updateNestedData }: any) {
-  const totalFlexibility = Object.values(formData.flexibility || {}).reduce((sum: number, val: any) => sum + val, 0)
+function FlexibilityStep({ formData, updateNestedData }: NestedStepComponentProps) {
+  const flexibilityValues = formData.flexibility || { pricing: 5, terms: 5, scope: 5, timeline: 5, location: 5 }
+  const totalFlexibility = Object.values(flexibilityValues).reduce((sum: number, val: number) => sum + val, 0)
   
   return (
     <div className="space-y-6">
@@ -772,7 +788,7 @@ function FlexibilityStep({ formData, updateNestedData }: any) {
         }).map(([key, label]) => (
           <div key={key}>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              {label}: {formData.flexibility?.[key]} / 10
+              {label}: {(formData.flexibility as Record<string, number>)?.[key]} / 10
             </label>
             <input
               type="range"
@@ -780,7 +796,7 @@ function FlexibilityStep({ formData, updateNestedData }: any) {
               max="10"
               step="1"
               className="w-full"
-              value={formData.flexibility?.[key] || 5}
+              value={(formData.flexibility as Record<string, number>)?.[key] || 5}
               onChange={(e) => updateNestedData('flexibility', key, parseInt(e.target.value))}
             />
             <div className="flex justify-between text-xs text-slate-500">
