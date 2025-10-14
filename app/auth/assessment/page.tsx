@@ -1400,6 +1400,7 @@ function PreliminaryAssessmentContent() {
                   )}
                 </div>
               </div>
+)}
 
 // ========== SECTION 17: MAIN EXPORT WITH SUSPENSE ==========
               export default function PreliminaryAssessment() {
