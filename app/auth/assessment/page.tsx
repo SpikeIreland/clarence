@@ -1354,70 +1354,76 @@ function PreliminaryAssessmentContent() {
                   </button>
                 </div>
               )}
-
-              {/* ========== SECTION 16: ACTION BUTTONS (INTEGRATED) ========== */}
-              <div className="flex items-center justify-between mt-6">
-                <button
-                  onClick={() => router.push('/auth/contracts-dashboard')}
-                  className="text-slate-600 hover:text-slate-900 font-medium text-sm flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  Save & Return to Dashboard
-                </button>
-
-                <div className="flex gap-3">
-                  {!assessmentComplete ? (
-                    <button
-                      onClick={handleSubmitAssessment}
-                      disabled={!selectedProvider}
-                      className={`px-6 py-3 rounded-lg font-medium text-sm shadow-sm transition ${selectedProvider
-                        ? 'bg-green-600 hover:bg-green-700 text-white'
-                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                        }`}
-                    >
-                      Complete Assessment & Continue
-                    </button>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2 px-4 py-3 bg-green-50 text-green-700 rounded-lg border border-green-200">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="font-medium text-sm">Assessment Complete</span>
-                      </div>
-                      <button
-                        onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
-                        className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2"
-                      >
-                        Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points)
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
             </div>
+          </div>
+        ) : (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
+            <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
+          </div>
+        )}
+
+        {/* ========== SECTION 16: ACTION BUTTONS (INTEGRATED) ========== */}
+        <div className="flex items-center justify-between mt-6">
+          <button
+            onClick={() => router.push('/auth/contracts-dashboard')}
+            className="text-slate-600 hover:text-slate-900 font-medium text-sm flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Save & Return to Dashboard
+          </button>
+
+          <div className="flex gap-3">
+            {!assessmentComplete ? (
+              <button
+                onClick={handleSubmitAssessment}
+                disabled={!selectedProvider}
+                className={`px-6 py-3 rounded-lg font-medium text-sm shadow-sm transition ${selectedProvider
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+              >
+                Complete Assessment & Continue
+              </button>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 px-4 py-3 bg-green-50 text-green-700 rounded-lg border border-green-200">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="font-medium text-sm">Assessment Complete</span>
+                </div>
+                <button
+                  onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
+                  className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2"
+                >
+                  Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points)
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </>
+            )}
           </div>
         </div>
-        )
-      }
+      </div>
+    </div>
+  )
+}
 
 // ========== SECTION 17: MAIN EXPORT WITH SUSPENSE ==========
-        export default function PreliminaryAssessment() {
+export default function PreliminaryAssessment() {
   return (
-        <Suspense fallback={
-          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
-              <p className="mt-4 text-slate-600">Loading assessment...</p>
-            </div>
-          </div>
-        }>
-          <PreliminaryAssessmentContent />
-        </Suspense>
-        )
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading assessment...</p>
+        </div>
+      </div>
+    }>
+      <PreliminaryAssessmentContent />
+    </Suspense>
+  )
 }
