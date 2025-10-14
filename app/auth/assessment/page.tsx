@@ -1026,10 +1026,10 @@ function PreliminaryAssessmentContent() {
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-medium text-slate-800">Negotiation Power Balance</h4>
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${leverageScore.customer >= 55
-                          ? 'bg-blue-100 text-blue-700'
-                          : leverageScore.customer >= 45
-                            ? 'bg-slate-100 text-slate-700'
-                            : 'bg-green-100 text-green-700'
+                        ? 'bg-blue-100 text-blue-700'
+                        : leverageScore.customer >= 45
+                          ? 'bg-slate-100 text-slate-700'
+                          : 'bg-green-100 text-green-700'
                         }`}>
                         {leverageScore.customer >= 55
                           ? 'Customer Advantage'
@@ -1373,8 +1373,8 @@ function PreliminaryAssessmentContent() {
                       onClick={handleSubmitAssessment}
                       disabled={!selectedProvider}
                       className={`px-6 py-3 rounded-lg font-medium text-sm shadow-sm transition ${selectedProvider
-                          ? 'bg-green-600 hover:bg-green-700 text-white'
-                          : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                         }`}
                     >
                       Complete Assessment & Continue
@@ -1400,20 +1400,23 @@ function PreliminaryAssessmentContent() {
                   )}
                 </div>
               </div>
-)}
+            </div>
+          </div>
+        )
+      }
 
 // ========== SECTION 17: MAIN EXPORT WITH SUSPENSE ==========
-              export default function PreliminaryAssessment() {
+        export default function PreliminaryAssessment() {
   return (
-              <Suspense fallback={
-                <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
-                    <p className="mt-4 text-slate-600">Loading assessment...</p>
-                  </div>
-                </div>
-              }>
-                <PreliminaryAssessmentContent />
-              </Suspense>
-              )
+        <Suspense fallback={
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
+              <p className="mt-4 text-slate-600">Loading assessment...</p>
+            </div>
+          </div>
+        }>
+          <PreliminaryAssessmentContent />
+        </Suspense>
+        )
 }
