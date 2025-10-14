@@ -1008,20 +1008,28 @@ function PreliminaryAssessmentContent() {
                 </div>
               )}
 
-              {/* ========== SECTION 15: LEVERAGE CONTENT (SIMPLIFIED FOR DEMO) ========== */}
+              {/* ========== SECTION 15: LEVERAGE CONTENT (COMPLETE 4-CATEGORY) ========== */}
               {activeSection === 'leverage' && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-medium text-slate-900 mb-4">Leverage Assessment</h3>
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Advanced Leverage Assessment</h3>
+
+                  {/* Introduction */}
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200 mb-6">
+                    <p className="text-sm text-purple-900">
+                      This assessment determines the negotiating power balance using 4 key categories.
+                      The leverage ratio directly impacts how many priority points each party receives to allocate across contract clauses.
+                    </p>
+                  </div>
 
                   {/* Leverage Score Display */}
                   <div className="bg-gradient-to-r from-blue-50 to-green-50 p-6 rounded-lg border border-slate-300">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-medium text-slate-800">Negotiation Power Balance</h4>
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${leverageScore.customer >= 55
-                        ? 'bg-blue-100 text-blue-700'
-                        : leverageScore.customer >= 45
-                          ? 'bg-slate-100 text-slate-700'
-                          : 'bg-green-100 text-green-700'
+                          ? 'bg-blue-100 text-blue-700'
+                          : leverageScore.customer >= 45
+                            ? 'bg-slate-100 text-slate-700'
+                            : 'bg-green-100 text-green-700'
                         }`}>
                         {leverageScore.customer >= 55
                           ? 'Customer Advantage'
@@ -1074,43 +1082,247 @@ function PreliminaryAssessmentContent() {
                     </div>
                   </div>
 
-                  {/* Quick Factor Input (Optional - can hide for demo) */}
+                  {/* CATEGORY 1: Market Dynamics */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
-                    <h4 className="font-medium text-slate-800 mb-4">Key Leverage Factors</h4>
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm mr-3">1</span>
+                      Market Dynamics (25% weight)
+                    </h4>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Number of Competing Providers</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Alternative Providers Available</label>
                         <select
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                           value={leverageFactors.marketDynamics.alternatives}
-                          onChange={(e) => {
-                            updateLeverageFactor('marketDynamics', 'alternatives', e.target.value)
-                            // Auto-calculate on change
-                            setTimeout(calculateAdvancedLeverage, 100)
-                          }}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'alternatives', e.target.value)}
                         >
                           <option value="">Select...</option>
-                          <option value="many">Many (7+ providers)</option>
-                          <option value="several">Several (4-6 providers)</option>
-                          <option value="few">Few (2-3 providers)</option>
+                          <option value="many">Many (10+ qualified providers)</option>
+                          <option value="several">Several (5-9 providers)</option>
+                          <option value="few">Few (2-4 providers)</option>
                           <option value="sole">Sole source</option>
                         </select>
                       </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Market Conditions</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.marketDynamics.marketCondition}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'marketCondition', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="buyer">Strong buyer&apos;s market</option>
+                          <option value="balanced">Balanced market</option>
+                          <option value="seller">Strong seller&apos;s market</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Customer Time Pressure</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.marketDynamics.customerTimePresure}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'customerTimePresure', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="urgent">Urgent (need decision within weeks)</option>
+                          <option value="moderate">Moderate (1-3 months)</option>
+                          <option value="relaxed">Relaxed (3+ months)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider Capacity</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.marketDynamics.providerCapacity}
+                          onChange={(e) => updateLeverageFactor('marketDynamics', 'providerCapacity', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="eager">Eager for business</option>
+                          <option value="available">Available capacity</option>
+                          <option value="constrained">Capacity constrained</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CATEGORY 2: Economic Factors */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-sm mr-3">2</span>
+                      Economic Factors (25% weight)
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Deal Size Relative to Customer Budget</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.dealSizeRatio}
+                          onChange={(e) => updateLeverageFactor('economic', 'dealSizeRatio', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="minimal">Minimal (&lt;2% of IT budget)</option>
+                          <option value="moderate">Moderate (2-10% of budget)</option>
+                          <option value="significant">Significant (10-25% of budget)</option>
+                          <option value="major">Major (&gt;25% of budget)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider Dependence on This Deal</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.providerDependence}
+                          onChange={(e) => updateLeverageFactor('economic', 'providerDependence', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="critical">Critical (&gt;15% of provider revenue)</option>
+                          <option value="important">Important (5-15% of revenue)</option>
+                          <option value="small">Small (1-5% of revenue)</option>
+                          <option value="tiny">Tiny (&lt;1% of revenue)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Switching Costs</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.switchingCosts}
+                          onChange={(e) => updateLeverageFactor('economic', 'switchingCosts', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="minimal">Minimal (easy to switch)</option>
+                          <option value="moderate">Moderate (some disruption)</option>
+                          <option value="high">High (significant cost/time)</option>
+                          <option value="prohibitive">Prohibitive (near impossible)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Budget Flexibility</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.economic.budgetFlexibility}
+                          onChange={(e) => updateLeverageFactor('economic', 'budgetFlexibility', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="flexible">Flexible (can adjust budget)</option>
+                          <option value="moderate">Moderate flexibility</option>
+                          <option value="fixed">Fixed (hard budget limit)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CATEGORY 3: Strategic Position */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm mr-3">3</span>
+                      Strategic Position (25% weight)
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Service Criticality</label>
                         <select
                           className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                           value={leverageFactors.strategic.serviceCriticality}
-                          onChange={(e) => {
-                            updateLeverageFactor('strategic', 'serviceCriticality', e.target.value)
-                            setTimeout(calculateAdvancedLeverage, 100)
-                          }}
+                          onChange={(e) => updateLeverageFactor('strategic', 'serviceCriticality', e.target.value)}
                         >
                           <option value="">Select...</option>
-                          <option value="mission-critical">Mission Critical</option>
-                          <option value="business-critical">Business Critical</option>
-                          <option value="important">Important</option>
-                          <option value="non-core">Non-core</option>
+                          <option value="mission-critical">Mission-critical (business stops without it)</option>
+                          <option value="business-critical">Business-critical (major impact)</option>
+                          <option value="important">Important (noticeable impact)</option>
+                          <option value="non-core">Non-core (minimal impact)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider&apos;s Strategic Interest</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.strategic.providerInterest}
+                          onChange={(e) => updateLeverageFactor('strategic', 'providerInterest', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="critical">Critical (must-win deal)</option>
+                          <option value="high">High interest (want this deal)</option>
+                          <option value="moderate">Moderate interest</option>
+                          <option value="low">Low interest (take it or leave it)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Incumbent Advantage</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.strategic.incumbentAdvantage}
+                          onChange={(e) => updateLeverageFactor('strategic', 'incumbentAdvantage', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="none">No incumbent / New service</option>
+                          <option value="weak">Weak incumbent advantage</option>
+                          <option value="moderate">Moderate advantage</option>
+                          <option value="strong">Strong incumbent advantage</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Reputational Value</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.strategic.reputationalValue}
+                          onChange={(e) => updateLeverageFactor('strategic', 'reputationalValue', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="minimal">Minimal (standard reference)</option>
+                          <option value="moderate">Moderate (good reference)</option>
+                          <option value="significant">Significant (strong brand value)</option>
+                          <option value="transformational">Transformational (game-changing reference)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CATEGORY 4: BATNA Analysis */}
+                  <div className="bg-white p-6 rounded-lg border border-slate-200">
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <span className="w-8 h-8 bg-red-100 text-red-700 rounded-full flex items-center justify-center text-sm mr-3">4</span>
+                      BATNA - Best Alternative to Negotiated Agreement (25% weight)
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Customer&apos;s Best Alternative</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.batna.customerAlternative}
+                          onChange={(e) => updateLeverageFactor('batna', 'customerAlternative', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="strong">Strong alternative (credible Plan B)</option>
+                          <option value="moderate">Moderate alternative (acceptable fallback)</option>
+                          <option value="weak">Weak alternative (poor fallback)</option>
+                          <option value="none">No alternative (must do this deal)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Provider&apos;s Pipeline Strength</label>
+                        <select
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                          value={leverageFactors.batna.providerPipeline}
+                          onChange={(e) => updateLeverageFactor('batna', 'providerPipeline', e.target.value)}
+                        >
+                          <option value="">Select...</option>
+                          <option value="full">Full pipeline (can walk away)</option>
+                          <option value="healthy">Healthy pipeline (other options)</option>
+                          <option value="light">Light pipeline (need this deal)</option>
+                          <option value="desperate">Desperate (must win this deal)</option>
                         </select>
                       </div>
                     </div>
@@ -1125,9 +1337,10 @@ function PreliminaryAssessmentContent() {
                       <div>
                         <p className="text-sm font-medium text-amber-900">How CLARENCE Uses This</p>
                         <p className="text-xs text-amber-700 mt-1">
-                          The leverage percentage determines negotiation points allocation. During contract negotiation,
-                          each party uses their points to prioritize which clauses matter most to them. CLARENCE algorithm
-                          then calculates optimal compromise positions based on these priorities and the leverage balance.
+                          All 4 categories (Market Dynamics, Economic Factors, Strategic Position, BATNA) are equally weighted at 25% each.
+                          The algorithm calculates the leverage percentage, which determines negotiation point allocation. During contract negotiation,
+                          each party uses their points to prioritize which clauses matter most. CLARENCE then calculates optimal compromise positions
+                          based on these priorities and the leverage balance.
                         </p>
                       </div>
                     </div>
@@ -1141,118 +1354,65 @@ function PreliminaryAssessmentContent() {
                   </button>
                 </div>
               )}
-            </div>
-          </div>
-        ) : (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
-            <p className="text-yellow-800 mb-4">Please select a provider to begin the assessment</p>
-          </div>
-        )}
 
-        {/* ========== SECTION 16: ACTION BUTTONS ========== */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              {!assessmentComplete ? (
+              {/* ========== SECTION 16: ACTION BUTTONS (INTEGRATED) ========== */}
+              <div className="flex items-center justify-between mt-6">
                 <button
-                  onClick={handleSubmitAssessment}
-                  disabled={!selectedProvider}
-                  className={`px-6 py-3 rounded-lg font-medium text-sm ${selectedProvider
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                    }`}
+                  onClick={() => router.push('/auth/contracts-dashboard')}
+                  className="text-slate-600 hover:text-slate-900 font-medium text-sm flex items-center gap-2"
                 >
-                  Complete Assessment
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Save & Return to Dashboard
                 </button>
-              ) : (
-                <>
-                  <button
-                    className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
-                    disabled
-                  >
-                    ✓ Assessment Complete
-                  </button>
-                  <button
-                    onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
-                    className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm"
-                  >
-                    Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points) →
-                  </button>
-                </>
-              )}
-            </div>
 
-            <div className="flex justify-end">
-              <button
-                onClick={() => router.push('/auth/contracts-dashboard')}
-                className="text-slate-600 hover:text-slate-900 font-medium text-sm"
-              >
-                Save & Return Later
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ========== SECTION 16: ACTION BUTTONS ========== */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              {!assessmentComplete ? (
-                <button
-                  onClick={handleSubmitAssessment}
-                  disabled={!selectedProvider}
-                  className={`px-6 py-3 rounded-lg font-medium text-sm ${selectedProvider
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                    }`}
-                >
-                  Complete Assessment
-                </button>
-              ) : (
-                <>
-                  <button
-                    className="bg-slate-400 text-white px-6 py-3 rounded-lg font-medium text-sm cursor-not-allowed"
-                    disabled
-                  >
-                    ✓ Assessment Complete
-                  </button>
-                  <button
-                    onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
-                    className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm"
-                  >
-                    Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points) →
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={() => router.push('/auth/contracts-dashboard')}
-                className="text-slate-600 hover:text-slate-900 font-medium text-sm"
-              >
-                Save & Return Later
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+                <div className="flex gap-3">
+                  {!assessmentComplete ? (
+                    <button
+                      onClick={handleSubmitAssessment}
+                      disabled={!selectedProvider}
+                      className={`px-6 py-3 rounded-lg font-medium text-sm shadow-sm transition ${selectedProvider
+                          ? 'bg-green-600 hover:bg-green-700 text-white'
+                          : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        }`}
+                    >
+                      Complete Assessment & Continue
+                    </button>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 px-4 py-3 bg-green-50 text-green-700 rounded-lg border border-green-200">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="font-medium text-sm">Assessment Complete</span>
+                      </div>
+                      <button
+                        onClick={() => router.push(`/auth/foundation?session=${session?.sessionId}&provider=${selectedProvider?.providerId}`)}
+                        className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg font-medium text-sm shadow-sm flex items-center gap-2"
+                      >
+                        Proceed to Phase 2: Foundation ({Math.floor(leverageScore.customer * 2)} points)
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
 
 // ========== SECTION 17: MAIN EXPORT WITH SUSPENSE ==========
-export default function PreliminaryAssessment() {
+              export default function PreliminaryAssessment() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Loading assessment...</p>
-        </div>
-      </div>
-    }>
-      <PreliminaryAssessmentContent />
-    </Suspense>
-  )
+              <Suspense fallback={
+                <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
+                    <p className="mt-4 text-slate-600">Loading assessment...</p>
+                  </div>
+                </div>
+              }>
+                <PreliminaryAssessmentContent />
+              </Suspense>
+              )
 }
