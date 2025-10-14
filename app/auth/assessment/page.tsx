@@ -474,10 +474,55 @@ function PreliminaryAssessmentContent() {
       const sessionId = searchParams.get('session') || searchParams.get('session_id')
 
       if (sessionId) {
+        // Load providers first
         await loadProviders(sessionId)
+
+        // NEW: Load customer requirements with leverage data from API
+        try {
+          const requirementsResponse = await fetch(
+            `https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session=${sessionId}`
+          )
+
+          if (requirementsResponse.ok) {
+            const requirementsData = await requirementsResponse.json()
+
+            console.log('✅ Customer requirements loaded:', requirementsData)
+
+            // Extract and set leverage scores from API
+            if (requirementsData.leverage) {
+              const customerLev = requirementsData.leverage.customerLeveragePercentage || 65
+              const providerLev = requirementsData.leverage.providerLeveragePercentage || 35
+
+              setLeverageScore({
+                customer: customerLev,
+                provider: providerLev
+              })
+
+              console.log('✅ Leverage set from API:', { customer: customerLev, provider: providerLev })
+            }
+
+            // Set session data from API response
+            const apiSession: Session = {
+              sessionId: requirementsData.sessionId || sessionId,
+              sessionNumber: requirementsData.sessionNumber,
+              customerCompany: requirementsData.customer?.company || 'Customer',
+              serviceRequired: requirementsData.requirements?.serviceRequired || 'Service',
+              dealValue: requirementsData.requirements?.budget?.dealValue?.toString() || '0',
+              status: requirementsData.metadata?.sessionStatus || 'initiated',
+              phase: 1
+            }
+            setSession(apiSession)
+            setLoading(false)
+            return
+          } else {
+            console.log('⚠️ API returned error, using demo data')
+          }
+        } catch (apiError) {
+          console.log('⚠️ API call failed, using demo data:', apiError)
+        }
       }
 
-      // Set demo session
+      // Fallback demo session if API fails or no sessionId
       const demoSession: Session = {
         sessionId: sessionId || 'demo-session',
         customerCompany: 'Demo Customer Ltd',
@@ -488,8 +533,8 @@ function PreliminaryAssessmentContent() {
       }
       setSession(demoSession)
 
-    } catch {
-      console.error('Error loading session')
+    } catch (error) {
+      console.error('❌ Error in loadSessionData:', error)
     } finally {
       setLoading(false)
     }
@@ -1113,8 +1158,8 @@ function PreliminaryAssessmentContent() {
                   onClick={handleSubmitAssessment}
                   disabled={!selectedProvider}
                   className={`px-6 py-3 rounded-lg font-medium text-sm ${selectedProvider
-                      ? 'bg-green-600 hover:bg-green-700 text-white'
-                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                     }`}
                 >
                   Complete Assessment
