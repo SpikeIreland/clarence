@@ -99,6 +99,22 @@ interface AdvancedLeverageFactors {
   }
 }
 
+interface ProviderAPIResponse {
+  provider_id?: string;
+  user_id?: string;
+  providerId?: string;
+  company_name?: string;
+  provider_company?: string;
+  providerName?: string;
+  annual_revenue?: string;
+  annual_revenue_range?: string;
+  providerTurnover?: string;
+  number_of_employees?: string;
+  providerEmployees?: string;
+  years_in_business?: string;
+  providerExperience?: string;
+}
+
 // ========== SECTION 2: MAIN COMPONENT START ==========
 function PreliminaryAssessmentContent() {
   const router = useRouter()
@@ -250,7 +266,7 @@ function PreliminaryAssessmentContent() {
           [assessmentType]: result.assessment || 'Assessment completed'
         }))
       }
-    } catch (err) {
+    } catch {
       console.error('CLARENCE Assessment Error')
       // Use fallback assessment
       setClarenceAssessments(prev => ({
@@ -428,7 +444,7 @@ function PreliminaryAssessmentContent() {
     isLoadingRef.current = true
 
     try {
-      // Try API first
+      // Try API first (keep your existing endpoint)
       const response = await fetch(
         `https://spikeislandstudios.app.n8n.cloud/webhook/providers-api?session_id=${sessionId}`
       )
@@ -436,17 +452,29 @@ function PreliminaryAssessmentContent() {
       if (response.ok) {
         const data = await response.json()
         if (data && data.length > 0) {
-          setProviders(data)
+          // MAP THE DATA PROPERLY HERE - this is the key change
+          const mappedProviders = data.map((p: ProviderAPIResponse) => ({
+            providerId: p.provider_id || p.user_id || p.providerId,
+            providerName: p.company_name || p.provider_company || p.providerName || 'Unknown Provider',
+            providerTurnover: p.annual_revenue || p.annual_revenue_range || p.providerTurnover || 'Not specified',
+            providerEmployees: p.number_of_employees || p.providerEmployees || 'Not specified',
+            providerExperience: p.years_in_business || p.providerExperience || 'Not specified'
+          }))
+
+          console.log('Loaded providers from API:', mappedProviders) // Add logging
+
+          setProviders(mappedProviders)
           providersLoadedRef.current = true
-          if (data.length === 1) selectProvider(data[0])
+          if (mappedProviders.length === 1) selectProvider(mappedProviders[0])
+          isLoadingRef.current = false
           return
         }
       }
-    } catch {
-      console.log('API failed, using mock data')
+    } catch (error) {
+      console.log('API failed:', error)
     }
 
-    // Use mock data as fallback
+    // Use mock data as fallback (keep your existing mock data)
     const mockProviders: Provider[] = [
       {
         providerId: '3f126f60-561a-4f14-a847-70ac8138fecd',
@@ -463,6 +491,9 @@ function PreliminaryAssessmentContent() {
         providerExperience: '15+ years'
       }
     ]
+
+    console.log('Using mock providers:', mockProviders) // Add logging
+
     setProviders(mockProviders)
     providersLoadedRef.current = true
     isLoadingRef.current = false
