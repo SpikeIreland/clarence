@@ -99,21 +99,6 @@ interface AdvancedLeverageFactors {
   }
 }
 
-interface ProviderAPIResponse {
-  provider_id?: string;
-  user_id?: string;
-  providerId?: string;
-  company_name?: string;
-  provider_company?: string;
-  providerName?: string;
-  annual_revenue?: string;
-  annual_revenue_range?: string;
-  providerTurnover?: string;
-  number_of_employees?: string;
-  providerEmployees?: string;
-  years_in_business?: string;
-  providerExperience?: string;
-}
 
 // ========== SECTION 2: MAIN COMPONENT START ==========
 function PreliminaryAssessmentContent() {
@@ -444,24 +429,29 @@ function PreliminaryAssessmentContent() {
     isLoadingRef.current = true
 
     try {
-      // Try API first (keep your existing endpoint)
+      // FIXED: Call the correct API endpoint
       const response = await fetch(
-        `https://spikeislandstudios.app.n8n.cloud/webhook/providers-api?session_id=${sessionId}`
+        `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${sessionId}`
       )
 
       if (response.ok) {
-        const data = await response.json()
-        if (data && data.length > 0) {
-          // MAP THE DATA PROPERLY HERE - this is the key change
-          const mappedProviders = data.map((p: ProviderAPIResponse) => ({
-            providerId: p.provider_id || p.user_id || p.providerId,
-            providerName: p.company_name || p.provider_company || p.providerName || 'Unknown Provider',
-            providerTurnover: p.annual_revenue || p.annual_revenue_range || p.providerTurnover || 'Not specified',
-            providerEmployees: p.number_of_employees || p.providerEmployees || 'Not specified',
-            providerExperience: p.years_in_business || p.providerExperience || 'Not specified'
+        const result = await response.json()
+
+        // The API returns a wrapper object with data property
+        const data = result.data ? (Array.isArray(result.data) ? result.data : [result.data]) : []
+
+        if (data.length > 0) {
+          // Map the data properly from the API response structure
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const mappedProviders = data.map((p: any) => ({
+            providerId: p.providerId || p.provider_id,
+            providerName: p.provider?.company || p.provider_company || 'Unknown Provider',
+            providerTurnover: p.capabilities?.company?.annualRevenue || p.annual_revenue_range || 'Not specified',
+            providerEmployees: p.capabilities?.company?.numberOfEmployees || p.number_of_employees || 'Not specified',
+            providerExperience: p.capabilities?.company?.yearsInBusiness || p.years_in_business || 'Not specified'
           }))
 
-          console.log('Loaded providers from API:', mappedProviders) // Add logging
+          console.log('Loaded providers from API:', mappedProviders)
 
           setProviders(mappedProviders)
           providersLoadedRef.current = true
@@ -470,9 +460,11 @@ function PreliminaryAssessmentContent() {
           return
         }
       }
+      
     } catch (error) {
       console.log('API failed:', error)
     }
+
 
     // Use mock data as fallback (keep your existing mock data)
     const mockProviders: Provider[] = [
