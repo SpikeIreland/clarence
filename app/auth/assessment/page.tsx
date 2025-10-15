@@ -375,6 +375,11 @@ function PreliminaryAssessmentContent() {
   }
 
   // Auto-populate Deal Profile from data
+
+  console.log('customerRequirements object:', customerRequirements)
+  console.log('serviceRequired path:', customerRequirements?.requirements?.serviceRequired)
+  console.log('businessChallenge path:', customerRequirements?.requirements?.businessChallenge)
+
   const populateDealProfile = (capabilities: Record<string, unknown>, requirements: Record<string, unknown>, sessionData: Session | null) => {
     console.log('Auto-populating Deal Profile...')
 
