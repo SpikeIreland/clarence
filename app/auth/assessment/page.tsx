@@ -795,7 +795,7 @@ function PreliminaryAssessmentContent() {
                       <div>
                         <label className="block text-sm font-medium text-blue-800 mb-1">Service Required</label>
                         <div className="px-3 py-2 bg-white rounded-lg border border-blue-200">
-                          {customerRequirements?.requirements?.serviceRequired || session?.serviceRequired || 'Not specified'}
+                          {customerRequirements?.serviceRequired || customerRequirements?.requirements?.serviceRequired || session?.serviceRequired || 'Not specified'}
                         </div>
                       </div>
 
@@ -832,14 +832,14 @@ function PreliminaryAssessmentContent() {
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-blue-800 mb-1">Business Challenge</label>
                       <div className="px-3 py-2 bg-white rounded-lg border border-blue-200 text-sm">
-                        {customerRequirements?.requirements?.businessChallenge || 'Not specified'}
+                        {customerRequirements?.businessChallenge || customerRequirements?.requirements?.businessChallenge || 'Not specified'}
                       </div>
                     </div>
 
                     <div className="mt-3">
                       <label className="block text-sm font-medium text-blue-800 mb-1">Desired Outcome</label>
                       <div className="px-3 py-2 bg-white rounded-lg border border-blue-200 text-sm">
-                        {customerRequirements?.requirements?.desiredOutcome || 'Not specified'}
+                        {customerRequirements?.desiredOutcome || customerRequirements?.requirements?.desiredOutcome || 'Not specified'}
                       </div>
                     </div>
                   </div>
@@ -930,8 +930,7 @@ function PreliminaryAssessmentContent() {
                       <div>
                         <label className="block text-sm font-medium text-green-800 mb-1">Payment Terms</label>
                         <div className="px-3 py-2 bg-white rounded-lg border border-green-200">
-                          NET {customerRequirements?.requirements?.commercial?.paymentTermsRequired || '45'} days
-                          {customerRequirements?.requirements?.commercial?.paymentTermsFlexibility === false &&
+                          {(customerRequirements?.paymentTermsFlexibility === false || customerRequirements?.requirements?.commercial?.paymentTermsFlexibility === false) &&
                             <span className="ml-2 text-xs text-red-600">(Non-negotiable)</span>
                           }
                         </div>
