@@ -429,7 +429,6 @@ function PreliminaryAssessmentContent() {
     isLoadingRef.current = true
 
     try {
-      // FIXED: Call the correct API endpoint
       const response = await fetch(
         `https://spikeislandstudios.app.n8n.cloud/webhook/provider-capabilities-api?session_id=${sessionId}`
       )
@@ -437,21 +436,25 @@ function PreliminaryAssessmentContent() {
       if (response.ok) {
         const result = await response.json()
 
-        // The API returns a wrapper object with data property
-        const data = result.data ? (Array.isArray(result.data) ? result.data : [result.data]) : []
+        console.log('API Response:', result) // Add this to see the actual structure
 
-        if (data.length > 0) {
-          // Map the data properly from the API response structure
+        // Handle the response structure properly
+        const providersArray = result.data ?
+          (Array.isArray(result.data) ? result.data : [result.data]) :
+          (Array.isArray(result) ? result : [result])
+
+        if (providersArray.length > 0) {
+          // Update the mapping to use the actual field names from the API
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const mappedProviders = data.map((p: any) => ({
-            providerId: p.providerId || p.provider_id,
-            providerName: p.provider?.company || p.provider_company || 'Unknown Provider',
-            providerTurnover: p.capabilities?.company?.annualRevenue || p.annual_revenue_range || 'Not specified',
-            providerEmployees: p.capabilities?.company?.numberOfEmployees || p.number_of_employees || 'Not specified',
-            providerExperience: p.capabilities?.company?.yearsInBusiness || p.years_in_business || 'Not specified'
+          const mappedProviders = providersArray.map((p: any) => ({
+            providerId: p.provider_id || p.providerId,
+            providerName: p.provider_company || p.company_name || p.providerName || 'Unknown Provider',
+            providerTurnover: p.annual_revenue_range || p.providerTurnover || 'Not specified',
+            providerEmployees: p.number_of_employees?.toString() || p.providerEmployees || 'Not specified',
+            providerExperience: p.years_in_business?.toString() || p.providerExperience || 'Not specified'
           }))
 
-          console.log('Loaded providers from API:', mappedProviders)
+          console.log('Mapped providers:', mappedProviders) // See the mapped data
 
           setProviders(mappedProviders)
           providersLoadedRef.current = true
@@ -460,11 +463,9 @@ function PreliminaryAssessmentContent() {
           return
         }
       }
-      
     } catch (error) {
       console.log('API failed:', error)
     }
-
 
     // Use mock data as fallback (keep your existing mock data)
     const mockProviders: Provider[] = [
