@@ -380,6 +380,15 @@ function PreliminaryAssessmentContent() {
   console.log('serviceRequired path:', customerRequirements?.requirements?.serviceRequired)
   console.log('businessChallenge path:', customerRequirements?.requirements?.businessChallenge)
 
+
+  if (customerRequirements) {
+    console.log('Requirements keys:', Object.keys(customerRequirements))
+    console.log('Requirements.requirements:', customerRequirements.requirements)
+    if (customerRequirements.requirements) {
+      console.log('Requirements.requirements keys:', Object.keys(customerRequirements.requirements))
+    }
+  }
+
   const populateDealProfile = (capabilities: Record<string, unknown>, requirements: Record<string, unknown>, sessionData: Session | null) => {
     console.log('Auto-populating Deal Profile...')
 
@@ -927,12 +936,14 @@ function PreliminaryAssessmentContent() {
                         </div>
                       </div>
 
+                      // Replace the Payment Terms div with this:
                       <div>
                         <label className="block text-sm font-medium text-green-800 mb-1">Payment Terms</label>
                         <div className="px-3 py-2 bg-white rounded-lg border border-green-200">
-                          {(customerRequirements?.paymentTermsFlexibility === false || customerRequirements?.requirements?.commercial?.paymentTermsFlexibility === false) &&
+                          NET {customerRequirements?.requirements?.commercial?.paymentTermsRequired || '45'} days
+                          {customerRequirements?.requirements?.commercial?.paymentTermsFlexibility === false && (
                             <span className="ml-2 text-xs text-red-600">(Non-negotiable)</span>
-                          }
+                          )}
                         </div>
                       </div>
 
