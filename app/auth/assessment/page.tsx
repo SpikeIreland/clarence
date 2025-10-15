@@ -936,7 +936,6 @@ function PreliminaryAssessmentContent() {
                         </div>
                       </div>
 
-                      // Replace the Payment Terms div with this:
                       <div>
                         <label className="block text-sm font-medium text-green-800 mb-1">Payment Terms</label>
                         <div className="px-3 py-2 bg-white rounded-lg border border-green-200">
