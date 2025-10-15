@@ -436,25 +436,25 @@ function PreliminaryAssessmentContent() {
       if (response.ok) {
         const result = await response.json()
 
-        console.log('API Response:', result) // Add this to see the actual structure
+        console.log('API Response:', result) // Debug log
 
-        // Handle the response structure properly
+        // The API returns data wrapped in a success object
         const providersArray = result.data ?
           (Array.isArray(result.data) ? result.data : [result.data]) :
-          (Array.isArray(result) ? result : [result])
+          []
 
         if (providersArray.length > 0) {
-          // Update the mapping to use the actual field names from the API
+          // FIX: Update mapping to use the actual structure returned by API
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const mappedProviders = providersArray.map((p: any) => ({
-            providerId: p.provider_id || p.providerId,
-            providerName: p.provider_company || p.company_name || p.providerName || 'Unknown Provider',
-            providerTurnover: p.annual_revenue_range || p.providerTurnover || 'Not specified',
-            providerEmployees: p.number_of_employees?.toString() || p.providerEmployees || 'Not specified',
-            providerExperience: p.years_in_business?.toString() || p.providerExperience || 'Not specified'
+            providerId: p.providerId || p.provider_id,
+            providerName: p.provider?.company || p.capabilities?.company?.name || 'Unknown Provider', // FIXED PATH
+            providerTurnover: p.capabilities?.company?.annualRevenue || 'Not specified',
+            providerEmployees: p.capabilities?.company?.numberOfEmployees?.toString() || 'Not specified',
+            providerExperience: p.capabilities?.company?.yearsInBusiness?.toString() + ' years' || 'Not specified'
           }))
 
-          console.log('Mapped providers:', mappedProviders) // See the mapped data
+          console.log('Mapped providers:', mappedProviders) // Debug log
 
           setProviders(mappedProviders)
           providersLoadedRef.current = true
