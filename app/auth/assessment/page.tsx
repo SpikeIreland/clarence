@@ -136,6 +136,10 @@ function PreliminaryAssessmentContent() {
     successCriteria: ''
   })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [customerRequirements, setCustomerRequirements] = useState<any>(null)
+
+
   // Party Fit Data State
   const [partyFitData, setPartyFitData] = useState<PartyFitData>({
     strategic: {
@@ -510,6 +514,8 @@ function PreliminaryAssessmentContent() {
           if (requirementsResponse.ok) {
             const requirementsData = await requirementsResponse.json()
 
+            setCustomerRequirements(requirementsData)
+
             console.log('✅ Customer requirements loaded:', requirementsData)
 
             // Extract and set leverage scores from API
@@ -766,100 +772,290 @@ function PreliminaryAssessmentContent() {
             </div>
 
             <div className="p-8">
-              {/* ========== SECTION 13: DEAL PROFILE CONTENT ========== */}
+
               {activeSection === 'profile' && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-medium text-slate-900 mb-4">Deal Profile</h3>
+                  <h3 className="text-xl font-medium text-slate-900 mb-4">Deal Profile & Requirements</h3>
 
-                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                    <label className="block text-sm font-medium text-purple-900 mb-2">Service Category</label>
-                    <select
-                      className="w-full px-3 py-2 border border-purple-300 rounded-lg bg-white"
-                      value={dealProfile.serviceCategory}
-                      onChange={(e) => setDealProfile({ ...dealProfile, serviceCategory: e.target.value })}
-                    >
-                      <option value="">Select service type...</option>
-                      <option value="customer-support">Customer Support</option>
-                      <option value="technical-support">Technical Support</option>
-                      <option value="it-services">IT Services</option>
-                      <option value="financial-support">Financial Support (F&A)</option>
-                      <option value="hr-services">HR Services</option>
-                    </select>
-                  </div>
+                  {/* Service Overview Section */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-900 mb-4 flex items-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Service Overview
+                    </h4>
 
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <h4 className="font-medium text-blue-900 mb-3">Contract Overview</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-blue-800 mb-1">Engagement Model</label>
-                        <select
-                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-                          value={dealProfile.engagementModel}
-                          onChange={(e) => setDealProfile({ ...dealProfile, engagementModel: e.target.value })}
-                        >
-                          <option value="">Select model...</option>
-                          <option value="full-outsource">Full Outsourcing</option>
-                          <option value="co-managed">Co-Managed Service</option>
-                          <option value="staff-augmentation">Staff Augmentation</option>
-                          <option value="managed-service">Managed Service</option>
-                        </select>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Service Required</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-blue-200">
+                          {customerRequirements?.requirements?.serviceRequired || session?.serviceRequired || 'Not specified'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Deal Value</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-blue-200 font-semibold">
+                          £{parseInt(customerRequirements?.requirements?.budget?.dealValue || session?.dealValue || '0').toLocaleString()}
+                        </div>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-blue-800 mb-1">Contract Duration</label>
-                        <select
-                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-                          value={dealProfile.duration}
-                          onChange={(e) => setDealProfile({ ...dealProfile, duration: e.target.value })}
-                        >
-                          <option value="12">12 months</option>
-                          <option value="24">24 months</option>
-                          <option value="36">36 months</option>
-                          <option value="48">48 months</option>
-                          <option value="60">60 months</option>
-                        </select>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-blue-200">
+                          {customerRequirements?.requirements?.team?.projectDurationMonths || '24'} months
+                        </div>
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-blue-800 mb-1">Total Contract Value</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-                          placeholder="e.g., £2,000,000"
-                          value={dealProfile.totalValue}
-                          onChange={(e) => setDealProfile({ ...dealProfile, totalValue: e.target.value })}
-                        />
+                        <label className="block text-sm font-medium text-blue-800 mb-1">Service Criticality</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-blue-200">
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm">{customerRequirements?.requirements?.serviceCriticality || 'Important'}</div>
+                            <div className="flex-1 bg-gray-200 rounded-full h-2">
+                              <div
+                                className="bg-blue-600 h-2 rounded-full"
+                                style={{ width: `${(customerRequirements?.requirements?.serviceCriticality || 5) * 10}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
+                    </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-blue-800 mb-1">Pricing Model</label>
-                        <select
-                          className="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white"
-                          value={dealProfile.pricingModel}
-                          onChange={(e) => setDealProfile({ ...dealProfile, pricingModel: e.target.value })}
-                        >
-                          <option value="">Select pricing...</option>
-                          <option value="fixed-price">Fixed Price</option>
-                          <option value="time-materials">Time & Materials</option>
-                          <option value="per-fte">Per FTE</option>
-                          <option value="per-transaction">Per Transaction</option>
-                        </select>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-blue-800 mb-1">Business Challenge</label>
+                      <div className="px-3 py-2 bg-white rounded-lg border border-blue-200 text-sm">
+                        {customerRequirements?.requirements?.businessChallenge || 'Not specified'}
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-blue-800 mb-1">Desired Outcome</label>
+                      <div className="px-3 py-2 bg-white rounded-lg border border-blue-200 text-sm">
+                        {customerRequirements?.requirements?.desiredOutcome || 'Not specified'}
                       </div>
                     </div>
                   </div>
 
+                  {/* Operational Requirements Section */}
                   <div className="bg-white p-6 rounded-lg border border-slate-200">
-                    <h4 className="font-medium text-slate-800 mb-3">Scope & Scale</h4>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Service Description</label>
-                      <textarea
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                        rows={3}
-                        placeholder="Describe the services required..."
-                        value={dealProfile.serviceDescription}
-                        onChange={(e) => setDealProfile({ ...dealProfile, serviceDescription: e.target.value })}
-                      />
+                    <h4 className="font-medium text-slate-800 mb-4 flex items-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Operational Requirements
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Team Size Required</label>
+                        <div className="px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                          {customerRequirements?.requirements?.team?.minimumSize || '5'} - {customerRequirements?.requirements?.team?.maximumSize || '20'} FTEs
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Required Start Date</label>
+                        <div className="px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                          {customerRequirements?.requirements?.team?.requiredStartDate ?
+                            new Date(customerRequirements.requirements.team.requiredStartDate).toLocaleDateString() :
+                            'ASAP'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Required Certifications</label>
+                        <div className="px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                          <div className="flex flex-wrap gap-1">
+                            {(customerRequirements?.requirements?.technical?.requiredCertifications || ['ISO 27001', 'SOC2']).map((cert: string, idx: number) => (
+                              <span key={idx} className="px-2 py-1 bg-slate-200 text-xs rounded-full">{cert}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Methodologies</label>
+                        <div className="px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                          <div className="flex flex-wrap gap-1">
+                            {(customerRequirements?.requirements?.technical?.requiredMethodologies || ['Agile']).map((method: string, idx: number) => (
+                              <span key={idx} className="px-2 py-1 bg-slate-200 text-xs rounded-full">{method}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
+
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Required Technologies</label>
+                      <div className="px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+                        {customerRequirements?.requirements?.technical?.requiredTechnologies?.join(', ') || 'Not specified'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Commercial Requirements Section */}
+                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-lg border border-green-200">
+                    <h4 className="font-medium text-green-900 mb-4 flex items-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Commercial Requirements
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-green-800 mb-1">Budget Range</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-green-200 font-semibold">
+                          £{(customerRequirements?.requirements?.budget?.min || 400000).toLocaleString()} -
+                          £{(customerRequirements?.requirements?.budget?.max || 600000).toLocaleString()}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-green-800 mb-1">Pricing Model</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-green-200">
+                          {customerRequirements?.requirements?.commercial?.preferredPricingModel || 'Time & Materials'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-green-800 mb-1">Payment Terms</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-green-200">
+                          NET {customerRequirements?.requirements?.commercial?.paymentTermsRequired || '45'} days
+                          {customerRequirements?.requirements?.commercial?.paymentTermsFlexibility === false &&
+                            <span className="ml-2 text-xs text-red-600">(Non-negotiable)</span>
+                          }
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-green-800 mb-1">Max Acceptable Rate</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-green-200">
+                          {customerRequirements?.requirements?.commercial?.maximumAcceptableRate ?
+                            `£${customerRequirements.requirements.commercial.maximumAcceptableRate}/day` :
+                            'Open to negotiation'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Risk & Compliance Requirements Section */}
+                  <div className="bg-gradient-to-r from-red-50 to-orange-50 p-6 rounded-lg border border-red-200">
+                    <h4 className="font-medium text-red-900 mb-4 flex items-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      Risk & Compliance Requirements
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-red-800 mb-1">Minimum Liability Cap</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-red-200">
+                          £{(customerRequirements?.requirements?.riskCompliance?.minimumLiabilityCap || 1000000).toLocaleString()}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-red-800 mb-1">Insurance Coverage</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-red-200">
+                          £{(customerRequirements?.requirements?.riskCompliance?.minimumInsuranceCoverage || 5000000).toLocaleString()}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-red-800 mb-1">Response Time SLA</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-red-200">
+                          ≤ {customerRequirements?.requirements?.riskCompliance?.maximumResponseTimeHours || '1'} hour(s)
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-red-800 mb-1">Availability SLA</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-red-200">
+                          ≥ {customerRequirements?.requirements?.riskCompliance?.minimumAvailabilityGuarantee || '99.5'}%
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-red-800 mb-1">Data Location</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-red-200">
+                          {customerRequirements?.requirements?.riskCompliance?.dataLocationRequirement || 'UK or EU only'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-red-800 mb-1">GDPR Audit</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-red-200">
+                          {customerRequirements?.requirements?.riskCompliance?.gdprAuditRequired ?
+                            <span className="text-green-700 font-medium">✓ Required</span> :
+                            <span className="text-slate-600">Not required</span>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Strategic Context Section (for leverage) */}
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg border border-purple-200">
+                    <h4 className="font-medium text-purple-900 mb-4 flex items-center">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      Strategic Context (Impacts Leverage)
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-purple-800 mb-1">Alternative Providers</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-purple-200">
+                          {customerRequirements?.leverage?.factors?.market?.alternativeProviders || '7'} available
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-purple-800 mb-1">Market Conditions</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-purple-200">
+                          <span className="capitalize">{customerRequirements?.leverage?.factors?.market?.marketConditions?.replace('_', ' ') || "Buyer's Market"}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-purple-800 mb-1">Time Pressure</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-purple-200">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-gray-200 rounded-full h-2">
+                              <div
+                                className="bg-purple-600 h-2 rounded-full"
+                                style={{ width: `${(customerRequirements?.leverage?.factors?.market?.timePressure || 5) * 10}%` }}
+                              />
+                            </div>
+                            <span className="text-sm">{customerRequirements?.leverage?.factors?.market?.timePressure || '5'}/10</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-purple-800 mb-1">Walk-Away Point</label>
+                        <div className="px-3 py-2 bg-white rounded-lg border border-purple-200 font-semibold">
+                          £{(customerRequirements?.leverage?.factors?.batna?.notes || '850,000')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {customerRequirements?.leverage && (
+                      <div className="mt-4 p-3 bg-purple-100 rounded-lg">
+                        <div className="text-sm text-purple-900">
+                          <strong>Leverage Impact:</strong> Based on these factors, customer has {customerRequirements.leverage.customerLeveragePercentage}% leverage
+                          ({customerRequirements.leverage.customerNegotiationPoints} negotiation points) versus providers {customerRequirements.leverage.providerLeveragePercentage}%
+                          ({customerRequirements.leverage.providerNegotiationPoints} points).
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
