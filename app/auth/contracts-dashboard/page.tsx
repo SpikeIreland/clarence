@@ -526,26 +526,6 @@ export default function ContractsDashboard() {
               <span className="ml-4 text-slate-600 text-sm">Contract Dashboard</span>
             </div>
             <div className="flex items-center gap-4">
-              {/* Create New Contract Button in Nav */}
-              <button
-                onClick={createNewContract}
-                disabled={isCreatingContract}
-                className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isCreatingContract ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    New Contract
-                  </>
-                )}
-              </button>
               <button
                 onClick={() => setShowChatOverlay(true)}
                 className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all"
