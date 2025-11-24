@@ -1,12 +1,15 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { calculateLeverage, formDataToLeverageInputs } from '@/lib/calculateLeverage'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 
-// ========== SECTION 1: INTERFACES ==========
+// ============================================================================
+// SECTION 1: INTERFACES
+// ============================================================================
 interface CustomerRequirements {
     // Session & Company
     sessionId: string
+    sessionNumber: string
     companyName: string
     companySize: string
     contactName: string
@@ -59,20 +62,13 @@ interface CustomerRequirements {
         innovation: number
         riskMitigation: number
     }
+}
 
-    // Leverage calculation results
-    leverageScore?: {
-        customer: number
-        provider: number
-        customerPoints: number
-        providerPoints: number
-        factors: {
-            market: { score: number; weight: number }
-            economic: { score: number; weight: number }
-            strategic: { score: number; weight: number }
-            batna: { score: number; weight: number }
-        }
-    }
+interface ChatMessage {
+    id: string
+    type: 'user' | 'clarence'
+    content: string
+    timestamp: Date
 }
 
 type NestedKeyOf<T> = keyof T | 'contractPositions' | 'priorities'
@@ -91,17 +87,59 @@ interface PrioritiesStepProps extends NestedStepComponentProps {
     priorityPoints: number
 }
 
+// ============================================================================
+// SECTION 2: CONSTANTS
+// ============================================================================
+const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
-// ========== SECTION 2: MAIN COMPONENT ==========
-export default function CustomerRequirementsForm() {
+// ============================================================================
+// SECTION 3: MAIN COMPONENT WRAPPER (for Suspense)
+// ============================================================================
+export default function CustomerRequirementsPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-8 h-8 border-4 border-slate-300 border-t-slate-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-600">Loading form...</p>
+                </div>
+            </div>
+        }>
+            <CustomerRequirementsForm />
+        </Suspense>
+    )
+}
+
+// ============================================================================
+// SECTION 4: MAIN FORM COMPONENT
+// ============================================================================
+function CustomerRequirementsForm() {
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const chatEndRef = useRef<HTMLDivElement>(null)
+
+    // ========================================================================
+    // SECTION 5: STATE DECLARATIONS
+    // ========================================================================
     const [loading, setLoading] = useState(false)
+    const [initialLoading, setInitialLoading] = useState(true)
     const [currentStep, setCurrentStep] = useState(1)
     const [totalSteps] = useState(6)
     const [priorityPoints, setPriorityPoints] = useState(25)
 
+    // Session state
+    const [sessionId, setSessionId] = useState<string | null>(null)
+    const [sessionNumber, setSessionNumber] = useState<string | null>(null)
 
-    // ========== SECTION 3: FORM STATE ==========
+    // Chat state
+    const [chatOpen, setChatOpen] = useState(false)
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+    const [chatInput, setChatInput] = useState('')
+    const [chatLoading, setChatLoading] = useState(false)
+
+    // ========================================================================
+    // SECTION 6: FORM STATE
+    // ========================================================================
     const [formData, setFormData] = useState<Partial<CustomerRequirements>>({
         contractPositions: {
             liabilityCap: 200,
@@ -119,51 +157,53 @@ export default function CustomerRequirementsForm() {
         }
     })
 
-    // ========== SECTION 4: LEVERAGE CALCULATION ==========
-    const calculateAndUpdateLeverage = useCallback(() => {
-        // Only calculate if we have minimum required data
-        if (!formData.numberOfBidders || !formData.serviceCriticality) {
-            return
-        }
-
-        try {
-            const leverageInputs = formDataToLeverageInputs(formData)
-            const leverageResult = calculateLeverage(leverageInputs)
-
-            setFormData(prev => ({
-                ...prev,
-                leverageScore: {
-                    customer: leverageResult.customerLeverage,
-                    provider: leverageResult.providerLeverage,
-                    customerPoints: leverageResult.customerPoints,
-                    providerPoints: leverageResult.providerPoints,
-                    factors: leverageResult.factors
-                }
-            }))
-
-            console.log('✅ Leverage calculated:', leverageResult)
-        } catch (error) {
-            console.error('❌ Leverage calculation error:', error)
-        }
-    }, [formData])
-
-    // Recalculate leverage when relevant fields change
+    // ========================================================================
+    // SECTION 7: INITIALIZE FROM URL PARAMS
+    // ========================================================================
     useEffect(() => {
-        if (currentStep >= 2) {
-            calculateAndUpdateLeverage()
-        }
-    }, [
-        formData.numberOfBidders,
-        formData.marketPosition,
-        formData.decisionTimeline,
-        formData.serviceCriticality,
-        formData.alternativeOptions,
-        formData.budgetFlexibility,
-        currentStep,
-        calculateAndUpdateLeverage
-    ])
+        const urlSessionId = searchParams.get('session_id')
+        const urlSessionNumber = searchParams.get('session_number')
 
-    // ========== SECTION 5: VALIDATION FUNCTIONS ==========
+        if (urlSessionId) {
+            setSessionId(urlSessionId)
+            setFormData(prev => ({ ...prev, sessionId: urlSessionId }))
+        }
+
+        if (urlSessionNumber) {
+            setSessionNumber(urlSessionNumber)
+            setFormData(prev => ({ ...prev, sessionNumber: urlSessionNumber }))
+        }
+
+        // Load user info from localStorage
+        const auth = localStorage.getItem('clarence_auth')
+        if (auth) {
+            try {
+                const authData = JSON.parse(auth)
+                setFormData(prev => ({
+                    ...prev,
+                    companyName: authData.userInfo?.company || '',
+                    contactName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim(),
+                    contactEmail: authData.userInfo?.email || ''
+                }))
+            } catch (e) {
+                console.error('Error parsing auth data:', e)
+            }
+        }
+
+        // Add welcome message to chat
+        setChatMessages([{
+            id: '1',
+            type: 'clarence',
+            content: `Welcome! I'm CLARENCE, your contract negotiation assistant. I'm here to help you complete your requirements form.\n\nFeel free to ask me about:\n• What information to provide\n• How your answers affect leverage\n• Best practices for contract terms\n\nHow can I help you today?`,
+            timestamp: new Date()
+        }])
+
+        setInitialLoading(false)
+    }, [searchParams])
+
+    // ========================================================================
+    // SECTION 8: VALIDATION FUNCTIONS
+    // ========================================================================
     const validatePriorityPoints = useCallback(() => {
         const total = Object.values(formData.priorities || {}).reduce((sum, val) => sum + val, 0)
         const remaining = 25 - total
@@ -175,7 +215,9 @@ export default function CustomerRequirementsForm() {
         validatePriorityPoints()
     }, [validatePriorityPoints])
 
-    // ========== SECTION 6: FORM HANDLERS ==========
+    // ========================================================================
+    // SECTION 9: FORM HANDLERS
+    // ========================================================================
     const updateFormData = (field: keyof CustomerRequirements, value: string | number) => {
         setFormData(prev => ({
             ...prev,
@@ -193,26 +235,33 @@ export default function CustomerRequirementsForm() {
         }))
     }
 
+    // ========================================================================
+    // SECTION 10: FORM SUBMISSION (UPDATE, not INSERT)
+    // ========================================================================
     const handleSubmit = async () => {
         if (!validatePriorityPoints()) {
             alert('Please adjust priority points to not exceed 25')
             return
         }
 
-        // Final leverage calculation
-        calculateAndUpdateLeverage()
+        if (!sessionId) {
+            alert('Session ID is missing. Please go back to dashboard and create a new contract.')
+            return
+        }
 
         setLoading(true)
         try {
             const submissionData = {
                 ...formData,
+                sessionId: sessionId,
+                sessionNumber: sessionNumber,
                 timestamp: new Date().toISOString(),
-                formVersion: '5.0',
-                formSource: 'customer-requirements-form',
-                leverageCalculated: true
+                formVersion: '6.0',
+                formSource: 'customer-requirements-form'
             }
 
-            const response = await fetch('/api/customer-requirements', {
+            // Call the N8N webhook to UPDATE the session (not create)
+            const response = await fetch(`${API_BASE}/customer-requirements`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(submissionData)
@@ -220,9 +269,13 @@ export default function CustomerRequirementsForm() {
 
             if (response.ok) {
                 const result = await response.json()
-                router.push(`/auth/assessment?session=${result.sessionId}`)
+                console.log('Requirements submitted:', result)
+
+                // Redirect to questionnaire (next phase)
+                router.push(`/auth/questionnaire?session_id=${sessionId}&session_number=${sessionNumber}`)
             } else {
-                throw new Error('Submission failed')
+                const errorData = await response.json()
+                throw new Error(errorData.error || 'Submission failed')
             }
         } catch (error) {
             console.error('Submission error:', error)
@@ -232,11 +285,95 @@ export default function CustomerRequirementsForm() {
         }
     }
 
-    // ========== SECTION 7: STEP NAVIGATION ==========
+    // ========================================================================
+    // SECTION 11: CHAT FUNCTIONS
+    // ========================================================================
+    const sendChatMessage = async () => {
+        if (!chatInput.trim() || chatLoading) return
+
+        const userMessage: ChatMessage = {
+            id: Date.now().toString(),
+            type: 'user',
+            content: chatInput.trim(),
+            timestamp: new Date()
+        }
+
+        setChatMessages(prev => [...prev, userMessage])
+        setChatInput('')
+        setChatLoading(true)
+
+        try {
+            // Build context from current form state
+            const context = {
+                currentStep,
+                stepName: getStepName(currentStep),
+                formData: formData,
+                sessionId,
+                sessionNumber
+            }
+
+            const response = await fetch(`${API_BASE}/clarence-chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: userMessage.content,
+                    context: context,
+                    chatHistory: chatMessages.slice(-10) // Last 10 messages for context
+                })
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                const clarenceMessage: ChatMessage = {
+                    id: (Date.now() + 1).toString(),
+                    type: 'clarence',
+                    content: data.response || data.message || 'I apologize, I could not process that request.',
+                    timestamp: new Date()
+                }
+                setChatMessages(prev => [...prev, clarenceMessage])
+            } else {
+                throw new Error('Chat request failed')
+            }
+        } catch (error) {
+            console.error('Chat error:', error)
+            const errorMessage: ChatMessage = {
+                id: (Date.now() + 1).toString(),
+                type: 'clarence',
+                content: 'I apologize, I encountered an issue. Please try again or continue with the form.',
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
+            setChatLoading(false)
+        }
+    }
+
+    const getStepName = (step: number): string => {
+        const stepNames: Record<number, string> = {
+            1: 'Company Information',
+            2: 'Market Context & Leverage',
+            3: 'Service Requirements',
+            4: 'Alternative Options (BATNA)',
+            5: 'Contract Positions',
+            6: 'Priority Allocation'
+        }
+        return stepNames[step] || 'Unknown Step'
+    }
+
+    // Scroll chat to bottom when new messages arrive
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [chatMessages])
+
+    // ========================================================================
+    // SECTION 12: STEP NAVIGATION
+    // ========================================================================
     const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, totalSteps))
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
 
-    // ========== SECTION 8: RENDER STEPS ==========
+    // ========================================================================
+    // SECTION 13: RENDER STEPS
+    // ========================================================================
     const renderStep = () => {
         switch (currentStep) {
             case 1:
@@ -256,125 +393,329 @@ export default function CustomerRequirementsForm() {
         }
     }
 
+    // ========================================================================
+    // SECTION 14: LOADING STATE
+    // ========================================================================
+    if (initialLoading) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-8 h-8 border-4 border-slate-300 border-t-slate-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-600">Loading form...</p>
+                </div>
+            </div>
+        )
+    }
 
-    // ========== SECTION 9: MAIN RENDER ==========
+    // ========================================================================
+    // SECTION 15: MAIN RENDER
+    // ========================================================================
     return (
-        <div className="min-h-screen bg-slate-50">
-            {/* Navigation */}
-            <nav className="bg-white shadow-sm border-b border-slate-200">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-16">
-                        <div className="flex items-center">
-                            <span className="text-2xl font-medium text-slate-700">CLARENCE</span>
-                            <span className="ml-4 text-slate-600 text-sm">Customer Requirements</span>
-                        </div>
-                        {formData.leverageScore && (
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-slate-600">Your Leverage:</span>
-                                <span className="font-bold text-green-600">{formData.leverageScore.customer}%</span>
+        <div className="min-h-screen bg-slate-50 flex">
+            {/* ================================================================ */}
+            {/* SECTION 16: MAIN CONTENT AREA */}
+            {/* ================================================================ */}
+            <div className={`flex-1 transition-all duration-300 ${chatOpen ? 'mr-96' : ''}`}>
+                {/* Navigation */}
+                <nav className="bg-white shadow-sm border-b border-slate-200">
+                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between h-16">
+                            <div className="flex items-center">
+                                <Link href="/auth/contract-dashboard" className="flex items-center">
+                                    <div>
+                                        <div className="text-2xl font-medium text-slate-700">CLARENCE</div>
+                                        <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
+                                    </div>
+                                </Link>
+                                <span className="ml-4 text-slate-600 text-sm">Customer Requirements</span>
                             </div>
+                            <div className="flex items-center gap-4">
+                                {sessionNumber && (
+                                    <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                                        {sessionNumber}
+                                    </span>
+                                )}
+                                <button
+                                    onClick={() => setChatOpen(!chatOpen)}
+                                    className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all ${chatOpen
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white'
+                                        }`}
+                                >
+                                    💬 {chatOpen ? 'Close Chat' : 'Ask CLARENCE'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+
+                {/* Session Info Banner */}
+                {sessionNumber && (
+                    <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white py-3">
+                        <div className="max-w-5xl mx-auto px-4 flex items-center justify-between">
+                            <div className="flex items-center gap-6">
+                                <div>
+                                    <span className="text-slate-300 text-xs">Session</span>
+                                    <div className="font-mono text-sm">{sessionNumber}</div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-300 text-xs">Status</span>
+                                    <div className="text-sm">
+                                        <span className="bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded text-xs">
+                                            Requirements In Progress
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-300 text-xs">Phase</span>
+                                    <div className="text-sm">1 - Deal Profile</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="max-w-3xl mx-auto px-4 py-8">
+                    {/* Progress Bar */}
+                    <div className="mb-8">
+                        <div className="flex justify-between mb-2">
+                            <span className="text-sm text-slate-600">Step {currentStep} of {totalSteps}: {getStepName(currentStep)}</span>
+                            <span className="text-sm text-slate-600">
+                                {Math.round((currentStep / totalSteps) * 100)}% Complete
+                            </span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-2">
+                            <div
+                                className="bg-gradient-to-r from-slate-600 to-slate-700 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${(currentStep / totalSteps) * 100}%` }}
+                            />
+                        </div>
+
+                        {/* Step Indicators */}
+                        <div className="flex justify-between mt-4">
+                            {[1, 2, 3, 4, 5, 6].map((step) => (
+                                <button
+                                    key={step}
+                                    onClick={() => setCurrentStep(step)}
+                                    className={`w-8 h-8 rounded-full text-xs font-medium transition-all ${step === currentStep
+                                            ? 'bg-slate-700 text-white'
+                                            : step < currentStep
+                                                ? 'bg-emerald-500 text-white'
+                                                : 'bg-slate-200 text-slate-500'
+                                        }`}
+                                >
+                                    {step < currentStep ? '✓' : step}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Form Content */}
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                        {renderStep()}
+                    </div>
+
+                    {/* Navigation Buttons */}
+                    <div className="mt-6 flex justify-between">
+                        <button
+                            onClick={prevStep}
+                            disabled={currentStep === 1}
+                            className={`px-6 py-2 rounded-lg transition-all ${currentStep === 1
+                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                    : 'bg-slate-600 text-white hover:bg-slate-700'
+                                }`}
+                        >
+                            ← Previous
+                        </button>
+
+                        {currentStep < totalSteps ? (
+                            <button
+                                onClick={nextStep}
+                                className="px-6 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-all"
+                            >
+                                Next →
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleSubmit}
+                                disabled={loading || priorityPoints < 0}
+                                className="px-6 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg hover:from-emerald-700 hover:to-emerald-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                            >
+                                {loading ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Submitting...
+                                    </>
+                                ) : (
+                                    <>Submit Requirements →</>
+                                )}
+                            </button>
                         )}
                     </div>
-                </div>
-            </nav>
 
-            <div className="max-w-3xl mx-auto px-4 py-8">
-                {/* Progress Bar */}
-                <div className="mb-8">
-                    <div className="flex justify-between mb-2">
-                        <span className="text-sm text-slate-600">Step {currentStep} of {totalSteps}</span>
-                        <span className="text-sm text-slate-600">
-                            {Math.round((currentStep / totalSteps) * 100)}% Complete
-                        </span>
-                    </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2">
-                        <div
-                            className="bg-gradient-to-r from-slate-600 to-slate-700 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(currentStep / totalSteps) * 100}%` }}
-                        />
+                    {/* Save & Exit Option */}
+                    <div className="mt-4 text-center">
+                        <button
+                            onClick={() => router.push('/auth/contract-dashboard')}
+                            className="text-sm text-slate-500 hover:text-slate-700 underline"
+                        >
+                            Save & Return to Dashboard
+                        </button>
                     </div>
                 </div>
+            </div>
 
-                {/* Form Content */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                    {renderStep()}
-                </div>
-
-                {/* Navigation Buttons */}
-                <div className="mt-6 flex justify-between">
+            {/* ================================================================ */}
+            {/* SECTION 17: CLARENCE CHAT PANEL */}
+            {/* ================================================================ */}
+            <div className={`fixed right-0 top-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl transform transition-transform duration-300 z-50 ${chatOpen ? 'translate-x-0' : 'translate-x-full'
+                }`}>
+                {/* Chat Header */}
+                <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-xl">
+                            🎓
+                        </div>
+                        <div>
+                            <div className="font-medium">CLARENCE</div>
+                            <div className="text-xs text-slate-300">Your Contract Assistant</div>
+                        </div>
+                    </div>
                     <button
-                        onClick={prevStep}
-                        disabled={currentStep === 1}
-                        className={`px-6 py-2 rounded-lg ${currentStep === 1
-                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                            : 'bg-slate-600 text-white hover:bg-slate-700'
-                            }`}
+                        onClick={() => setChatOpen(false)}
+                        className="text-white/70 hover:text-white p-1"
                     >
-                        Previous
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
+                </div>
 
-                    {currentStep < totalSteps ? (
-                        <button
-                            onClick={nextStep}
-                            className="px-6 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+                {/* Chat Context */}
+                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
+                    <div className="text-xs text-slate-500">
+                        Currently on: <span className="font-medium text-slate-700">{getStepName(currentStep)}</span>
+                    </div>
+                </div>
+
+                {/* Chat Messages */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ height: 'calc(100vh - 200px)' }}>
+                    {chatMessages.map((msg) => (
+                        <div
+                            key={msg.id}
+                            className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
                         >
-                            Next
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleSubmit}
-                            disabled={loading || priorityPoints < 0}
-                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-400"
-                        >
-                            {loading ? 'Submitting...' : 'Submit Requirements'}
-                        </button>
+                            <div
+                                className={`max-w-[80%] rounded-lg p-3 ${msg.type === 'user'
+                                        ? 'bg-slate-700 text-white'
+                                        : 'bg-slate-100 text-slate-800'
+                                    }`}
+                            >
+                                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                <p className={`text-xs mt-1 ${msg.type === 'user' ? 'text-slate-300' : 'text-slate-400'
+                                    }`}>
+                                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            </div>
+                        </div>
+                    ))}
+                    {chatLoading && (
+                        <div className="flex justify-start">
+                            <div className="bg-slate-100 rounded-lg p-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                </div>
+                            </div>
+                        </div>
                     )}
+                    <div ref={chatEndRef} />
+                </div>
+
+                {/* Chat Input */}
+                <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200">
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                            placeholder="Ask CLARENCE anything..."
+                            className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm"
+                        />
+                        <button
+                            onClick={sendChatMessage}
+                            disabled={chatLoading || !chatInput.trim()}
+                            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all"
+                        >
+                            Send
+                        </button>
+                    </div>
+                    <div className="mt-2 flex gap-2 flex-wrap">
+                        <button
+                            onClick={() => setChatInput('What information should I provide here?')}
+                            className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
+                        >
+                            What info needed?
+                        </button>
+                        <button
+                            onClick={() => setChatInput('How does this affect my leverage?')}
+                            className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
+                        >
+                            Leverage impact?
+                        </button>
+                        <button
+                            onClick={() => setChatInput('What are best practices here?')}
+                            className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
+                        >
+                            Best practices?
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
     )
 }
 
-// ========== SECTION 10: STEP COMPONENTS ==========
+// ============================================================================
+// SECTION 18: STEP COMPONENTS
+// ============================================================================
 
-// ========== STEP 1 - COMPANY INFO ==========
+// STEP 1 - COMPANY INFO
 function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Company Information</h2>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Session ID <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                        value={formData.sessionId || ''}
-                        onChange={(e) => updateFormData('sessionId', e.target.value)}
-                        placeholder="e.g., SIS-BACKOFFICE-2025-001"
-                    />
+            {/* Session ID - Read Only if pre-populated */}
+            {formData.sessionId && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-600">Session ID:</span>
+                        <span className="font-mono text-sm text-slate-800">{formData.sessionNumber || formData.sessionId}</span>
+                        <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded">Auto-assigned</span>
+                    </div>
                 </div>
+            )}
 
+            <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                         Company Name <span className="text-red-500">*</span>
                     </label>
                     <input
                         type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.companyName || ''}
                         onChange={(e) => updateFormData('companyName', e.target.value)}
                     />
                 </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Company Size</label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.companySize || ''}
                         onChange={(e) => updateFormData('companySize', e.target.value)}
                     >
@@ -385,13 +726,15 @@ function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
                         <option value="1000+">Enterprise (1000+)</option>
                     </select>
                 </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                         Annual Revenue
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.annualRevenue || ''}
                         onChange={(e) => updateFormData('annualRevenue', e.target.value)}
                     >
@@ -403,6 +746,17 @@ function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
                         <option value="100M+">More than £100M</option>
                     </select>
                 </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Industry</label>
+                    <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                        value={formData.industry || ''}
+                        onChange={(e) => updateFormData('industry', e.target.value)}
+                        placeholder="e.g., Financial Services, Healthcare, Technology"
+                    />
+                </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -412,7 +766,7 @@ function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
                     </label>
                     <input
                         type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.contactName || ''}
                         onChange={(e) => updateFormData('contactName', e.target.value)}
                     />
@@ -424,28 +778,17 @@ function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
                     </label>
                     <input
                         type="email"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.contactEmail || ''}
                         onChange={(e) => updateFormData('contactEmail', e.target.value)}
                     />
                 </div>
             </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Industry</label>
-                <input
-                    type="text"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
-                    value={formData.industry || ''}
-                    onChange={(e) => updateFormData('industry', e.target.value)}
-                    placeholder="e.g., Financial Services, Healthcare, Technology"
-                />
-            </div>
         </div>
     )
 }
 
-// Step 2: Market Context & Leverage
+// STEP 2: Market Context & Leverage
 function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
@@ -463,7 +806,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
                         Number of Competing Providers
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.numberOfBidders || ''}
                         onChange={(e) => updateFormData('numberOfBidders', e.target.value)}
                     >
@@ -480,7 +823,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
                         Your Market Position
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.marketPosition || ''}
                         onChange={(e) => updateFormData('marketPosition', e.target.value)}
                     >
@@ -500,7 +843,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
                     </label>
                     <input
                         type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.dealValue || ''}
                         onChange={(e) => updateFormData('dealValue', e.target.value)}
                         placeholder="e.g., 500000"
@@ -512,7 +855,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
                         Decision Timeline
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.decisionTimeline || ''}
                         onChange={(e) => updateFormData('decisionTimeline', e.target.value)}
                     >
@@ -531,7 +874,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
                         Incumbent Status
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.incumbentStatus || ''}
                         onChange={(e) => updateFormData('incumbentStatus', e.target.value)}
                     >
@@ -548,7 +891,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
                         Estimated Switching Costs
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.switchingCosts || ''}
                         onChange={(e) => updateFormData('switchingCosts', e.target.value)}
                     >
@@ -564,7 +907,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
     )
 }
 
-// Step 3: Service Requirements
+// STEP 3: Service Requirements
 function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
@@ -576,7 +919,7 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                         Service Category <span className="text-red-500">*</span>
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.serviceRequired || ''}
                         onChange={(e) => updateFormData('serviceRequired', e.target.value)}
                     >
@@ -592,10 +935,10 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Service Criticality (for leverage)
+                        Service Criticality
                     </label>
                     <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.serviceCriticality || ''}
                         onChange={(e) => updateFormData('serviceCriticality', e.target.value)}
                     >
@@ -614,11 +957,11 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                     Business Challenge <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     rows={3}
                     value={formData.businessChallenge || ''}
                     onChange={(e) => updateFormData('businessChallenge', e.target.value)}
-                    placeholder="Describe the specific business challenge..."
+                    placeholder="Describe the specific business challenge you're trying to solve..."
                 />
             </div>
 
@@ -627,18 +970,18 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                     Desired Outcome <span className="text-red-500">*</span>
                 </label>
                 <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     rows={3}
                     value={formData.desiredOutcome || ''}
                     onChange={(e) => updateFormData('desiredOutcome', e.target.value)}
-                    placeholder="What does success look like?"
+                    placeholder="What does success look like for this engagement?"
                 />
             </div>
         </div>
     )
 }
 
-// Step 4: BATNA Assessment (NEW)
+// STEP 4: BATNA Assessment
 function BATNAStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
@@ -656,7 +999,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
                     What are your alternatives if this negotiation fails?
                 </label>
                 <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     value={formData.alternativeOptions || ''}
                     onChange={(e) => updateFormData('alternativeOptions', e.target.value)}
                 >
@@ -675,7 +1018,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
                     In-house capability to deliver this service?
                 </label>
                 <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     value={formData.inHouseCapability || ''}
                     onChange={(e) => updateFormData('inHouseCapability', e.target.value)}
                 >
@@ -693,7 +1036,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
                 </label>
                 <input
                     type="text"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     value={formData.walkAwayPoint || ''}
                     onChange={(e) => updateFormData('walkAwayPoint', e.target.value)}
                     placeholder="e.g., £750,000 or 20% above budget"
@@ -706,7 +1049,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
                     Budget Flexibility
                 </label>
                 <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     value={formData.budgetFlexibility || ''}
                     onChange={(e) => updateFormData('budgetFlexibility', e.target.value)}
                 >
@@ -722,7 +1065,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
     )
 }
 
-// Step 5: Contract Positions
+// STEP 5: Contract Positions
 function ContractPositionsStep({ formData, updateNestedData }: NestedStepComponentProps) {
     return (
         <div className="space-y-6">
@@ -734,21 +1077,21 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
                 </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Liability Cap (% of annual contract value): {formData.contractPositions?.liabilityCap}%
+                        Liability Cap (% of annual contract value): <span className="font-bold text-slate-800">{formData.contractPositions?.liabilityCap}%</span>
                     </label>
                     <input
                         type="range"
                         min="100"
                         max="500"
                         step="25"
-                        className="w-full"
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                         value={formData.contractPositions?.liabilityCap || 200}
                         onChange={(e) => updateNestedData('contractPositions', 'liabilityCap', parseInt(e.target.value))}
                     />
-                    <div className="flex justify-between text-xs text-slate-500">
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
                         <span>100% (Low)</span>
                         <span>300% (Standard)</span>
                         <span>500% (High)</span>
@@ -757,18 +1100,18 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Payment Terms (days): {formData.contractPositions?.paymentTerms} days
+                        Payment Terms: <span className="font-bold text-slate-800">{formData.contractPositions?.paymentTerms} days</span>
                     </label>
                     <input
                         type="range"
                         min="15"
                         max="90"
                         step="15"
-                        className="w-full"
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                         value={formData.contractPositions?.paymentTerms || 45}
                         onChange={(e) => updateNestedData('contractPositions', 'paymentTerms', parseInt(e.target.value))}
                     />
-                    <div className="flex justify-between text-xs text-slate-500">
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
                         <span>15 days</span>
                         <span>45 days</span>
                         <span>90 days</span>
@@ -777,21 +1120,41 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                        SLA Target (%): {formData.contractPositions?.slaTarget}%
+                        SLA Target: <span className="font-bold text-slate-800">{formData.contractPositions?.slaTarget}%</span>
                     </label>
                     <input
                         type="range"
                         min="95"
                         max="99.9"
                         step="0.1"
-                        className="w-full"
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                         value={formData.contractPositions?.slaTarget || 99.5}
                         onChange={(e) => updateNestedData('contractPositions', 'slaTarget', parseFloat(e.target.value))}
                     />
-                    <div className="flex justify-between text-xs text-slate-500">
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
                         <span>95% (Basic)</span>
                         <span>99% (Standard)</span>
                         <span>99.9% (Premium)</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Termination Notice: <span className="font-bold text-slate-800">{formData.contractPositions?.terminationNotice} days</span>
+                    </label>
+                    <input
+                        type="range"
+                        min="30"
+                        max="180"
+                        step="30"
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                        value={formData.contractPositions?.terminationNotice || 60}
+                        onChange={(e) => updateNestedData('contractPositions', 'terminationNotice', parseInt(e.target.value))}
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>30 days</span>
+                        <span>90 days</span>
+                        <span>180 days</span>
                     </div>
                 </div>
             </div>
@@ -799,7 +1162,7 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
     )
 }
 
-// Step 6: Priorities with Point System
+// STEP 6: Priorities with Point System
 function PrioritiesStep({ formData, updateNestedData, priorityPoints }: PrioritiesStepProps) {
     return (
         <div className="space-y-6">
@@ -807,15 +1170,23 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: Prioriti
 
             <div className={`border rounded-lg p-4 mb-6 ${priorityPoints >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
                 }`}>
-                <p className="text-sm font-medium mb-2">
-                    Priority Points: {priorityPoints} / 25 remaining
-                </p>
-                <p className="text-xs text-slate-600">
-                    Allocate 25 points total across priorities. This forces realistic trade-offs.
-                </p>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium">
+                            Priority Points Remaining: <span className={`text-lg ${priorityPoints >= 0 ? 'text-green-700' : 'text-red-700'}`}>{priorityPoints}</span> / 25
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                            Allocate 25 points total across priorities. This forces realistic trade-offs.
+                        </p>
+                    </div>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${priorityPoints >= 0 ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
+                        }`}>
+                        {priorityPoints}
+                    </div>
+                </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
                 {Object.entries({
                     cost: 'Cost Optimization',
                     quality: 'Quality Standards',
@@ -825,18 +1196,18 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: Prioriti
                 }).map(([key, label]) => (
                     <div key={key}>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                            {label}: {(formData.priorities as Record<string, number>)?.[key]} points
+                            {label}: <span className="font-bold text-slate-800">{(formData.priorities as Record<string, number>)?.[key]} points</span>
                         </label>
                         <input
                             type="range"
                             min="0"
                             max="10"
                             step="1"
-                            className="w-full"
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                             value={(formData.priorities as Record<string, number>)?.[key] || 5}
                             onChange={(e) => updateNestedData('priorities', key, parseInt(e.target.value))}
                         />
-                        <div className="flex justify-between text-xs text-slate-500">
+                        <div className="flex justify-between text-xs text-slate-500 mt-1">
                             <span>0 (Not important)</span>
                             <span>5 (Moderate)</span>
                             <span>10 (Critical)</span>
@@ -846,7 +1217,7 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: Prioriti
             </div>
 
             {priorityPoints < 0 && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
                     <p className="font-medium">Points exceeded!</p>
                     <p className="text-sm">Please reduce point allocations to stay within 25 total points.</p>
                 </div>
