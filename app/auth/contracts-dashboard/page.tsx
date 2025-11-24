@@ -2,12 +2,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { 
+import {
   BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 
-// ========== SECTION 1: INTERFACES ==========
+// ============================================================================
+// SECTION 1: INTERFACES
+// ============================================================================
 interface UserInfo {
   firstName?: string
   lastName?: string
@@ -38,6 +40,9 @@ interface ChatMessage {
   timestamp: Date
 }
 
+// ============================================================================
+// SECTION 2: CONSTANTS
+// ============================================================================
 const phases: Record<number, { name: string; description: string; color: string }> = {
   1: { name: 'Preliminary', description: 'Deal profile & leverage assessment', color: '#64748b' },
   2: { name: 'Foundation', description: 'Contract foundation', color: '#94a3b8' },
@@ -47,7 +52,6 @@ const phases: Record<number, { name: string; description: string; color: string 
   6: { name: 'Final Review', description: 'Consistency & execution', color: '#0f172a' }
 }
 
-// Contract type categories for John's metrics
 const contractTypes: Record<string, string> = {
   'IT Services': 'IT Services',
   'IT Consulting': 'IT Services',
@@ -63,7 +67,6 @@ const contractTypes: Record<string, string> = {
   'Other': 'Other'
 }
 
-// Deal size categories for John's metrics
 const dealSizeCategories = [
   { min: 0, max: 250000, label: '0-250k', color: '#94a3b8' },
   { min: 250000, max: 500000, label: '250-500k', color: '#64748b' },
@@ -73,30 +76,39 @@ const dealSizeCategories = [
   { min: 5000000, max: Infinity, label: '5m+', color: '#0f172a' }
 ]
 
-// ========== SECTION 2: MAIN COMPONENT START ==========
+const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+// ============================================================================
+// SECTION 3: MAIN COMPONENT
+// ============================================================================
 export default function ContractsDashboard() {
   const router = useRouter()
   const chatEndRef = useRef<HTMLDivElement>(null)
-  
-  // ========== SECTION 3: STATE DECLARATIONS ==========
+
+  // ============================================================================
+  // SECTION 4: STATE DECLARATIONS
+  // ============================================================================
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
-  const [showMetrics, setShowMetrics] = useState(false) // Changed to false by default
+  const [showMetrics, setShowMetrics] = useState(false)
   const [showChatOverlay, setShowChatOverlay] = useState(false)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [chatMinimized, setChatMinimized] = useState(false)
+  const [isCreatingContract, setIsCreatingContract] = useState(false)
 
-  // ========== SECTION 4: FUNCTIONS ==========
+  // ============================================================================
+  // SECTION 5: DATA LOADING FUNCTIONS
+  // ============================================================================
   const loadUserInfo = useCallback(async () => {
     const auth = localStorage.getItem('clarence_auth')
     if (!auth) {
       router.push('/auth/login')
       return
     }
-    
+
     const authData = JSON.parse(auth)
     setUserInfo(authData.userInfo)
   }, [router])
@@ -105,12 +117,12 @@ export default function ContractsDashboard() {
     try {
       const auth = localStorage.getItem('clarence_auth')
       if (!auth) return
-      
+
       const authData = JSON.parse(auth)
-      const apiUrl = `https://spikeislandstudios.app.n8n.cloud/webhook/sessions-api?role=${authData.userInfo?.role || 'customer'}&email=${authData.userInfo?.email}`
-      
+      const apiUrl = `${API_BASE}/sessions-api?role=${authData.userInfo?.role || 'customer'}&email=${authData.userInfo?.email}`
+
       console.log('Loading sessions from:', apiUrl)
-      
+
       const response = await fetch(apiUrl)
       if (response.ok) {
         const data = await response.json()
@@ -128,12 +140,65 @@ export default function ContractsDashboard() {
     }
   }
 
+  // ============================================================================
+  // SECTION 6: CREATE NEW CONTRACT FUNCTION
+  // ============================================================================
+  async function createNewContract() {
+    if (isCreatingContract) return
+
+    setIsCreatingContract(true)
+
+    try {
+      const auth = localStorage.getItem('clarence_auth')
+      if (!auth) {
+        router.push('/auth/login')
+        return
+      }
+
+      const authData = JSON.parse(auth)
+
+      // Call the session-create API
+      const response = await fetch(`${API_BASE}/session-create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: authData.userInfo?.userId,
+          userEmail: authData.userInfo?.email,
+          companyName: authData.userInfo?.company,
+          userName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim()
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('New session created:', data)
+
+        // Store the new session ID and redirect to Customer Requirements
+        localStorage.setItem('currentSessionId', data.sessionId)
+        localStorage.setItem('newSessionNumber', data.sessionNumber)
+
+        // Redirect to Customer Requirements form with session ID
+        router.push(`/auth/customerRequirements?session_id=${data.sessionId}&session_number=${data.sessionNumber}`)
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to create session:', errorData)
+        alert('Failed to create new contract. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error creating contract:', error)
+      alert('Failed to create new contract. Please try again.')
+    } finally {
+      setIsCreatingContract(false)
+    }
+  }
+
+  // ============================================================================
+  // SECTION 7: METRICS CALCULATION
+  // ============================================================================
   const getMetricsData = () => {
-    // Active vs Closed contracts (John's metric #1)
     const active = sessions.filter(s => s.status !== 'completed').length
     const completed = sessions.filter(s => s.status === 'completed').length
-    
-    // Contract types distribution (John's metric #2)
+
     const typeDistribution: Record<string, number> = {}
     sessions.forEach(session => {
       let category = 'Other'
@@ -145,13 +210,12 @@ export default function ContractsDashboard() {
       }
       typeDistribution[category] = (typeDistribution[category] || 0) + 1
     })
-    
+
     const contractTypeData = Object.entries(typeDistribution).map(([type, count]) => ({
       type: type.length > 15 ? type.substring(0, 15) + '...' : type,
       count
     }))
 
-    // Deal size distribution (John's metric #3)
     const sizeDistribution: Record<string, number> = {}
     sessions.forEach(session => {
       const dealValue = parseInt(session.dealValue || '0')
@@ -168,10 +232,9 @@ export default function ContractsDashboard() {
         value: sizeDistribution[cat.label] || 0,
         color: cat.color
       }))
-    
-    // Total value calculation
+
     const totalValue = sessions.reduce((sum, s) => sum + parseInt(s.dealValue || '0'), 0)
-    
+
     return {
       statusData: [
         { name: 'Active', value: active || 0, color: '#475569' },
@@ -180,12 +243,15 @@ export default function ContractsDashboard() {
       contractTypeData,
       dealSizeData,
       totalValue,
-      avgCompletion: sessions.length > 0 
+      avgCompletion: sessions.length > 0
         ? Math.round(sessions.reduce((sum, s) => sum + (s.phaseAlignment || 0), 0) / sessions.length)
         : 0
     }
   }
 
+  // ============================================================================
+  // SECTION 8: NAVIGATION FUNCTIONS
+  // ============================================================================
   function continueWithClarence(sessionId?: string) {
     if (sessionId) {
       localStorage.setItem('currentSessionId', sessionId)
@@ -198,18 +264,17 @@ export default function ContractsDashboard() {
   function navigateToPhase(session: Session, providerId?: string) {
     localStorage.setItem('currentSessionId', session.sessionId)
     localStorage.setItem('currentSession', JSON.stringify(session))
-    
+
     if (providerId) {
       localStorage.setItem('selectedProviderId', providerId)
     }
-    
+
     const phase = session.phase || 1
-    // FIX: Changed from 'session' to 'session_id' to match webhook expectations
-    const queryParams = providerId 
+    const queryParams = providerId
       ? `?session_id=${session.sessionId}&provider=${providerId}`
       : `?session_id=${session.sessionId}`
-    
-    switch(phase) {
+
+    switch (phase) {
       case 1:
         router.push(`/auth/assessment${queryParams}`)
         break
@@ -231,55 +296,124 @@ export default function ContractsDashboard() {
     }
   }
 
+  // ============================================================================
+  // SECTION 9: UI HELPER FUNCTIONS
+  // ============================================================================
   function getStatusBadgeClass(status: string) {
     const statusClasses: Record<string, string> = {
       'created': 'bg-yellow-50 text-yellow-700',
       'initiated': 'bg-yellow-50 text-yellow-700',
+      'customer_intake_complete': 'bg-blue-50 text-blue-700',
+      'customer_onboarding_complete': 'bg-indigo-50 text-indigo-700',
+      'providers_invited': 'bg-purple-50 text-purple-700',
       'assessment_complete': 'bg-slate-100 text-slate-700',
       'completed': 'bg-green-50 text-green-700',
       'provider_matched': 'bg-purple-50 text-purple-700',
       'mediation_pending': 'bg-orange-50 text-orange-700',
+      'negotiation_active': 'bg-indigo-50 text-indigo-700',
       'in_progress': 'bg-indigo-50 text-indigo-700'
     }
     return statusClasses[status] || 'bg-slate-100 text-slate-700'
   }
 
+  function getStatusDisplayText(status: string) {
+    const statusTexts: Record<string, string> = {
+      'created': 'Draft',
+      'initiated': 'Draft',
+      'customer_intake_complete': 'Intake Complete',
+      'customer_onboarding_complete': 'Ready to Invite',
+      'providers_invited': 'Awaiting Providers',
+      'assessment_complete': 'Assessment Complete',
+      'completed': 'Completed',
+      'provider_matched': 'Provider Matched',
+      'mediation_pending': 'Mediation Pending',
+      'negotiation_active': 'Negotiating',
+      'in_progress': 'In Progress'
+    }
+    return statusTexts[status] || status.replace(/_/g, ' ')
+  }
+
   function getPhaseActionButton(session: Session) {
     const phase = session.phase || 1
-    
-    if (session.status === 'completed') {
+    const status = session.status
+
+    if (status === 'completed') {
       return {
         text: '✓ Contract Completed',
         className: 'bg-slate-400 cursor-not-allowed text-white',
-        disabled: true
+        disabled: true,
+        action: () => { }
       }
     }
-    
-    switch(phase) {
+
+    // Handle onboarding statuses
+    if (status === 'created' || status === 'initiated') {
+      return {
+        text: 'Continue Setup →',
+        className: 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white',
+        disabled: false,
+        action: () => router.push(`/auth/customerRequirements?session_id=${session.sessionId}`)
+      }
+    }
+
+    if (status === 'customer_intake_complete') {
+      return {
+        text: 'Complete Questionnaire →',
+        className: 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white',
+        disabled: false,
+        action: () => router.push(`/auth/questionnaire?session_id=${session.sessionId}`)
+      }
+    }
+
+    if (status === 'customer_onboarding_complete') {
+      return {
+        text: 'Invite Providers →',
+        className: 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white',
+        disabled: false,
+        action: () => router.push(`/auth/invite-providers?session_id=${session.sessionId}`)
+      }
+    }
+
+    if (status === 'providers_invited') {
+      return {
+        text: 'View Provider Status',
+        className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
+        disabled: false,
+        action: () => router.push(`/auth/provider-status?session_id=${session.sessionId}`)
+      }
+    }
+
+    // Standard phase-based buttons
+    switch (phase) {
       case 1:
         return {
-          text: session.status === 'assessment_complete' 
-            ? 'Review Assessment' 
+          text: status === 'assessment_complete'
+            ? 'Review Assessment'
             : 'Start Phase 1: Assessment',
           className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
-          disabled: false
+          disabled: false,
+          action: () => navigateToPhase(session)
         }
       case 2:
         return {
           text: 'Continue Phase 2: Foundation',
           className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
-          disabled: false
+          disabled: false,
+          action: () => navigateToPhase(session)
         }
       default:
         return {
-          text: 'Start Assessment',
+          text: 'Open Contract Studio',
           className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
-          disabled: false
+          disabled: false,
+          action: () => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
         }
     }
   }
 
-  // ========== SECTION 5: CHAT FUNCTIONS ==========
+  // ============================================================================
+  // SECTION 10: CHAT FUNCTIONS
+  // ============================================================================
   async function sendChatMessage() {
     if (!chatInput.trim() || isChatLoading) return
 
@@ -295,7 +429,6 @@ export default function ContractsDashboard() {
     setIsChatLoading(true)
 
     try {
-      // Build context for CLARENCE
       const dashboardContext = {
         userInfo: userInfo,
         totalContracts: sessions.length,
@@ -310,20 +443,20 @@ export default function ContractsDashboard() {
         }))
       }
 
-      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/clarence-chat', {
+      const response = await fetch(`${API_BASE}/clarence-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: chatInput,
           context: 'dashboard',
           dashboardData: dashboardContext,
-          sessionId: null, // No specific session on dashboard
+          sessionId: null,
           userId: userInfo?.userId || 'unknown'
         })
       })
 
       const data = await response.json()
-      
+
       const clarenceMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'clarence',
@@ -346,7 +479,9 @@ export default function ContractsDashboard() {
     }
   }
 
-  // Initialize chat with welcome message
+  // ============================================================================
+  // SECTION 11: EFFECTS
+  // ============================================================================
   useEffect(() => {
     if (showChatOverlay && chatMessages.length === 0) {
       const welcomeMessage: ChatMessage = {
@@ -359,24 +494,25 @@ export default function ContractsDashboard() {
     }
   }, [showChatOverlay, chatMessages.length, userInfo])
 
-  // Auto-scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
 
-  // ========== SECTION 6: USE EFFECTS ==========
   useEffect(() => {
     loadUserInfo()
     loadSessions()
   }, [loadUserInfo])
 
-  // ========== SECTION 7: METRICS CALCULATION ==========
+  // ============================================================================
+  // SECTION 12: METRICS DATA
+  // ============================================================================
   const metrics = getMetricsData()
 
-  // ========== SECTION 8: RENDER START ==========
+  // ============================================================================
+  // SECTION 13: RENDER - NAVIGATION BAR
+  // ============================================================================
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* ========== SECTION 9: NAVIGATION BAR ========== */}
       <nav className="bg-white shadow-sm border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -390,6 +526,26 @@ export default function ContractsDashboard() {
               <span className="ml-4 text-slate-600 text-sm">Contract Dashboard</span>
             </div>
             <div className="flex items-center gap-4">
+              {/* Create New Contract Button in Nav */}
+              <button
+                onClick={createNewContract}
+                disabled={isCreatingContract}
+                className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCreatingContract ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    New Contract
+                  </>
+                )}
+              </button>
               <button
                 onClick={() => setShowChatOverlay(true)}
                 className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all"
@@ -401,20 +557,47 @@ export default function ContractsDashboard() {
         </div>
       </nav>
 
-      {/* ========== SECTION 10: MAIN CONTENT CONTAINER ========== */}
+      {/* ============================================================================ */}
+      {/* SECTION 14: MAIN CONTENT */}
+      {/* ============================================================================ */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* ========== SECTION 11: HEADER BANNER ========== */}
+
+        {/* Header Banner with Create Button */}
         <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-6 rounded-xl mb-8">
-          <h1 className="text-2xl font-medium mb-2">
-            Welcome back, {userInfo?.firstName || 'User'}
-          </h1>
-          <p className="text-slate-300 text-sm">
-            {userInfo?.company || 'Your Company'} | {userInfo?.role === 'admin' ? 'Administrator' : 'Customer Portal'}
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-medium mb-2">
+                Welcome back, {userInfo?.firstName || 'User'}
+              </h1>
+              <p className="text-slate-300 text-sm">
+                {userInfo?.company || 'Your Company'} | {userInfo?.role === 'admin' ? 'Administrator' : 'Customer Portal'}
+              </p>
+            </div>
+            <button
+              onClick={createNewContract}
+              disabled={isCreatingContract}
+              className="bg-white/10 hover:bg-white/20 border border-white/30 text-white px-5 py-3 rounded-lg flex items-center gap-2 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCreatingContract ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create New Contract
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* ========== SECTION 12: COLLAPSIBLE METRICS ========== */}
+        {/* ============================================================================ */}
+        {/* SECTION 15: COLLAPSIBLE METRICS */}
+        {/* ============================================================================ */}
         {sessions.length > 0 && (
           <div className="mb-8">
             <button
@@ -423,10 +606,10 @@ export default function ContractsDashboard() {
             >
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-medium text-slate-700">📊 Contract Analytics</h3>
-                <svg 
-                  className={`w-5 h-5 text-slate-500 transition-transform ${showMetrics ? 'rotate-180' : ''}`} 
-                  fill="none" 
-                  stroke="currentColor" 
+                <svg
+                  className={`w-5 h-5 text-slate-500 transition-transform ${showMetrics ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -445,7 +628,7 @@ export default function ContractsDashboard() {
             {showMetrics && (
               <div className="mt-4 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Metric #1: Active vs Closed Contracts */}
+                  {/* Active vs Closed */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-base font-medium mb-4 text-slate-700">Active vs Closed Contracts</h3>
                     <ResponsiveContainer width="100%" height={200}>
@@ -469,7 +652,7 @@ export default function ContractsDashboard() {
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Metric #2: Contract Types */}
+                  {/* Contract Types */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-base font-medium mb-4 text-slate-700">Contracts by Type</h3>
                     <ResponsiveContainer width="100%" height={200}>
@@ -483,7 +666,7 @@ export default function ContractsDashboard() {
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Metric #3: Deal Size Distribution */}
+                  {/* Deal Size Distribution */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-base font-medium mb-4 text-slate-700">Deal Size Distribution</h3>
                     {metrics.dealSizeData.length > 0 ? (
@@ -516,7 +699,9 @@ export default function ContractsDashboard() {
           </div>
         )}
 
-        {/* ========== SECTION 13: QUICK STATS CARDS ========== */}
+        {/* ============================================================================ */}
+        {/* SECTION 16: QUICK STATS CARDS */}
+        {/* ============================================================================ */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
             <div className="text-2xl font-medium text-slate-700">{sessions.length}</div>
@@ -542,32 +727,63 @@ export default function ContractsDashboard() {
           </div>
         </div>
 
-        {/* ========== SECTION 14: SESSIONS LIST ========== */}
+        {/* ============================================================================ */}
+        {/* SECTION 17: SESSIONS LIST */}
+        {/* ============================================================================ */}
         <div>
-          <h2 className="text-xl font-medium mb-4 text-slate-800">Active Contract Negotiations</h2>
-          
+          <h2 className="text-xl font-medium mb-4 text-slate-800">Your Contracts</h2>
+
           {loading ? (
             <div className="bg-white p-12 rounded-xl text-center border border-slate-200">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
               <p className="mt-4 text-slate-600">Loading contracts...</p>
             </div>
           ) : sessions.length === 0 ? (
+            /* Empty State with Create Button */
             <div className="bg-white p-12 rounded-xl text-center border border-slate-200">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
               <h3 className="text-lg font-medium mb-2 text-slate-800">Welcome to CLARENCE!</h3>
-              <p className="text-slate-600 mb-6 text-sm">{`You don't have any active contracts yet.`}</p>
-              <button
-                onClick={() => setShowChatOverlay(true)}
-                className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-6 py-3 rounded-lg text-sm"
-              >
-                💬 Start with CLARENCE Chat
-              </button>
+              <p className="text-slate-600 mb-6 text-sm max-w-md mx-auto">
+                {`You don't have any contracts yet. Create your first contract to begin the intelligent negotiation process with CLARENCE.`}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={createNewContract}
+                  disabled={isCreatingContract}
+                  className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-6 py-3 rounded-lg text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCreatingContract ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create New Contract
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowChatOverlay(true)}
+                  className="border border-slate-300 text-slate-700 px-6 py-3 rounded-lg text-sm hover:bg-slate-50 flex items-center justify-center gap-2"
+                >
+                  💬 Ask CLARENCE First
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid gap-4">
               {sessions.map(session => {
-                const phase = session.phase || 1;
-                const actionButton = getPhaseActionButton(session);
-                
+                const phase = session.phase || 1
+                const actionButton = getPhaseActionButton(session)
+
                 return (
                   <div key={session.sessionId} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-3">
@@ -575,13 +791,13 @@ export default function ContractsDashboard() {
                         <h3 className="text-base font-medium text-slate-800">
                           {session.sessionNumber || `Contract ${session.sessionId.substring(0, 8)}`}
                         </h3>
-                        <p className="text-slate-600 text-sm">{session.serviceRequired}</p>
+                        <p className="text-slate-600 text-sm">{session.serviceRequired || 'Service type pending'}</p>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(session.status)}`}>
-                        Phase {phase}: {phases[phase]?.name || 'Unknown'}
+                        {getStatusDisplayText(session.status)}
                       </span>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-sm">
                       <div>
                         <span className="text-slate-500 text-xs">Customer:</span>
@@ -589,21 +805,23 @@ export default function ContractsDashboard() {
                       </div>
                       <div>
                         <span className="text-slate-500 text-xs">Provider:</span>
-                        <p className="font-medium text-slate-700">{session.providerCompany || 'TBD'}</p>
+                        <p className="font-medium text-slate-700">{session.providerCompany || 'Pending'}</p>
                       </div>
                       <div>
                         <span className="text-slate-500 text-xs">Value:</span>
-                        <p className="font-medium text-slate-700">£{parseInt(session.dealValue || '0').toLocaleString()}</p>
+                        <p className="font-medium text-slate-700">
+                          {session.dealValue ? `£${parseInt(session.dealValue).toLocaleString()}` : 'TBD'}
+                        </p>
                       </div>
                       <div>
-                        <span className="text-slate-500 text-xs">Progress:</span>
-                        <p className="font-medium text-slate-700">{session.phaseAlignment || 0}%</p>
+                        <span className="text-slate-500 text-xs">Phase:</span>
+                        <p className="font-medium text-slate-700">{phases[phase]?.name || 'Setup'}</p>
                       </div>
                     </div>
 
                     <div className="mb-3">
                       <div className="w-full bg-slate-200 rounded-full h-1.5">
-                        <div 
+                        <div
                           className="bg-slate-600 h-1.5 rounded-full transition-all"
                           style={{ width: `${session.phaseAlignment || 0}%` }}
                         />
@@ -612,22 +830,22 @@ export default function ContractsDashboard() {
 
                     <div className="flex gap-2">
                       <button
-                        onClick={() => navigateToPhase(session)}
+                        onClick={actionButton.action}
                         disabled={actionButton.disabled}
                         className={`flex-1 py-2 px-4 rounded-lg text-sm transition-all ${actionButton.className}`}
                       >
                         {actionButton.text}
                       </button>
-                      
+
                       <button
                         onClick={() => continueWithClarence(session.sessionId)}
                         className="px-4 py-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg text-sm"
                       >
                         💬 Chat
                       </button>
-                      
+
                       <button
-                        onClick={() => continueWithClarence(session.sessionId)}
+                        onClick={() => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)}
                         className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-sm text-slate-700"
                       >
                         View Details
@@ -641,7 +859,9 @@ export default function ContractsDashboard() {
         </div>
       </div>
 
-      {/* ========== SECTION 15: CHAT OVERLAY ========== */}
+      {/* ============================================================================ */}
+      {/* SECTION 18: CHAT OVERLAY */}
+      {/* ============================================================================ */}
       {showChatOverlay && (
         <div className={`fixed ${chatMinimized ? 'bottom-4 right-4' : 'inset-0'} z-50 ${chatMinimized ? '' : 'bg-black/50'}`}>
           <div className={`${chatMinimized ? 'w-80' : 'absolute right-0 top-0 h-full w-full md:w-96'} bg-white ${chatMinimized ? 'rounded-lg shadow-xl' : ''} flex flex-col`}>
@@ -682,11 +902,10 @@ export default function ContractsDashboard() {
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
                   {chatMessages.map(message => (
                     <div key={message.id} className={`mb-4 ${message.type === 'user' ? 'text-right' : ''}`}>
-                      <div className={`inline-block max-w-[80%] ${
-                        message.type === 'user' 
-                          ? 'bg-slate-600 text-white rounded-lg px-4 py-2' 
+                      <div className={`inline-block max-w-[80%] ${message.type === 'user'
+                          ? 'bg-slate-600 text-white rounded-lg px-4 py-2'
                           : 'bg-white rounded-lg px-4 py-2 shadow-sm border border-slate-200'
-                      }`}>
+                        }`}>
                         <p className="text-sm">{message.content}</p>
                         <p className={`text-xs mt-1 ${message.type === 'user' ? 'text-slate-300' : 'text-slate-500'}`}>
                           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -734,7 +953,9 @@ export default function ContractsDashboard() {
         </div>
       )}
 
-      {/* ========== SECTION 16: FLOATING CHAT BUTTON ========== */}
+      {/* ============================================================================ */}
+      {/* SECTION 19: FLOATING CHAT BUTTON */}
+      {/* ============================================================================ */}
       {!showChatOverlay && (
         <button
           onClick={() => setShowChatOverlay(true)}
