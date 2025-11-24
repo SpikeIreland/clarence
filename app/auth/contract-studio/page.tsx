@@ -1081,7 +1081,7 @@ function ContractStudioContent() {
     const [chatMessages, setChatMessages] = useState<ClauseChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
     const [isChatLoading, setIsChatLoading] = useState(false)
-    const [activeTab, setActiveTab] = useState<'dynamics' | 'draft' | 'tradeoffs' | 'history'>('dynamics')
+    const [activeTab, setActiveTab] = useState<'dynamics' | 'tradeoffs' | 'history' | 'draft'>('dynamics')
     const [showLeverageDetails, setShowLeverageDetails] = useState(false)
 
     const chatEndRef = useRef<HTMLDivElement>(null)
@@ -1718,7 +1718,7 @@ function ContractStudioContent() {
 
                                 {/* Tab Navigation */}
                                 <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                                    {(['dynamics', 'draft', 'tradeoffs', 'history'] as const).map(tab => (
+                                    {(['dynamics', 'tradeoffs', 'history', 'draft'] as const).map(tab => (
                                         <button
                                             key={tab}
                                             onClick={() => setActiveTab(tab)}
