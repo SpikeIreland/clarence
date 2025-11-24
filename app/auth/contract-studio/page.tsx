@@ -109,6 +109,56 @@ interface PartyStatus {
     userName: string | null
 }
 
+// API Response Types (for mapping from N8N API)
+interface ApiClauseResponse {
+    positionId: string
+    clauseId: string
+    clauseNumber: string
+    clauseName: string
+    category: string
+    description: string
+    parentPositionId: string | null
+    clauseLevel: number
+    displayOrder: number
+    customerPosition: string | null
+    providerPosition: string | null
+    currentCompromise: string | null
+    aiSuggestedCompromise: string | null
+    gapSize: string
+    gapSeverity: string
+    customerWeight: number
+    providerWeight: number
+    isDealBreakerCustomer: boolean
+    isDealBreakerProvider: boolean
+    clauseContent: string | null
+    customerNotes: string | null
+    providerNotes: string | null
+    priorityLevel: number
+    status: string
+    isExpanded: boolean
+}
+
+interface ApiMessageResponse {
+    messageId?: string
+    message_id?: string
+    sessionId?: string
+    session_id?: string
+    positionId?: string | null
+    position_id?: string | null
+    sender: string
+    senderUserId?: string | null
+    sender_user_id?: string | null
+    message: string
+    messageType?: string
+    message_type?: string
+    relatedPositionChange?: boolean
+    related_position_change?: boolean
+    triggeredBy?: string | null
+    triggered_by?: string | null
+    createdAt?: string
+    created_at?: string
+}
+
 // ============================================================================
 // SECTION 2: API CONFIGURATION & FUNCTIONS
 // ============================================================================
@@ -122,31 +172,141 @@ async function fetchContractStudioData(sessionId: string): Promise<{
     leverage: LeverageData
 } | null> {
     try {
-        // TODO: Replace with actual API endpoint once N8N workflow is created
-        // const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
-        // if (!response.ok) throw new Error('Failed to fetch contract studio data')
-        // return await response.json()
+        const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+        if (!response.ok) throw new Error('Failed to fetch contract studio data')
+        const data = await response.json()
 
-        // For now, return null to trigger mock data
-        return null
+        // Map API response to our interfaces
+        const session: Session = {
+            sessionId: data.session.sessionId,
+            sessionNumber: data.session.sessionNumber,
+            customerCompany: data.session.customerCompany,
+            providerCompany: data.session.providerCompany,
+            serviceType: data.session.contractType || 'IT Services',
+            dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
+            phase: parsePhaseFromState(data.session.phase),
+            status: data.session.status
+        }
+
+        // Map clauses from API (convert string numbers to actual numbers)
+        const clauses: ContractClause[] = data.clauses.map((c: ApiClauseResponse) => ({
+            positionId: c.positionId,
+            clauseId: c.clauseId,
+            clauseNumber: c.clauseNumber,
+            clauseName: c.clauseName,
+            category: c.category,
+            description: c.description,
+            parentPositionId: c.parentPositionId,
+            clauseLevel: c.clauseLevel,
+            displayOrder: c.displayOrder,
+            customerPosition: c.customerPosition ? parseFloat(c.customerPosition) : null,
+            providerPosition: c.providerPosition ? parseFloat(c.providerPosition) : null,
+            currentCompromise: c.currentCompromise ? parseFloat(c.currentCompromise) : null,
+            clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(c.aiSuggestedCompromise) : null,
+            industryStandard: null, // Not in current API
+            gapSize: c.gapSize ? parseFloat(c.gapSize) : 0,
+            customerWeight: c.customerWeight,
+            providerWeight: c.providerWeight,
+            isDealBreakerCustomer: c.isDealBreakerCustomer,
+            isDealBreakerProvider: c.isDealBreakerProvider,
+            clauseContent: c.clauseContent,
+            customerNotes: c.customerNotes,
+            providerNotes: c.providerNotes,
+            status: c.status,
+            isExpanded: c.isExpanded
+        }))
+
+        // Map leverage data
+        const leverage: LeverageData = {
+            leverageScoreCustomer: data.leverage.leverageScoreCustomer,
+            leverageScoreProvider: data.leverage.leverageScoreProvider,
+            leverageScoreCalculatedAt: data.leverage.leverageScoreCalculatedAt,
+            leverageTrackerCustomer: data.leverage.leverageTrackerCustomer,
+            leverageTrackerProvider: data.leverage.leverageTrackerProvider,
+            alignmentPercentage: data.leverage.alignmentPercentage,
+            isAligned: data.leverage.isAligned,
+            leverageTrackerCalculatedAt: data.leverage.leverageTrackerCalculatedAt,
+            marketDynamicsScore: data.leverage.marketDynamicsScore,
+            marketDynamicsRationale: data.leverage.marketDynamicsRationale,
+            economicFactorsScore: data.leverage.economicFactorsScore,
+            economicFactorsRationale: data.leverage.economicFactorsRationale,
+            strategicPositionScore: data.leverage.strategicPositionScore,
+            strategicPositionRationale: data.leverage.strategicPositionRationale,
+            batnaScore: data.leverage.batnaScore,
+            batnaRationale: data.leverage.batnaRationale
+        }
+
+        return { session, clauses, leverage }
     } catch (error) {
         console.error('Error fetching contract studio data:', error)
         return null
     }
 }
 
+// Helper: Format currency from numeric value
+function formatCurrency(value: string | number | null, currency: string): string {
+    if (!value) return '£0'
+    const num = typeof value === 'string' ? parseFloat(value) : value
+    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : '€'
+    if (num >= 1000000) {
+        return `${symbol}${(num / 1000000).toFixed(1)}M`
+    } else if (num >= 1000) {
+        return `${symbol}${(num / 1000).toFixed(0)}K`
+    }
+    return `${symbol}${num.toLocaleString()}`
+}
+
+// Helper: Format position values (can be % or currency depending on clause)
+function formatPositionValue(value: number): string {
+    if (value >= 1000000) {
+        return `£${(value / 1000000).toFixed(1)}M`
+    } else if (value >= 1000) {
+        return `£${(value / 1000).toFixed(0)}K`
+    }
+    return `${value}`
+}
+
+// Helper: Parse phase number from negotiation state
+function parsePhaseFromState(state: string | null): number {
+    if (!state) return 2 // Default to phase 2
+    const phaseMap: Record<string, number> = {
+        'deal_profiling': 1,
+        'initial_positions': 2,
+        'mediation_pending': 2,
+        'gap_analysis': 3,
+        'negotiation': 4,
+        'agreement': 5,
+        'execution': 6,
+        'completed': 6
+    }
+    return phaseMap[state] || 2
+}
+
 // Fetch clause-specific chat messages
 async function fetchClauseChat(sessionId: string, positionId: string | null): Promise<ClauseChatMessage[]> {
     try {
-        // TODO: Replace with actual API endpoint once N8N workflow is created
-        // const url = positionId 
-        //   ? `${API_BASE}/clause-chat-api?session_id=${sessionId}&position_id=${positionId}`
-        //   : `${API_BASE}/clause-chat-api?session_id=${sessionId}&general=true`
-        // const response = await fetch(url)
-        // if (!response.ok) throw new Error('Failed to fetch clause chat')
-        // return await response.json()
+        const url = positionId
+            ? `${API_BASE}/clause-chat-api-get?session_id=${sessionId}&position_id=${positionId}`
+            : `${API_BASE}/clause-chat-api-get?session_id=${sessionId}&general=true`
+        const response = await fetch(url)
+        if (!response.ok) throw new Error('Failed to fetch clause chat')
+        const data = await response.json()
 
-        return []
+        // Handle both array response and object with messages array
+        const messages = Array.isArray(data) ? data : (data.messages || [])
+
+        return messages.map((m: ApiMessageResponse) => ({
+            messageId: m.messageId || m.message_id,
+            sessionId: m.sessionId || m.session_id,
+            positionId: m.positionId || m.position_id,
+            sender: m.sender,
+            senderUserId: m.senderUserId || m.sender_user_id,
+            message: m.message,
+            messageType: m.messageType || m.message_type || 'discussion',
+            relatedPositionChange: m.relatedPositionChange || m.related_position_change || false,
+            triggeredBy: m.triggeredBy || m.triggered_by,
+            createdAt: m.createdAt || m.created_at
+        }))
     } catch (error) {
         console.error('Error fetching clause chat:', error)
         return []
@@ -863,15 +1023,6 @@ function getStatusIcon(status: string): string {
         case 'disputed': return '!'
         default: return '○'
     }
-}
-
-function formatCurrency(value: number): string {
-    if (value >= 1000000) {
-        return `£${(value / 1000000).toFixed(1)}M`
-    } else if (value >= 1000) {
-        return `£${(value / 1000).toFixed(0)}K`
-    }
-    return `£${value}`
 }
 
 function calculateClauseStats(clauses: ContractClause[]): {
@@ -1600,7 +1751,7 @@ function ContractStudioContent() {
                                                 <span className="text-slate-600">
                                                     {selectedClause.customerPosition !== null
                                                         ? (selectedClause.customerPosition >= 1000
-                                                            ? formatCurrency(selectedClause.customerPosition)
+                                                            ? formatPositionValue(selectedClause.customerPosition)
                                                             : selectedClause.customerPosition + (selectedClause.clauseName.includes('SLA') ? '%' : ''))
                                                         : 'Not set'}
                                                 </span>
@@ -1620,7 +1771,7 @@ function ContractStudioContent() {
                                                 <span className="text-slate-600">
                                                     {selectedClause.providerPosition !== null
                                                         ? (selectedClause.providerPosition >= 1000
-                                                            ? formatCurrency(selectedClause.providerPosition)
+                                                            ? formatPositionValue(selectedClause.providerPosition)
                                                             : selectedClause.providerPosition + (selectedClause.clauseName.includes('SLA') ? '%' : ''))
                                                         : 'Not set'}
                                                 </span>
@@ -1639,7 +1790,7 @@ function ContractStudioContent() {
                                                 <span className="text-sm text-amber-700">Gap to Close</span>
                                                 <span className="text-sm font-semibold text-amber-700">
                                                     {selectedClause.gapSize >= 1000
-                                                        ? formatCurrency(selectedClause.gapSize)
+                                                        ? formatPositionValue(selectedClause.gapSize)
                                                         : selectedClause.gapSize + (selectedClause.clauseName.includes('SLA') ? '%' : '')}
                                                 </span>
                                             </div>
@@ -1658,13 +1809,13 @@ function ContractStudioContent() {
                                                 <div className="text-sm font-medium text-emerald-800 mb-1">CLARENCE Recommendation</div>
                                                 <div className="text-lg font-bold text-emerald-700">
                                                     {selectedClause.clarenceRecommendation >= 1000
-                                                        ? formatCurrency(selectedClause.clarenceRecommendation)
+                                                        ? formatPositionValue(selectedClause.clarenceRecommendation)
                                                         : selectedClause.clarenceRecommendation + (selectedClause.clauseName.includes('SLA') ? '%' : '')}
                                                 </div>
                                                 {selectedClause.industryStandard !== null && (
                                                     <div className="text-xs text-emerald-600 mt-1">
                                                         Industry standard: {selectedClause.industryStandard >= 1000
-                                                            ? formatCurrency(selectedClause.industryStandard)
+                                                            ? formatPositionValue(selectedClause.industryStandard)
                                                             : selectedClause.industryStandard + (selectedClause.clauseName.includes('SLA') ? '%' : '')}
                                                     </div>
                                                 )}
