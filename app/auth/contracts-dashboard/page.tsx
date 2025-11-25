@@ -769,7 +769,7 @@ export default function ContractsDashboard() {
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <h3 className="text-base font-medium text-slate-800">
-                          {session.sessionNumber || `Contract ${session.sessionId.substring(0, 8)}`}
+                          {session.sessionNumber || (session?.sessionId || 'NEW')?.substring(0, 8)}
                         </h3>
                         <p className="text-slate-600 text-sm">{session.serviceRequired || 'Service type pending'}</p>
                       </div>
@@ -883,8 +883,8 @@ export default function ContractsDashboard() {
                   {chatMessages.map(message => (
                     <div key={message.id} className={`mb-4 ${message.type === 'user' ? 'text-right' : ''}`}>
                       <div className={`inline-block max-w-[80%] ${message.type === 'user'
-                          ? 'bg-slate-600 text-white rounded-lg px-4 py-2'
-                          : 'bg-white rounded-lg px-4 py-2 shadow-sm border border-slate-200'
+                        ? 'bg-slate-600 text-white rounded-lg px-4 py-2'
+                        : 'bg-white rounded-lg px-4 py-2 shadow-sm border border-slate-200'
                         }`}>
                         <p className="text-sm">{message.content}</p>
                         <p className={`text-xs mt-1 ${message.type === 'user' ? 'text-slate-300' : 'text-slate-500'}`}>
