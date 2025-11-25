@@ -1,287 +1,519 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
 
-interface User {
-  userId?: string
-  user_id?: string
-  firstName?: string
-  first_name?: string
-  lastName?: string
-  last_name?: string
-  email?: string
-  companyName?: string
-  company_name?: string
-  role?: string
+// ============================================================================
+// SECTION 1: LOADING COMPONENT
+// ============================================================================
+
+function LoginLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-slate-600">Loading...</p>
+      </div>
+    </div>
+  )
 }
 
-interface ApiResponse {
-  success: boolean
-  message?: string
-  sessionToken?: string
-  user?: User
-}
+// ============================================================================
+// SECTION 2: MAIN LOGIN/SIGNUP COMPONENT
+// ============================================================================
 
-export default function LoginPage() {
+function LoginSignupContent() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
+  const supabase = createClient()
+
+  // ========================================================================
+  // SECTION 3: STATE
+  // ========================================================================
+
+  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login')
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{text: string, type: 'success' | 'error' | 'info'} | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  // Configuration
-  const API_BASE = 'https://spikeislandstudios.app.n8n.cloud'
+  // Login form
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
 
-  // API call helper
-  async function apiCall(endpoint: string, method = 'GET', body: Record<string, unknown> | null = null, token: string | null = null): Promise<ApiResponse> {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json'
+  // Signup form
+  const [signupEmail, setSignupEmail] = useState('')
+  const [signupPassword, setSignupPassword] = useState('')
+  const [signupConfirmPassword, setSignupConfirmPassword] = useState('')
+  const [signupFirstName, setSignupFirstName] = useState('')
+  const [signupLastName, setSignupLastName] = useState('')
+  const [signupCompany, setSignupCompany] = useState('')
+  const [signupRole, setSignupRole] = useState<'customer' | 'provider'>('customer')
+
+  // ========================================================================
+  // SECTION 4: VALIDATION
+  // ========================================================================
+
+  function validateEmail(email: string): boolean {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return re.test(email)
+  }
+
+  function validateLoginForm(): string | null {
+    if (!loginEmail || !loginPassword) {
+      return 'Please fill in all fields'
     }
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
+    if (!validateEmail(loginEmail)) {
+      return 'Please enter a valid email address'
+    }
+    if (loginPassword.length < 6) {
+      return 'Password must be at least 6 characters'
+    }
+    return null
+  }
+
+  function validateSignupForm(): string | null {
+    if (!signupEmail || !signupPassword || !signupConfirmPassword || !signupFirstName || !signupLastName || !signupCompany) {
+      return 'Please fill in all fields'
+    }
+    if (!validateEmail(signupEmail)) {
+      return 'Please enter a valid email address'
+    }
+    if (signupPassword.length < 6) {
+      return 'Password must be at least 6 characters'
+    }
+    if (signupPassword !== signupConfirmPassword) {
+      return 'Passwords do not match'
+    }
+    if (signupFirstName.length < 2) {
+      return 'First name must be at least 2 characters'
+    }
+    if (signupLastName.length < 2) {
+      return 'Last name must be at least 2 characters'
+    }
+    if (signupCompany.length < 2) {
+      return 'Company name must be at least 2 characters'
+    }
+    return null
+  }
+
+  // ========================================================================
+  // SECTION 5: LOGIN HANDLER
+  // ========================================================================
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+
+    // Validate
+    const validationError = validateLoginForm()
+    if (validationError) {
+      setError(validationError)
+      return
     }
 
-    const config: RequestInit = {
-      method,
-      headers
-    }
-
-    if (body) {
-      config.body = JSON.stringify(body)
-    }
+    setLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, config)
-      const data = await response.json()
-      return data
-    } catch (error) {
-      console.error('API Error:', error)
-      return {
-        success: false,
-        message: 'Network error. Please check your connection and try again.'
-      }
-    }
-  }
+      // Sign in with Supabase Auth
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword
+      })
 
-  // Login function
-  async function login(email: string, password: string, rememberMe: boolean = false) {
-    const result = await apiCall('/webhook/auth-login', 'POST', {
-      email,
-      password,
-      rememberMe
-    })
-    
-    if (result.success) {
-      localStorage.setItem('sessionToken', result.sessionToken || '')
-      localStorage.setItem('user', JSON.stringify(result.user))
-      
-      if (rememberMe) {
-        localStorage.setItem('rememberUser', email)
-      }
-    }
-    
-    return result
-  }
+      if (signInError) throw signInError
 
-  // Redirect based on role
-  function redirectBasedOnRole(user: User) {
-    const userData = {
-      userId: user.userId || user.user_id,
-      name: `${user.firstName || user.first_name || ''} ${user.lastName || user.last_name || ''}`.trim(),
-      firstName: user.firstName || user.first_name,
-      lastName: user.lastName || user.last_name,
-      email: user.email,
-      company: user.companyName || user.company_name,
-      role: user.role,
-      sessionToken: localStorage.getItem('sessionToken') || 'temp-token'
-    }
-    
-    localStorage.setItem('clarence_auth', JSON.stringify({
-      userId: userData.userId,
-      sessionToken: userData.sessionToken,
-      userInfo: userData
-    }))
-    
-    router.push('/auth/contracts-dashboard')
-  }
+      if (data.user) {
+        // Get user profile from public.users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('auth_id', data.user.id)
+          .single()
 
-  // Check existing session - using useCallback to fix the dependency warning
-  const checkExistingSession = useCallback(async () => {
-    const token = localStorage.getItem('sessionToken')
-    if (token) {
-      const result = await apiCall('/webhook/auth-validate', 'GET', null, token)
-      if (result.success && result.user) {
-        const userData = {
-          userId: result.user.user_id,
-          firstName: result.user.first_name,
-          lastName: result.user.last_name,
-          email: result.user.email,
-          company: result.user.company_name,
-          role: result.user.role,
-          sessionToken: token
+        if (userError) throw userError
+
+        // Store user info in localStorage for legacy compatibility
+        const authData = {
+          userInfo: {
+            userId: userData.auth_id,
+            email: userData.email,
+            firstName: userData.first_name,
+            lastName: userData.last_name,
+            company: userData.company_name,
+            role: userData.role
+          },
+          timestamp: new Date().toISOString()
         }
-        
-        setMessage({ text: `Welcome back, ${userData.firstName}! Redirecting...`, type: 'success' })
-        setTimeout(() => redirectBasedOnRole(userData), 1000)
-      } else {
-        localStorage.removeItem('sessionToken')
-        localStorage.removeItem('user')
+        localStorage.setItem('clarence_auth', JSON.stringify(authData))
+
+        // Redirect to dashboard
+        router.push('/auth/contracts-dashboard')
       }
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Check for existing session on mount
-  useEffect(() => {
-    checkExistingSession()
-    
-    // Pre-fill remembered email
-    const rememberedEmail = localStorage.getItem('rememberUser')
-    if (rememberedEmail) {
-      setEmail(rememberedEmail)
-      setRememberMe(true)
-    }
-  }, [checkExistingSession])
-
-  // Handle form submission
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setMessage(null)
-
-    const result = await login(email, password, rememberMe)
-
-    if (result.success && result.user) {
-      setMessage({ 
-        text: `Welcome back, ${result.user.firstName || result.user.first_name}! Redirecting...`, 
-        type: 'success' 
-      })
-      setTimeout(() => redirectBasedOnRole(result.user!), 1500)
-    } else {
-      setMessage({ 
-        text: result.message || 'Login failed. Please check your credentials.', 
-        type: 'error' 
-      })
+    } catch (err: unknown) {
+      console.error('Login error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to login. Please check your credentials.'
+      setError(errorMessage)
+    } finally {
       setLoading(false)
     }
   }
 
+  // ========================================================================
+  // SECTION 6: SIGNUP HANDLER
+  // ========================================================================
+
+  async function handleSignup(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+
+    // Validate
+    const validationError = validateSignupForm()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // Sign up with Supabase Auth
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: signupEmail,
+        password: signupPassword,
+        options: {
+          data: {
+            first_name: signupFirstName,
+            last_name: signupLastName,
+            company_name: signupCompany,
+            role: signupRole
+          }
+        }
+      })
+
+      if (signUpError) throw signUpError
+
+      if (data.user) {
+        // Check if email confirmation is required
+        if (data.user.identities && data.user.identities.length === 0) {
+          setSuccess('Please check your email to confirm your account before logging in.')
+          setActiveTab('login')
+        } else {
+          setSuccess('Account created successfully! Redirecting...')
+
+          // Store user info in localStorage
+          const authData = {
+            userInfo: {
+              userId: data.user.id,
+              email: signupEmail,
+              firstName: signupFirstName,
+              lastName: signupLastName,
+              company: signupCompany,
+              role: signupRole
+            },
+            timestamp: new Date().toISOString()
+          }
+          localStorage.setItem('clarence_auth', JSON.stringify(authData))
+
+          // Redirect to dashboard after short delay
+          setTimeout(() => {
+            router.push('/auth/contracts-dashboard')
+          }, 1500)
+        }
+      }
+    } catch (err: unknown) {
+      console.error('Signup error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.'
+      setError(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ========================================================================
+  // SECTION 7: RENDER
+  // ========================================================================
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 flex items-center justify-center p-5">
-      {/* Back to Home Link - Top Left */}
-      <Link 
-        href="/" 
-        className="absolute top-8 left-8 text-slate-400 hover:text-white text-sm font-medium transition-colors duration-300"
-      >
-        ← Back to Home
-      </Link>
-
-      <div className="bg-slate-50 rounded-xl shadow-2xl p-10 w-full max-w-md relative overflow-hidden">
-        {/* Top accent bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-slate-600 to-slate-700"></div>
-        
-        {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo/Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-medium text-slate-800 mb-2 tracking-wide">CLARENCE</h1>
-          <p className="text-sm text-slate-500 font-light tracking-wider">The Honest Broker</p>
-          <div className="mt-6">
-            <h2 className="text-lg font-normal text-slate-700">Sign In</h2>
-            <p className="text-sm text-slate-500 mt-1">Access your contract negotiations</p>
+          <div className="inline-block">
+            <div className="text-4xl font-medium text-slate-800 mb-2">CLARENCE</div>
+            <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
           </div>
-        </div>
-
-        {/* Message Display */}
-        {message && (
-          <div className={`p-3 rounded-lg mb-6 text-center text-sm ${
-            message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
-            message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
-            'bg-blue-50 text-blue-700 border border-blue-200'
-          }`}>
-            {message.text}
-          </div>
-        )}
-
-        {/* Login Form */}
-        <form onSubmit={handleSubmit}>
-          <div className="mb-5">
-            <label className="block mb-2 text-slate-600 font-medium text-sm">
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-all"
-              placeholder="your.email@company.com"
-              required
-            />
-          </div>
-
-          <div className="mb-5">
-            <label className="block mb-2 text-slate-600 font-medium text-sm">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-slate-500 focus:ring-1 focus:ring-slate-500 transition-all"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
-
-          <div className="mb-6 flex items-center">
-            <input
-              type="checkbox"
-              id="rememberMe"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="mr-2 w-4 h-4 text-slate-600 rounded border-slate-300 focus:ring-slate-500"
-            />
-            <label htmlFor="rememberMe" className="text-slate-600 text-sm">
-              Keep me signed in
-            </label>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg font-medium text-sm transition-all duration-300 hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed relative"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Signing in...
-              </span>
-            ) : (
-              'Sign In'
-            )}
-          </button>
-        </form>
-
-        {/* Sign up link */}
-        <div className="text-center mt-6 pt-6 border-t border-slate-200">
-          <p className="text-slate-600 text-sm">
-            Don&apos;t have an account?{' '}
-            <a href="/auth/signup" className="text-slate-700 font-medium hover:text-slate-900 hover:underline transition-colors">
-              Create account
-            </a>
+          <p className="text-slate-600 mt-4 text-sm">
+            {activeTab === 'login'
+              ? 'Sign in to continue to your account'
+              : 'Create your account to get started'
+            }
           </p>
         </div>
 
-        {/* Footer link */}
-        <div className="text-center mt-4">
-          <a href="/forgot-password" className="text-slate-500 text-sm hover:text-slate-700 transition-colors">
-            Forgot password?
-          </a>
+        {/* Main Card */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          {/* Tabs */}
+          <div className="flex border-b border-slate-200">
+            <button
+              onClick={() => {
+                setActiveTab('login')
+                setError(null)
+                setSuccess(null)
+              }}
+              className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'login'
+                ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+            >
+              Login
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('signup')
+                setError(null)
+                setSuccess(null)
+              }}
+              className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'signup'
+                ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          {/* Error/Success Messages */}
+          {error && (
+            <div className="mx-6 mt-6 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="mx-6 mt-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+              {success}
+            </div>
+          )}
+
+          {/* Login Form */}
+          {activeTab === 'login' && (
+            <form onSubmit={handleLogin} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                  placeholder="you@company.com"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                  placeholder="••••••••"
+                  disabled={loading}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Signing in...
+                  </>
+                ) : (
+                  'Sign In'
+                )}
+              </button>
+
+              <div className="text-center text-sm text-slate-500">
+                Forgot password?{' '}
+                <button type="button" className="text-emerald-600 hover:underline">
+                  Reset it
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Signup Form */}
+          {activeTab === 'signup' && (
+            <form onSubmit={handleSignup} className="p-6 space-y-4">
+              {/* Role Selection */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Account Type
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSignupRole('customer')}
+                    className={`p-3 border-2 rounded-lg text-sm font-medium transition ${signupRole === 'customer'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    disabled={loading}
+                  >
+                    Customer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSignupRole('provider')}
+                    className={`p-3 border-2 rounded-lg text-sm font-medium transition ${signupRole === 'provider'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    disabled={loading}
+                  >
+                    Provider
+                  </button>
+                </div>
+              </div>
+
+              {/* Name Fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    value={signupFirstName}
+                    onChange={(e) => setSignupFirstName(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                    placeholder="John"
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={signupLastName}
+                    onChange={(e) => setSignupLastName(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                    placeholder="Doe"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Company */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Company Name
+                </label>
+                <input
+                  type="text"
+                  value={signupCompany}
+                  onChange={(e) => setSignupCompany(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                  placeholder="Acme Corporation"
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                  placeholder="you@company.com"
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                  placeholder="••••••••"
+                  disabled={loading}
+                />
+                <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
+              </div>
+
+              {/* Confirm Password */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={signupConfirmPassword}
+                  onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                  placeholder="••••••••"
+                  disabled={loading}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Creating account...
+                  </>
+                ) : (
+                  'Create Account'
+                )}
+              </button>
+
+              <p className="text-xs text-slate-500 text-center">
+                By signing up, you agree to our Terms of Service and Privacy Policy
+              </p>
+            </form>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-6 text-sm text-slate-500">
+          © {new Date().getFullYear()} CLARENCE by Spike Island Studios
         </div>
       </div>
     </div>
+  )
+}
+
+// ============================================================================
+// SECTION 8: DEFAULT EXPORT WITH SUSPENSE
+// ============================================================================
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginLoading />}>
+      <LoginSignupContent />
+    </Suspense>
   )
 }
