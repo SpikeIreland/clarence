@@ -1949,9 +1949,9 @@ function ContractStudioContent() {
                 {/* ================================================================== */}
                 {/* RIGHT PANEL: CLARENCE Chat */}
                 {/* ================================================================== */}
-                <div className="w-96 bg-white border-l border-slate-200 flex flex-col h-full max-h-full">
+                <div className="w-96 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
                     {/* Chat Header */}
-                    <div className="p-4 border-b border-slate-200">
+                    <div className="flex-shrink-0 p-4 border-b border-slate-200">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
                                 <span className="text-white font-bold">C</span>
@@ -1968,8 +1968,8 @@ function ContractStudioContent() {
                         </div>
                     </div>
 
-                    {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Chat Messages - scrollable area */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
                         {chatMessages.map((msg) => (
                             <div
                                 key={msg.messageId}
@@ -2013,8 +2013,8 @@ function ContractStudioContent() {
                         <div ref={chatEndRef} />
                     </div>
 
-                    {/* Chat Input */}
-                    <div className="p-4 border-t border-slate-200">
+                    {/* Chat Input - fixed at bottom */}
+                    <div className="flex-shrink-0 p-4 border-t border-slate-200 bg-white">
                         <div className="flex gap-2">
                             <input
                                 type="text"
