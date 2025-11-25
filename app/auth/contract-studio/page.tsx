@@ -1404,10 +1404,10 @@ function ContractStudioContent() {
 
                     {/* Alignment Badge */}
                     <div className={`px-3 py-1 rounded-full text-xs font-medium ${leverage.alignmentPercentage >= 90
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : leverage.alignmentPercentage >= 70
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-red-100 text-red-700'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : leverage.alignmentPercentage >= 70
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-red-100 text-red-700'
                         }`}>
                         {leverage.alignmentPercentage}% Aligned
                     </div>
@@ -1469,8 +1469,8 @@ function ContractStudioContent() {
                         {/* Leverage Tracker (dynamic - shown as fill) */}
                         <div
                             className={`h-full transition-all duration-500 ${leverage.leverageTrackerCustomer > leverage.leverageScoreCustomer
-                                    ? 'bg-emerald-500'
-                                    : 'bg-amber-500'
+                                ? 'bg-emerald-500'
+                                : 'bg-amber-500'
                                 }`}
                             style={{ width: `${leverage.leverageTrackerCustomer}%` }}
                         ></div>
@@ -1554,8 +1554,8 @@ function ContractStudioContent() {
             <div>
                 <div
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition group ${isSelected
-                            ? 'bg-emerald-50 border border-emerald-200'
-                            : 'hover:bg-slate-50'
+                        ? 'bg-emerald-50 border border-emerald-200'
+                        : 'hover:bg-slate-50'
                         }`}
                     style={{ paddingLeft: `${12 + depth * 16}px` }}
                     onClick={() => handleClauseSelect(clause)}
@@ -1630,7 +1630,7 @@ function ContractStudioContent() {
             <PartyStatusBanner />
 
             {/* Main Three-Panel Layout */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden h-0">
                 {/* ================================================================== */}
                 {/* LEFT PANEL: Clause Navigation */}
                 {/* ================================================================== */}
@@ -1677,8 +1677,8 @@ function ContractStudioContent() {
                         ))}
                     </div>
 
-                    {/* Add Clause Button */}
-                    <div className="p-4 border-t border-slate-200">
+                    {/* Chat Input */}
+                    <div className="p-4 border-t border-slate-200 flex-shrink-0 bg-white">
                         <button className="w-full py-2 px-4 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-emerald-500 hover:text-emerald-600 transition flex items-center justify-center gap-2">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1706,9 +1706,9 @@ function ContractStudioContent() {
                                         <span className="text-sm font-mono text-slate-400">{selectedClause.clauseNumber}</span>
                                         <h2 className="text-lg font-semibold text-slate-800">{selectedClause.clauseName}</h2>
                                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${selectedClause.status === 'aligned' ? 'bg-emerald-100 text-emerald-700' :
-                                                selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
-                                                    selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
-                                                        'bg-slate-100 text-slate-700'
+                                            selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
+                                                selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
+                                                    'bg-slate-100 text-slate-700'
                                             }`}>
                                             {selectedClause.status}
                                         </span>
@@ -1723,8 +1723,8 @@ function ContractStudioContent() {
                                             key={tab}
                                             onClick={() => setActiveTab(tab)}
                                             className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
+                                                ? 'bg-white text-slate-800 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-700'
                                                 }`}
                                         >
                                             {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -1949,7 +1949,7 @@ function ContractStudioContent() {
                 {/* ================================================================== */}
                 {/* RIGHT PANEL: CLARENCE Chat */}
                 {/* ================================================================== */}
-                <div className="w-96 bg-white border-l border-slate-200 flex flex-col">
+                <div className="w-96 bg-white border-l border-slate-200 flex flex-col h-full max-h-full">
                     {/* Chat Header */}
                     <div className="p-4 border-b border-slate-200">
                         <div className="flex items-center gap-3">
@@ -1976,10 +1976,10 @@ function ContractStudioContent() {
                                 className={`flex ${msg.sender === 'customer' ? 'justify-end' : 'justify-start'}`}
                             >
                                 <div className={`max-w-[85%] rounded-lg p-3 ${msg.sender === 'clarence'
-                                        ? 'bg-slate-100 text-slate-700'
-                                        : msg.sender === 'customer'
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-blue-500 text-white'
+                                    ? 'bg-slate-100 text-slate-700'
+                                    : msg.sender === 'customer'
+                                        ? 'bg-emerald-500 text-white'
+                                        : 'bg-blue-500 text-white'
                                     }`}>
                                     {msg.sender === 'clarence' && (
                                         <div className="flex items-center gap-2 mb-2">
