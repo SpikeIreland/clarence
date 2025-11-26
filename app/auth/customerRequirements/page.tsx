@@ -62,6 +62,18 @@ interface CustomerRequirements {
         innovation: number
         riskMitigation: number
     }
+
+    // Technical & Compliance Requirements
+    securityRequirements: string[]
+    integrationNeeds: string
+    dataLocation: string
+    auditRequirements: string
+
+    // Additional Context
+    previousSimilarProjects: string
+    internalResourcesAvailable: string
+    competitiveSituation: string
+    additionalContext: string
 }
 
 interface ChatMessage {
@@ -75,7 +87,7 @@ type NestedKeyOf<T> = keyof T | 'contractPositions' | 'priorities'
 
 interface StepComponentProps {
     formData: Partial<CustomerRequirements>
-    updateFormData: (field: keyof CustomerRequirements, value: string | number) => void
+    updateFormData: (field: keyof CustomerRequirements, value: string | number | string[]) => void
 }
 
 interface NestedStepComponentProps {
@@ -124,7 +136,7 @@ function CustomerRequirementsForm() {
     const [loading, setLoading] = useState(false)
     const [initialLoading, setInitialLoading] = useState(true)
     const [currentStep, setCurrentStep] = useState(1)
-    const [totalSteps] = useState(6)
+    const [totalSteps] = useState(9) // UPDATED: Now 9 steps
     const [priorityPoints, setPriorityPoints] = useState(25)
 
     // Session state
@@ -141,6 +153,7 @@ function CustomerRequirementsForm() {
     // SECTION 6: FORM STATE
     // ========================================================================
     const [formData, setFormData] = useState<Partial<CustomerRequirements>>({
+        // Contract positions defaults
         contractPositions: {
             liabilityCap: 200,
             paymentTerms: 45,
@@ -148,13 +161,24 @@ function CustomerRequirementsForm() {
             dataRetention: 5,
             terminationNotice: 60
         },
+        // Priority defaults
         priorities: {
             cost: 5,
             quality: 5,
             speed: 5,
             innovation: 5,
             riskMitigation: 5
-        }
+        },
+        // Commercial defaults
+        budgetMin: 0,
+        budgetMax: 0,
+        paymentTermsPreference: '',
+        contractDuration: '',
+        // Technical defaults
+        securityRequirements: [],
+        integrationNeeds: '',
+        dataLocation: '',
+        auditRequirements: ''
     })
 
     // ========================================================================
@@ -218,7 +242,7 @@ function CustomerRequirementsForm() {
     // ========================================================================
     // SECTION 9: FORM HANDLERS
     // ========================================================================
-    const updateFormData = (field: keyof CustomerRequirements, value: string | number) => {
+    const updateFormData = (field: keyof CustomerRequirements, value: string | number | string[]) => {
         setFormData(prev => ({
             ...prev,
             [field]: value
@@ -256,7 +280,7 @@ function CustomerRequirementsForm() {
                 sessionId: sessionId,
                 sessionNumber: sessionNumber,
                 timestamp: new Date().toISOString(),
-                formVersion: '6.0',
+                formVersion: '7.0',
                 formSource: 'customer-requirements-form'
             }
 
@@ -271,8 +295,8 @@ function CustomerRequirementsForm() {
                 const result = await response.json()
                 console.log('Requirements submitted:', result)
 
-                // Redirect to questionnaire (next phase)
-                router.push(`/auth/questionnaire?session_id=${sessionId}&session_number=${sessionNumber}`)
+                // Redirect to strategic assessment (next phase)
+                router.push(`/auth/strategic-assessment?session_id=${sessionId}&session_number=${sessionNumber}`)
             } else {
                 const errorData = await response.json()
                 throw new Error(errorData.error || 'Submission failed')
@@ -318,7 +342,7 @@ function CustomerRequirementsForm() {
                 body: JSON.stringify({
                     message: userMessage.content,
                     context: context,
-                    chatHistory: chatMessages.slice(-10) // Last 10 messages for context
+                    chatHistory: chatMessages.slice(-10)
                 })
             })
 
@@ -348,14 +372,18 @@ function CustomerRequirementsForm() {
         }
     }
 
+    // UPDATED: Step names for 9 steps
     const getStepName = (step: number): string => {
         const stepNames: Record<number, string> = {
             1: 'Company Information',
             2: 'Market Context & Leverage',
             3: 'Service Requirements',
             4: 'Alternative Options (BATNA)',
-            5: 'Contract Positions',
-            6: 'Priority Allocation'
+            5: 'Commercial Terms',
+            6: 'Contract Positions',
+            7: 'Priority Allocation',
+            8: 'Technical & Compliance',
+            9: 'Additional Context'
         }
         return stepNames[step] || 'Unknown Step'
     }
@@ -372,7 +400,7 @@ function CustomerRequirementsForm() {
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
 
     // ========================================================================
-    // SECTION 13: RENDER STEPS
+    // SECTION 13: RENDER STEPS - UPDATED FOR 9 STEPS
     // ========================================================================
     const renderStep = () => {
         switch (currentStep) {
@@ -385,9 +413,15 @@ function CustomerRequirementsForm() {
             case 4:
                 return <BATNAStep formData={formData} updateFormData={updateFormData} />
             case 5:
-                return <ContractPositionsStep formData={formData} updateNestedData={updateNestedData} />
+                return <CommercialTermsStep formData={formData} updateFormData={updateFormData} />
             case 6:
+                return <ContractPositionsStep formData={formData} updateNestedData={updateNestedData} />
+            case 7:
                 return <PrioritiesStep formData={formData} updateNestedData={updateNestedData} priorityPoints={priorityPoints} />
+            case 8:
+                return <TechnicalRequirementsStep formData={formData} updateFormData={updateFormData} />
+            case 9:
+                return <AdditionalContextStep formData={formData} updateFormData={updateFormData} />
             default:
                 return null
         }
@@ -438,8 +472,8 @@ function CustomerRequirementsForm() {
                                 <button
                                     onClick={() => setChatOpen(!chatOpen)}
                                     className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all ${chatOpen
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white'
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white'
                                         }`}
                                 >
                                     💬 {chatOpen ? 'Close Chat' : 'Ask CLARENCE'}
@@ -491,18 +525,19 @@ function CustomerRequirementsForm() {
                             />
                         </div>
 
-                        {/* Step Indicators */}
+                        {/* Step Indicators - Updated for 9 steps */}
                         <div className="flex justify-between mt-4">
-                            {[1, 2, 3, 4, 5, 6].map((step) => (
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((step) => (
                                 <button
                                     key={step}
                                     onClick={() => setCurrentStep(step)}
                                     className={`w-8 h-8 rounded-full text-xs font-medium transition-all ${step === currentStep
-                                            ? 'bg-slate-700 text-white'
-                                            : step < currentStep
-                                                ? 'bg-emerald-500 text-white'
-                                                : 'bg-slate-200 text-slate-500'
+                                        ? 'bg-slate-700 text-white'
+                                        : step < currentStep
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-slate-200 text-slate-500'
                                         }`}
+                                    title={getStepName(step)}
                                 >
                                     {step < currentStep ? '✓' : step}
                                 </button>
@@ -521,8 +556,8 @@ function CustomerRequirementsForm() {
                             onClick={prevStep}
                             disabled={currentStep === 1}
                             className={`px-6 py-2 rounded-lg transition-all ${currentStep === 1
-                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                    : 'bg-slate-600 text-white hover:bg-slate-700'
+                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                : 'bg-slate-600 text-white hover:bg-slate-700'
                                 }`}
                         >
                             ← Previous
@@ -547,7 +582,7 @@ function CustomerRequirementsForm() {
                                         Submitting...
                                     </>
                                 ) : (
-                                    <>Submit Requirements →</>
+                                    <>Submit & Continue to Strategic Assessment →</>
                                 )}
                             </button>
                         )}
@@ -607,8 +642,8 @@ function CustomerRequirementsForm() {
                         >
                             <div
                                 className={`max-w-[80%] rounded-lg p-3 ${msg.type === 'user'
-                                        ? 'bg-slate-700 text-white'
-                                        : 'bg-slate-100 text-slate-800'
+                                    ? 'bg-slate-700 text-white'
+                                    : 'bg-slate-100 text-slate-800'
                                     }`}
                             >
                                 <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -796,7 +831,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-blue-800">
-                    This information is critical for CLARENCE&apos;s leverage calculation algorithm, which determines negotiation dynamics.
+                    💡 This information is critical for CLARENCE&apos;s leverage calculation algorithm, which determines negotiation dynamics.
                 </p>
             </div>
 
@@ -846,8 +881,9 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                         value={formData.dealValue || ''}
                         onChange={(e) => updateFormData('dealValue', e.target.value)}
-                        placeholder="e.g., 500000"
+                        placeholder="e.g., 1800000"
                     />
+                    <p className="text-xs text-slate-500 mt-1">Annual contract value</p>
                 </div>
 
                 <div>
@@ -924,7 +960,7 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                         onChange={(e) => updateFormData('serviceRequired', e.target.value)}
                     >
                         <option value="">Select Service</option>
-                        <option value="Customer Support">Back Office Operations</option>
+                        <option value="Back Office Operations">Back Office Operations</option>
                         <option value="Customer Support">Customer Support</option>
                         <option value="Technical Support">Technical Support</option>
                         <option value="Data Processing">Data Processing</option>
@@ -959,7 +995,7 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                 </label>
                 <textarea
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={3}
+                    rows={4}
                     value={formData.businessChallenge || ''}
                     onChange={(e) => updateFormData('businessChallenge', e.target.value)}
                     placeholder="Describe the specific business challenge you're trying to solve..."
@@ -972,7 +1008,7 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                 </label>
                 <textarea
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={3}
+                    rows={4}
                     value={formData.desiredOutcome || ''}
                     onChange={(e) => updateFormData('desiredOutcome', e.target.value)}
                     placeholder="What does success look like for this engagement?"
@@ -990,7 +1026,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-yellow-800">
-                    Your Best Alternative to a Negotiated Agreement (BATNA) significantly impacts your leverage.
+                    ⚖️ Your Best Alternative to a Negotiated Agreement (BATNA) significantly impacts your leverage.
                     Be honest - this information helps CLARENCE negotiate effectively on your behalf.
                 </p>
             </div>
@@ -1040,7 +1076,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     value={formData.walkAwayPoint || ''}
                     onChange={(e) => updateFormData('walkAwayPoint', e.target.value)}
-                    placeholder="e.g., £750,000 or 20% above budget"
+                    placeholder="e.g., £2,000,000 or 15% above budget"
                 />
                 <p className="text-xs text-slate-500 mt-1">This remains confidential and helps CLARENCE know your limits</p>
             </div>
@@ -1056,8 +1092,8 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
                 >
                     <option value="">Select</option>
                     <option value="fixed">Fixed budget - no flexibility</option>
-                    <option value="limited">Limited flexibility (up to 5%)</option>
-                    <option value="moderate">Moderate flexibility (5-15%)</option>
+                    <option value="limited">Limited flexibility (up to 10%)</option>
+                    <option value="moderate">Moderate flexibility (10-15%)</option>
                     <option value="flexible">Flexible (15-25%)</option>
                     <option value="very-flexible">Very flexible (25%+)</option>
                 </select>
@@ -1066,15 +1102,106 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
     )
 }
 
-// STEP 5: Contract Positions
+// ============================================================================
+// SECTION 19: NEW STEP - COMMERCIAL TERMS
+// ============================================================================
+function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-medium text-slate-800 mb-4">Commercial Terms</h2>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-green-800">
+                    💰 Define your budget range and commercial preferences. This helps CLARENCE understand your financial boundaries.
+                </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Budget Minimum (£)
+                    </label>
+                    <input
+                        type="number"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                        value={formData.budgetMin || ''}
+                        onChange={(e) => updateFormData('budgetMin', parseInt(e.target.value) || 0)}
+                        placeholder="e.g., 1500000"
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Budget Maximum (£)
+                    </label>
+                    <input
+                        type="number"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                        value={formData.budgetMax || ''}
+                        onChange={(e) => updateFormData('budgetMax', parseInt(e.target.value) || 0)}
+                        placeholder="e.g., 2000000"
+                    />
+                </div>
+            </div>
+
+            {formData.budgetMin && formData.budgetMax && formData.budgetMin > 0 && formData.budgetMax > 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <p className="text-sm text-slate-700">
+                        <span className="font-medium">Budget Range:</span> £{formData.budgetMin.toLocaleString()} - £{formData.budgetMax.toLocaleString()}
+                    </p>
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Payment Terms Preference
+                    </label>
+                    <select
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                        value={formData.paymentTermsPreference || ''}
+                        onChange={(e) => updateFormData('paymentTermsPreference', e.target.value)}
+                    >
+                        <option value="">Select</option>
+                        <option value="NET-15">NET 15 days</option>
+                        <option value="NET-30">NET 30 days</option>
+                        <option value="NET-45">NET 45 days</option>
+                        <option value="NET-60">NET 60 days</option>
+                        <option value="NET-90">NET 90 days</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Contract Duration
+                    </label>
+                    <select
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                        value={formData.contractDuration || ''}
+                        onChange={(e) => updateFormData('contractDuration', e.target.value)}
+                    >
+                        <option value="">Select</option>
+                        <option value="12">12 months</option>
+                        <option value="24">24 months</option>
+                        <option value="36">36 months</option>
+                        <option value="48">48 months</option>
+                        <option value="60">60 months</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// STEP 6: Contract Positions (was Step 5)
 function ContractPositionsStep({ formData, updateNestedData }: NestedStepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Initial Contract Positions</h2>
 
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-green-800">
-                    Set your starting positions on key contract terms. CLARENCE will use these as the basis for negotiation.
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-purple-800">
+                    📋 Set your starting positions on key contract terms. CLARENCE will use these as the basis for negotiation.
                 </p>
             </div>
 
@@ -1093,9 +1220,9 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
                         onChange={(e) => updateNestedData('contractPositions', 'liabilityCap', parseInt(e.target.value))}
                     />
                     <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>100% (Low)</span>
+                        <span>100% (Provider-friendly)</span>
                         <span>300% (Standard)</span>
-                        <span>500% (High)</span>
+                        <span>500% (Customer-friendly)</span>
                     </div>
                 </div>
 
@@ -1113,9 +1240,9 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
                         onChange={(e) => updateNestedData('contractPositions', 'paymentTerms', parseInt(e.target.value))}
                     />
                     <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>15 days</span>
+                        <span>15 days (Provider-friendly)</span>
                         <span>45 days</span>
-                        <span>90 days</span>
+                        <span>90 days (Customer-friendly)</span>
                     </div>
                 </div>
 
@@ -1141,6 +1268,26 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Data Retention: <span className="font-bold text-slate-800">{formData.contractPositions?.dataRetention} years</span>
+                    </label>
+                    <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        step="1"
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                        value={formData.contractPositions?.dataRetention || 5}
+                        onChange={(e) => updateNestedData('contractPositions', 'dataRetention', parseInt(e.target.value))}
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>1 year</span>
+                        <span>5 years</span>
+                        <span>10 years</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                         Termination Notice: <span className="font-bold text-slate-800">{formData.contractPositions?.terminationNotice} days</span>
                     </label>
                     <input
@@ -1153,9 +1300,9 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
                         onChange={(e) => updateNestedData('contractPositions', 'terminationNotice', parseInt(e.target.value))}
                     />
                     <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>30 days</span>
+                        <span>30 days (Customer-friendly)</span>
                         <span>90 days</span>
-                        <span>180 days</span>
+                        <span>180 days (Provider-friendly)</span>
                     </div>
                 </div>
             </div>
@@ -1163,7 +1310,7 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
     )
 }
 
-// STEP 6: Priorities with Point System
+// STEP 7: Priorities with Point System (was Step 6)
 function PrioritiesStep({ formData, updateNestedData, priorityPoints }: PrioritiesStepProps) {
     return (
         <div className="space-y-6">
@@ -1177,7 +1324,7 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: Prioriti
                             Priority Points Remaining: <span className={`text-lg ${priorityPoints >= 0 ? 'text-green-700' : 'text-red-700'}`}>{priorityPoints}</span> / 25
                         </p>
                         <p className="text-xs text-slate-600 mt-1">
-                            Allocate 25 points total across priorities. This forces realistic trade-offs.
+                            Allocate 25 points total across priorities. This forces realistic trade-offs and informs CLARENCE&apos;s negotiation strategy.
                         </p>
                     </div>
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${priorityPoints >= 0 ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
@@ -1223,6 +1370,195 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: Prioriti
                     <p className="text-sm">Please reduce point allocations to stay within 25 total points.</p>
                 </div>
             )}
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 20: NEW STEP - TECHNICAL & COMPLIANCE REQUIREMENTS
+// ============================================================================
+function TechnicalRequirementsStep({ formData, updateFormData }: StepComponentProps) {
+    const securityOptions = [
+        'ISO 27001',
+        'SOC2 Type II',
+        'GDPR Compliance',
+        'PCI-DSS',
+        'Cyber Essentials',
+        'Cyber Essentials Plus',
+        'HIPAA'
+    ]
+
+    const handleSecurityChange = (option: string, checked: boolean) => {
+        const current = formData.securityRequirements || []
+        if (checked) {
+            updateFormData('securityRequirements', [...current, option])
+        } else {
+            updateFormData('securityRequirements', current.filter(s => s !== option))
+        }
+    }
+
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-medium text-slate-800 mb-4">Technical & Compliance Requirements</h2>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800">
+                    🔒 Define your security, compliance, and integration requirements. These often become non-negotiable contract terms.
+                </p>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-3">
+                    Security & Compliance Certifications Required
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                    {securityOptions.map((option) => (
+                        <label key={option} className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={(formData.securityRequirements || []).includes(option)}
+                                onChange={(e) => handleSecurityChange(option, e.target.checked)}
+                                className="w-4 h-4 text-slate-600 rounded focus:ring-slate-500"
+                            />
+                            <span className="text-sm text-slate-700">{option}</span>
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Integration Requirements
+                </label>
+                <textarea
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    rows={3}
+                    value={formData.integrationNeeds || ''}
+                    onChange={(e) => updateFormData('integrationNeeds', e.target.value)}
+                    placeholder="e.g., SAP integration, Oracle Financials, Salesforce CRM, REST API access..."
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Data Location Requirements
+                    </label>
+                    <select
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                        value={formData.dataLocation || ''}
+                        onChange={(e) => updateFormData('dataLocation', e.target.value)}
+                    >
+                        <option value="">Select</option>
+                        <option value="uk-only">UK only</option>
+                        <option value="uk-eu">UK or EU</option>
+                        <option value="eu-only">EU only</option>
+                        <option value="eea">EEA (European Economic Area)</option>
+                        <option value="global">No restrictions</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Audit Requirements
+                    </label>
+                    <select
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                        value={formData.auditRequirements || ''}
+                        onChange={(e) => updateFormData('auditRequirements', e.target.value)}
+                    >
+                        <option value="">Select</option>
+                        <option value="full">Full audit rights (annual on-site)</option>
+                        <option value="limited">Limited audit rights (with notice)</option>
+                        <option value="third-party">Third-party audit reports only</option>
+                        <option value="none">No specific requirements</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 21: NEW STEP - ADDITIONAL CONTEXT
+// ============================================================================
+function AdditionalContextStep({ formData, updateFormData }: StepComponentProps) {
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-medium text-slate-800 mb-4">Additional Context</h2>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-amber-800">
+                    📝 This information helps CLARENCE understand the full picture and negotiate more effectively on your behalf.
+                </p>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Previous Similar Projects
+                </label>
+                <textarea
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    rows={3}
+                    value={formData.previousSimilarProjects || ''}
+                    onChange={(e) => updateFormData('previousSimilarProjects', e.target.value)}
+                    placeholder="Describe any previous similar engagements, what worked, what didn't..."
+                />
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Internal Resources Available
+                </label>
+                <textarea
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    rows={3}
+                    value={formData.internalResourcesAvailable || ''}
+                    onChange={(e) => updateFormData('internalResourcesAvailable', e.target.value)}
+                    placeholder="e.g., Project manager available, IT team for integration, dedicated budget for change management..."
+                />
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Competitive Situation
+                </label>
+                <textarea
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    rows={3}
+                    value={formData.competitiveSituation || ''}
+                    onChange={(e) => updateFormData('competitiveSituation', e.target.value)}
+                    placeholder="Describe your evaluation criteria, decision-making process, other providers being considered..."
+                />
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Any Other Relevant Information
+                </label>
+                <textarea
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    rows={3}
+                    value={formData.additionalContext || ''}
+                    onChange={(e) => updateFormData('additionalContext', e.target.value)}
+                    placeholder="Anything else CLARENCE should know about this engagement..."
+                />
+            </div>
+
+            {/* Summary Card */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 mt-8">
+                <h3 className="text-lg font-medium text-slate-800 mb-4">📋 Ready to Submit</h3>
+                <p className="text-sm text-slate-600 mb-4">
+                    After submitting, you&apos;ll proceed to the Strategic Assessment where CLARENCE will ask probing questions
+                    to calculate your leverage position and prepare for negotiation.
+                </p>
+                <div className="flex items-center gap-2 text-sm text-emerald-700">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>All information is confidential and only used to improve your negotiation position</span>
+                </div>
+            </div>
         </div>
     )
 }
