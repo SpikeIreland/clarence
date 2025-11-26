@@ -558,8 +558,20 @@ function ContractStudioContent() {
             if (status === 'customer_assessment_complete' || status === 'pending_provider') {
                 setSessionStatus('pending_provider')
                 return null // Don't load full data yet
-            } else if (status === 'provider_invited') {
+            } else if (status === 'provider_invited' || status === 'providers_invited') {
                 setSessionStatus('provider_invited')
+                // Load basic session data even for invited state
+                const basicSession: Session = {
+                    sessionId: data.session.sessionId || sessionId,
+                    sessionNumber: data.session.sessionNumber || '',
+                    customerCompany: data.session.customerCompany || '',
+                    providerCompany: 'Awaiting Provider Response',
+                    serviceType: data.session.contractType || 'Service Agreement',
+                    dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
+                    phase: 1,
+                    status: status
+                }
+                setSession(basicSession)
                 return null
             } else if (status === 'provider_intake_complete' || status === 'leverage_pending') {
                 setSessionStatus('leverage_pending')
@@ -1043,13 +1055,16 @@ function ContractStudioContent() {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                     </div>
-                                    <h2 className="text-2xl font-semibold text-slate-800 mb-2">Invitation Sent!</h2>
+                                    <h2 className="text-2xl font-semibold text-slate-800 mb-2">Awaiting Provider Response</h2>
                                     <p className="text-slate-600 max-w-md mx-auto mb-6">
-                                        We&apos;ve sent an invitation to <strong>{providerEmail}</strong>.
-                                        You&apos;ll be notified when they complete their intake questionnaire.
+                                        {inviteSent
+                                            ? <>We&apos;ve sent an invitation to <strong>{providerEmail}</strong>.</>
+                                            : <>An invitation has been sent to the provider.</>
+                                        }
+                                        {' '}You&apos;ll be notified when they complete their intake questionnaire.
                                     </p>
 
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto mb-6">
                                         <div className="text-sm text-blue-800">
                                             <strong>What happens next?</strong>
                                             <ul className="mt-2 text-left space-y-1">
@@ -1062,12 +1077,35 @@ function ContractStudioContent() {
                                         </div>
                                     </div>
 
-                                    <button
-                                        onClick={() => router.push('/auth/contracts-dashboard')}
-                                        className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
-                                    >
-                                        ← Return to Dashboard
-                                    </button>
+                                    {/* Action Buttons */}
+                                    <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto">
+                                        <button
+                                            onClick={() => router.push('/auth/contracts-dashboard')}
+                                            className="px-6 py-2 text-slate-600 hover:text-slate-800 border border-slate-300 rounded-lg transition cursor-pointer"
+                                        >
+                                            ← Return to Dashboard
+                                        </button>
+                                        <button
+                                            onClick={() => setSessionStatus('ready')}
+                                            className="px-6 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition cursor-pointer"
+                                        >
+                                            Preview Contract Studio →
+                                        </button>
+                                    </div>
+
+                                    {/* Resend Invite Option */}
+                                    <div className="mt-6 pt-6 border-t border-slate-200 max-w-md mx-auto">
+                                        <p className="text-sm text-slate-500 mb-2">Provider hasn&apos;t responded?</p>
+                                        <button
+                                            onClick={() => {
+                                                setInviteSent(false)
+                                                setSessionStatus('pending_provider')
+                                            }}
+                                            className="text-sm text-emerald-600 hover:text-emerald-700 font-medium cursor-pointer"
+                                        >
+                                            Send to a different email address
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
@@ -1123,13 +1161,13 @@ function ContractStudioContent() {
     }
 
     // Only proceed to full contract studio if we have all required data
-    if (!session || !leverage || !userInfo) {
+    if (!session || !userInfo) {
         return (
             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="text-center">
                     <p className="text-red-600 mb-4">Failed to load contract data</p>
                     <button
-                        onClick={() => router.push('/auth/dashboard')}
+                        onClick={() => router.push('/auth/contracts-dashboard')}
                         className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
                     >
                         ← Return to Dashboard
@@ -1137,6 +1175,26 @@ function ContractStudioContent() {
                 </div>
             </div>
         )
+    }
+
+    // Create placeholder leverage if not available (preview mode)
+    const displayLeverage: LeverageData = leverage || {
+        leverageScoreCustomer: 50,
+        leverageScoreProvider: 50,
+        leverageScoreCalculatedAt: '',
+        leverageTrackerCustomer: 50,
+        leverageTrackerProvider: 50,
+        alignmentPercentage: 0,
+        isAligned: false,
+        leverageTrackerCalculatedAt: '',
+        marketDynamicsScore: 0,
+        marketDynamicsRationale: 'Pending provider intake',
+        economicFactorsScore: 0,
+        economicFactorsRationale: 'Pending provider intake',
+        strategicPositionScore: 0,
+        strategicPositionRationale: 'Pending provider intake',
+        batnaScore: 0,
+        batnaRationale: 'Pending provider intake'
     }
 
     const clauseStats = calculateClauseStats(clauseTree)
@@ -1228,7 +1286,7 @@ function ContractStudioContent() {
 
     const LeverageIndicator = () => {
         // Calculate how much dynamic differs from master
-        const customerShift = leverage.leverageTrackerCustomer - leverage.leverageScoreCustomer
+        const customerShift = displayLeverage.leverageTrackerCustomer - displayLeverage.leverageScoreCustomer
         const isCustomerGaining = customerShift > 0
 
         return (
@@ -1246,13 +1304,13 @@ function ContractStudioContent() {
                     </div>
 
                     {/* Alignment Badge */}
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${leverage.alignmentPercentage >= 90
+                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${displayLeverage.alignmentPercentage >= 90
                         ? 'bg-emerald-100 text-emerald-700'
-                        : leverage.alignmentPercentage >= 70
+                        : displayLeverage.alignmentPercentage >= 70
                             ? 'bg-amber-100 text-amber-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
-                        {leverage.alignmentPercentage}% Aligned
+                        {displayLeverage.alignmentPercentage}% Aligned
                     </div>
                 </div>
 
@@ -1262,7 +1320,7 @@ function ContractStudioContent() {
                     <div className="bg-slate-50 rounded-lg p-3">
                         <div className="text-xs text-slate-500 mb-1">Leverage Score</div>
                         <div className="text-lg font-bold text-slate-800">
-                            {leverage.leverageScoreCustomer} : {leverage.leverageScoreProvider}
+                            {displayLeverage.leverageScoreCustomer} : {displayLeverage.leverageScoreProvider}
                         </div>
                         <div className="text-xs text-slate-400">Fixed baseline from assessment</div>
                     </div>
@@ -1271,7 +1329,7 @@ function ContractStudioContent() {
                     <div className="bg-slate-50 rounded-lg p-3">
                         <div className="text-xs text-slate-500 mb-1">Alignment Score</div>
                         <div className="text-lg font-bold text-emerald-600">
-                            {leverage.alignmentPercentage}%
+                            {displayLeverage.alignmentPercentage}%
                         </div>
                         <div className="text-xs text-slate-400">Progress to agreement</div>
                     </div>
@@ -1280,7 +1338,7 @@ function ContractStudioContent() {
                     <div className="bg-slate-50 rounded-lg p-3">
                         <div className="text-xs text-slate-500 mb-1">Leverage Tracker</div>
                         <div className="text-lg font-bold text-slate-800">
-                            {leverage.leverageTrackerCustomer} : {leverage.leverageTrackerProvider}
+                            {displayLeverage.leverageTrackerCustomer} : {displayLeverage.leverageTrackerProvider}
                         </div>
                         <div className={`text-xs ${isCustomerGaining ? 'text-emerald-600' : 'text-amber-600'}`}>
                             {isCustomerGaining ? '↑' : '↓'} {Math.abs(customerShift)}% from baseline
@@ -1301,21 +1359,21 @@ function ContractStudioContent() {
                         {/* Leverage Score (baseline - shown as markers) */}
                         <div
                             className="absolute top-0 bottom-0 w-1 bg-slate-800 z-10"
-                            style={{ left: `${leverage.leverageScoreCustomer}%`, transform: 'translateX(-50%)' }}
-                            title={`Leverage Score: ${leverage.leverageScoreCustomer}%`}
+                            style={{ left: `${displayLeverage.leverageScoreCustomer}%`, transform: 'translateX(-50%)' }}
+                            title={`Leverage Score: ${displayLeverage.leverageScoreCustomer}%`}
                         >
                             <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-600 whitespace-nowrap">
-                                ◆ {leverage.leverageScoreCustomer}%
+                                ◆ {displayLeverage.leverageScoreCustomer}%
                             </div>
                         </div>
 
                         {/* Leverage Tracker (dynamic - shown as fill) */}
                         <div
-                            className={`h-full transition-all duration-500 ${leverage.leverageTrackerCustomer > leverage.leverageScoreCustomer
+                            className={`h-full transition-all duration-500 ${displayLeverage.leverageTrackerCustomer > displayLeverage.leverageScoreCustomer
                                 ? 'bg-emerald-500'
                                 : 'bg-amber-500'
                                 }`}
-                            style={{ width: `${leverage.leverageTrackerCustomer}%` }}
+                            style={{ width: `${displayLeverage.leverageTrackerCustomer}%` }}
                         ></div>
 
                         {/* Center line */}
@@ -1342,40 +1400,40 @@ function ContractStudioContent() {
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
                                 <span className="text-xs text-slate-600">Market Dynamics</span>
-                                <span className={`text-xs font-medium ${leverage.marketDynamicsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {leverage.marketDynamicsScore >= 0 ? '+' : ''}{leverage.marketDynamicsScore}
+                                <span className={`text-xs font-medium ${displayLeverage.marketDynamicsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.marketDynamicsScore >= 0 ? '+' : ''}{displayLeverage.marketDynamicsScore}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
                                 <span className="text-xs text-slate-600">Economic Factors</span>
-                                <span className={`text-xs font-medium ${leverage.economicFactorsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {leverage.economicFactorsScore >= 0 ? '+' : ''}{leverage.economicFactorsScore}
+                                <span className={`text-xs font-medium ${displayLeverage.economicFactorsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.economicFactorsScore >= 0 ? '+' : ''}{displayLeverage.economicFactorsScore}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
                                 <span className="text-xs text-slate-600">Strategic Position</span>
-                                <span className={`text-xs font-medium ${leverage.strategicPositionScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {leverage.strategicPositionScore >= 0 ? '+' : ''}{leverage.strategicPositionScore}
+                                <span className={`text-xs font-medium ${displayLeverage.strategicPositionScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.strategicPositionScore >= 0 ? '+' : ''}{displayLeverage.strategicPositionScore}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
                                 <span className="text-xs text-slate-600">BATNA Strength</span>
-                                <span className={`text-xs font-medium ${leverage.batnaScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {leverage.batnaScore >= 0 ? '+' : ''}{leverage.batnaScore}
+                                <span className={`text-xs font-medium ${displayLeverage.batnaScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.batnaScore >= 0 ? '+' : ''}{displayLeverage.batnaScore}
                                 </span>
                             </div>
                         </div>
 
                         {/* Factor Rationales */}
                         <div className="mt-3 space-y-2">
-                            {leverage.marketDynamicsRationale && (
+                            {displayLeverage.marketDynamicsRationale && (
                                 <div className="text-xs text-slate-500">
-                                    <span className="font-medium">Market:</span> {leverage.marketDynamicsRationale}
+                                    <span className="font-medium">Market:</span> {displayLeverage.marketDynamicsRationale}
                                 </div>
                             )}
-                            {leverage.batnaRationale && (
+                            {displayLeverage.batnaRationale && (
                                 <div className="text-xs text-slate-500">
-                                    <span className="font-medium">BATNA:</span> {leverage.batnaRationale}
+                                    <span className="font-medium">BATNA:</span> {displayLeverage.batnaRationale}
                                 </div>
                             )}
                         </div>
