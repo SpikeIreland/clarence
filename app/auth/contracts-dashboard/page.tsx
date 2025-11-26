@@ -178,7 +178,7 @@ export default function ContractsDashboard() {
         localStorage.setItem('newSessionNumber', data.sessionNumber)
 
         // Redirect to Customer Requirements form with session ID
-        router.push(`/auth/customerRequirements?session_id=${data.sessionId}&session_number=${data.sessionNumber}`)
+        router.push(`/auth/customer-requirements?session_id=${data.sessionId}&session_number=${data.sessionNumber}`)
       } else {
         const errorData = await response.json()
         console.error('Failed to create session:', errorData)
@@ -352,7 +352,7 @@ export default function ContractsDashboard() {
         text: 'Continue Setup →',
         className: 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white',
         disabled: false,
-        action: () => router.push(`/auth/customerRequirements?session_id=${session.sessionId}`)
+        action: () => router.push(`/auth/customer-requirements?session_id=${session.sessionId}`)
       }
     }
 
