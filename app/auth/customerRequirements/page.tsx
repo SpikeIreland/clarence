@@ -924,6 +924,7 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                         onChange={(e) => updateFormData('serviceRequired', e.target.value)}
                     >
                         <option value="">Select Service</option>
+                        <option value="Customer Support">Back Office Operations</option>
                         <option value="Customer Support">Customer Support</option>
                         <option value="Technical Support">Technical Support</option>
                         <option value="Data Processing">Data Processing</option>
