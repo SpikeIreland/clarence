@@ -292,14 +292,37 @@ function CustomerRequirementsForm() {
             })
 
             if (response.ok) {
-                const result = await response.json()
-                console.log('Requirements submitted:', result)
+                // Handle empty or non-JSON responses gracefully
+                let result = null
+                const responseText = await response.text()
+
+                if (responseText && responseText.trim()) {
+                    try {
+                        result = JSON.parse(responseText)
+                        console.log('Requirements submitted:', result)
+                    } catch (parseError) {
+                        // Response was not JSON, but that's okay if status was OK
+                        console.log('Requirements submitted (no JSON response)')
+                    }
+                } else {
+                    console.log('Requirements submitted (empty response)')
+                }
 
                 // Redirect to strategic assessment (next phase)
                 router.push(`/auth/strategic-assessment?session_id=${sessionId}&session_number=${sessionNumber}`)
             } else {
-                const errorData = await response.json()
-                throw new Error(errorData.error || 'Submission failed')
+                // Try to get error message from response
+                let errorMessage = 'Submission failed'
+                try {
+                    const errorText = await response.text()
+                    if (errorText) {
+                        const errorData = JSON.parse(errorText)
+                        errorMessage = errorData.error || errorData.message || errorMessage
+                    }
+                } catch {
+                    errorMessage = `HTTP ${response.status}: ${response.statusText}`
+                }
+                throw new Error(errorMessage)
             }
         } catch (error) {
             console.error('Submission error:', error)
