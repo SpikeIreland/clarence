@@ -1,63 +1,146 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 // ============================================================================
-// SECTION 1: CONSTANTS
+// SECTION 1: CONSTANTS & TYPES
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
+interface TokenData {
+    valid: boolean
+    bidId: string
+    sessionId: string
+    sessionNumber: string
+    customerCompany: string
+    serviceRequired: string
+    dealValue: string
+    providerEmail: string
+    provider_contact_email?: string  // API might return this name
+    bidStatus: string
+    error?: string
+    message?: string
+}
+
+interface SessionAccessResult {
+    valid: boolean
+    sessionId?: string
+    sessionStatus?: string
+    bidStatus?: string
+    intakeComplete?: boolean
+    questionnaireComplete?: boolean
+    error?: string
+    message?: string
+}
+
 // ============================================================================
-// SECTION 2: MAIN COMPONENT
+// SECTION 2: MAIN COMPONENT WRAPPER (Suspense)
 // ============================================================================
 
-export default function ProviderPortal() {
+export default function ProviderPortalPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-10 h-10 border-3 border-slate-600 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-400">Loading provider portal...</p>
+                </div>
+            </div>
+        }>
+            <ProviderPortalContent />
+        </Suspense>
+    )
+}
+
+// ============================================================================
+// SECTION 3: MAIN CONTENT COMPONENT
+// ============================================================================
+
+function ProviderPortalContent() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const supabase = createClient()
 
     // ========================================================================
-    // SECTION 3: STATE
+    // SECTION 4: STATE
     // ========================================================================
 
-    const [activeView, setActiveView] = useState<'welcome' | 'token' | 'login' | 'register'>('welcome')
+    const [activeView, setActiveView] = useState<'welcome' | 'token' | 'register' | 'session-login'>('welcome')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [success, setSuccess] = useState<string | null>(null)
 
-    // Token input
+    // Token input & validation
     const [inviteToken, setInviteToken] = useState('')
-    const [tokenData, setTokenData] = useState<{
-        sessionId: string
-        sessionNumber: string
-        customerCompany: string
-        serviceRequired: string
-        dealValue: string
-        providerEmail: string
-    } | null>(null)
+    const [tokenData, setTokenData] = useState<TokenData | null>(null)
 
-    // Login form
-    const [loginEmail, setLoginEmail] = useState('')
-    const [loginPassword, setLoginPassword] = useState('')
-
-    // Register form
-    const [registerEmail, setRegisterEmail] = useState('')
+    // Registration form (session-scoped)
     const [registerPassword, setRegisterPassword] = useState('')
     const [registerConfirmPassword, setRegisterConfirmPassword] = useState('')
     const [registerFirstName, setRegisterFirstName] = useState('')
     const [registerLastName, setRegisterLastName] = useState('')
     const [registerCompany, setRegisterCompany] = useState('')
 
+    // Session login form
+    const [loginSessionNumber, setLoginSessionNumber] = useState('')
+    const [loginEmail, setLoginEmail] = useState('')
+    const [loginPassword, setLoginPassword] = useState('')
+
     // ========================================================================
-    // SECTION 4: TOKEN VALIDATION
+    // SECTION 5: URL PARAMETER HANDLING
+    // ========================================================================
+
+    useEffect(() => {
+        // Check for token in URL (from email link)
+        const urlToken = searchParams.get('token')
+        const urlSessionId = searchParams.get('session_id')
+
+        if (urlToken) {
+            setInviteToken(urlToken)
+            // Auto-validate if we have both
+            if (urlSessionId) {
+                validateTokenFromUrl(urlSessionId, urlToken)
+            } else {
+                setActiveView('token')
+            }
+        }
+    }, [searchParams])
+
+    async function validateTokenFromUrl(sessionId: string, token: string) {
+        setLoading(true)
+        setError(null)
+
+        try {
+            const response = await fetch(
+                `${API_BASE}/validate-provider-invite?session_id=${sessionId}&token=${token}`
+            )
+            const data: TokenData = await response.json()
+
+            if (data.valid) {
+                setTokenData(data)
+                setActiveView('register')
+            } else {
+                setError(data.message || 'Invalid or expired invitation')
+                setActiveView('token')
+            }
+        } catch (err) {
+            console.error('Token validation error:', err)
+            setError('Failed to validate invitation. Please try entering your token manually.')
+            setActiveView('token')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 6: TOKEN VALIDATION
     // ========================================================================
 
     async function handleValidateToken(e: React.FormEvent) {
         e.preventDefault()
         setError(null)
-        setSuccess(null)
 
         if (!inviteToken.trim()) {
             setError('Please enter your invitation token')
@@ -67,45 +150,33 @@ export default function ProviderPortal() {
         setLoading(true)
 
         try {
-            // Extract session_id from token if it's a full URL
             let token = inviteToken.trim()
             let sessionId = ''
 
             // Check if user pasted a full URL
-            if (token.includes('session_id=')) {
-                const url = new URL(token.includes('http') ? token : `https://example.com?${token}`)
-                sessionId = url.searchParams.get('session_id') || ''
-                token = url.searchParams.get('token') || token
+            if (token.includes('session_id=') || token.includes('token=')) {
+                try {
+                    const url = new URL(token.includes('http') ? token : `https://example.com?${token}`)
+                    sessionId = url.searchParams.get('session_id') || ''
+                    token = url.searchParams.get('token') || token
+                } catch {
+                    // Not a valid URL, treat as raw token
+                }
             }
 
-            // If we don't have a session_id, we need to look it up by token
             const validateUrl = sessionId
                 ? `${API_BASE}/validate-provider-invite?session_id=${sessionId}&token=${token}`
                 : `${API_BASE}/validate-provider-invite?token=${token}`
 
             const response = await fetch(validateUrl)
-            const data = await response.json()
+            const data: TokenData = await response.json()
 
             if (data.valid) {
-                setTokenData({
-                    sessionId: data.sessionId,
-                    sessionNumber: data.sessionNumber || '',
-                    customerCompany: data.customerCompany || 'Customer',
-                    serviceRequired: data.serviceRequired || 'Service Agreement',
-                    dealValue: data.dealValue || '',
-                    providerEmail: data.providerEmail || ''
-                })
-
-                // Pre-fill email if available
-                if (data.providerEmail) {
-                    setRegisterEmail(data.providerEmail)
-                    setLoginEmail(data.providerEmail)
-                }
-
-                setSuccess('Token validated! Please sign in or create an account to continue.')
-                setActiveView('login')
+                setTokenData(data)
+                setInviteToken(token) // Store clean token
+                setActiveView('register')
             } else {
-                setError(data.message || 'Invalid or expired invitation token. Please check and try again.')
+                setError(data.message || 'Invalid or expired invitation token.')
             }
         } catch (err) {
             console.error('Token validation error:', err)
@@ -116,82 +187,15 @@ export default function ProviderPortal() {
     }
 
     // ========================================================================
-    // SECTION 5: LOGIN HANDLER
-    // ========================================================================
-
-    async function handleLogin(e: React.FormEvent) {
-        e.preventDefault()
-        setError(null)
-        setSuccess(null)
-
-        if (!loginEmail || !loginPassword) {
-            setError('Please enter your email and password')
-            return
-        }
-
-        setLoading(true)
-
-        try {
-            const { data, error: signInError } = await supabase.auth.signInWithPassword({
-                email: loginEmail,
-                password: loginPassword
-            })
-
-            if (signInError) throw signInError
-
-            if (data.user) {
-                // Get user profile
-                const { data: userData, error: userError } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('auth_id', data.user.id)
-                    .single()
-
-                if (userError && userError.code !== 'PGRST116') {
-                    throw userError
-                }
-
-                // Store user info
-                const authData = {
-                    userInfo: {
-                        userId: data.user.id,
-                        email: loginEmail,
-                        firstName: userData?.first_name || '',
-                        lastName: userData?.last_name || '',
-                        company: userData?.company_name || '',
-                        role: 'provider'
-                    },
-                    timestamp: new Date().toISOString()
-                }
-                localStorage.setItem('clarence_auth', JSON.stringify(authData))
-
-                // Redirect based on whether we have a pending token
-                if (tokenData?.sessionId) {
-                    router.push(`/auth/provider-intake?session_id=${tokenData.sessionId}&token=${inviteToken}`)
-                } else {
-                    router.push('/provider/dashboard')
-                }
-            }
-        } catch (err: unknown) {
-            console.error('Login error:', err)
-            const errorMessage = err instanceof Error ? err.message : 'Failed to login. Please check your credentials.'
-            setError(errorMessage)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    // ========================================================================
-    // SECTION 6: REGISTER HANDLER
+    // SECTION 7: REGISTRATION HANDLER (SESSION-SCOPED)
     // ========================================================================
 
     async function handleRegister(e: React.FormEvent) {
         e.preventDefault()
         setError(null)
-        setSuccess(null)
 
         // Validation
-        if (!registerEmail || !registerPassword || !registerFirstName || !registerLastName || !registerCompany) {
+        if (!registerFirstName || !registerLastName || !registerCompany) {
             setError('Please fill in all fields')
             return
         }
@@ -203,56 +207,68 @@ export default function ProviderPortal() {
             setError('Passwords do not match')
             return
         }
+        if (!tokenData) {
+            setError('Session data missing. Please re-enter your token.')
+            setActiveView('token')
+            return
+        }
+
+        // Get email from token data (API might use different field names)
+        const providerEmail = tokenData.providerEmail || tokenData.provider_contact_email || ''
+
+        if (!providerEmail) {
+            setError('Provider email not found. Please re-enter your token.')
+            setActiveView('token')
+            return
+        }
 
         setLoading(true)
 
         try {
+            // Create auth account
             const { data, error: signUpError } = await supabase.auth.signUp({
-                email: registerEmail,
+                email: providerEmail,
                 password: registerPassword,
                 options: {
                     data: {
                         first_name: registerFirstName,
                         last_name: registerLastName,
                         company_name: registerCompany,
-                        role: 'provider'
+                        user_type: 'provider'
                     }
                 }
             })
 
-            if (signUpError) throw signUpError
+            if (signUpError) {
+                // Check if user already exists
+                if (signUpError.message.includes('already registered')) {
+                    setError('An account with this email already exists. Please use "Return to Session" to sign in.')
+                    return
+                }
+                throw signUpError
+            }
 
             if (data.user) {
-                // Store user info
-                const authData = {
-                    userInfo: {
-                        userId: data.user.id,
-                        email: registerEmail,
-                        firstName: registerFirstName,
-                        lastName: registerLastName,
-                        company: registerCompany,
-                        role: 'provider'
-                    },
-                    timestamp: new Date().toISOString()
+                // Store provider session info
+                const providerAuth = {
+                    sessionId: tokenData.sessionId,
+                    sessionNumber: tokenData.sessionNumber,
+                    email: providerEmail,
+                    firstName: registerFirstName,
+                    lastName: registerLastName,
+                    company: registerCompany,
+                    role: 'provider',
+                    token: inviteToken,
+                    registeredAt: new Date().toISOString()
                 }
-                localStorage.setItem('clarence_auth', JSON.stringify(authData))
+                localStorage.setItem('clarence_provider_session', JSON.stringify(providerAuth))
 
-                // Check if email confirmation required
-                if (data.user.identities && data.user.identities.length === 0) {
-                    setSuccess('Please check your email to confirm your account.')
-                    setActiveView('login')
-                } else {
-                    // Redirect to intake or dashboard
-                    if (tokenData?.sessionId) {
-                        router.push(`/auth/provider-intake?session_id=${tokenData.sessionId}&token=${inviteToken}`)
-                    } else {
-                        router.push('/provider/dashboard')
-                    }
-                }
+                // Navigate to welcome page
+                router.push(`/provider/welcome?session_id=${tokenData.sessionId}`)
             }
         } catch (err: unknown) {
-            console.error('Register error:', err)
-            const errorMessage = err instanceof Error ? err.message : 'Failed to create account.'
+            console.error('Registration error:', err)
+            const errorMessage = err instanceof Error ? err.message : 'Failed to register. Please try again.'
             setError(errorMessage)
         } finally {
             setLoading(false)
@@ -260,89 +276,192 @@ export default function ProviderPortal() {
     }
 
     // ========================================================================
-    // SECTION 7: RENDER - WELCOME VIEW
+    // SECTION 8: SESSION LOGIN HANDLER
+    // ========================================================================
+
+    async function handleSessionLogin(e: React.FormEvent) {
+        e.preventDefault()
+        setError(null)
+
+        if (!loginSessionNumber || !loginEmail || !loginPassword) {
+            setError('Please fill in all fields')
+            return
+        }
+
+        setLoading(true)
+
+        try {
+            // First, authenticate
+            const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+                email: loginEmail,
+                password: loginPassword
+            })
+
+            if (signInError) throw signInError
+
+            if (authData.user) {
+                // Validate session access
+                const sessionNum = loginSessionNumber.toUpperCase().replace('SES-', '')
+                const response = await fetch(
+                    `${API_BASE}/validate-provider-session-access?session_number=${sessionNum}&email=${loginEmail}`
+                )
+                const accessData: SessionAccessResult = await response.json()
+
+                if (!accessData.valid) {
+                    // Sign out since they don't have access
+                    await supabase.auth.signOut()
+                    setError(accessData.message || 'You do not have access to this session.')
+                    return
+                }
+
+                // Check session status
+                if (accessData.sessionStatus === 'completed' || accessData.sessionStatus === 'cancelled') {
+                    await supabase.auth.signOut()
+                    setError('This opportunity has concluded. Thank you for your participation.')
+                    return
+                }
+
+                if (accessData.bidStatus === 'rejected') {
+                    await supabase.auth.signOut()
+                    setError('Your bid was not selected for this opportunity. Thank you for your interest.')
+                    return
+                }
+
+                // Store session info
+                const providerAuth = {
+                    sessionId: accessData.sessionId,
+                    sessionNumber: sessionNum,
+                    email: loginEmail,
+                    role: 'provider',
+                    intakeComplete: accessData.intakeComplete,
+                    questionnaireComplete: accessData.questionnaireComplete,
+                    loggedInAt: new Date().toISOString()
+                }
+                localStorage.setItem('clarence_provider_session', JSON.stringify(providerAuth))
+
+                // Route based on progress
+                if (!accessData.intakeComplete) {
+                    router.push(`/provider/intake?session_id=${accessData.sessionId}`)
+                } else if (!accessData.questionnaireComplete) {
+                    router.push(`/provider/questionnaire?session_id=${accessData.sessionId}`)
+                } else {
+                    router.push(`/auth/contract-studio?session_id=${accessData.sessionId}`)
+                }
+            }
+        } catch (err: unknown) {
+            console.error('Login error:', err)
+            const errorMessage = err instanceof Error ? err.message : 'Failed to sign in. Please check your credentials.'
+            setError(errorMessage)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 9: RENDER - WELCOME VIEW
     // ========================================================================
 
     if (activeView === 'welcome') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 flex items-center justify-center p-4">
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
                 <div className="w-full max-w-lg">
                     {/* Header */}
                     <div className="text-center mb-8">
                         <div className="inline-block">
-                            <div className="text-4xl font-medium text-slate-800 mb-2">CLARENCE</div>
-                            <div className="text-xs text-slate-500 tracking-widest font-light">PROVIDER PORTAL</div>
+                            <div className="text-4xl font-light text-white mb-2 tracking-wide">CLARENCE</div>
+                            <div className="text-xs text-blue-400 tracking-[0.3em] font-light">PROVIDER ACCESS</div>
                         </div>
-                        <p className="text-slate-600 mt-4 text-sm">
-                            Access contract negotiations you&apos;ve been invited to participate in
+                        <p className="text-slate-400 mt-6 text-sm max-w-sm mx-auto">
+                            Access contract opportunities you&apos;ve been invited to participate in
                         </p>
                     </div>
 
                     {/* Main Card */}
-                    <div className="bg-white rounded-2xl shadow-xl p-8">
+                    <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 p-8">
                         <div className="space-y-4">
-                            {/* Option 1: Enter Token */}
+                            {/* Option 1: I Have an Invitation */}
                             <button
                                 onClick={() => setActiveView('token')}
-                                className="w-full p-6 border-2 border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/50 transition text-left group cursor-pointer"
+                                className="w-full p-5 bg-gradient-to-r from-blue-600/20 to-blue-500/10 border border-blue-500/30 rounded-xl hover:border-blue-400/50 hover:from-blue-600/30 hover:to-blue-500/20 transition-all text-left group cursor-pointer"
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-blue-200 transition">
-                                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500/30 transition">
+                                        <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                         </svg>
                                     </div>
                                     <div>
-                                        <h3 className="font-semibold text-slate-800 mb-1">I Have an Invitation</h3>
-                                        <p className="text-sm text-slate-500">
-                                            Enter your invitation token from the email you received
+                                        <h3 className="font-medium text-white mb-1">I Have an Invitation</h3>
+                                        <p className="text-sm text-slate-400">
+                                            Enter your invitation token to register for a new opportunity
                                         </p>
                                     </div>
+                                    <svg className="w-5 h-5 text-slate-500 group-hover:text-blue-400 transition ml-auto mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
                                 </div>
                             </button>
 
-                            {/* Option 2: Sign In */}
+                            {/* Option 2: Return to Session */}
                             <button
-                                onClick={() => setActiveView('login')}
-                                className="w-full p-6 border-2 border-slate-200 rounded-xl hover:border-blue-500 hover:bg-blue-50/50 transition text-left group cursor-pointer"
+                                onClick={() => setActiveView('session-login')}
+                                className="w-full p-5 bg-slate-700/30 border border-slate-600/50 rounded-xl hover:border-slate-500/50 hover:bg-slate-700/50 transition-all text-left group cursor-pointer"
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-slate-200 transition">
-                                        <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    <div className="w-12 h-12 bg-slate-600/30 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:bg-slate-600/50 transition">
+                                        <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                                         </svg>
                                     </div>
                                     <div>
-                                        <h3 className="font-semibold text-slate-800 mb-1">Sign In to Existing Account</h3>
-                                        <p className="text-sm text-slate-500">
-                                            Access your provider dashboard and ongoing negotiations
+                                        <h3 className="font-medium text-white mb-1">Return to Session</h3>
+                                        <p className="text-sm text-slate-400">
+                                            Sign in to continue with an existing opportunity
                                         </p>
                                     </div>
+                                    <svg className="w-5 h-5 text-slate-500 group-hover:text-slate-400 transition ml-auto mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
                                 </div>
                             </button>
                         </div>
 
+                        {/* Divider */}
+                        <div className="my-6 border-t border-slate-700/50"></div>
+
                         {/* Info Box */}
-                        <div className="mt-6 p-4 bg-blue-50 rounded-xl">
-                            <h4 className="text-sm font-medium text-blue-800 mb-2">What is CLARENCE?</h4>
-                            <p className="text-xs text-blue-700">
-                                CLARENCE is an AI-powered contract mediation platform. Customers invite providers
-                                like you to negotiate contracts through a fair, transparent process where both
-                                parties work toward mutually beneficial agreements.
-                            </p>
+                        <div className="p-4 bg-slate-700/20 rounded-xl border border-slate-600/30">
+                            <div className="flex items-start gap-3">
+                                <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-medium text-white mb-1">What is CLARENCE?</h4>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                        CLARENCE is an AI-powered contract mediation platform. You&apos;ve been invited
+                                        by a customer to participate in a fair, transparent negotiation process where
+                                        both parties work toward mutually beneficial agreements.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     {/* Customer Link */}
-                    <div className="text-center mt-6">
+                    <div className="text-center mt-8 p-4 bg-slate-800/30 rounded-xl border border-slate-700/30">
                         <p className="text-sm text-slate-500 mb-2">Are you a customer looking to create contracts?</p>
-                        <Link href="/auth/login" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
-                            Go to Customer Portal →
+                        <Link href="/auth/login" className="text-blue-400 hover:text-blue-300 font-medium text-sm inline-flex items-center gap-1">
+                            Go to Customer Portal
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
                         </Link>
                     </div>
 
                     {/* Footer */}
-                    <div className="text-center mt-6 text-sm text-slate-400">
+                    <div className="text-center mt-6 text-xs text-slate-500">
                         © {new Date().getFullYear()} CLARENCE by Spike Island Studios
                     </div>
                 </div>
@@ -351,34 +470,33 @@ export default function ProviderPortal() {
     }
 
     // ========================================================================
-    // SECTION 8: RENDER - TOKEN INPUT VIEW
+    // SECTION 10: RENDER - TOKEN INPUT VIEW
     // ========================================================================
 
     if (activeView === 'token') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 flex items-center justify-center p-4">
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
                 <div className="w-full max-w-md">
                     {/* Header */}
                     <div className="text-center mb-8">
                         <div className="inline-block">
-                            <div className="text-4xl font-medium text-slate-800 mb-2">CLARENCE</div>
-                            <div className="text-xs text-slate-500 tracking-widest font-light">PROVIDER PORTAL</div>
+                            <div className="text-4xl font-light text-white mb-2 tracking-wide">CLARENCE</div>
+                            <div className="text-xs text-blue-400 tracking-[0.3em] font-light">PROVIDER ACCESS</div>
                         </div>
-                        <p className="text-slate-600 mt-4 text-sm">
-                            Enter your invitation token to access the contract
+                        <p className="text-slate-400 mt-4 text-sm">
+                            Enter your invitation token to get started
                         </p>
                     </div>
 
                     {/* Main Card */}
-                    <div className="bg-white rounded-2xl shadow-xl p-8">
+                    <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 p-8">
                         {/* Back Button */}
                         <button
                             onClick={() => {
                                 setActiveView('welcome')
                                 setError(null)
-                                setSuccess(null)
                             }}
-                            className="flex items-center gap-1 text-slate-500 hover:text-slate-700 text-sm mb-6 cursor-pointer"
+                            className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm mb-6 cursor-pointer transition"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -386,44 +504,39 @@ export default function ProviderPortal() {
                             Back
                         </button>
 
-                        {/* Error/Success Messages */}
+                        {/* Error Message */}
                         {error && (
-                            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
                                 {error}
-                            </div>
-                        )}
-                        {success && (
-                            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
-                                {success}
                             </div>
                         )}
 
                         <form onSubmit={handleValidateToken} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                <label className="block text-sm font-medium text-slate-300 mb-2">
                                     Invitation Token
                                 </label>
                                 <input
                                     type="text"
                                     value={inviteToken}
                                     onChange={(e) => setInviteToken(e.target.value)}
-                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-mono"
+                                    className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm font-mono placeholder-slate-500"
                                     placeholder="INV-XXXXXXXX-XXXXXX"
                                     disabled={loading}
                                 />
                                 <p className="text-xs text-slate-500 mt-2">
-                                    You can find this token in your invitation email, or paste the full invitation link
+                                    Find this in your invitation email, or paste the full link
                                 </p>
                             </div>
 
                             <button
                                 type="submit"
                                 disabled={loading || !inviteToken.trim()}
-                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer"
+                                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer"
                             >
                                 {loading ? (
                                     <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                         Validating...
                                     </>
                                 ) : (
@@ -437,18 +550,18 @@ export default function ProviderPortal() {
                             </button>
                         </form>
 
-                        {/* Help Text */}
-                        <div className="mt-6 pt-6 border-t border-slate-200">
-                            <p className="text-sm text-slate-600 mb-2">Don&apos;t have a token?</p>
+                        {/* Help */}
+                        <div className="mt-6 pt-6 border-t border-slate-700/50">
+                            <p className="text-sm text-slate-400 mb-2">Don&apos;t have a token?</p>
                             <p className="text-xs text-slate-500">
-                                Invitation tokens are sent by customers who want to negotiate a contract with you.
-                                If you believe you should have received an invitation, please contact the customer directly.
+                                Tokens are sent by customers who want to negotiate with you.
+                                Contact the customer directly if you believe you should have received one.
                             </p>
                         </div>
                     </div>
 
                     {/* Footer */}
-                    <div className="text-center mt-6 text-sm text-slate-400">
+                    <div className="text-center mt-6 text-xs text-slate-500">
                         © {new Date().getFullYear()} CLARENCE by Spike Island Studios
                     </div>
                 </div>
@@ -457,240 +570,140 @@ export default function ProviderPortal() {
     }
 
     // ========================================================================
-    // SECTION 9: RENDER - LOGIN/REGISTER VIEW
+    // SECTION 11: RENDER - REGISTRATION VIEW (SESSION-SCOPED)
     // ========================================================================
 
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                {/* Header */}
-                <div className="text-center mb-8">
-                    <div className="inline-block">
-                        <div className="text-4xl font-medium text-slate-800 mb-2">CLARENCE</div>
-                        <div className="text-xs text-slate-500 tracking-widest font-light">PROVIDER PORTAL</div>
+    if (activeView === 'register' && tokenData) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+                <div className="w-full max-w-md">
+                    {/* Header */}
+                    <div className="text-center mb-6">
+                        <div className="inline-block">
+                            <div className="text-4xl font-light text-white mb-2 tracking-wide">CLARENCE</div>
+                            <div className="text-xs text-blue-400 tracking-[0.3em] font-light">PROVIDER ACCESS</div>
+                        </div>
                     </div>
-                    <p className="text-slate-600 mt-4 text-sm">
-                        {activeView === 'login' ? 'Sign in to your provider account' : 'Create your provider account'}
-                    </p>
-                </div>
 
-                {/* Token Info Banner (if token validated) */}
-                {tokenData && (
-                    <div className="bg-blue-600 text-white rounded-xl p-4 mb-4">
+                    {/* Opportunity Banner */}
+                    <div className="bg-gradient-to-r from-blue-600/20 to-emerald-600/20 border border-blue-500/30 rounded-xl p-4 mb-4">
                         <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
                             <div>
-                                <div className="text-sm font-medium">Invitation Validated</div>
-                                <div className="text-xs text-blue-100 mt-1">
+                                <div className="text-sm font-medium text-white">Invitation Validated</div>
+                                <div className="text-xs text-slate-300 mt-1">
                                     {tokenData.customerCompany} • {tokenData.serviceRequired}
-                                    {tokenData.dealValue && ` • £${Number(tokenData.dealValue).toLocaleString()}`}
                                 </div>
+                                {tokenData.dealValue && (
+                                    <div className="text-xs text-emerald-400 mt-0.5">
+                                        Contract Value: £{Number(tokenData.dealValue).toLocaleString()}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
-                )}
 
-                {/* Main Card */}
-                <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-                    {/* Back Button */}
-                    <div className="px-6 pt-6">
+                    {/* Main Card */}
+                    <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 p-6">
+                        {/* Back Button */}
                         <button
                             onClick={() => {
-                                setActiveView(tokenData ? 'token' : 'welcome')
+                                setActiveView('token')
                                 setError(null)
-                                setSuccess(null)
                             }}
-                            className="flex items-center gap-1 text-slate-500 hover:text-slate-700 text-sm cursor-pointer"
+                            className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm mb-4 cursor-pointer transition"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                             </svg>
                             Back
                         </button>
-                    </div>
 
-                    {/* Tabs */}
-                    <div className="flex border-b border-slate-200 mt-4">
-                        <button
-                            onClick={() => {
-                                setActiveView('login')
-                                setError(null)
-                            }}
-                            className={`flex-1 py-4 text-sm font-medium transition cursor-pointer ${activeView === 'login'
-                                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
-                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                                }`}
-                        >
-                            Sign In
-                        </button>
-                        <button
-                            onClick={() => {
-                                setActiveView('register')
-                                setError(null)
-                            }}
-                            className={`flex-1 py-4 text-sm font-medium transition cursor-pointer ${activeView === 'register'
-                                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
-                                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                                }`}
-                        >
-                            Create Account
-                        </button>
-                    </div>
+                        <h2 className="text-lg font-medium text-white mb-1">Register for this Opportunity</h2>
+                        <p className="text-sm text-slate-400 mb-6">Create your credentials to participate in this negotiation</p>
 
-                    {/* Error/Success Messages */}
-                    {error && (
-                        <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                            {error}
-                        </div>
-                    )}
-                    {success && (
-                        <div className="mx-6 mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
-                            {success}
-                        </div>
-                    )}
+                        {/* Error Message */}
+                        {error && (
+                            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                                {error}
+                            </div>
+                        )}
 
-                    {/* Login Form */}
-                    {activeView === 'login' && (
-                        <form onSubmit={handleLogin} className="p-6 space-y-4">
+                        <form onSubmit={handleRegister} className="space-y-4">
+                            {/* Email (Read-only) */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Email Address
-                                </label>
-                                <input
-                                    type="email"
-                                    value={loginEmail}
-                                    onChange={(e) => setLoginEmail(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                    placeholder="you@company.com"
-                                    disabled={loading}
-                                />
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Email Address</label>
+                                <div className="w-full px-4 py-2.5 bg-slate-700/30 border border-slate-600/30 rounded-lg text-slate-400 text-sm">
+                                    {tokenData.providerEmail || tokenData.provider_contact_email}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">This is the email the invitation was sent to</p>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Password
-                                </label>
-                                <input
-                                    type="password"
-                                    value={loginPassword}
-                                    onChange={(e) => setLoginPassword(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                    placeholder="••••••••"
-                                    disabled={loading}
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                                {loading ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Signing in...
-                                    </>
-                                ) : (
-                                    'Sign In'
-                                )}
-                            </button>
-
-                            <div className="text-center text-sm text-slate-500">
-                                <button type="button" className="text-blue-600 hover:underline cursor-pointer">
-                                    Forgot password?
-                                </button>
-                            </div>
-                        </form>
-                    )}
-
-                    {/* Register Form */}
-                    {activeView === 'register' && (
-                        <form onSubmit={handleRegister} className="p-6 space-y-4">
+                            {/* Name Fields */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        First Name
-                                    </label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">First Name</label>
                                     <input
                                         type="text"
                                         value={registerFirstName}
                                         onChange={(e) => setRegisterFirstName(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm placeholder-slate-500"
                                         placeholder="John"
                                         disabled={loading}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                                        Last Name
-                                    </label>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Last Name</label>
                                     <input
                                         type="text"
                                         value={registerLastName}
                                         onChange={(e) => setRegisterLastName(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                        className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm placeholder-slate-500"
                                         placeholder="Doe"
                                         disabled={loading}
                                     />
                                 </div>
                             </div>
 
+                            {/* Company */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Company Name
-                                </label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Company Name</label>
                                 <input
                                     type="text"
                                     value={registerCompany}
                                     onChange={(e) => setRegisterCompany(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm placeholder-slate-500"
                                     placeholder="Your Company Ltd"
                                     disabled={loading}
                                 />
                             </div>
 
+                            {/* Password */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Email Address
-                                </label>
-                                <input
-                                    type="email"
-                                    value={registerEmail}
-                                    onChange={(e) => setRegisterEmail(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                    placeholder="you@company.com"
-                                    disabled={loading}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Password
-                                </label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Create Password</label>
                                 <input
                                     type="password"
                                     value={registerPassword}
                                     onChange={(e) => setRegisterPassword(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm placeholder-slate-500"
                                     placeholder="••••••••"
                                     disabled={loading}
                                 />
-                                <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
+                                <p className="text-xs text-slate-500 mt-1">Minimum 6 characters. Use this to return to your session.</p>
                             </div>
 
+                            {/* Confirm Password */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Confirm Password
-                                </label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Confirm Password</label>
                                 <input
                                     type="password"
                                     value={registerConfirmPassword}
                                     onChange={(e) => setRegisterConfirmPassword(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm placeholder-slate-500"
                                     placeholder="••••••••"
                                     disabled={loading}
                                 />
@@ -699,35 +712,151 @@ export default function ProviderPortal() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer"
+                                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer mt-6"
                             >
                                 {loading ? (
                                     <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Creating account...
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        Registering...
                                     </>
                                 ) : (
-                                    'Create Account'
+                                    <>
+                                        Continue to Welcome
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                        </svg>
+                                    </>
                                 )}
                             </button>
-
-                            <p className="text-xs text-slate-500 text-center">
-                                By signing up, you agree to our Terms of Service and Privacy Policy
-                            </p>
                         </form>
-                    )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="text-center mt-6 text-xs text-slate-500">
+                        © {new Date().getFullYear()} CLARENCE by Spike Island Studios
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 12: RENDER - SESSION LOGIN VIEW
+    // ========================================================================
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+            <div className="w-full max-w-md">
+                {/* Header */}
+                <div className="text-center mb-8">
+                    <div className="inline-block">
+                        <div className="text-4xl font-light text-white mb-2 tracking-wide">CLARENCE</div>
+                        <div className="text-xs text-blue-400 tracking-[0.3em] font-light">PROVIDER ACCESS</div>
+                    </div>
+                    <p className="text-slate-400 mt-4 text-sm">
+                        Sign in to return to your session
+                    </p>
                 </div>
 
-                {/* Customer Link */}
-                <div className="text-center mt-6">
-                    <p className="text-sm text-slate-500 mb-2">Are you a customer looking to create contracts?</p>
-                    <Link href="/auth/login" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
-                        Go to Customer Portal →
-                    </Link>
+                {/* Main Card */}
+                <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 p-8">
+                    {/* Back Button */}
+                    <button
+                        onClick={() => {
+                            setActiveView('welcome')
+                            setError(null)
+                        }}
+                        className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm mb-6 cursor-pointer transition"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Back
+                    </button>
+
+                    {/* Error Message */}
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                            {error}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSessionLogin} className="space-y-4">
+                        {/* Session Number */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Session Number</label>
+                            <input
+                                type="text"
+                                value={loginSessionNumber}
+                                onChange={(e) => setLoginSessionNumber(e.target.value)}
+                                className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm font-mono placeholder-slate-500"
+                                placeholder="SES-001 or 001"
+                                disabled={loading}
+                            />
+                            <p className="text-xs text-slate-500 mt-1">From your invitation email or registration confirmation</p>
+                        </div>
+
+                        {/* Email */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Email Address</label>
+                            <input
+                                type="email"
+                                value={loginEmail}
+                                onChange={(e) => setLoginEmail(e.target.value)}
+                                className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm placeholder-slate-500"
+                                placeholder="you@company.com"
+                                disabled={loading}
+                            />
+                        </div>
+
+                        {/* Password */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                            <input
+                                type="password"
+                                value={loginPassword}
+                                onChange={(e) => setLoginPassword(e.target.value)}
+                                className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white text-sm placeholder-slate-500"
+                                placeholder="••••••••"
+                                disabled={loading}
+                            />
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer mt-2"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    Signing in...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                                    </svg>
+                                    Access Session
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    {/* Help */}
+                    <div className="mt-6 pt-6 border-t border-slate-700/50">
+                        <p className="text-sm text-slate-400 mb-2">First time here?</p>
+                        <button
+                            onClick={() => setActiveView('token')}
+                            className="text-blue-400 hover:text-blue-300 text-sm cursor-pointer"
+                        >
+                            Enter your invitation token instead →
+                        </button>
+                    </div>
                 </div>
 
                 {/* Footer */}
-                <div className="text-center mt-6 text-sm text-slate-400">
+                <div className="text-center mt-6 text-xs text-slate-500">
                     © {new Date().getFullYear()} CLARENCE by Spike Island Studios
                 </div>
             </div>
