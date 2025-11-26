@@ -379,7 +379,7 @@ export default function ContractsDashboard() {
         text: 'View Provider Status',
         className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
         disabled: false,
-        action: () => router.push(`/auth/provider-status?session_id=${session.sessionId}`)
+        action: () => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
       }
     }
 
