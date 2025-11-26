@@ -37,19 +37,27 @@ interface ExistingRequirements {
   inHouseCapability: string
   walkAwayPoint: string
   budgetFlexibility: string
-  // Contract positions
-  liabilityCap: number
-  paymentTerms: number
-  slaTarget: number
-  terminationNotice: number
-  // Priorities
-  priorities: {
+  // Contract positions - individual fields (legacy)
+  liabilityCap?: number
+  paymentTerms?: number
+  slaTarget?: number
+  terminationNotice?: number
+  // Contract positions - nested object (from API)
+  contractPositions?: {
+    liabilityCap?: number
+    paymentTerms?: number
+    slaTarget?: number
+    dataRetention?: number
+    terminationNotice?: number
+  } | string
+  // Priorities - can be object or JSON string from API
+  priorities?: {
     cost: number
     quality: number
     speed: number
     innovation: number
     riskMitigation: number
-  }
+  } | string
 }
 
 interface StrategicAnswers {
@@ -95,6 +103,114 @@ interface LeverageAssessment {
   providerLeverage: number
   breakdown: LeverageBreakdown
   reasoning: string
+}
+
+// ========================================================================
+// SECTION 1.5: DISPLAY FORMATTING HELPERS
+// ========================================================================
+
+// Format incumbent status for display
+const getIncumbentDisplay = (status: string): string => {
+  const statusMap: Record<string, string> = {
+    'no-incumbent': 'New engagement (no current provider)',
+    'replacing-poor': 'Replacing a poor performer',
+    'replacing-good': 'Replacing a satisfactory provider',
+    'expanding': 'Expanding existing relationship',
+    '': 'Not specified'
+  }
+  return statusMap[status] || status.replace(/-/g, ' ')
+}
+
+// Format timeline for display
+const getTimelineDisplay = (timeline: string): string => {
+  const timelineMap: Record<string, string> = {
+    'Urgent': 'Urgent - under 2 weeks',
+    'Normal': 'Standard - within 1 month',
+    'Flexible': 'Flexible - 1-3 months',
+    'No Rush': 'No time pressure',
+    '': 'Not specified'
+  }
+  return timelineMap[timeline] || timeline
+}
+
+// Format criticality for display
+const getCriticalityDisplay = (criticality: string): string => {
+  const criticalityMap: Record<string, string> = {
+    'mission-critical': 'Mission-critical (business stops without it)',
+    'business-critical': 'Business-critical (major impact)',
+    'important': 'Important to operations',
+    'standard': 'Standard business function',
+    '': 'Not specified'
+  }
+  return criticalityMap[criticality] || criticality.replace(/-/g, ' ')
+}
+
+// Format switching costs for display
+const getSwitchingCostsDisplay = (costs: string): string => {
+  const costsMap: Record<string, string> = {
+    'minimal': 'Minimal (< £10k)',
+    'moderate': 'Moderate (£10-50k)',
+    'high': 'High (£50-200k)',
+    'prohibitive': 'Prohibitive (> £200k)',
+    '': 'Not assessed'
+  }
+  return costsMap[costs] || costs
+}
+
+// Format currency value
+const formatCurrency = (value: string | number): string => {
+  if (!value) return 'Not specified'
+  const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.]/g, '')) : value
+  if (isNaN(num)) return String(value)
+  if (num >= 1000000) return `£${(num / 1000000).toFixed(1)}M`
+  if (num >= 1000) return `£${(num / 1000).toFixed(0)}K`
+  return `£${num.toLocaleString()}`
+}
+
+// Format priorities for display (sorted by points)
+const formatPrioritiesDisplay = (
+  priorities: Record<string, number> | string | null | undefined
+): string => {
+  if (!priorities) return 'Not specified'
+
+  // Parse if string
+  let prioritiesObj: Record<string, number>
+  if (typeof priorities === 'string') {
+    try {
+      prioritiesObj = JSON.parse(priorities)
+    } catch {
+      return 'Not specified'
+    }
+  } else {
+    prioritiesObj = priorities as Record<string, number>
+  }
+
+  if (!prioritiesObj || typeof prioritiesObj !== 'object' || Object.keys(prioritiesObj).length === 0) {
+    return 'Not specified'
+  }
+
+  const labels: Record<string, string> = {
+    'cost': 'Cost Optimization',
+    'quality': 'Quality Standards',
+    'speed': 'Speed of Delivery',
+    'innovation': 'Innovation & Technology',
+    'riskMitigation': 'Risk Mitigation'
+  }
+
+  const sorted = Object.entries(prioritiesObj)
+    .filter(([, value]) => typeof value === 'number' && value > 0)
+    .sort(([, a], [, b]) => b - a)
+    .map(([key, value], index) => `${index + 1}. ${labels[key] || key} (${value} points)`)
+
+  return sorted.length > 0 ? sorted.join('\n') : 'Not specified'
+}
+
+// Format number of bidders for display
+const getBiddersDisplay = (bidders: string): string => {
+  if (!bidders) return 'Not specified'
+  if (bidders === '1') return 'Sole source (1 provider)'
+  if (bidders === '7+') return 'Highly competitive (7+ providers)'
+  return `${bidders} providers in consideration`
 }
 
 // ========== SECTION 2: STRATEGIC QUESTIONS ==========
@@ -423,33 +539,62 @@ Let's start with your alternatives...`
     setIsTyping(false)
   }
 
-  // ========== SECTION 10: GENERATE INTELLIGENT OPENING ==========
+  // ========================================================================
+  // SECTION 10: GENERATE INTELLIGENT OPENING
+  // ========================================================================
   const generateIntelligentOpening = (data: ExistingRequirements): string => {
-    const priorityRanking = getPriorityRanking(data.priorities)
-    const timeline = getTimelineDescription(data.decisionTimeline)
+    const priorityRanking = formatPrioritiesDisplay(data.priorities)
+    const timeline = getTimelineDisplay(data.decisionTimeline)
 
-    return `Good to continue, ${data.contactName || 'there'}. I've reviewed your requirements submission for **${data.companyName}**.
+    // Parse contract positions if needed
+    let positions: {
+      liabilityCap?: number
+      paymentTerms?: number
+      slaTarget?: number
+      dataRetention?: number
+      terminationNotice?: number
+    } = {}
+
+    if (data.contractPositions) {
+      if (typeof data.contractPositions === 'string') {
+        try {
+          positions = JSON.parse(data.contractPositions)
+        } catch {
+          positions = {}
+        }
+      } else {
+        positions = data.contractPositions
+      }
+    }
+
+    // Get position values with defaults
+    const liabilityCap = positions.liabilityCap ?? data.liabilityCap ?? 0
+    const paymentTerms = positions.paymentTerms ?? data.paymentTerms ?? 0
+    const slaTarget = positions.slaTarget ?? data.slaTarget ?? 0
+    const terminationNotice = positions.terminationNotice ?? data.terminationNotice ?? 0
+
+    return `Good to meet you, ${data.contactName || data.companyName || 'there'}. I've reviewed your requirements submission for **${data.companyName}**.
 
 Here's what I understand:
 
 **The Deal:**
-• ${data.serviceRequired || 'Service'} contract worth ${formatCurrency(data.dealValue)}
-• ${data.serviceCriticality || 'Business critical'} to your operations
-• ${data.numberOfBidders || '2-3'} providers in consideration
+- ${data.serviceRequired || 'Service'} contract worth ${formatCurrency(data.dealValue)}
+- ${getCriticalityDisplay(data.serviceCriticality)}
+- ${getBiddersDisplay(data.numberOfBidders)}
 
 **Your Position:**
-• ${data.incumbentStatus === 'Replacing Provider' || data.incumbentStatus === 'replacing-incumbent' ? 'Replacing an underperforming incumbent' : data.incumbentStatus === 'no-incumbent' ? 'New engagement - no incumbent' : data.incumbentStatus || 'New engagement'}
-• Timeline: ${timeline}
-• Switching costs assessed as: ${data.switchingCosts || 'Moderate'}
+- ${getIncumbentDisplay(data.incumbentStatus)}
+- Timeline: ${timeline}
+- Switching costs: ${getSwitchingCostsDisplay(data.switchingCosts)}
 
 **Your Priorities (from highest):**
 ${priorityRanking}
 
 **Your Starting Positions:**
-• Liability cap: ${data.liabilityCap}% of annual value
-• Payment terms: ${data.paymentTerms} days
-• SLA target: ${data.slaTarget}% uptime
-• Termination notice: ${data.terminationNotice} days
+- Liability cap: ${liabilityCap}% of annual value
+- Payment terms: ${paymentTerms} days
+- SLA target: ${slaTarget}% uptime
+- Termination notice: ${terminationNotice} days
 
 I have the facts. Now I need to understand the *dynamics* that will determine your leverage.`
   }
