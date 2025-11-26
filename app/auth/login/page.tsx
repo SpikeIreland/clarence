@@ -46,7 +46,7 @@ function LoginSignupContent() {
   const [signupFirstName, setSignupFirstName] = useState('')
   const [signupLastName, setSignupLastName] = useState('')
   const [signupCompany, setSignupCompany] = useState('')
-  const [signupRole, setSignupRole] = useState<'customer' | 'provider'>('customer')
+  const signupRole = 'customer' // Customers only - providers have separate portal
 
   // ========================================================================
   // SECTION 4: VALIDATION
@@ -245,8 +245,8 @@ function LoginSignupContent() {
           </div>
           <p className="text-slate-600 mt-4 text-sm">
             {activeTab === 'login'
-              ? 'Sign in to continue to your account'
-              : 'Create your account to get started'
+              ? 'Sign in to your customer account'
+              : 'Create your customer account to get started'
             }
           </p>
         </div>
@@ -353,36 +353,6 @@ function LoginSignupContent() {
           {/* Signup Form */}
           {activeTab === 'signup' && (
             <form onSubmit={handleSignup} className="p-6 space-y-4">
-              {/* Role Selection */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Account Type
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSignupRole('customer')}
-                    className={`p-3 border-2 rounded-lg text-sm font-medium transition ${signupRole === 'customer'
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                      }`}
-                    disabled={loading}
-                  >
-                    Customer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSignupRole('provider')}
-                    className={`p-3 border-2 rounded-lg text-sm font-medium transition ${signupRole === 'provider'
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                      }`}
-                    disabled={loading}
-                  >
-                    Provider
-                  </button>
-                </div>
-              </div>
 
               {/* Name Fields */}
               <div className="grid grid-cols-2 gap-3">
