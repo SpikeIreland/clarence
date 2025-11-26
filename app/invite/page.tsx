@@ -53,7 +53,7 @@ function ProviderInviteContent() {
             try {
                 // Validate token with backend
                 const response = await fetch(
-                    `${API_BASE}/validate-invite?session_id=${sessionId}&token=${token}`
+                    `${API_BASE}/validate-provider-invite?session_id=${sessionId}&token=${token}`
                 )
 
                 if (response.ok) {
