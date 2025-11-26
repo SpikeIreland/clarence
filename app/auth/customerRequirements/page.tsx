@@ -380,8 +380,8 @@ function CustomerRequirementsForm() {
             3: 'Service Requirements',
             4: 'Alternative Options (BATNA)',
             5: 'Commercial Terms',
-            6: 'Contract Positions',
-            7: 'Priority Allocation',
+            6: 'Priority Allocation',
+            7: 'Contract Positions',
             8: 'Technical & Compliance',
             9: 'Additional Context'
         }
@@ -415,9 +415,9 @@ function CustomerRequirementsForm() {
             case 5:
                 return <CommercialTermsStep formData={formData} updateFormData={updateFormData} />
             case 6:
-                return <ContractPositionsStep formData={formData} updateNestedData={updateNestedData} />
-            case 7:
                 return <PrioritiesStep formData={formData} updateNestedData={updateNestedData} priorityPoints={priorityPoints} />
+            case 7:
+                return <ContractPositionsStep formData={formData} updateNestedData={updateNestedData} />
             case 8:
                 return <TechnicalRequirementsStep formData={formData} updateFormData={updateFormData} />
             case 9:
@@ -1069,16 +1069,22 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
 
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Walk-away point (maximum acceptable cost)
+                    Walk-away Point / Exit Strategy
                 </label>
-                <input
-                    type="text"
+                <select
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
                     value={formData.walkAwayPoint || ''}
                     onChange={(e) => updateFormData('walkAwayPoint', e.target.value)}
-                    placeholder="e.g., £2,000,000 or 15% above budget"
-                />
-                <p className="text-xs text-slate-500 mt-1">This remains confidential and helps CLARENCE know your limits</p>
+                >
+                    <option value="">Select</option>
+                    <option value="can-delay">Can delay decision if necessary</option>
+                    <option value="hard-deadline">Hard deadline - must decide by specific date</option>
+                    <option value="in-house-fallback">Could bring in-house as fallback</option>
+                    <option value="alternative-provider">Have alternative provider ready</option>
+                    <option value="status-quo">Can continue with current situation</option>
+                    <option value="no-alternative">No viable alternative - must reach agreement</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">This remains confidential and helps CLARENCE understand your negotiating flexibility</p>
             </div>
 
             <div>
