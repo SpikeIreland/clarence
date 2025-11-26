@@ -651,9 +651,10 @@ function ContractStudioContent() {
             // Get session ID and status from URL params
             const sessionId = searchParams.get('session_id') || searchParams.get('session')
             const urlStatus = searchParams.get('status')
+            const sessionNumber = searchParams.get('session_number')
 
             if (!sessionId) {
-                router.push('/auth/dashboard')
+                router.push('/auth/contracts-dashboard')
                 return
             }
 
@@ -661,33 +662,58 @@ function ContractStudioContent() {
             if (urlStatus === 'pending_provider') {
                 setSessionStatus('pending_provider')
 
-                // Still load basic session info
+                // Load session data from customer-requirements-api (where we saved it)
                 try {
-                    const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+                    const response = await fetch(`${API_BASE}/customer-requirements-api?session_id=${sessionId}`)
                     if (response.ok) {
                         const data = await response.json()
-                        if (data.session) {
-                            setSession({
-                                sessionId: data.session.sessionId || sessionId,
-                                sessionNumber: data.session.sessionNumber || '',
-                                customerCompany: data.session.customerCompany || user.company || '',
-                                providerCompany: 'Awaiting Provider',
-                                serviceType: data.session.contractType || 'Service Agreement',
-                                dealValue: formatCurrency(data.session.dealValue, 'GBP'),
-                                phase: 1,
-                                status: 'pending_provider'
-                            })
-                        }
+                        console.log('Customer requirements data:', data)
+
+                        // Map the data to session format
+                        setSession({
+                            sessionId: sessionId,
+                            sessionNumber: data.sessionNumber || sessionNumber || '',
+                            customerCompany: data.companyName || data.company_name || user.company || '',
+                            providerCompany: 'Awaiting Provider',
+                            serviceType: data.serviceRequired || data.service_required || 'Service Agreement',
+                            dealValue: formatCurrency(data.dealValue || data.deal_value || '0', 'GBP'),
+                            phase: 1,
+                            status: 'pending_provider'
+                        })
+                    } else {
+                        console.error('Failed to load customer requirements:', response.status)
+                        // Set minimal session data from URL params
+                        setSession({
+                            sessionId: sessionId,
+                            sessionNumber: sessionNumber || '',
+                            customerCompany: user.company || 'Your Company',
+                            providerCompany: 'Awaiting Provider',
+                            serviceType: 'Service Agreement',
+                            dealValue: '£0',
+                            phase: 1,
+                            status: 'pending_provider'
+                        })
                     }
                 } catch (e) {
-                    console.error('Error loading basic session:', e)
+                    console.error('Error loading customer requirements:', e)
+                    // Set minimal session data
+                    setSession({
+                        sessionId: sessionId,
+                        sessionNumber: sessionNumber || '',
+                        customerCompany: user.company || 'Your Company',
+                        providerCompany: 'Awaiting Provider',
+                        serviceType: 'Service Agreement',
+                        dealValue: '£0',
+                        phase: 1,
+                        status: 'pending_provider'
+                    })
                 }
 
                 setLoading(false)
                 return
             }
 
-            // Load full contract data
+            // Load full contract data for non-pending states
             const data = await loadContractData(sessionId)
 
             if (data) {
@@ -794,28 +820,37 @@ function ContractStudioContent() {
         setInviteSending(true)
 
         try {
-            const response = await fetch(`${API_BASE}/provider-invite`, {
+            // Match the workflow's expected structure
+            const response = await fetch(`${API_BASE}/invite-provider`, {  // Changed URL
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    session_id: session.sessionId,
-                    session_number: session.sessionNumber,
-                    customer_company: session.customerCompany,
-                    provider_email: providerEmail,
-                    service_type: session.serviceType,
-                    deal_value: session.dealValue
+                    sessionId: session.sessionId,  // camelCase to match workflow
+                    sessionNumber: session.sessionNumber,
+                    customerCompany: session.customerCompany,
+                    serviceRequired: session.serviceType,
+                    dealValue: session.dealValue.replace(/[£$€,]/g, ''), // Strip currency symbols
+                    provider: {  // Nested structure
+                        companyName: '',  // Will be filled by provider
+                        contactName: '',
+                        contactEmail: providerEmail
+                    }
                 })
             })
 
             if (response.ok) {
+                const result = await response.json()
+                console.log('Invite sent successfully:', result)
                 setInviteSent(true)
                 setSessionStatus('provider_invited')
             } else {
+                const errorText = await response.text()
+                console.error('Failed to send invite:', errorText)
                 alert('Failed to send invitation. Please try again.')
             }
         } catch (error) {
             console.error('Error sending invite:', error)
-            alert('Failed to send invitation. Please try again.')
+            alert('Failed to send invitation. Please check your connection and try again.')
         }
 
         setInviteSending(false)
