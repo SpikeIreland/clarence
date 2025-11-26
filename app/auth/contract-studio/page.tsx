@@ -872,7 +872,7 @@ function ContractStudioContent() {
                             </div>
                         </div>
                         <button
-                            onClick={() => router.push('/auth/dashboard')}
+                            onClick={() => router.push('/auth/contracts-dashboard')}
                             className="text-slate-400 hover:text-white transition"
                         >
                             ← Back to Dashboard
@@ -1063,7 +1063,7 @@ function ContractStudioContent() {
                                     </div>
 
                                     <button
-                                        onClick={() => router.push('/auth/dashboard')}
+                                        onClick={() => router.push('/auth/contracts-dashboard')}
                                         className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition"
                                     >
                                         ← Return to Dashboard
@@ -1129,7 +1129,7 @@ function ContractStudioContent() {
                 <div className="text-center">
                     <p className="text-red-600 mb-4">Failed to load contract data</p>
                     <button
-                        onClick={() => router.push('/auth/dashboard')}
+                        onClick={() => router.push('/auth/contracts-dashboard')}
                         className="px-4 py-2 bg-emerald-500 text-white rounded-lg"
                     >
                         Return to Dashboard
@@ -1483,7 +1483,7 @@ function ContractStudioContent() {
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="font-semibold text-slate-800">Contract Clauses</h2>
                             <button
-                                onClick={() => router.push('/auth/dashboard')}
+                                onClick={() => router.push('/auth/contracts-dashboard')}
                                 className="text-slate-400 hover:text-slate-600"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
