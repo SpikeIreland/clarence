@@ -223,7 +223,7 @@ const STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   },
   {
     key: 'batnaTimeline',
-    question: "How quickly could you realistically execute that Plan B? Be honest - I need to understand your true timeline pressure.",
+    question: "How quickly could you realistically execute that Plan B? I need to understand your true timeline pressure.",
   },
   {
     key: 'batnaRealismScore',
@@ -276,6 +276,113 @@ function IntelligentQuestionnaireContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // ========================================================================
+  // SECTION 3A: PROGRESS TRACKING FOR QUESTIONNAIRE
+  // ========================================================================
+
+  // Define questionnaire sections matching STRATEGIC_QUESTIONS
+  const questionnaireSections = [
+    {
+      id: 'summary',
+      name: 'Requirements Summary',
+      icon: '📋',
+      questionIndices: [] as number[], // No questions, just display
+    },
+    {
+      id: 'batna',
+      name: 'BATNA Deep Dive',
+      icon: '⚖️',
+      questionIndices: [0, 1, 2], // batnaSpecifics, batnaTimeline, batnaRealismScore
+    },
+    {
+      id: 'redlines',
+      name: 'Red Lines & Flexibility',
+      icon: '🚫',
+      questionIndices: [3, 4], // absoluteRedLines, flexibleAreas
+    },
+    {
+      id: 'risk',
+      name: 'Risk Tolerance',
+      icon: '⚠️',
+      questionIndices: [5, 6], // riskAppetite, worstCaseScenario
+    },
+    {
+      id: 'internal',
+      name: 'Internal Dynamics',
+      icon: '🏢',
+      questionIndices: [7, 8], // stakeholderPressure, internalPolitics
+    },
+    {
+      id: 'relationship',
+      name: 'Relationship Priorities',
+      icon: '🤝',
+      questionIndices: [9, 10], // relationshipVsTerms, longTermVision
+    },
+    {
+      id: 'trust',
+      name: 'Provider Trust',
+      icon: '🔍',
+      questionIndices: [11, 12], // providerConcerns, trustLevel
+    },
+    {
+      id: 'result',
+      name: 'Leverage Result',
+      icon: '🏆',
+      questionIndices: [] as number[], // No questions, final result
+    }
+  ]
+
+  // Calculate which section the current question belongs to
+  const getCurrentSectionId = (): string => {
+    if (conversationComplete) return 'result'
+    if (currentQuestionIndex === 0 && messages.length <= 2) return 'summary'
+
+    for (const section of questionnaireSections) {
+      if (section.questionIndices.includes(currentQuestionIndex)) {
+        return section.id
+      }
+    }
+    return 'summary'
+  }
+
+  // Calculate section completion status
+  const getSectionStatus = (sectionId: string): 'complete' | 'current' | 'pending' => {
+    const section = questionnaireSections.find(s => s.id === sectionId)
+    if (!section) return 'pending'
+
+    if (sectionId === 'summary') return 'complete'
+    if (sectionId === 'result') return conversationComplete ? 'complete' : 'pending'
+
+    if (section.questionIndices.length === 0) return 'pending'
+
+    const maxIndex = Math.max(...section.questionIndices)
+    const minIndex = Math.min(...section.questionIndices)
+
+    if (currentQuestionIndex > maxIndex) return 'complete'
+    if (currentQuestionIndex >= minIndex && currentQuestionIndex <= maxIndex) return 'current'
+    return 'pending'
+  }
+
+  // Calculate section progress (answered/total)
+  const getSectionProgress = (sectionId: string): { answered: number; total: number } => {
+    const section = questionnaireSections.find(s => s.id === sectionId)
+    if (!section || section.questionIndices.length === 0) return { answered: 0, total: 0 }
+
+    const answered = section.questionIndices.filter(idx => {
+      const questionKey = STRATEGIC_QUESTIONS[idx]?.key
+      return questionKey && strategicAnswers[questionKey]
+    }).length
+
+    return { answered, total: section.questionIndices.length }
+  }
+
+  // Calculate overall progress percentage
+  const getOverallProgress = (): number => {
+    const totalQuestions = STRATEGIC_QUESTIONS.length
+    const answeredQuestions = Object.keys(strategicAnswers).length
+    return Math.round((answeredQuestions / totalQuestions) * 100)
+  }
 
   // ========== SECTION 4: STATE ==========
   const [loading, setLoading] = useState(true)
@@ -525,7 +632,7 @@ function IntelligentQuestionnaireContent() {
     await new Promise(resolve => setTimeout(resolve, 1500))
 
     // Transition to strategic questions
-    const transitionMessage = `Now I need to understand the strategic dynamics that will shape your negotiating position. These questions will help me calculate your true leverage and recommend defensible first-draft positions.
+    const transitionMessage = `These questions will help me calculate your true leverage and recommend defensible first-draft positions.
 
 Let's start with your alternatives...`
 
@@ -962,6 +1069,106 @@ Click "Generate Positions" to proceed to the Contract Studio.`
     router.push(`/auth/contract-studio?session_id=${sessionId}`)
   }
 
+  // ========================================================================
+  // SECTION 16B: PROGRESS MENU COMPONENT
+  // ========================================================================
+  const ProgressMenu = () => {
+    const overallProgress = getOverallProgress()
+    const currentSectionId = getCurrentSectionId()
+
+    return (
+      <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
+        {/* Header */}
+        <div className="p-4 border-b border-slate-200">
+          <h3 className="font-semibold text-slate-800">Strategic Assessment</h3>
+          <div className="mt-3">
+            <div className="flex justify-between text-sm text-slate-600 mb-1">
+              <span>Overall Progress</span>
+              <span>{overallProgress}%</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${overallProgress}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Section List */}
+        <div className="flex-1 overflow-y-auto p-3">
+          {questionnaireSections.map((section) => {
+            const status = getSectionStatus(section.id)
+            const progress = getSectionProgress(section.id)
+            const isActive = currentSectionId === section.id
+
+            return (
+              <div
+                key={section.id}
+                className={`p-3 rounded-lg mb-2 transition-all ${isActive
+                  ? 'bg-blue-50 border border-blue-200'
+                  : status === 'complete'
+                    ? 'bg-green-50 border border-green-100'
+                    : 'bg-slate-50 border border-transparent'
+                  }`}
+              >
+                <div className="flex items-center">
+                  {/* Status indicator */}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-3 ${status === 'complete'
+                    ? 'bg-green-100 text-green-600'
+                    : isActive
+                      ? 'bg-blue-100 text-blue-600'
+                      : 'bg-slate-200 text-slate-400'
+                    }`}>
+                    {status === 'complete' ? '✓' : section.icon}
+                  </div>
+
+                  {/* Section info */}
+                  <div className="flex-1 min-w-0">
+                    <div className={`font-medium text-sm ${isActive ? 'text-blue-700' :
+                      status === 'complete' ? 'text-green-700' : 'text-slate-600'
+                      }`}>
+                      {section.name}
+                    </div>
+
+                    {progress.total > 0 && (
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {progress.answered}/{progress.total} questions
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Progress bar for sections with questions */}
+                {progress.total > 0 && (
+                  <div className="mt-2 ml-11">
+                    <div className="w-full bg-slate-200 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all duration-300 ${status === 'complete' ? 'bg-green-500' : 'bg-blue-500'
+                          }`}
+                        style={{ width: `${(progress.answered / progress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Footer with session info */}
+        <div className="p-4 border-t border-slate-200 bg-slate-50">
+          <div className="text-xs text-slate-500">
+            {sessionNumber && <div className="font-mono">{sessionNumber}</div>}
+            {existingData?.companyName && (
+              <div className="truncate mt-1">{existingData.companyName}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ========== SECTION 17: LOADING STATE ==========
   if (loading) {
     return (
@@ -976,32 +1183,36 @@ Click "Generate Positions" to proceed to the Contract Studio.`
 
   // ========== SECTION 18: RENDER ==========
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">C</span>
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* Left Progress Menu */}
+      <ProgressMenu />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="bg-white border-b border-slate-200 px-6 py-4">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">C</span>
+              </div>
+              <div>
+                <h1 className="font-semibold text-slate-800">CLARENCE</h1>
+                <p className="text-sm text-slate-500">Strategic Assessment</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-semibold text-slate-800">CLARENCE</h1>
-              <p className="text-sm text-slate-500">Strategic Assessment</p>
-            </div>
+
+            {existingData && (
+              <div className="text-right text-sm">
+                <p className="font-medium text-slate-700">{existingData.companyName}</p>
+                <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
+              </div>
+            )}
           </div>
+        </header>
 
-          {existingData && (
-            <div className="text-right text-sm">
-              <p className="font-medium text-slate-700">{existingData.companyName}</p>
-              <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* Progress Indicator */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3">
-        <div className="max-w-4xl mx-auto">
+        {/* Progress Bar (Mobile/Compact) */}
+        <div className="bg-white border-b border-slate-200 px-6 py-3 lg:hidden">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-slate-400">Question {Math.min(currentQuestionIndex + 1, STRATEGIC_QUESTIONS.length)} of {STRATEGIC_QUESTIONS.length}</span>
             <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -1015,83 +1226,85 @@ Click "Generate Positions" to proceed to the Contract Studio.`
             )}
           </div>
         </div>
-      </div>
 
-      {/* Chat Container */}
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[600px] flex flex-col">
+        {/* Chat Container */}
+        <div className="flex-1 p-6 overflow-hidden">
+          <div className="max-w-3xl mx-auto h-full">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
 
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-lg p-4 ${message.type === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-800'
-                    }`}
-                >
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {message.content.split('**').map((part, i) =>
-                      i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-                    )}
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg p-4 ${message.type === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-800'
+                        }`}
+                    >
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {message.content.split('**').map((part, i) =>
+                          i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                ))}
 
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="bg-slate-100 rounded-lg p-4">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                {isTyping && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-100 rounded-lg p-4">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
 
-            <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input Area */}
+              {!conversationComplete ? (
+                <div className="border-t border-slate-200 p-4">
+                  <form onSubmit={handleSubmit} className="flex gap-3">
+                    <input
+                      type="text"
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      placeholder="Type your response..."
+                      className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={isTyping}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!userInput.trim() || isTyping}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Send
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <div className="border-t border-slate-200 p-4">
+                  <button
+                    onClick={handleProceedToStudio}
+                    className="w-full py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    Generate Positions & Open Contract Studio
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-
-          {/* Input Area */}
-          {!conversationComplete ? (
-            <div className="border-t border-slate-200 p-4">
-              <form onSubmit={handleSubmit} className="flex gap-3">
-                <input
-                  type="text"
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  placeholder="Type your response..."
-                  className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isTyping}
-                />
-                <button
-                  type="submit"
-                  disabled={!userInput.trim() || isTyping}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-                >
-                  Send
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="border-t border-slate-200 p-4">
-              <button
-                onClick={handleProceedToStudio}
-                className="w-full py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-              >
-                Generate Positions & Open Contract Studio
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
