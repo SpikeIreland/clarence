@@ -6,6 +6,15 @@ import { useRouter, useSearchParams } from 'next/navigation'
 // SECTION 1: INTERFACES & TYPES
 // ============================================================================
 
+// Session status types
+type SessionStatus =
+    | 'pending_provider'      // Customer done, waiting for provider invite
+    | 'provider_invited'      // Provider has been invited but not completed
+    | 'provider_intake'       // Provider completing their questionnaire
+    | 'leverage_pending'      // Both done, calculating leverage
+    | 'ready'                 // Full negotiation ready
+    | 'active'                // Negotiation in progress
+
 interface Session {
     sessionId: string
     sessionNumber: string
@@ -385,590 +394,7 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 // SECTION 3: MOCK DATA (Temporary - Replace with API data)
 // ============================================================================
 
-function getMockSession(): Session {
-    return {
-        sessionId: 'fba5fcab-ab6d-428d-9227-5389696100aa',
-        sessionNumber: 'SIS-16092025-001',
-        customerCompany: 'Spike Island Studios',
-        providerCompany: 'TechFirst Solutions',
-        serviceType: 'IT Services',
-        dealValue: '£2,000,000',
-        phase: 2,
-        status: 'active'
-    }
-}
 
-function getMockLeverageData(): LeverageData {
-    return {
-        // Leverage Score (from onboarding analysis - fixed baseline)
-        leverageScoreCustomer: 55,
-        leverageScoreProvider: 45,
-        leverageScoreCalculatedAt: '2025-01-15T10:30:00Z',
-
-        // Leverage Tracker (from current clause positions - changes in real-time)
-        leverageTrackerCustomer: 62,
-        leverageTrackerProvider: 38,
-        alignmentPercentage: 87,
-        isAligned: false,
-        leverageTrackerCalculatedAt: new Date().toISOString(),
-
-        // Factor breakdown
-        marketDynamicsScore: 12,
-        marketDynamicsRationale: 'Multiple qualified providers competing; buyer\'s market conditions',
-        economicFactorsScore: 8,
-        economicFactorsRationale: 'Deal represents 3% of provider revenue; moderate dependency',
-        strategicPositionScore: -5,
-        strategicPositionRationale: 'Mission-critical service increases provider leverage',
-        batnaScore: 10,
-        batnaRationale: 'Customer has viable alternatives; provider needs the win'
-    }
-}
-
-function getMockClauses(): ContractClause[] {
-    return [
-        // Category 1: Scope of Services
-        {
-            positionId: 'pos-001',
-            clauseId: 'clause-001',
-            clauseNumber: '1',
-            clauseName: 'Scope of Services',
-            category: 'scope',
-            description: 'Defines the services to be provided under this agreement',
-            parentPositionId: null,
-            clauseLevel: 1,
-            displayOrder: 1,
-            customerPosition: null,
-            providerPosition: null,
-            currentCompromise: null,
-            clarenceRecommendation: null,
-            industryStandard: null,
-            gapSize: 0,
-            customerWeight: 8,
-            providerWeight: 7,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'pending',
-            isExpanded: true,
-            children: []
-        },
-        {
-            positionId: 'pos-002',
-            clauseId: 'clause-002',
-            clauseNumber: '1.1',
-            clauseName: 'Core Services',
-            category: 'scope',
-            description: 'Primary services included in the base contract',
-            parentPositionId: 'pos-001',
-            clauseLevel: 2,
-            displayOrder: 2,
-            customerPosition: 85,
-            providerPosition: 80,
-            currentCompromise: 82,
-            clarenceRecommendation: 83,
-            industryStandard: 80,
-            gapSize: 5,
-            customerWeight: 9,
-            providerWeight: 8,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: 'The Provider shall deliver the following core services...',
-            customerNotes: 'Need 24/7 coverage included',
-            providerNotes: null,
-            status: 'aligned',
-            children: []
-        },
-        {
-            positionId: 'pos-003',
-            clauseId: 'clause-003',
-            clauseNumber: '1.2',
-            clauseName: 'Additional Services',
-            category: 'scope',
-            description: 'Optional services available upon request',
-            parentPositionId: 'pos-001',
-            clauseLevel: 2,
-            displayOrder: 3,
-            customerPosition: 70,
-            providerPosition: 60,
-            currentCompromise: 65,
-            clarenceRecommendation: 68,
-            industryStandard: 65,
-            gapSize: 10,
-            customerWeight: 5,
-            providerWeight: 6,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'negotiating',
-            children: []
-        },
-
-        // Category 2: Pricing Structure
-        {
-            positionId: 'pos-004',
-            clauseId: 'clause-004',
-            clauseNumber: '2',
-            clauseName: 'Pricing Structure',
-            category: 'pricing',
-            description: 'Commercial terms and fee arrangements',
-            parentPositionId: null,
-            clauseLevel: 1,
-            displayOrder: 4,
-            customerPosition: null,
-            providerPosition: null,
-            currentCompromise: null,
-            clarenceRecommendation: null,
-            industryStandard: null,
-            gapSize: 0,
-            customerWeight: 10,
-            providerWeight: 10,
-            isDealBreakerCustomer: true,
-            isDealBreakerProvider: true,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'negotiating',
-            isExpanded: true,
-            children: []
-        },
-        {
-            positionId: 'pos-005',
-            clauseId: 'clause-005',
-            clauseNumber: '2.1',
-            clauseName: 'Base Annual Fee',
-            category: 'pricing',
-            description: 'Fixed annual service charge',
-            parentPositionId: 'pos-004',
-            clauseLevel: 2,
-            displayOrder: 5,
-            customerPosition: 850000,
-            providerPosition: 950000,
-            currentCompromise: null,
-            clarenceRecommendation: 900000,
-            industryStandard: 875000,
-            gapSize: 100000,
-            customerWeight: 10,
-            providerWeight: 10,
-            isDealBreakerCustomer: true,
-            isDealBreakerProvider: false,
-            clauseContent: 'The Customer shall pay the Provider an annual fee of £[AMOUNT]...',
-            customerNotes: 'Budget ceiling is £900K',
-            providerNotes: 'Minimum viable is £920K given scope',
-            status: 'disputed',
-            children: []
-        },
-        {
-            positionId: 'pos-006',
-            clauseId: 'clause-006',
-            clauseNumber: '2.2',
-            clauseName: 'Variable Costs',
-            category: 'pricing',
-            description: 'Usage-based and volume-dependent charges',
-            parentPositionId: 'pos-004',
-            clauseLevel: 2,
-            displayOrder: 6,
-            customerPosition: null,
-            providerPosition: null,
-            currentCompromise: null,
-            clarenceRecommendation: null,
-            industryStandard: null,
-            gapSize: 0,
-            customerWeight: 7,
-            providerWeight: 8,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'pending',
-            isExpanded: false,
-            children: []
-        },
-        {
-            positionId: 'pos-007',
-            clauseId: 'clause-007',
-            clauseNumber: '2.2.1',
-            clauseName: 'Usage-Based Fees',
-            category: 'pricing',
-            description: 'Per-transaction or per-user charges',
-            parentPositionId: 'pos-006',
-            clauseLevel: 3,
-            displayOrder: 7,
-            customerPosition: 15,
-            providerPosition: 25,
-            currentCompromise: 20,
-            clarenceRecommendation: 18,
-            industryStandard: 20,
-            gapSize: 10,
-            customerWeight: 6,
-            providerWeight: 7,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'negotiating',
-            children: []
-        },
-        {
-            positionId: 'pos-008',
-            clauseId: 'clause-008',
-            clauseNumber: '2.2.2',
-            clauseName: 'Volume Discounts',
-            category: 'pricing',
-            description: 'Tiered pricing based on transaction volumes',
-            parentPositionId: 'pos-006',
-            clauseLevel: 3,
-            displayOrder: 8,
-            customerPosition: 20,
-            providerPosition: 10,
-            currentCompromise: 15,
-            clarenceRecommendation: 15,
-            industryStandard: 12,
-            gapSize: 10,
-            customerWeight: 5,
-            providerWeight: 4,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'aligned',
-            children: []
-        },
-        {
-            positionId: 'pos-009',
-            clauseId: 'clause-009',
-            clauseNumber: '2.3',
-            clauseName: 'Payment Schedule',
-            category: 'pricing',
-            description: 'Timing and terms of payments',
-            parentPositionId: 'pos-004',
-            clauseLevel: 2,
-            displayOrder: 9,
-            customerPosition: 60,
-            providerPosition: 30,
-            currentCompromise: 45,
-            clarenceRecommendation: 45,
-            industryStandard: 45,
-            gapSize: 30,
-            customerWeight: 6,
-            providerWeight: 8,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: 'Payment shall be made within [X] days of invoice...',
-            customerNotes: 'Prefer 60 days for cash flow',
-            providerNotes: 'Need 30 days maximum',
-            status: 'negotiating',
-            children: []
-        },
-
-        // Category 3: Service Levels
-        {
-            positionId: 'pos-010',
-            clauseId: 'clause-010',
-            clauseNumber: '3',
-            clauseName: 'Service Levels',
-            category: 'sla',
-            description: 'Performance standards and guarantees',
-            parentPositionId: null,
-            clauseLevel: 1,
-            displayOrder: 10,
-            customerPosition: null,
-            providerPosition: null,
-            currentCompromise: null,
-            clarenceRecommendation: null,
-            industryStandard: null,
-            gapSize: 0,
-            customerWeight: 9,
-            providerWeight: 7,
-            isDealBreakerCustomer: true,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'disputed',
-            isExpanded: true,
-            children: []
-        },
-        {
-            positionId: 'pos-011',
-            clauseId: 'clause-011',
-            clauseNumber: '3.1',
-            clauseName: 'Uptime SLA',
-            category: 'sla',
-            description: 'System availability guarantees',
-            parentPositionId: 'pos-010',
-            clauseLevel: 2,
-            displayOrder: 11,
-            customerPosition: 99.9,
-            providerPosition: 99.5,
-            currentCompromise: null,
-            clarenceRecommendation: 99.7,
-            industryStandard: 99.5,
-            gapSize: 0.4,
-            customerWeight: 10,
-            providerWeight: 8,
-            isDealBreakerCustomer: true,
-            isDealBreakerProvider: false,
-            clauseContent: 'The Provider guarantees system availability of [X]% measured monthly...',
-            customerNotes: 'Mission critical - need 99.9%',
-            providerNotes: '99.9% requires significant infrastructure investment',
-            status: 'disputed',
-            children: []
-        },
-        {
-            positionId: 'pos-012',
-            clauseId: 'clause-012',
-            clauseNumber: '3.2',
-            clauseName: 'Response Times',
-            category: 'sla',
-            description: 'Incident response time commitments',
-            parentPositionId: 'pos-010',
-            clauseLevel: 2,
-            displayOrder: 12,
-            customerPosition: 15,
-            providerPosition: 30,
-            currentCompromise: 20,
-            clarenceRecommendation: 20,
-            industryStandard: 30,
-            gapSize: 15,
-            customerWeight: 8,
-            providerWeight: 6,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: '15 minutes for P1 issues',
-            providerNotes: null,
-            status: 'negotiating',
-            children: []
-        },
-
-        // Category 4: Liability
-        {
-            positionId: 'pos-013',
-            clauseId: 'clause-013',
-            clauseNumber: '4',
-            clauseName: 'Liability & Indemnification',
-            category: 'liability',
-            description: 'Liability caps and indemnity provisions',
-            parentPositionId: null,
-            clauseLevel: 1,
-            displayOrder: 13,
-            customerPosition: null,
-            providerPosition: null,
-            currentCompromise: null,
-            clarenceRecommendation: null,
-            industryStandard: null,
-            gapSize: 0,
-            customerWeight: 8,
-            providerWeight: 9,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: true,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'negotiating',
-            isExpanded: false,
-            children: []
-        },
-        {
-            positionId: 'pos-014',
-            clauseId: 'clause-014',
-            clauseNumber: '4.1',
-            clauseName: 'Liability Cap',
-            category: 'liability',
-            description: 'Maximum liability exposure',
-            parentPositionId: 'pos-013',
-            clauseLevel: 2,
-            displayOrder: 14,
-            customerPosition: 200,
-            providerPosition: 50,
-            currentCompromise: null,
-            clarenceRecommendation: 100,
-            industryStandard: 100,
-            gapSize: 150,
-            customerWeight: 9,
-            providerWeight: 10,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: true,
-            clauseContent: 'The Provider\'s total liability shall not exceed [X]% of annual charges...',
-            customerNotes: 'Need 200% of annual fees',
-            providerNotes: 'Cannot exceed 50% of contract value',
-            status: 'disputed',
-            children: []
-        },
-
-        // Category 5: Term & Termination
-        {
-            positionId: 'pos-015',
-            clauseId: 'clause-015',
-            clauseNumber: '5',
-            clauseName: 'Term & Termination',
-            category: 'term',
-            description: 'Contract duration and exit provisions',
-            parentPositionId: null,
-            clauseLevel: 1,
-            displayOrder: 15,
-            customerPosition: null,
-            providerPosition: null,
-            currentCompromise: null,
-            clarenceRecommendation: null,
-            industryStandard: null,
-            gapSize: 0,
-            customerWeight: 7,
-            providerWeight: 8,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: null,
-            providerNotes: null,
-            status: 'pending',
-            isExpanded: false,
-            children: []
-        },
-        {
-            positionId: 'pos-016',
-            clauseId: 'clause-016',
-            clauseNumber: '5.1',
-            clauseName: 'Initial Term',
-            category: 'term',
-            description: 'Primary contract period',
-            parentPositionId: 'pos-015',
-            clauseLevel: 2,
-            displayOrder: 16,
-            customerPosition: 24,
-            providerPosition: 36,
-            currentCompromise: 30,
-            clarenceRecommendation: 30,
-            industryStandard: 36,
-            gapSize: 12,
-            customerWeight: 6,
-            providerWeight: 8,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: 'Prefer 24 months for flexibility',
-            providerNotes: '36 months needed for ROI',
-            status: 'negotiating',
-            children: []
-        },
-        {
-            positionId: 'pos-017',
-            clauseId: 'clause-017',
-            clauseNumber: '5.2',
-            clauseName: 'Termination for Convenience',
-            category: 'term',
-            description: 'Notice period for early exit',
-            parentPositionId: 'pos-015',
-            clauseLevel: 2,
-            displayOrder: 17,
-            customerPosition: 30,
-            providerPosition: 90,
-            currentCompromise: 60,
-            clarenceRecommendation: 60,
-            industryStandard: 90,
-            gapSize: 60,
-            customerWeight: 7,
-            providerWeight: 7,
-            isDealBreakerCustomer: false,
-            isDealBreakerProvider: false,
-            clauseContent: null,
-            customerNotes: '30 days notice preferred',
-            providerNotes: '90 days minimum for transition',
-            status: 'negotiating',
-            children: []
-        }
-    ]
-}
-
-function getMockChatMessages(positionId: string | null): ClauseChatMessage[] {
-    const baseMessages: ClauseChatMessage[] = [
-        {
-            messageId: 'msg-001',
-            sessionId: 'fba5fcab-ab6d-428d-9227-5389696100aa',
-            positionId: null,
-            sender: 'clarence',
-            senderUserId: null,
-            message: 'Welcome to Contract Studio. I\'m here to help you negotiate the IT Services agreement between Spike Island Studios and TechFirst Solutions. Select a clause from the left panel to begin detailed discussions.',
-            messageType: 'notification',
-            relatedPositionChange: false,
-            triggeredBy: 'session_start',
-            createdAt: new Date(Date.now() - 3600000).toISOString()
-        }
-    ]
-
-    if (positionId === 'pos-005') {
-        baseMessages.push(
-            {
-                messageId: 'msg-002',
-                sessionId: 'fba5fcab-ab6d-428d-9227-5389696100aa',
-                positionId: 'pos-005',
-                sender: 'customer',
-                senderUserId: 'user-001',
-                message: 'The £950K ask is too high. Our budget ceiling is £900K.',
-                messageType: 'discussion',
-                relatedPositionChange: false,
-                triggeredBy: 'manual',
-                createdAt: new Date(Date.now() - 1800000).toISOString()
-            },
-            {
-                messageId: 'msg-003',
-                sessionId: 'fba5fcab-ab6d-428d-9227-5389696100aa',
-                positionId: 'pos-005',
-                sender: 'clarence',
-                senderUserId: null,
-                message: 'I understand the budget constraint. The Base Annual Fee has a significant gap of £100K between positions. Industry benchmarks suggest £875K for similar scope.\n\nConsider: meeting at £900K here could give you leverage on the SLA clause where you\'re seeking 99.9% uptime. Would you like me to model this trade-off?',
-                messageType: 'auto_response',
-                relatedPositionChange: false,
-                triggeredBy: 'clause_selected',
-                createdAt: new Date(Date.now() - 1700000).toISOString()
-            }
-        )
-    }
-
-    if (positionId === 'pos-011') {
-        baseMessages.push(
-            {
-                messageId: 'msg-004',
-                sessionId: 'fba5fcab-ab6d-428d-9227-5389696100aa',
-                positionId: 'pos-011',
-                sender: 'clarence',
-                senderUserId: null,
-                message: 'The Uptime SLA is marked as a deal-breaker for Spike Island Studios. The 0.4% gap between 99.9% and 99.5% represents significant infrastructure investment for the provider.\n\nSuggestion: Accepting 99.7% with enhanced service credits could satisfy both parties while keeping costs reasonable.',
-                messageType: 'auto_response',
-                relatedPositionChange: false,
-                triggeredBy: 'clause_selected',
-                createdAt: new Date(Date.now() - 900000).toISOString()
-            }
-        )
-    }
-
-    return baseMessages
-}
-
-function getMockUserInfo(): UserInfo {
-    return {
-        firstName: 'Paul',
-        lastName: 'Crosbie',
-        email: 'paul@spikeisland.tv',
-        company: 'Spike Island Studios',
-        role: 'customer',
-        userId: '76783a96-b05f-4bd1-b0ab-6ebbeb0647e4'
-    }
-}
-
-function getMockOtherPartyStatus(): PartyStatus {
-    return {
-        isOnline: true,
-        lastSeen: new Date().toISOString(),
-        userName: 'James Chen'
-    }
-}
 
 // ============================================================================
 // SECTION 4: HELPER FUNCTIONS
@@ -1090,8 +516,12 @@ function ContractStudioContent() {
     // SECTION 7: DATA LOADING
     // ============================================================================
 
+    const [sessionStatus, setSessionStatus] = useState<SessionStatus>('pending_provider')
+    const [providerEmail, setProviderEmail] = useState('')
+    const [inviteSending, setInviteSending] = useState(false)
+    const [inviteSent, setInviteSent] = useState(false)
+
     const loadUserInfo = useCallback(() => {
-        // Check for auth in localStorage
         const authData = localStorage.getItem('clarence_auth')
         if (!authData) {
             router.push('/auth/login')
@@ -1100,7 +530,14 @@ function ContractStudioContent() {
 
         try {
             const parsed = JSON.parse(authData)
-            return getMockUserInfo() // Use mock for now
+            return {
+                firstName: parsed.userInfo?.firstName || 'User',
+                lastName: parsed.userInfo?.lastName || '',
+                email: parsed.userInfo?.email || '',
+                company: parsed.userInfo?.company || '',
+                role: parsed.userInfo?.role || 'customer',
+                userId: parsed.userInfo?.userId || ''
+            } as UserInfo
         } catch {
             router.push('/auth/login')
             return null
@@ -1108,31 +545,99 @@ function ContractStudioContent() {
     }, [router])
 
     const loadContractData = useCallback(async (sessionId: string) => {
-        // Try API first
-        const apiData = await fetchContractStudioData(sessionId)
+        try {
+            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+            if (!response.ok) throw new Error('Failed to fetch')
 
-        if (apiData) {
-            return apiData
-        }
+            const data = await response.json()
 
-        // Fall back to mock data
-        return {
-            session: getMockSession(),
-            clauses: getMockClauses(),
-            leverage: getMockLeverageData()
+            // Check if provider has completed intake
+            const status = data.session?.status || 'pending_provider'
+
+            // Map status from database to our status types
+            if (status === 'customer_assessment_complete' || status === 'pending_provider') {
+                setSessionStatus('pending_provider')
+                return null // Don't load full data yet
+            } else if (status === 'provider_invited') {
+                setSessionStatus('provider_invited')
+                return null
+            } else if (status === 'provider_intake_complete' || status === 'leverage_pending') {
+                setSessionStatus('leverage_pending')
+                return null
+            }
+
+            // Full data available
+            setSessionStatus('ready')
+
+            const session: Session = {
+                sessionId: data.session.sessionId,
+                sessionNumber: data.session.sessionNumber,
+                customerCompany: data.session.customerCompany,
+                providerCompany: data.session.providerCompany || 'Provider (Pending)',
+                serviceType: data.session.contractType || 'IT Services',
+                dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
+                phase: parsePhaseFromState(data.session.phase),
+                status: data.session.status
+            }
+
+            const clauses: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => ({
+                positionId: c.positionId,
+                clauseId: c.clauseId,
+                clauseNumber: c.clauseNumber,
+                clauseName: c.clauseName,
+                category: c.category,
+                description: c.description,
+                parentPositionId: c.parentPositionId,
+                clauseLevel: c.clauseLevel,
+                displayOrder: c.displayOrder,
+                customerPosition: c.customerPosition ? parseFloat(c.customerPosition) : null,
+                providerPosition: c.providerPosition ? parseFloat(c.providerPosition) : null,
+                currentCompromise: c.currentCompromise ? parseFloat(c.currentCompromise) : null,
+                clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(c.aiSuggestedCompromise) : null,
+                industryStandard: null,
+                gapSize: c.gapSize ? parseFloat(c.gapSize) : 0,
+                customerWeight: c.customerWeight,
+                providerWeight: c.providerWeight,
+                isDealBreakerCustomer: c.isDealBreakerCustomer,
+                isDealBreakerProvider: c.isDealBreakerProvider,
+                clauseContent: c.clauseContent,
+                customerNotes: c.customerNotes,
+                providerNotes: c.providerNotes,
+                status: c.status,
+                isExpanded: c.isExpanded
+            }))
+
+            const leverage: LeverageData = data.leverage || {
+                leverageScoreCustomer: 50,
+                leverageScoreProvider: 50,
+                leverageScoreCalculatedAt: '',
+                leverageTrackerCustomer: 50,
+                leverageTrackerProvider: 50,
+                alignmentPercentage: 0,
+                isAligned: false,
+                leverageTrackerCalculatedAt: '',
+                marketDynamicsScore: 0,
+                marketDynamicsRationale: '',
+                economicFactorsScore: 0,
+                economicFactorsRationale: '',
+                strategicPositionScore: 0,
+                strategicPositionRationale: '',
+                batnaScore: 0,
+                batnaRationale: ''
+            }
+
+            return { session, clauses, leverage }
+        } catch (error) {
+            console.error('Error fetching contract studio data:', error)
+            // Default to pending provider state if API fails
+            setSessionStatus('pending_provider')
+            return null
         }
     }, [])
 
     const loadClauseChat = useCallback(async (sessionId: string, positionId: string | null) => {
-        // Try API first
         const apiMessages = await fetchClauseChat(sessionId, positionId)
-
-        if (apiMessages.length > 0) {
-            return apiMessages
-        }
-
-        // Fall back to mock messages
-        return getMockChatMessages(positionId)
+        return apiMessages
     }, [])
 
     // Initial load
@@ -1143,60 +648,67 @@ function ContractStudioContent() {
 
             setUserInfo(user)
 
-            const sessionId = searchParams.get('session') || 'fba5fcab-ab6d-428d-9227-5389696100aa'
+            // Get session ID and status from URL params
+            const sessionId = searchParams.get('session_id') || searchParams.get('session')
+            const urlStatus = searchParams.get('status')
+
+            if (!sessionId) {
+                router.push('/auth/dashboard')
+                return
+            }
+
+            // Check URL status first
+            if (urlStatus === 'pending_provider') {
+                setSessionStatus('pending_provider')
+
+                // Still load basic session info
+                try {
+                    const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+                    if (response.ok) {
+                        const data = await response.json()
+                        if (data.session) {
+                            setSession({
+                                sessionId: data.session.sessionId || sessionId,
+                                sessionNumber: data.session.sessionNumber || '',
+                                customerCompany: data.session.customerCompany || user.company || '',
+                                providerCompany: 'Awaiting Provider',
+                                serviceType: data.session.contractType || 'Service Agreement',
+                                dealValue: formatCurrency(data.session.dealValue, 'GBP'),
+                                phase: 1,
+                                status: 'pending_provider'
+                            })
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error loading basic session:', e)
+                }
+
+                setLoading(false)
+                return
+            }
+
+            // Load full contract data
             const data = await loadContractData(sessionId)
 
-            setSession(data.session)
-            setClauses(data.clauses)
-            setClauseTree(buildClauseTree(data.clauses))
-            setLeverage(data.leverage)
+            if (data) {
+                setSession(data.session)
+                setClauses(data.clauses)
+                setClauseTree(buildClauseTree(data.clauses))
+                setLeverage(data.leverage)
 
-            // Load general chat
-            const messages = await loadClauseChat(sessionId, null)
-            setChatMessages(messages)
+                const messages = await loadClauseChat(sessionId, null)
+                setChatMessages(messages)
 
-            // Check other party status
-            const otherRole = user.role === 'customer' ? 'provider' : 'customer'
-            const status = getMockOtherPartyStatus()
-            setOtherPartyStatus(status)
+                const otherRole = user.role === 'customer' ? 'provider' : 'customer'
+                const status = await checkPartyStatus(sessionId, otherRole)
+                setOtherPartyStatus(status)
+            }
 
             setLoading(false)
         }
 
         init()
-    }, [loadUserInfo, loadContractData, loadClauseChat, searchParams])
-
-    // Load clause-specific chat when selection changes
-    useEffect(() => {
-        if (!session) return
-
-        const loadChat = async () => {
-            const messages = await loadClauseChat(session.sessionId, selectedClause?.positionId || null)
-            setChatMessages(messages)
-        }
-
-        loadChat()
-    }, [selectedClause, session, loadClauseChat])
-
-    // Auto-scroll chat
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [chatMessages])
-
-    // Periodically check other party status
-    useEffect(() => {
-        const interval = setInterval(() => {
-            // In production, this would call the API
-            // For demo, randomly toggle status occasionally
-            setOtherPartyStatus(prev => ({
-                ...prev,
-                isOnline: Math.random() > 0.2, // Stay mostly online
-                lastSeen: prev.isOnline ? new Date().toISOString() : prev.lastSeen
-            }))
-        }, 30000) // Every 30 seconds
-
-        return () => clearInterval(interval)
-    }, [])
+    }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router])
 
     // ============================================================================
     // SECTION 8: EVENT HANDLERS
@@ -1273,21 +785,317 @@ function ContractStudioContent() {
     }
 
     // ============================================================================
-    // SECTION 9: LOADING STATE RENDER
+    // SECTION 8B: PENDING PROVIDER VIEW COMPONENT
+    // ============================================================================
+
+    const handleSendInvite = async () => {
+        if (!providerEmail.trim() || !session) return
+
+        setInviteSending(true)
+
+        try {
+            const response = await fetch(`${API_BASE}/provider-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    session_number: session.sessionNumber,
+                    customer_company: session.customerCompany,
+                    provider_email: providerEmail,
+                    service_type: session.serviceType,
+                    deal_value: session.dealValue
+                })
+            })
+
+            if (response.ok) {
+                setInviteSent(true)
+                setSessionStatus('provider_invited')
+            } else {
+                alert('Failed to send invitation. Please try again.')
+            }
+        } catch (error) {
+            console.error('Error sending invite:', error)
+            alert('Failed to send invitation. Please try again.')
+        }
+
+        setInviteSending(false)
+    }
+
+    const PendingProviderView = () => {
+        return (
+            <div className="min-h-screen bg-slate-50">
+                {/* Header */}
+                <div className="bg-slate-800 text-white px-6 py-4">
+                    <div className="max-w-4xl mx-auto flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-lg">C</span>
+                            </div>
+                            <div>
+                                <h1 className="font-semibold">Contract Studio</h1>
+                                <p className="text-sm text-slate-400">{session?.sessionNumber}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => router.push('/auth/dashboard')}
+                            className="text-slate-400 hover:text-white transition"
+                        >
+                            ← Back to Dashboard
+                        </button>
+                    </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="max-w-4xl mx-auto p-8">
+                    {/* Status Card */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                        {/* Progress Steps */}
+                        <div className="bg-slate-50 px-8 py-6 border-b border-slate-200">
+                            <div className="flex items-center justify-between">
+                                {/* Step 1: Customer Assessment */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-medium text-emerald-700">Your Assessment</div>
+                                        <div className="text-xs text-slate-500">Complete</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 h-1 bg-slate-200 mx-4 rounded">
+                                    <div className={`h-full rounded transition-all duration-500 ${sessionStatus === 'pending_provider' ? 'w-0 bg-slate-300' :
+                                        sessionStatus === 'provider_invited' ? 'w-1/2 bg-amber-400' :
+                                            'w-full bg-emerald-500'
+                                        }`}></div>
+                                </div>
+
+                                {/* Step 2: Provider Invited */}
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${sessionStatus === 'provider_invited' || sessionStatus === 'leverage_pending' || sessionStatus === 'ready'
+                                        ? 'bg-emerald-500'
+                                        : 'bg-slate-200'
+                                        }`}>
+                                        {sessionStatus === 'provider_invited' || sessionStatus === 'leverage_pending' || sessionStatus === 'ready' ? (
+                                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        ) : (
+                                            <span className="text-slate-500 font-medium">2</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <div className={`text-sm font-medium ${sessionStatus === 'pending_provider' ? 'text-slate-600' : 'text-emerald-700'
+                                            }`}>Invite Provider</div>
+                                        <div className="text-xs text-slate-500">
+                                            {sessionStatus === 'pending_provider' ? 'Pending' :
+                                                sessionStatus === 'provider_invited' ? 'Invited' : 'Complete'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 h-1 bg-slate-200 mx-4 rounded">
+                                    <div className={`h-full rounded transition-all duration-500 ${sessionStatus === 'leverage_pending' ? 'w-1/2 bg-amber-400' :
+                                        sessionStatus === 'ready' ? 'w-full bg-emerald-500' :
+                                            'w-0 bg-slate-300'
+                                        }`}></div>
+                                </div>
+
+                                {/* Step 3: Provider Assessment */}
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${sessionStatus === 'ready' ? 'bg-emerald-500' : 'bg-slate-200'
+                                        }`}>
+                                        {sessionStatus === 'ready' ? (
+                                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        ) : (
+                                            <span className="text-slate-500 font-medium">3</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <div className={`text-sm font-medium ${sessionStatus === 'ready' ? 'text-emerald-700' : 'text-slate-600'
+                                            }`}>Provider Assessment</div>
+                                        <div className="text-xs text-slate-500">
+                                            {sessionStatus === 'leverage_pending' ? 'In Progress' :
+                                                sessionStatus === 'ready' ? 'Complete' : 'Waiting'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Main Content Area */}
+                        <div className="p-8">
+                            {sessionStatus === 'pending_provider' && !inviteSent && (
+                                <>
+                                    <div className="text-center mb-8">
+                                        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                        <h2 className="text-2xl font-semibold text-slate-800 mb-2">Invite Your Provider</h2>
+                                        <p className="text-slate-600 max-w-md mx-auto">
+                                            Your strategic assessment is complete. Now invite the provider to complete their intake questionnaire so CLARENCE can calculate the true leverage balance.
+                                        </p>
+                                    </div>
+
+                                    {/* Session Summary */}
+                                    <div className="bg-slate-50 rounded-xl p-6 mb-8">
+                                        <h3 className="text-sm font-semibold text-slate-700 mb-4">Session Summary</h3>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <div className="text-xs text-slate-500">Your Company</div>
+                                                <div className="font-medium text-slate-800">{session?.customerCompany}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-slate-500">Service Type</div>
+                                                <div className="font-medium text-slate-800">{session?.serviceType}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-slate-500">Deal Value</div>
+                                                <div className="font-medium text-emerald-600">{session?.dealValue}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-xs text-slate-500">Session Number</div>
+                                                <div className="font-medium text-slate-800 font-mono">{session?.sessionNumber}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Invite Form */}
+                                    <div className="max-w-md mx-auto">
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                                            Provider Contact Email
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={providerEmail}
+                                            onChange={(e) => setProviderEmail(e.target.value)}
+                                            placeholder="provider@company.com"
+                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent mb-4"
+                                        />
+                                        <button
+                                            onClick={handleSendInvite}
+                                            disabled={!providerEmail.trim() || inviteSending}
+                                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                                        >
+                                            {inviteSending ? (
+                                                <>
+                                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                    Sending Invitation...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                                    </svg>
+                                                    Send Invitation
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {(sessionStatus === 'provider_invited' || inviteSent) && (
+                                <div className="text-center">
+                                    <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <svg className="w-10 h-10 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <h2 className="text-2xl font-semibold text-slate-800 mb-2">Invitation Sent!</h2>
+                                    <p className="text-slate-600 max-w-md mx-auto mb-6">
+                                        We&apos;ve sent an invitation to <strong>{providerEmail}</strong>.
+                                        You&apos;ll be notified when they complete their intake questionnaire.
+                                    </p>
+
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+                                        <div className="text-sm text-blue-800">
+                                            <strong>What happens next?</strong>
+                                            <ul className="mt-2 text-left space-y-1">
+                                                <li>• Provider receives email invitation</li>
+                                                <li>• They complete their intake questionnaire</li>
+                                                <li>• CLARENCE calculates leverage balance</li>
+                                                <li>• First-draft positions are generated</li>
+                                                <li>• You&apos;ll be notified to start negotiation</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={() => router.push('/auth/dashboard')}
+                                        className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition"
+                                    >
+                                        ← Return to Dashboard
+                                    </button>
+                                </div>
+                            )}
+
+                            {sessionStatus === 'leverage_pending' && (
+                                <div className="text-center">
+                                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                                    </div>
+                                    <h2 className="text-2xl font-semibold text-slate-800 mb-2">Calculating Leverage...</h2>
+                                    <p className="text-slate-600 max-w-md mx-auto mb-6">
+                                        Both parties have completed their assessments. CLARENCE is now calculating the leverage balance and generating first-draft positions.
+                                    </p>
+                                    <p className="text-sm text-slate-500">This usually takes less than a minute.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Info Cards */}
+                    <div className="grid grid-cols-3 gap-4 mt-6">
+                        <div className="bg-white rounded-xl p-4 border border-slate-200">
+                            <div className="text-2xl mb-2">🔒</div>
+                            <h4 className="font-medium text-slate-800 mb-1">Confidential</h4>
+                            <p className="text-xs text-slate-500">Each party&apos;s data is kept private until positions are shared</p>
+                        </div>
+                        <div className="bg-white rounded-xl p-4 border border-slate-200">
+                            <div className="text-2xl mb-2">⚖️</div>
+                            <h4 className="font-medium text-slate-800 mb-1">Fair Calculation</h4>
+                            <p className="text-xs text-slate-500">Leverage is calculated using market data and both parties&apos; inputs</p>
+                        </div>
+                        <div className="bg-white rounded-xl p-4 border border-slate-200">
+                            <div className="text-2xl mb-2">📊</div>
+                            <h4 className="font-medium text-slate-800 mb-1">Transparent Process</h4>
+                            <p className="text-xs text-slate-500">Both parties see how positions are calculated and justified</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ============================================================================
+    // SECTION 9: LOADING & CONDITIONAL RENDERING
     // ============================================================================
 
     if (loading) {
         return <ContractStudioLoading />
     }
 
+    // Show pending provider view if provider hasn't completed intake
+    if (sessionStatus === 'pending_provider' || sessionStatus === 'provider_invited' || sessionStatus === 'leverage_pending') {
+        return <PendingProviderView />
+    }
+
+    // Only proceed to full contract studio if we have all required data
     if (!session || !leverage || !userInfo) {
         return (
             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="text-center">
-                    <p className="text-red-600">Failed to load contract data</p>
+                    <p className="text-red-600 mb-4">Failed to load contract data</p>
                     <button
                         onClick={() => router.push('/auth/dashboard')}
-                        className="mt-4 px-4 py-2 bg-emerald-500 text-white rounded-lg"
+                        className="px-4 py-2 bg-emerald-500 text-white rounded-lg"
                     >
                         Return to Dashboard
                     </button>
