@@ -187,7 +187,7 @@ function IntelligentQuestionnaireContent() {
 
       try {
         // FIXED: Use correct API endpoint
-        const response = await fetch(`https://clairence.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sid}`)
+        const response = await fetch(`https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sid}`)
 
         if (response.ok) {
           const data = await response.json()
@@ -793,7 +793,7 @@ Click "Generate Positions" to proceed to the Contract Studio.`
 
     // Save strategic answers and leverage assessment to backend
     try {
-      const response = await fetch('https://clairence.app.n8n.cloud/webhook/strategic-assessment', {
+      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
