@@ -1064,7 +1064,7 @@ function ContractStudioContent() {
 
                                     <button
                                         onClick={() => router.push('/auth/contracts-dashboard')}
-                                        className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition"
+                                        className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
                                     >
                                         ← Return to Dashboard
                                     </button>
@@ -1129,10 +1129,10 @@ function ContractStudioContent() {
                 <div className="text-center">
                     <p className="text-red-600 mb-4">Failed to load contract data</p>
                     <button
-                        onClick={() => router.push('/auth/contracts-dashboard')}
-                        className="px-4 py-2 bg-emerald-500 text-white rounded-lg"
+                        onClick={() => router.push('/auth/dashboard')}
+                        className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
                     >
-                        Return to Dashboard
+                        ← Return to Dashboard
                     </button>
                 </div>
             </div>
