@@ -287,55 +287,55 @@ function IntelligentQuestionnaireContent() {
       id: 'summary',
       name: 'Requirements Summary',
       icon: '📋',
-      questionIndices: [] as number[], // No questions, just display
+      questionIndices: [] as number[],
     },
     {
       id: 'batna',
       name: 'BATNA Deep Dive',
       icon: '⚖️',
-      questionIndices: [0, 1, 2], // batnaSpecifics, batnaTimeline, batnaRealismScore
+      questionIndices: [0, 1, 2],
     },
     {
       id: 'redlines',
       name: 'Red Lines & Flexibility',
       icon: '🚫',
-      questionIndices: [3, 4], // absoluteRedLines, flexibleAreas
+      questionIndices: [3, 4],
     },
     {
       id: 'risk',
       name: 'Risk Tolerance',
       icon: '⚠️',
-      questionIndices: [5, 6], // riskAppetite, worstCaseScenario
+      questionIndices: [5, 6],
     },
     {
       id: 'internal',
       name: 'Internal Dynamics',
       icon: '🏢',
-      questionIndices: [7, 8], // stakeholderPressure, internalPolitics
+      questionIndices: [7, 8],
     },
     {
       id: 'relationship',
       name: 'Relationship Priorities',
       icon: '🤝',
-      questionIndices: [9, 10], // relationshipVsTerms, longTermVision
+      questionIndices: [9, 10],
     },
     {
       id: 'trust',
       name: 'Provider Trust',
       icon: '🔍',
-      questionIndices: [11, 12], // providerConcerns, trustLevel
+      questionIndices: [11, 12],
     },
     {
-      id: 'result',
-      name: 'Leverage Result',
-      icon: '🏆',
-      questionIndices: [] as number[], // No questions, final result
+      id: 'complete',  // Changed from 'result'
+      name: 'Invite Provider',  // Changed from 'Leverage Result'
+      icon: '✉️',  // Changed from '🏆'
+      questionIndices: [] as number[],
     }
   ]
 
   // Calculate which section the current question belongs to
   const getCurrentSectionId = (): string => {
-    if (conversationComplete) return 'result'
+    if (conversationComplete) return 'complete'  // Changed from 'result'
     if (currentQuestionIndex === 0 && messages.length <= 2) return 'summary'
 
     for (const section of questionnaireSections) {
@@ -352,7 +352,7 @@ function IntelligentQuestionnaireContent() {
     if (!section) return 'pending'
 
     if (sectionId === 'summary') return 'complete'
-    if (sectionId === 'result') return conversationComplete ? 'complete' : 'pending'
+    if (sectionId === 'complete') return conversationComplete ? 'complete' : 'pending'  // Changed from 'result'
 
     if (section.questionIndices.length === 0) return 'pending'
 
@@ -835,37 +835,108 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
 
     await new Promise(resolve => setTimeout(resolve, 1000))
 
-    addClarenceMessage("Thank you. I now have everything I need to calculate your leverage position and generate defensible first-draft positions.")
+    addClarenceMessage("Thank you. I now have a complete picture of your strategic position and priorities.")
 
     await new Promise(resolve => setTimeout(resolve, 1500))
 
-    // Calculate leverage based on strategic answers - aligned with algorithm spec
-    const leverage = calculateLeverage()
-    setLeverageAssessment(leverage)
+    // Calculate PRELIMINARY customer-side factors only
+    // Full leverage calculation happens AFTER provider intake
+    const customerFactors = calculateCustomerFactors()
 
-    const summaryMessage = `**Leverage Assessment Complete**
+    const summaryMessage = `**Strategic Assessment Complete**
 
-Based on your strategic inputs:
+I've captured your position on:
 
-**Customer Leverage: ${leverage.customerLeverage}%**
-**Provider Leverage: ${leverage.providerLeverage}%**
+✓ **BATNA Analysis** - Your alternatives and fallback options
+✓ **Red Lines** - What you absolutely won't compromise on
+✓ **Flexibility Areas** - Where you have room to negotiate
+✓ **Risk Tolerance** - How much uncertainty you can accept
+✓ **Internal Dynamics** - Stakeholder pressures and politics
+✓ **Relationship Priorities** - Partnership vs. commercial focus
+✓ **Provider Trust** - Your confidence level and concerns
 
-**Breakdown (25% weight each):**
-• Market Dynamics: ${leverage.breakdown.marketDynamicsScore}/100
-• Economic Factors: ${leverage.breakdown.economicFactorsScore}/100
-• Strategic Position: ${leverage.breakdown.strategicPositionScore}/100
-• BATNA Analysis: ${leverage.breakdown.batnaScore}/100
+**What happens next:**
 
-${leverage.reasoning}
+1. **Invite your provider** to complete their intake questionnaire
+2. Once they submit, I'll calculate the **true leverage balance** using both parties' data
+3. Then I'll generate **defensible first-draft positions** calibrated to that leverage
 
-I'm now ready to generate your first-draft positions across all contract clauses. These will be calibrated to your leverage position and defensible based on the market data and strategic context you've provided.
-
-Click "Generate Positions" to proceed to the Contract Studio.`
+Your data is saved and ready. Click below to proceed to the Contract Studio where you can invite your provider.`
 
     addClarenceMessage(summaryMessage)
 
+    // Store preliminary assessment (not full leverage yet)
+    setLeverageAssessment({
+      customerLeverage: 0, // Placeholder - calculated after provider intake
+      providerLeverage: 0,
+      breakdown: customerFactors,
+      reasoning: "Full leverage calculation pending provider intake."
+    })
+
     setIsTyping(false)
     setConversationComplete(true)
+  }
+
+  // ========== SECTION 14B: CALCULATE CUSTOMER-SIDE FACTORS ONLY ==========
+  const calculateCustomerFactors = (): LeverageBreakdown => {
+    // These are preliminary scores based on customer data only
+    // Full leverage calculation requires provider data too
+
+    let marketScore = 50
+    let economicScore = 50
+    let strategicScore = 50
+    let batnaScore = 50
+
+    // Market factors from customer perspective
+    if (existingData?.numberOfBidders === '4+' || existingData?.numberOfBidders === '4-plus') {
+      marketScore += 15
+    } else if (existingData?.numberOfBidders === 'Single Source' || existingData?.numberOfBidders === 'single') {
+      marketScore -= 20
+    }
+
+    if (existingData?.decisionTimeline === 'Urgent' || existingData?.decisionTimeline === 'urgent') {
+      marketScore -= 10
+    } else if (existingData?.decisionTimeline === 'Flexible' || existingData?.decisionTimeline === 'flexible') {
+      marketScore += 10
+    }
+
+    // Economic factors
+    if (existingData?.switchingCosts === 'High' || existingData?.switchingCosts === 'high') {
+      economicScore -= 15
+    } else if (existingData?.switchingCosts === 'Low' || existingData?.switchingCosts === 'low') {
+      economicScore += 10
+    }
+
+    // Strategic factors
+    if (existingData?.serviceCriticality === 'mission-critical') {
+      strategicScore -= 10
+    } else if (existingData?.serviceCriticality === 'non-core') {
+      strategicScore += 10
+    }
+
+    // BATNA from questionnaire answers
+    const batnaRealism = strategicAnswers.batnaRealismScore
+    if (batnaRealism) {
+      const score = parseInt(batnaRealism)
+      if (!isNaN(score)) {
+        if (score >= 8) batnaScore += 20
+        else if (score >= 6) batnaScore += 10
+        else if (score <= 4) batnaScore -= 15
+      }
+    }
+
+    if (existingData?.alternativeOptions === 'many-alternatives' || existingData?.alternativeOptions === 'strong') {
+      batnaScore += 10
+    } else if (existingData?.alternativeOptions === 'no-alternatives' || existingData?.alternativeOptions === 'none') {
+      batnaScore -= 15
+    }
+
+    return {
+      marketDynamicsScore: Math.max(0, Math.min(100, marketScore)),
+      economicFactorsScore: Math.max(0, Math.min(100, economicScore)),
+      strategicPositionScore: Math.max(0, Math.min(100, strategicScore)),
+      batnaScore: Math.max(0, Math.min(100, batnaScore))
+    }
   }
 
   // ========== SECTION 15: CALCULATE LEVERAGE (ALIGNED WITH ALGORITHM SPEC) ==========
@@ -1043,7 +1114,7 @@ Click "Generate Positions" to proceed to the Contract Studio.`
   const handleProceedToStudio = async () => {
     if (!sessionId) return
 
-    // Save strategic answers and leverage assessment to backend
+    // Save strategic answers (NOT leverage - that comes later)
     try {
       const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
         method: 'POST',
@@ -1052,7 +1123,8 @@ Click "Generate Positions" to proceed to the Contract Studio.`
           session_id: sessionId,
           session_number: sessionNumber,
           strategic_answers: strategicAnswers,
-          leverage_assessment: leverageAssessment,
+          customer_factors: leverageAssessment?.breakdown, // Preliminary factors only
+          status: 'customer_assessment_complete', // Not 'leverage_calculated'
           completed_at: new Date().toISOString()
         })
       })
@@ -1062,11 +1134,10 @@ Click "Generate Positions" to proceed to the Contract Studio.`
       }
     } catch (error) {
       console.error('Error saving assessment:', error)
-      // Continue anyway - don't block navigation for save errors
     }
 
-    // Navigate to Contract Studio
-    router.push(`/auth/contract-studio?session_id=${sessionId}`)
+    // Navigate to Contract Studio (which should show "Invite Provider" state)
+    router.push(`/auth/contract-studio?session_id=${sessionId}&status=pending_provider`)
   }
 
   // ========================================================================
@@ -1294,9 +1365,9 @@ Click "Generate Positions" to proceed to the Contract Studio.`
                 <div className="border-t border-slate-200 p-4">
                   <button
                     onClick={handleProceedToStudio}
-                    className="w-full py-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                    className="w-full py-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                   >
-                    Generate Positions & Open Contract Studio
+                    Proceed to Contract Studio & Invite Provider
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
