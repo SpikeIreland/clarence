@@ -80,7 +80,7 @@ interface StrategicQuestion {
   key: QuestionKey
   question: string
   followUp?: string
-  context?: (data: ExistingRequirements) => string
+  context?: (data: ExistingRequirements) => string | undefined
 }
 
 interface LeverageBreakdown {
@@ -218,7 +218,80 @@ function IntelligentQuestionnaireContent() {
   }, [searchParams])
 
   // ========== SECTION 6: MAP API RESPONSE ==========
-  const mapApiResponseToRequirements = (data: any): ExistingRequirements => {
+  interface ApiResponseData {
+    requirements?: {
+      serviceRequired?: string
+      serviceCriticality?: string
+      businessChallenge?: string
+      desiredOutcome?: string
+      budget?: { dealValue?: string }
+      commercial?: { paymentTermsRequired?: number }
+      riskCompliance?: {
+        minimumLiabilityCap?: number
+        minimumAvailabilityGuarantee?: number
+        terminationNoticeDays?: number
+      }
+    }
+    customer?: { company?: string }
+    metadata?: { industry?: string }
+    sessionNumber?: string
+    company_name?: string
+    companyName?: string
+    company_size?: string
+    companySize?: string
+    annual_revenue?: string
+    annualRevenue?: string
+    industry?: string
+    contact_name?: string
+    contactName?: string
+    contact_email?: string
+    contactEmail?: string
+    number_of_bidders?: string
+    numberOfBidders?: string
+    market_position?: string
+    marketPosition?: string
+    deal_value?: string
+    dealValue?: string
+    decision_timeline?: string
+    decisionTimeline?: string
+    incumbent_status?: string
+    incumbentStatus?: string
+    switching_costs?: string
+    switchingCosts?: string
+    service_required?: string
+    serviceRequired?: string
+    service_criticality?: string
+    service_criticality_text?: string
+    serviceCriticality?: string
+    business_challenge?: string
+    businessChallenge?: string
+    desired_outcome?: string
+    desiredOutcome?: string
+    alternative_options?: string
+    alternativeOptions?: string
+    in_house_capability?: string
+    inHouseCapability?: string
+    walk_away_point?: string
+    walkAwayPoint?: string
+    budget_flexibility?: string
+    budget_flexibility_text?: string
+    budgetFlexibility?: string
+    contractPositions?: string | {
+      liabilityCap?: number
+      paymentTerms?: number
+      slaTarget?: number
+      terminationNotice?: number
+    }
+    priorities?: string | {
+      cost?: number
+      quality?: number
+      speed?: number
+      innovation?: number
+      riskMitigation?: number
+    }
+  }
+
+  const mapApiResponseToRequirements = (data: ApiResponseData): ExistingRequirements => {
     // Handle both flat and nested response structures
     const requirements = data.requirements || {}
     const customer = data.customer || {}
