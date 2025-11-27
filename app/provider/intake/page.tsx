@@ -187,25 +187,60 @@ function ProviderIntakeContent() {
     })
 
     // ========================================================================
-    // SECTION 6: TOKEN VALIDATION
+    // SECTION 6: TOKEN VALIDATION (with localStorage fallback)
     // ========================================================================
 
     const validateToken = useCallback(async () => {
-        const sessionId = searchParams.get('session_id')
-        const token = searchParams.get('token')
+        // First, try to get from URL params
+        let sessionId = searchParams.get('session_id')
+        let token = searchParams.get('token')
 
+        console.log('Intake validation - URL params:', { sessionId, token })
+
+        // If missing from URL, check localStorage
         if (!sessionId || !token) {
+            try {
+                const storedSession = localStorage.getItem('clarence_provider_session')
+                console.log('Intake validation - localStorage raw:', storedSession)
+
+                if (storedSession) {
+                    const sessionData = JSON.parse(storedSession)
+                    console.log('Intake validation - localStorage parsed:', sessionData)
+
+                    // Use localStorage values if URL params are missing
+                    if (!sessionId && sessionData.sessionId) {
+                        sessionId = sessionData.sessionId
+                    }
+                    if (!token && sessionData.token) {
+                        token = sessionData.token
+                    }
+
+                    console.log('Intake validation - After localStorage merge:', { sessionId, token })
+                }
+            } catch (e) {
+                console.error('Error reading localStorage:', e)
+            }
+        }
+
+        // Final check - if still missing required data
+        if (!sessionId || !token) {
+            console.log('Intake validation - FAILED: Missing session_id or token')
             setErrorMessage('Invalid invitation link. Please check your email for the correct link.')
             setValidating(false)
             setLoading(false)
             return
         }
 
+        console.log('Intake validation - Calling API with:', { sessionId, token })
+
         try {
             const response = await fetch(`${API_BASE}/validate-provider-invite?session_id=${sessionId}&token=${token}`)
 
+            console.log('Intake validation - API response status:', response.status)
+
             if (response.ok) {
                 const data = await response.json()
+                console.log('Intake validation - API response data:', data)
 
                 if (data.valid) {
                     setInviteData({
@@ -230,40 +265,80 @@ function ProviderIntakeContent() {
                     }))
 
                     setIsValid(true)
+                    console.log('Intake validation - SUCCESS: Valid invite')
                 } else {
+                    console.log('Intake validation - FAILED: API said invalid -', data.message)
                     setErrorMessage(data.message || 'This invitation is no longer valid.')
                 }
             } else {
-                console.log('Validation endpoint returned error, proceeding with basic validation')
-                setInviteData({
-                    bidId: '',
-                    sessionId: sessionId,
-                    sessionNumber: '',
-                    customerCompany: '',
-                    serviceRequired: '',
-                    dealValue: '',
-                    providerCompany: '',
-                    providerContact: '',
-                    providerEmail: '',
-                    status: 'invited'
-                })
-                setIsValid(true)
+                console.log('Intake validation - API error, proceeding with basic validation')
+                // Fallback: proceed with basic data from localStorage if API fails
+                try {
+                    const storedSession = localStorage.getItem('clarence_provider_session')
+                    if (storedSession) {
+                        const sessionData = JSON.parse(storedSession)
+                        setInviteData({
+                            bidId: '',
+                            sessionId: sessionId,
+                            sessionNumber: sessionData.sessionNumber || '',
+                            customerCompany: '',
+                            serviceRequired: '',
+                            dealValue: '',
+                            providerCompany: sessionData.company || '',
+                            providerContact: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
+                            providerEmail: sessionData.email || '',
+                            status: 'invited'
+                        })
+                        setFormData(prev => ({
+                            ...prev,
+                            companyName: sessionData.company || '',
+                            contactName: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
+                            contactEmail: sessionData.email || ''
+                        }))
+                        setIsValid(true)
+                        console.log('Intake validation - SUCCESS via localStorage fallback')
+                    } else {
+                        setErrorMessage('Unable to validate your session. Please return to your invitation link.')
+                    }
+                } catch (e) {
+                    console.error('localStorage fallback error:', e)
+                    setErrorMessage('Unable to validate your session. Please return to your invitation link.')
+                }
             }
         } catch (error) {
             console.error('Validation error:', error)
-            setInviteData({
-                bidId: '',
-                sessionId: sessionId || '',
-                sessionNumber: '',
-                customerCompany: '',
-                serviceRequired: '',
-                dealValue: '',
-                providerCompany: '',
-                providerContact: '',
-                providerEmail: '',
-                status: 'invited'
-            })
-            setIsValid(true)
+            // Same fallback logic for network errors
+            try {
+                const storedSession = localStorage.getItem('clarence_provider_session')
+                if (storedSession) {
+                    const sessionData = JSON.parse(storedSession)
+                    setInviteData({
+                        bidId: '',
+                        sessionId: sessionId || '',
+                        sessionNumber: sessionData.sessionNumber || '',
+                        customerCompany: '',
+                        serviceRequired: '',
+                        dealValue: '',
+                        providerCompany: sessionData.company || '',
+                        providerContact: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
+                        providerEmail: sessionData.email || '',
+                        status: 'invited'
+                    })
+                    setFormData(prev => ({
+                        ...prev,
+                        companyName: sessionData.company || '',
+                        contactName: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
+                        contactEmail: sessionData.email || ''
+                    }))
+                    setIsValid(true)
+                    console.log('Intake validation - SUCCESS via localStorage fallback (after error)')
+                } else {
+                    setErrorMessage('Unable to validate your session. Please check your connection and try again.')
+                }
+            } catch (e) {
+                console.error('localStorage fallback error:', e)
+                setErrorMessage('Unable to validate your session. Please check your connection and try again.')
+            }
         }
 
         setValidating(false)

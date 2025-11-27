@@ -36,14 +36,35 @@ function ProviderWelcomeContent() {
     const [currentStep, setCurrentStep] = useState(0)
     const [showAllSteps, setShowAllSteps] = useState(false)
     const [sessionId, setSessionId] = useState<string | null>(null)
+    const [token, setToken] = useState<string | null>(null)
+    const [sessionNumber, setSessionNumber] = useState<string | null>(null)
 
     // ========================================================================
     // SECTION 4: INITIALIZATION
     // ========================================================================
 
     useEffect(() => {
+        // Get session_id from URL
         const sid = searchParams.get('session_id')
         setSessionId(sid)
+
+        // Get token and session number from localStorage (set during registration)
+        try {
+            const storedSession = localStorage.getItem('clarence_provider_session')
+            if (storedSession) {
+                const sessionData = JSON.parse(storedSession)
+                console.log('Welcome page - loaded session data:', sessionData)
+                setToken(sessionData.token || null)
+                setSessionNumber(sessionData.sessionNumber || null)
+
+                // If no session_id in URL, use from localStorage
+                if (!sid && sessionData.sessionId) {
+                    setSessionId(sessionData.sessionId)
+                }
+            }
+        } catch (e) {
+            console.error('Error reading localStorage:', e)
+        }
 
         // Auto-advance through steps with animation
         const timers: NodeJS.Timeout[] = []
@@ -61,11 +82,16 @@ function ProviderWelcomeContent() {
     // ========================================================================
 
     const handleContinue = () => {
-        if (sessionId) {
-            router.push(`/provider/intake?session_id=${sessionId}`)
-        } else {
-            router.push('/provider/intake')
-        }
+        // Build URL with both session_id and token
+        const params = new URLSearchParams()
+        if (sessionId) params.set('session_id', sessionId)
+        if (token) params.set('token', token)
+
+        const queryString = params.toString()
+        const url = queryString ? `/provider/intake?${queryString}` : '/provider/intake'
+
+        console.log('Navigating to:', url)
+        router.push(url)
     }
 
     const handleSkip = () => {
@@ -98,18 +124,18 @@ function ProviderWelcomeContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
             ),
-            duration: '5-8 minutes'
+            duration: '3-5 minutes'
         },
         {
             number: 3,
-            title: 'Contract Studio',
-            description: 'Negotiate terms with guidance from CLARENCE as your neutral mediator',
+            title: 'Enter Contract Studio',
+            description: 'Begin the mediated negotiation with full visibility and AI guidance',
             icon: (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
             ),
-            duration: 'Varies'
+            duration: 'Your negotiation begins'
         }
     ]
 
@@ -118,126 +144,123 @@ function ProviderWelcomeContent() {
     // ========================================================================
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl">
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
+            <div className="max-w-2xl w-full">
                 {/* Header */}
                 <div className="text-center mb-10">
-                    <div className="inline-block">
-                        <div className="text-5xl font-light text-white mb-2 tracking-wide">CLARENCE</div>
-                        <div className="text-xs text-emerald-400 tracking-[0.3em] font-light">THE HONEST BROKER</div>
-                    </div>
-                </div>
-
-                {/* Welcome Message */}
-                <div className="text-center mb-10">
-                    <h1 className="text-2xl font-light text-white mb-4">
-                        Welcome to Your Negotiation
+                    <h1 className="text-4xl font-light text-white mb-2 tracking-wide">
+                        CLARENCE
                     </h1>
-                    <p className="text-slate-400 max-w-md mx-auto leading-relaxed">
-                        I&apos;m CLARENCE, your AI-powered contract mediator. I&apos;ll guide you through
-                        a fair, transparent negotiation process designed to find mutually beneficial terms.
+                    <p className="text-emerald-400 text-sm tracking-widest uppercase">
+                        The Honest Broker
                     </p>
                 </div>
 
-                {/* Steps */}
-                <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 p-8 mb-6">
-                    <h2 className="text-lg font-medium text-white mb-6 text-center">Your Journey</h2>
+                {/* Welcome Card */}
+                <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-8">
+                    {/* Session Reference */}
+                    {sessionNumber && (
+                        <div className="text-center mb-6">
+                            <span className="text-xs text-slate-500 uppercase tracking-wider">Session Reference</span>
+                            <p className="text-slate-300 font-mono">{sessionNumber}</p>
+                        </div>
+                    )}
 
-                    <div className="space-y-4">
+                    {/* CLARENCE Introduction */}
+                    <div className="mb-8">
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
+                                <span className="text-white text-lg font-medium">C</span>
+                            </div>
+                            <div className="bg-slate-700/50 rounded-2xl rounded-tl-none p-4 flex-1">
+                                <p className="text-slate-200 leading-relaxed">
+                                    Welcome! I&apos;m <span className="text-emerald-400 font-medium">CLARENCE</span>, your neutral mediator for this contract negotiation.
+                                </p>
+                                <p className="text-slate-400 text-sm mt-2">
+                                    I&apos;ll guide you through a quick onboarding process before we begin. Everything you share is confidential and used only to facilitate fair negotiations.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Steps */}
+                    <div className="space-y-4 mb-8">
                         {steps.map((step, index) => (
                             <div
                                 key={step.number}
-                                className={`flex items-start gap-4 p-4 rounded-xl transition-all duration-500 ${currentStep >= step.number
-                                        ? 'bg-slate-700/50 border border-slate-600/50 opacity-100 translate-x-0'
-                                        : 'opacity-0 translate-x-4'
+                                className={`flex items-start gap-4 p-4 rounded-xl transition-all duration-500 ${currentStep >= step.number || showAllSteps
+                                        ? 'bg-slate-700/30 opacity-100 translate-x-0'
+                                        : 'opacity-0 -translate-x-4'
                                     }`}
                             >
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${currentStep >= step.number
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${currentStep >= step.number || showAllSteps
                                         ? 'bg-emerald-500/20 text-emerald-400'
-                                        : 'bg-slate-600/30 text-slate-500'
+                                        : 'bg-slate-700 text-slate-500'
                                     }`}>
                                     {step.icon}
                                 </div>
                                 <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs text-emerald-500 font-medium">STEP {step.number}</span>
-                                        <span className="text-xs text-slate-500">• {step.duration}</span>
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-white font-medium">{step.title}</h3>
+                                        <span className="text-xs text-slate-500">{step.duration}</span>
                                     </div>
-                                    <h3 className="text-white font-medium mt-1">{step.title}</h3>
-                                    <p className="text-sm text-slate-400 mt-1">{step.description}</p>
+                                    <p className="text-slate-400 text-sm mt-1">{step.description}</p>
                                 </div>
                             </div>
                         ))}
                     </div>
-                </div>
 
-                {/* CLARENCE Promise */}
-                <div className="bg-gradient-to-r from-emerald-600/10 to-blue-600/10 border border-emerald-500/20 rounded-xl p-6 mb-8">
-                    <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 className="text-white font-medium mb-2">My Promise to You</h3>
-                            <ul className="text-sm text-slate-400 space-y-1.5">
-                                <li className="flex items-start gap-2">
-                                    <svg className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    <span>I represent <strong className="text-slate-300">neither party</strong> — I&apos;m here to find fair outcomes</span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <svg className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    <span>All recommendations are based on <strong className="text-slate-300">market data and facts</strong></span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <svg className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    <span>Both parties see the <strong className="text-slate-300">same leverage analysis</strong></span>
-                                </li>
-                            </ul>
-                        </div>
+                    {/* CLARENCE Promise */}
+                    <div className={`border-t border-slate-700 pt-6 mb-6 transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'
+                        }`}>
+                        <h4 className="text-emerald-400 text-sm font-medium mb-3">CLARENCE&apos;s Promise</h4>
+                        <ul className="space-y-2 text-sm text-slate-400">
+                            <li className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Neutral mediation based on market data and factual analysis
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Equal visibility into negotiation dynamics for both parties
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Confidential handling of your strategic information
+                            </li>
+                        </ul>
                     </div>
-                </div>
 
-                {/* Actions */}
-                <div className="flex flex-col items-center gap-4">
-                    <button
-                        onClick={handleContinue}
-                        disabled={!showAllSteps}
-                        className={`px-8 py-3 rounded-xl font-medium transition-all flex items-center gap-2 cursor-pointer ${showAllSteps
-                                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                : 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                            }`}
-                    >
-                        Let&apos;s Begin
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
-                    </button>
+                    {/* Continue Button */}
+                    <div className={`transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'}`}>
+                        <button
+                            onClick={handleContinue}
+                            className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2"
+                        >
+                            Let&apos;s Begin
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                        </button>
+                        <p className="text-center text-slate-500 text-xs mt-3">
+                            Estimated time: 10-15 minutes
+                        </p>
+                    </div>
 
+                    {/* Skip Animation */}
                     {!showAllSteps && (
                         <button
                             onClick={handleSkip}
-                            className="text-slate-500 hover:text-slate-400 text-sm cursor-pointer transition"
+                            className="w-full mt-4 text-slate-500 hover:text-slate-400 text-sm transition-colors"
                         >
                             Skip animation →
                         </button>
                     )}
-
-                    <p className="text-xs text-slate-500 mt-2">
-                        Estimated time: 10-15 minutes
-                    </p>
-                </div>
-
-                {/* Footer */}
-                <div className="text-center mt-10 text-xs text-slate-500">
-                    © {new Date().getFullYear()} CLARENCE by Spike Island Studios
                 </div>
             </div>
         </div>
