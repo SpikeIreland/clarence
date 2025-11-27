@@ -1,7 +1,17 @@
 'use client'
+
+// ============================================================================
+// SECTION 1: IMPORTS
+// ============================================================================
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
+
+// ============================================================================
+// SECTION 2: INTERFACES
+// ============================================================================
 
 interface Company {
   id: string
@@ -23,27 +33,24 @@ interface FormData {
   acceptTerms: boolean
 }
 
-interface User {
-  userId?: string
-  user_id?: string
-  firstName?: string
-  first_name?: string
-  lastName?: string
-  last_name?: string
-  email?: string
-  companyName?: string
-  company_name?: string
-  role?: string
-}
+// ============================================================================
+// SECTION 3: CONSTANTS
+// ============================================================================
 
-interface RegistrationResponse {
-  userId?: string
-  sessionToken?: string
-  user?: User
-}
+const API_BASE = 'https://spikeislandstudios.app.n8n.cloud'
+
+// ============================================================================
+// SECTION 4: MAIN COMPONENT
+// ============================================================================
 
 export default function SignupPage() {
   const router = useRouter()
+  const supabase = createClient()
+
+  // ==========================================================================
+  // SECTION 5: STATE
+  // ==========================================================================
+
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
@@ -57,16 +64,17 @@ export default function SignupPage() {
     confirmPassword: '',
     acceptTerms: false
   })
-  
+
   const [companies, setCompanies] = useState<Company[]>([])
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, text: 'Password strength will appear here', class: '' })
   const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState<{text: string, type: 'success' | 'error' | 'info'} | null>(null)
+  const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null)
 
-  const API_BASE = 'https://spikeislandstudios.app.n8n.cloud'
+  // ==========================================================================
+  // SECTION 6: LOAD COMPANIES ON MOUNT
+  // ==========================================================================
 
-  // Load existing companies on mount
   useEffect(() => {
     loadExistingCompanies()
   }, [])
@@ -78,7 +86,7 @@ export default function SignupPage() {
         mode: 'cors',
         headers: { 'Accept': 'application/json' }
       })
-      
+
       if (response.ok) {
         const data = await response.json()
         if (Array.isArray(data)) {
@@ -94,9 +102,13 @@ export default function SignupPage() {
     }
   }
 
+  // ==========================================================================
+  // SECTION 7: COMPANY SEARCH & SELECTION
+  // ==========================================================================
+
   function handleCompanySearch(value: string) {
     setFormData(prev => ({ ...prev, companyName: value, companyId: '' }))
-    
+
     if (value.length < 2) {
       setShowCompanyDropdown(false)
       return
@@ -119,30 +131,34 @@ export default function SignupPage() {
     setMessage({ text: `Selected existing company: ${company.name}`, type: 'info' })
   }
 
+  // ==========================================================================
+  // SECTION 8: PASSWORD STRENGTH CHECKER
+  // ==========================================================================
+
   function checkPasswordStrength(password: string) {
     if (!password) {
       setPasswordStrength({ score: 0, text: 'Password strength will appear here', class: '' })
       return
     }
-    
+
     let score = 0
     const feedback = []
-    
+
     if (password.length >= 8) score++
     else feedback.push('at least 8 characters')
-    
+
     if (/[A-Z]/.test(password)) score++
     else feedback.push('uppercase letter')
-    
+
     if (/[a-z]/.test(password)) score++
     else feedback.push('lowercase letter')
-    
+
     if (/\d/.test(password)) score++
     else feedback.push('number')
-    
+
     if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++
     else feedback.push('special character')
-    
+
     if (score <= 2) {
       setPasswordStrength({ score, text: `Weak - Add: ${feedback.join(', ')}`, class: 'bg-red-500' })
     } else if (score === 3) {
@@ -154,19 +170,24 @@ export default function SignupPage() {
     }
   }
 
+  // ==========================================================================
+  // SECTION 9: FORM SUBMISSION - SUPABASE AUTH
+  // ==========================================================================
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    
+
+    // Validation
     if (formData.password !== formData.confirmPassword) {
       setMessage({ text: 'Passwords do not match', type: 'error' })
       return
     }
-    
+
     if (formData.password.length < 8) {
       setMessage({ text: 'Password must be at least 8 characters', type: 'error' })
       return
     }
-    
+
     if (!formData.acceptTerms) {
       setMessage({ text: 'Please accept the terms and conditions', type: 'error' })
       return
@@ -176,35 +197,51 @@ export default function SignupPage() {
     setMessage({ text: 'Creating your account...', type: 'info' })
 
     try {
-      const response = await fetch(`${API_BASE}/webhook/auth-register`, {
-        method: 'POST',
-        mode: 'cors',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          ...formData,
-          companyId: formData.companyId || null,
-          role: 'customer',
-          industry: formData.department || null
-        })
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        handleRegistrationSuccess(result)
-      } else {
-        let errorMessage = `Server returned ${response.status}`
-        try {
-          const error = await response.json()
-          errorMessage = error.message || errorMessage
-        } catch {
-          // Could not parse error response
+      // Create auth account with Supabase directly
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: 'https://www.clarencelegal.ai/auth/callback',
+          data: {
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            phone: formData.phone,
+            company_name: formData.companyName,
+            company_id: formData.companyId || null,
+            job_title: formData.jobTitle,
+            department: formData.department,
+            user_type: 'customer'
+          }
         }
-        throw new Error(errorMessage)
+      })
+
+      if (signUpError) {
+        throw signUpError
       }
-      
+
+      if (data.user) {
+        // Check if email confirmation is required
+        if (data.user.identities && data.user.identities.length === 0) {
+          // User already exists
+          setMessage({ text: 'An account with this email already exists. Please sign in instead.', type: 'error' })
+          setLoading(false)
+          return
+        }
+
+        if (data.session) {
+          // Email confirmation disabled - user is logged in immediately
+          handleRegistrationSuccess(data.user)
+        } else {
+          // Email confirmation required
+          setMessage({
+            text: '✉️ Please check your email to confirm your account. Click the link in the email to complete registration.',
+            type: 'success'
+          })
+          setLoading(false)
+        }
+      }
+
     } catch (error) {
       console.error('Sign up error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Registration failed'
@@ -213,30 +250,37 @@ export default function SignupPage() {
     }
   }
 
-  function handleRegistrationSuccess(response: RegistrationResponse) {
+  // ==========================================================================
+  // SECTION 10: REGISTRATION SUCCESS HANDLER
+  // ==========================================================================
+
+  function handleRegistrationSuccess(user: { id: string; email?: string; user_metadata?: Record<string, string> }) {
     setMessage({ text: '🎉 Account created! Redirecting to dashboard...', type: 'success' })
-    
+
     const authData = {
-      userId: response.userId || response.user?.userId || response.user?.user_id,
-      sessionToken: response.sessionToken,
+      userId: user.id,
       userInfo: {
-        firstName: response.user?.firstName || response.user?.first_name,
-        lastName: response.user?.lastName || response.user?.last_name,
-        email: response.user?.email,
-        company: response.user?.companyName || response.user?.company_name,
-        role: response.user?.role || 'customer',
+        firstName: user.user_metadata?.first_name || formData.firstName,
+        lastName: user.user_metadata?.last_name || formData.lastName,
+        email: user.email || formData.email,
+        company: user.user_metadata?.company_name || formData.companyName,
+        role: 'customer',
       }
     }
-    
+
     localStorage.setItem('clarence_auth', JSON.stringify(authData))
-    setTimeout(() => router.push('/auth/contracts-dashboard'), 2000)
+    setTimeout(() => router.push('/auth/dashboard'), 2000)
   }
+
+  // ==========================================================================
+  // SECTION 11: RENDER
+  // ==========================================================================
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 flex items-center justify-center p-5">
       {/* Back to Home Link - Top Left */}
-      <Link 
-        href="/" 
+      <Link
+        href="/"
         className="absolute top-8 left-8 text-slate-400 hover:text-white text-sm font-medium transition-colors duration-300"
       >
         ← Back to Home
@@ -252,11 +296,10 @@ export default function SignupPage() {
 
         {/* Message Display */}
         {message && (
-          <div className={`mx-8 mt-6 p-3 rounded-lg text-center text-sm ${
-            message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
-            message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
-            'bg-blue-50 text-blue-700 border border-blue-200'
-          }`}>
+          <div className={`mx-8 mt-6 p-3 rounded-lg text-center text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' :
+              message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
+                'bg-blue-50 text-blue-700 border border-blue-200'
+            }`}>
             {message.text}
           </div>
         )}
@@ -339,7 +382,7 @@ export default function SignupPage() {
                 required
               />
               <p className="text-xs text-slate-500 mt-1">Select existing company or enter a new one</p>
-              
+
               {showCompanyDropdown && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                   {companies
@@ -357,7 +400,7 @@ export default function SignupPage() {
                 </div>
               )}
             </div>
-            
+
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-600 mb-1">
@@ -414,7 +457,7 @@ export default function SignupPage() {
               />
               <div className="mt-2">
                 <div className="h-1 bg-slate-200 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className={`h-full transition-all ${passwordStrength.class}`}
                     style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
                   />
