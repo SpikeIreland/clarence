@@ -169,10 +169,68 @@ interface ApiMessageResponse {
 }
 
 // ============================================================================
+// SECTION 1B: CLARENCE AI TYPES (NEW)
+// ============================================================================
+
+interface ClarenceAIResponse {
+    success: boolean
+    promptType: string
+    sessionId: string
+    clauseId?: string
+    response: string
+    leverage: {
+        customer: number
+        provider: number
+        alignment: number
+    }
+    timestamp: string
+}
+
+// ============================================================================
 // SECTION 2: API CONFIGURATION & FUNCTIONS
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+// ============================================================================
+// SECTION 2B: CLARENCE AI API FUNCTIONS (NEW)
+// ============================================================================
+
+const CLARENCE_AI_URL = `${API_BASE}/clarence-ai`
+
+/**
+ * Call CLARENCE AI with specified prompt type
+ */
+async function callClarenceAI(
+    sessionId: string,
+    promptType: 'welcome' | 'clause_explain' | 'chat',
+    options: { clauseId?: string; message?: string } = {}
+): Promise<ClarenceAIResponse | null> {
+    try {
+        const response = await fetch(CLARENCE_AI_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId,
+                promptType,
+                ...options
+            })
+        })
+
+        if (!response.ok) {
+            throw new Error(`CLARENCE AI request failed: ${response.status}`)
+        }
+
+        return await response.json()
+    } catch (error) {
+        console.error('CLARENCE AI Error:', error)
+        return null
+    }
+}
+
+// ============================================================================
+// SECTION 2C: EXISTING API FUNCTIONS
+// ============================================================================
 
 // Fetch session and clause data for Contract Studio
 async function fetchContractStudioData(sessionId: string): Promise<{
@@ -510,6 +568,13 @@ function ContractStudioContent() {
     const [activeTab, setActiveTab] = useState<'dynamics' | 'tradeoffs' | 'history' | 'draft'>('dynamics')
     const [showLeverageDetails, setShowLeverageDetails] = useState(false)
 
+    // ============================================================================
+    // SECTION 6B: CLARENCE AI STATE (NEW)
+    // ============================================================================
+
+    const [clarenceWelcomeLoaded, setClarenceWelcomeLoaded] = useState(false)
+    const [lastExplainedClauseId, setLastExplainedClauseId] = useState<string | null>(null)
+
     const chatEndRef = useRef<HTMLDivElement>(null)
 
     // ============================================================================
@@ -652,6 +717,81 @@ function ContractStudioContent() {
         return apiMessages
     }, [])
 
+    // ============================================================================
+    // SECTION 7B: CLARENCE AI WELCOME MESSAGE LOADER (NEW)
+    // ============================================================================
+
+    const loadClarenceWelcome = useCallback(async (sessionId: string) => {
+        if (clarenceWelcomeLoaded) return // Only load once
+
+        setIsChatLoading(true)
+
+        try {
+            const response = await callClarenceAI(sessionId, 'welcome')
+
+            if (response?.success && response.response) {
+                const welcomeMessage: ClauseChatMessage = {
+                    messageId: `clarence-welcome-${Date.now()}`,
+                    sessionId: sessionId,
+                    positionId: null,
+                    sender: 'clarence',
+                    senderUserId: null,
+                    message: response.response,
+                    messageType: 'auto_response',
+                    relatedPositionChange: false,
+                    triggeredBy: 'session_load',
+                    createdAt: new Date().toISOString()
+                }
+
+                setChatMessages(prev => [welcomeMessage, ...prev])
+                setClarenceWelcomeLoaded(true)
+            }
+        } catch (error) {
+            console.error('Failed to load CLARENCE welcome:', error)
+        } finally {
+            setIsChatLoading(false)
+        }
+    }, [clarenceWelcomeLoaded])
+
+    // ============================================================================
+    // SECTION 7C: CLARENCE AI CLAUSE EXPLAINER (NEW)
+    // ============================================================================
+
+    const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause) => {
+        // Don't re-explain the same clause
+        if (lastExplainedClauseId === clause.clauseId) return
+
+        setIsChatLoading(true)
+        setLastExplainedClauseId(clause.clauseId)
+
+        try {
+            const response = await callClarenceAI(sessionId, 'clause_explain', {
+                clauseId: clause.clauseId
+            })
+
+            if (response?.success && response.response) {
+                const explainMessage: ClauseChatMessage = {
+                    messageId: `clarence-explain-${Date.now()}`,
+                    sessionId: sessionId,
+                    positionId: clause.positionId,
+                    sender: 'clarence',
+                    senderUserId: null,
+                    message: response.response,
+                    messageType: 'auto_response',
+                    relatedPositionChange: false,
+                    triggeredBy: 'clause_selection',
+                    createdAt: new Date().toISOString()
+                }
+
+                setChatMessages(prev => [...prev, explainMessage])
+            }
+        } catch (error) {
+            console.error('Failed to explain clause:', error)
+        } finally {
+            setIsChatLoading(false)
+        }
+    }, [lastExplainedClauseId])
+
     // Initial load
     useEffect(() => {
         const init = async () => {
@@ -749,12 +889,39 @@ function ContractStudioContent() {
     }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router])
 
     // ============================================================================
+    // SECTION 7D: LOAD CLARENCE WELCOME WHEN SESSION IS READY (NEW)
+    // ============================================================================
+
+    useEffect(() => {
+        if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading) {
+            loadClarenceWelcome(session.sessionId)
+        }
+    }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome])
+
+    // ============================================================================
+    // SECTION 7E: AUTO-SCROLL CHAT TO BOTTOM (NEW)
+    // ============================================================================
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [chatMessages])
+
+    // ============================================================================
     // SECTION 8: EVENT HANDLERS
+    // ============================================================================
+
+    // ============================================================================
+    // SECTION 8B: CLAUSE SELECT WITH CLARENCE EXPLANATION (MODIFIED)
     // ============================================================================
 
     const handleClauseSelect = (clause: ContractClause) => {
         setSelectedClause(clause)
         setActiveTab('dynamics')
+
+        // Trigger CLARENCE to explain the clause (NEW)
+        if (session?.sessionId && sessionStatus === 'ready') {
+            explainClauseWithClarence(session.sessionId, clause)
+        }
     }
 
     const handleClauseToggle = (positionId: string) => {
@@ -773,16 +940,23 @@ function ContractStudioContent() {
         setClauseTree(toggleExpanded(clauseTree))
     }
 
+    // ============================================================================
+    // SECTION 8C: SEND MESSAGE WITH REAL CLARENCE AI (MODIFIED)
+    // ============================================================================
+
     const handleSendMessage = async () => {
         if (!chatInput.trim() || !session || !userInfo) return
 
+        const userMessage = chatInput.trim()
+
+        // Add user message immediately
         const newMessage: ClauseChatMessage = {
             messageId: `msg-${Date.now()}`,
             sessionId: session.sessionId,
             positionId: selectedClause?.positionId || null,
             sender: userInfo.role || 'customer',
             senderUserId: userInfo.userId || null,
-            message: chatInput,
+            message: userMessage,
             messageType: 'discussion',
             relatedPositionChange: false,
             triggeredBy: 'manual',
@@ -793,26 +967,65 @@ function ContractStudioContent() {
         setChatInput('')
         setIsChatLoading(true)
 
-        // Simulate CLARENCE response
-        setTimeout(() => {
-            const clarenceResponse: ClauseChatMessage = {
-                messageId: `msg-${Date.now() + 1}`,
+        // Call CLARENCE AI for response (MODIFIED - was simulated, now real)
+        try {
+            const response = await callClarenceAI(session.sessionId, 'chat', {
+                message: userMessage,
+                clauseId: selectedClause?.clauseId
+            })
+
+            if (response?.success && response.response) {
+                const clarenceResponse: ClauseChatMessage = {
+                    messageId: `clarence-${Date.now()}`,
+                    sessionId: session.sessionId,
+                    positionId: selectedClause?.positionId || null,
+                    sender: 'clarence',
+                    senderUserId: null,
+                    message: response.response,
+                    messageType: 'auto_response',
+                    relatedPositionChange: false,
+                    triggeredBy: 'user_message',
+                    createdAt: new Date().toISOString()
+                }
+
+                setChatMessages(prev => [...prev, clarenceResponse])
+            } else {
+                // Fallback error message
+                const errorMessage: ClauseChatMessage = {
+                    messageId: `error-${Date.now()}`,
+                    sessionId: session.sessionId,
+                    positionId: selectedClause?.positionId || null,
+                    sender: 'clarence',
+                    senderUserId: null,
+                    message: 'I apologize, but I encountered an issue processing your request. Please try again.',
+                    messageType: 'auto_response',
+                    relatedPositionChange: false,
+                    triggeredBy: 'error',
+                    createdAt: new Date().toISOString()
+                }
+
+                setChatMessages(prev => [...prev, errorMessage])
+            }
+        } catch (error) {
+            console.error('CLARENCE chat error:', error)
+
+            const errorMessage: ClauseChatMessage = {
+                messageId: `error-${Date.now()}`,
                 sessionId: session.sessionId,
                 positionId: selectedClause?.positionId || null,
                 sender: 'clarence',
                 senderUserId: null,
-                message: selectedClause
-                    ? `I understand your point about ${selectedClause.clauseName}. Based on the current positions and market data, I would suggest exploring a middle ground. Would you like me to analyze potential trade-offs with other clauses?`
-                    : 'Thank you for your input. How can I help you progress the negotiation?',
+                message: 'I apologize, but I encountered a connection issue. Please try again in a moment.',
                 messageType: 'auto_response',
                 relatedPositionChange: false,
-                triggeredBy: 'user_message',
+                triggeredBy: 'error',
                 createdAt: new Date().toISOString()
             }
 
-            setChatMessages(prev => [...prev, clarenceResponse])
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
             setIsChatLoading(false)
-        }, 1000)
+        }
     }
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -823,7 +1036,7 @@ function ContractStudioContent() {
     }
 
     // ============================================================================
-    // SECTION 8B: PENDING PROVIDER VIEW COMPONENT
+    // SECTION 8D: PENDING PROVIDER VIEW COMPONENT
     // ============================================================================
 
     const handleSendInvite = async () => {
@@ -1781,6 +1994,11 @@ function ContractStudioContent() {
                                     }
                                 </div>
                             </div>
+                            {/* AI Status Indicator (NEW) */}
+                            <div className="flex items-center gap-1">
+                                <div className={`w-2 h-2 rounded-full ${isChatLoading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></div>
+                                <span className="text-xs text-slate-400">{isChatLoading ? 'Thinking...' : 'Ready'}</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1842,6 +2060,7 @@ function ContractStudioContent() {
                                     : "Ask CLARENCE anything..."
                                 }
                                 className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                disabled={isChatLoading}
                             />
                             <button
                                 onClick={handleSendMessage}
@@ -1856,10 +2075,20 @@ function ContractStudioContent() {
 
                         {/* Quick Actions */}
                         <div className="flex gap-2 mt-2">
-                            <button className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition">
+                            <button
+                                onClick={() => {
+                                    setChatInput('What trade-offs could help us reach agreement faster?')
+                                }}
+                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition"
+                            >
                                 Suggest Trade-off
                             </button>
-                            <button className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition">
+                            <button
+                                onClick={() => {
+                                    setChatInput('What is the industry standard for this clause?')
+                                }}
+                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition"
+                            >
                                 Industry Data
                             </button>
                         </div>
