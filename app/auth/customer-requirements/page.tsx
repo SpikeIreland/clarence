@@ -495,7 +495,7 @@ function CustomerRequirementsForm() {
                                 <button
                                     onClick={() => setChatOpen(!chatOpen)}
                                     className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all ${chatOpen
-                                        ? 'bg-emerald-600 text-white'
+                                        ? 'bg-blue-600 text-white'
                                         : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white'
                                         }`}
                                 >
@@ -557,7 +557,7 @@ function CustomerRequirementsForm() {
                                     className={`w-8 h-8 rounded-full text-xs font-medium transition-all ${step === currentStep
                                         ? 'bg-slate-700 text-white'
                                         : step < currentStep
-                                            ? 'bg-emerald-500 text-white'
+                                            ? 'bg-blue-500 text-white'
                                             : 'bg-slate-200 text-slate-500'
                                         }`}
                                     title={getStepName(step)}
@@ -597,7 +597,7 @@ function CustomerRequirementsForm() {
                             <button
                                 onClick={handleSubmit}
                                 disabled={loading || priorityPoints < 0}
-                                className="px-6 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg hover:from-emerald-700 hover:to-emerald-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 ... hover:from-blue-700 hover:to-blue-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                             >
                                 {loading ? (
                                     <>
@@ -752,7 +752,7 @@ function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-slate-600">Session ID:</span>
                         <span className="font-mono text-sm text-slate-800">{formData.sessionNumber || formData.sessionId}</span>
-                        <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded">Auto-assigned</span>
+                        <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded">Auto-assigned</span>
                     </div>
                 </div>
             )}
@@ -1345,7 +1345,7 @@ function PrioritiesStep({ formData, updateNestedData, priorityPoints }: Prioriti
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Priority Allocation</h2>
 
-            <div className={`border rounded-lg p-4 mb-6 ${priorityPoints >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+            <div className={`border rounded-lg p-4 mb-6 ${priorityPoints >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'
                 }`}>
                 <div className="flex items-center justify-between">
                     <div>
@@ -1581,7 +1581,7 @@ function AdditionalContextStep({ formData, updateFormData }: StepComponentProps)
                     After submitting, you&apos;ll proceed to the Strategic Assessment where CLARENCE will ask probing questions
                     to calculate your leverage position and prepare for negotiation.
                 </p>
-                <div className="flex items-center gap-2 text-sm text-emerald-700">
+                <div className="flex items-center gap-2 text-sm text-blue-700">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
