@@ -1036,6 +1036,90 @@ function ContractStudioContent() {
     }
 
     // ============================================================================
+    // SECTION 8D: QUICK ACTION HANDLER (NEW)
+    // ============================================================================
+
+    const handleQuickAction = async (message: string) => {
+        if (!session || !userInfo || isChatLoading) return
+
+        // Add user message immediately
+        const newMessage: ClauseChatMessage = {
+            messageId: `msg-${Date.now()}`,
+            sessionId: session.sessionId,
+            positionId: selectedClause?.positionId || null,
+            sender: userInfo.role || 'customer',
+            senderUserId: userInfo.userId || null,
+            message: message,
+            messageType: 'discussion',
+            relatedPositionChange: false,
+            triggeredBy: 'quick_action',
+            createdAt: new Date().toISOString()
+        }
+
+        setChatMessages(prev => [...prev, newMessage])
+        setIsChatLoading(true)
+
+        // Call CLARENCE AI for response
+        try {
+            const response = await callClarenceAI(session.sessionId, 'chat', {
+                message: message,
+                clauseId: selectedClause?.clauseId
+            })
+
+            if (response?.success && response.response) {
+                const clarenceResponse: ClauseChatMessage = {
+                    messageId: `clarence-${Date.now()}`,
+                    sessionId: session.sessionId,
+                    positionId: selectedClause?.positionId || null,
+                    sender: 'clarence',
+                    senderUserId: null,
+                    message: response.response,
+                    messageType: 'auto_response',
+                    relatedPositionChange: false,
+                    triggeredBy: 'quick_action',
+                    createdAt: new Date().toISOString()
+                }
+
+                setChatMessages(prev => [...prev, clarenceResponse])
+            } else {
+                const errorMessage: ClauseChatMessage = {
+                    messageId: `error-${Date.now()}`,
+                    sessionId: session.sessionId,
+                    positionId: selectedClause?.positionId || null,
+                    sender: 'clarence',
+                    senderUserId: null,
+                    message: 'I apologize, but I encountered an issue processing your request. Please try again.',
+                    messageType: 'auto_response',
+                    relatedPositionChange: false,
+                    triggeredBy: 'error',
+                    createdAt: new Date().toISOString()
+                }
+
+                setChatMessages(prev => [...prev, errorMessage])
+            }
+        } catch (error) {
+            console.error('CLARENCE quick action error:', error)
+
+            const errorMessage: ClauseChatMessage = {
+                messageId: `error-${Date.now()}`,
+                sessionId: session.sessionId,
+                positionId: selectedClause?.positionId || null,
+                sender: 'clarence',
+                senderUserId: null,
+                message: 'I apologize, but I encountered a connection issue. Please try again in a moment.',
+                messageType: 'auto_response',
+                relatedPositionChange: false,
+                triggeredBy: 'error',
+                createdAt: new Date().toISOString()
+            }
+
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
+            setIsChatLoading(false)
+        }
+    }
+
+    // ============================================================================
     // SECTION 8D: PENDING PROVIDER VIEW COMPONENT
     // ============================================================================
 
@@ -2076,18 +2160,16 @@ function ContractStudioContent() {
                         {/* Quick Actions */}
                         <div className="flex gap-2 mt-2">
                             <button
-                                onClick={() => {
-                                    setChatInput('What trade-offs could help us reach agreement faster?')
-                                }}
-                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition"
+                                onClick={() => handleQuickAction('What trade-offs could help us reach agreement faster?')}
+                                disabled={isChatLoading}
+                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-600 rounded-lg transition"
                             >
                                 Suggest Trade-off
                             </button>
                             <button
-                                onClick={() => {
-                                    setChatInput('What is the industry standard for this clause?')
-                                }}
-                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition"
+                                onClick={() => handleQuickAction('What is the industry standard for this clause?')}
+                                disabled={isChatLoading}
+                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-600 rounded-lg transition"
                             >
                                 Industry Data
                             </button>
