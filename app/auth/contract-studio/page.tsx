@@ -169,7 +169,24 @@ interface ApiMessageResponse {
 }
 
 // ============================================================================
-// SECTION 1B: CLARENCE AI TYPES (NEW)
+// SECTION 1B: TRADE-OFF TYPES (NEW)
+// ============================================================================
+
+interface TradeOffOpportunity {
+    id: string
+    clauseA: ContractClause
+    clauseB: ContractClause
+    tradeOffValue: number
+    description: string
+    customerGives: string
+    customerGets: string
+    providerGives: string
+    providerGets: string
+    alignmentImpact: number
+}
+
+// ============================================================================
+// SECTION 1C: CLARENCE AI TYPES
 // ============================================================================
 
 interface ClarenceAIResponse {
@@ -531,6 +548,70 @@ function calculateClauseStats(clauses: ContractClause[]): {
 }
 
 // ============================================================================
+// SECTION 4B: TRADE-OFF DETECTION ALGORITHM (NEW)
+// ============================================================================
+
+/**
+ * Detects trade-off opportunities based on the CLARENCE algorithm:
+ * - Finds clause pairs where priorities are inverted
+ * - Customer high priority on A, Provider high priority on B (and vice versa)
+ * - Calculates trade-off value based on priority differences and alignment gaps
+ */
+function detectTradeOffOpportunities(clauses: ContractClause[], selectedClause?: ContractClause | null): TradeOffOpportunity[] {
+    const opportunities: TradeOffOpportunity[] = []
+
+    // Filter to clauses with gaps (not already aligned)
+    const clausesWithGaps = clauses.filter(c => c.gapSize > 0 && c.customerPosition !== null && c.providerPosition !== null)
+
+    // If a clause is selected, find trade-offs specifically for that clause
+    const baseClause = selectedClause || null
+
+    for (let i = 0; i < clausesWithGaps.length; i++) {
+        const clauseA = clausesWithGaps[i]
+
+        // Skip if we have a selected clause and this isn't it
+        if (baseClause && clauseA.clauseId !== baseClause.clauseId) continue
+
+        for (let j = 0; j < clausesWithGaps.length; j++) {
+            if (i === j) continue
+
+            const clauseB = clausesWithGaps[j]
+
+            // Check for inverted priorities (core algorithm)
+            // Customer favors A more than Provider, Provider favors B more than Customer
+            const customerFavorsA = clauseA.customerWeight > clauseA.providerWeight
+            const providerFavorsB = clauseB.providerWeight > clauseB.customerWeight
+
+            if (customerFavorsA && providerFavorsB) {
+                // Calculate trade-off value
+                const priorityDiffA = clauseA.customerWeight - clauseA.providerWeight
+                const priorityDiffB = clauseB.providerWeight - clauseB.customerWeight
+                const tradeOffValue = (priorityDiffA * clauseA.gapSize) + (priorityDiffB * clauseB.gapSize)
+
+                // Estimate alignment impact (simplified)
+                const alignmentImpact = Math.round((clauseA.gapSize + clauseB.gapSize) / 4)
+
+                opportunities.push({
+                    id: `trade-${clauseA.clauseId}-${clauseB.clauseId}`,
+                    clauseA,
+                    clauseB,
+                    tradeOffValue,
+                    description: `Trade ${clauseA.clauseName} concession for ${clauseB.clauseName} improvement`,
+                    customerGives: `Move toward provider position on ${clauseA.clauseName}`,
+                    customerGets: `Better terms on ${clauseB.clauseName}`,
+                    providerGives: `Move toward customer position on ${clauseB.clauseName}`,
+                    providerGets: `Better terms on ${clauseA.clauseName}`,
+                    alignmentImpact
+                })
+            }
+        }
+    }
+
+    // Sort by trade-off value (highest first)
+    return opportunities.sort((a, b) => b.tradeOffValue - a.tradeOffValue).slice(0, 5)
+}
+
+// ============================================================================
 // SECTION 5: LOADING COMPONENT
 // ============================================================================
 
@@ -574,6 +655,15 @@ function ContractStudioContent() {
 
     const [clarenceWelcomeLoaded, setClarenceWelcomeLoaded] = useState(false)
     const [lastExplainedClauseId, setLastExplainedClauseId] = useState<string | null>(null)
+
+    // ============================================================================
+    // SECTION 6C: TRADE-OFF STATE (NEW)
+    // ============================================================================
+
+    const [tradeOffOpportunities, setTradeOffOpportunities] = useState<TradeOffOpportunity[]>([])
+    const [selectedTradeOff, setSelectedTradeOff] = useState<TradeOffOpportunity | null>(null)
+    const [tradeOffExplanation, setTradeOffExplanation] = useState<string | null>(null)
+    const [isLoadingTradeOff, setIsLoadingTradeOff] = useState(false)
 
     const chatEndRef = useRef<HTMLDivElement>(null)
 
@@ -905,6 +995,58 @@ function ContractStudioContent() {
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [chatMessages])
+
+    // ============================================================================
+    // SECTION 7F: CALCULATE TRADE-OFFS WHEN CLAUSES OR SELECTION CHANGES (NEW)
+    // ============================================================================
+
+    useEffect(() => {
+        if (clauses.length > 0) {
+            const opportunities = detectTradeOffOpportunities(clauses, selectedClause)
+            setTradeOffOpportunities(opportunities)
+            setSelectedTradeOff(null)
+            setTradeOffExplanation(null)
+        }
+    }, [clauses, selectedClause])
+
+    // ============================================================================
+    // SECTION 7G: EXPLAIN TRADE-OFF WITH CLARENCE (NEW)
+    // ============================================================================
+
+    const explainTradeOff = useCallback(async (tradeOff: TradeOffOpportunity) => {
+        if (!session?.sessionId) return
+
+        setSelectedTradeOff(tradeOff)
+        setIsLoadingTradeOff(true)
+        setTradeOffExplanation(null)
+
+        try {
+            const message = `Analyze this trade-off opportunity between "${tradeOff.clauseA.clauseName}" and "${tradeOff.clauseB.clauseName}". 
+
+Current positions:
+- ${tradeOff.clauseA.clauseName}: Customer ${tradeOff.clauseA.customerPosition}, Provider ${tradeOff.clauseA.providerPosition}, Gap: ${tradeOff.clauseA.gapSize}
+- ${tradeOff.clauseB.clauseName}: Customer ${tradeOff.clauseB.customerPosition}, Provider ${tradeOff.clauseB.providerPosition}, Gap: ${tradeOff.clauseB.gapSize}
+
+Priority weights:
+- ${tradeOff.clauseA.clauseName}: Customer weight ${tradeOff.clauseA.customerWeight}, Provider weight ${tradeOff.clauseA.providerWeight}
+- ${tradeOff.clauseB.clauseName}: Customer weight ${tradeOff.clauseB.customerWeight}, Provider weight ${tradeOff.clauseB.providerWeight}
+
+Explain why this is a good trade-off opportunity, what specific positions each party should move to, and how it would improve overall alignment.`
+
+            const response = await callClarenceAI(session.sessionId, 'chat', { message })
+
+            if (response?.success && response.response) {
+                setTradeOffExplanation(response.response)
+            } else {
+                setTradeOffExplanation('Unable to analyze this trade-off at the moment. Please try again.')
+            }
+        } catch (error) {
+            console.error('Trade-off explanation error:', error)
+            setTradeOffExplanation('An error occurred while analyzing this trade-off.')
+        } finally {
+            setIsLoadingTradeOff(false)
+        }
+    }, [session?.sessionId])
 
     // ============================================================================
     // SECTION 8: EVENT HANDLERS
@@ -2030,10 +2172,231 @@ function ContractStudioContent() {
                             </div>
                         )}
 
+                        {/* ============================================================ */}
+                        {/* TRADEOFFS TAB CONTENT (NEW) */}
+                        {/* ============================================================ */}
+                        {activeTab === 'tradeoffs' && selectedClause && (
+                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
+                                {/* Header */}
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-slate-800">Trade-Off Opportunities</h3>
+                                        <p className="text-sm text-slate-500">CLARENCE-detected opportunities for mutual gains</p>
+                                    </div>
+                                </div>
+
+                                {/* Trade-off Opportunities List */}
+                                {tradeOffOpportunities.length > 0 ? (
+                                    <div className="space-y-4">
+                                        {tradeOffOpportunities.map((opportunity) => (
+                                            <div
+                                                key={opportunity.id}
+                                                className={`border rounded-xl p-4 cursor-pointer transition-all ${selectedTradeOff?.id === opportunity.id
+                                                        ? 'border-purple-500 bg-purple-50 shadow-md'
+                                                        : 'border-slate-200 hover:border-purple-300 hover:bg-slate-50'
+                                                    }`}
+                                                onClick={() => explainTradeOff(opportunity)}
+                                            >
+                                                {/* Trade-off Header */}
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium text-slate-800">
+                                                            {opportunity.clauseA.clauseNumber} ↔ {opportunity.clauseB.clauseNumber}
+                                                        </span>
+                                                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                                                            +{opportunity.alignmentImpact}% alignment
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-400">
+                                                        Value: {opportunity.tradeOffValue.toFixed(1)}
+                                                    </div>
+                                                </div>
+
+                                                {/* Clause Names */}
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <div className="flex-1 p-2 bg-emerald-50 rounded-lg">
+                                                        <div className="text-xs text-emerald-600 font-medium">Customer Priority</div>
+                                                        <div className="text-sm text-slate-700 truncate">{opportunity.clauseA.clauseName}</div>
+                                                        <div className="text-xs text-slate-500">Gap: {opportunity.clauseA.gapSize}</div>
+                                                    </div>
+                                                    <div className="flex-shrink-0">
+                                                        <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 p-2 bg-blue-50 rounded-lg">
+                                                        <div className="text-xs text-blue-600 font-medium">Provider Priority</div>
+                                                        <div className="text-sm text-slate-700 truncate">{opportunity.clauseB.clauseName}</div>
+                                                        <div className="text-xs text-slate-500">Gap: {opportunity.clauseB.gapSize}</div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Trade Description */}
+                                                <div className="text-sm text-slate-600">
+                                                    <span className="font-medium">Proposal:</span> {opportunity.description}
+                                                </div>
+
+                                                {/* Click to analyze hint */}
+                                                {selectedTradeOff?.id !== opportunity.id && (
+                                                    <div className="text-xs text-purple-500 mt-2 flex items-center gap-1">
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        Click for CLARENCE analysis
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+
+                                        {/* CLARENCE Analysis Panel */}
+                                        {selectedTradeOff && (
+                                            <div className="mt-6 p-4 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-100">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                                        <span className="text-white font-bold text-sm">C</span>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <div className="text-sm font-medium text-purple-800 mb-2">CLARENCE Trade-Off Analysis</div>
+                                                        {isLoadingTradeOff ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                                                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                                                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                                                <span className="text-sm text-purple-600 ml-2">Analyzing trade-off...</span>
+                                                            </div>
+                                                        ) : tradeOffExplanation ? (
+                                                            <p className="text-sm text-slate-700 whitespace-pre-wrap">{tradeOffExplanation}</p>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+
+                                                {/* Action Buttons */}
+                                                {tradeOffExplanation && !isLoadingTradeOff && (
+                                                    <div className="flex gap-2 mt-4 pt-4 border-t border-purple-200">
+                                                        <button
+                                                            onClick={() => {
+                                                                handleQuickAction(`Create a package deal proposal for trading ${selectedTradeOff.clauseA.clauseName} against ${selectedTradeOff.clauseB.clauseName}`)
+                                                            }}
+                                                            className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition"
+                                                        >
+                                                            Create Package Deal
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedTradeOff(null)
+                                                                setTradeOffExplanation(null)
+                                                            }}
+                                                            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-600 text-sm font-medium rounded-lg border border-slate-300 transition"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                            </svg>
+                                        </div>
+                                        <h4 className="text-lg font-medium text-slate-700 mb-2">No Trade-Offs Detected</h4>
+                                        <p className="text-sm text-slate-500 max-w-md mx-auto">
+                                            CLARENCE hasn&apos;t identified any complementary priority opportunities for this clause yet.
+                                            This may happen when clause priorities are similar for both parties.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Algorithm Explanation */}
+                                <div className="mt-6 pt-4 border-t border-slate-200">
+                                    <details className="text-sm">
+                                        <summary className="text-slate-500 cursor-pointer hover:text-slate-700">
+                                            How does trade-off detection work?
+                                        </summary>
+                                        <div className="mt-2 p-3 bg-slate-50 rounded-lg text-slate-600">
+                                            <p className="mb-2">
+                                                CLARENCE identifies trade-off opportunities when priorities are <strong>inverted</strong> between parties:
+                                            </p>
+                                            <ul className="list-disc list-inside space-y-1 text-xs">
+                                                <li>Customer places high priority on Clause A, Provider places low priority</li>
+                                                <li>Provider places high priority on Clause B, Customer places low priority</li>
+                                                <li>Both parties can get more of what they value most by trading concessions</li>
+                                            </ul>
+                                            <p className="mt-2 text-xs">
+                                                Trade-off value = (Priority Difference × Gap Size) for each clause
+                                            </p>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Keep other tab content (draft, tradeoffs, history) */}
                         {/* And the "no clause selected" state */}
 
-                        {!selectedClause && (
+                        {/* Global Trade-offs View (when no clause selected but on tradeoffs tab) */}
+                        {activeTab === 'tradeoffs' && !selectedClause && (
+                            <div className="bg-white rounded-xl border border-slate-200 p-6 mt-2">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-slate-800">All Trade-Off Opportunities</h3>
+                                        <p className="text-sm text-slate-500">Select a clause to see specific trade-offs, or view all opportunities below</p>
+                                    </div>
+                                </div>
+
+                                {/* Show trade-offs calculated from all clauses */}
+                                {detectTradeOffOpportunities(clauses).length > 0 ? (
+                                    <div className="space-y-3">
+                                        {detectTradeOffOpportunities(clauses).map((opportunity) => (
+                                            <div
+                                                key={opportunity.id}
+                                                className="border border-slate-200 rounded-lg p-4 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition"
+                                                onClick={() => {
+                                                    handleClauseSelect(opportunity.clauseA)
+                                                    setActiveTab('tradeoffs')
+                                                }}
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium text-slate-800">
+                                                            {opportunity.clauseA.clauseName}
+                                                        </span>
+                                                        <span className="text-purple-500">↔</span>
+                                                        <span className="font-medium text-slate-800">
+                                                            {opportunity.clauseB.clauseName}
+                                                        </span>
+                                                    </div>
+                                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                                                        +{opportunity.alignmentImpact}% potential
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-slate-600">{opportunity.description}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 text-slate-500">
+                                        <p>No trade-off opportunities detected across clauses.</p>
+                                        <p className="text-sm mt-1">This may occur when priorities are similar for both parties.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {!selectedClause && activeTab !== 'tradeoffs' && (
                             <div className="h-full flex items-center justify-center">
                                 <div className="text-center">
                                     <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -2043,6 +2406,13 @@ function ContractStudioContent() {
                                     </div>
                                     <h3 className="text-lg font-medium text-slate-700 mb-2">Select a Clause</h3>
                                     <p className="text-sm text-slate-500">Choose a clause from the left panel to view its details</p>
+
+                                    {/* Hint to view trade-offs */}
+                                    <div className="mt-6 p-3 bg-purple-50 rounded-lg">
+                                        <p className="text-sm text-purple-700">
+                                            💡 Tip: Click the <strong>Tradeoffs</strong> tab to see all available trade-off opportunities
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         )}
