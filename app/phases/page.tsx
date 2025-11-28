@@ -1,16 +1,24 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 
-// ========== INTERFACES ==========
+// ============================================================================
+// SECTION 1: INTERFACES & TYPES
+// ============================================================================
+
 interface Phase {
   number: number
   title: string
   subtitle: string
   description: string[]
   keyOutcome: string
+  color: 'emerald' | 'blue' | 'amber'
 }
 
-// ========== DATA ==========
+// ============================================================================
+// SECTION 2: PHASE DATA
+// ============================================================================
+
 const phases: Phase[] = [
   {
     number: 1,
@@ -22,7 +30,8 @@ const phases: Phase[] = [
       "Develop a calculation of the parties' respective leverage and the parties will be allocated a corresponding number of points to use in priority-ranking each clause.",
       "Auto-populate any data points into the relevant contract clauses or schedules."
     ],
-    keyOutcome: "Comprehensive deal profile with leverage-weighted negotiation framework"
+    keyOutcome: "Comprehensive deal profile with leverage-weighted negotiation framework",
+    color: 'emerald'
   },
   {
     number: 2,
@@ -34,7 +43,8 @@ const phases: Phase[] = [
       "CLARENCE will identify for the parties where they are not yet aligned.",
       "Highlights areas requiring compromises during the balance of the negotiation."
     ],
-    keyOutcome: "Complete initial positions mapped with alignment gaps identified"
+    keyOutcome: "Complete initial positions mapped with alignment gaps identified",
+    color: 'emerald'
   },
   {
     number: 3,
@@ -46,7 +56,8 @@ const phases: Phase[] = [
       "Parties can reach agreement relatively quickly through one or two iterations.",
       "Building momentum through quick wins on easier agreement points."
     ],
-    keyOutcome: "Quick wins achieved on high-alignment items"
+    keyOutcome: "Quick wins achieved on high-alignment items",
+    color: 'blue'
   },
   {
     number: 4,
@@ -58,7 +69,8 @@ const phases: Phase[] = [
       "Facilitate trade-offs across unrelated clauses to prevent negotiation deadlock.",
       "Navigate complex interdependencies to avoid the negotiation process becoming stuck."
     ],
-    keyOutcome: "Resolution of complex contentious points through creative compromises"
+    keyOutcome: "Resolution of complex contentious points through creative compromises",
+    color: 'blue'
   },
   {
     number: 5,
@@ -70,7 +82,8 @@ const phases: Phase[] = [
       "Negotiations often get bogged down in this phase.",
       "CLARENCE's focus on creative and pragmatic trade-offs is critical at this stage."
     ],
-    keyOutcome: "Commercial and operational schedules finalized"
+    keyOutcome: "Commercial and operational schedules finalized",
+    color: 'amber'
   },
   {
     number: 6,
@@ -82,264 +95,409 @@ const phases: Phase[] = [
       "Ensuring internal consistency across all sections.",
       "Finalizing the contract for execution."
     ],
-    keyOutcome: "Contract ready for signature"
+    keyOutcome: "Contract ready for signature",
+    color: 'amber'
   }
 ]
 
-// ========== MAIN COMPONENT ==========
-export default function PhasesPage() {
-  const [selectedPhase, setSelectedPhase] = useState<number | null>(null)
-  const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set())
+// ============================================================================
+// SECTION 3: HELPER FUNCTIONS
+// ============================================================================
 
-  // Handle clicking on phase indicator circles
+const getPhaseColors = (color: 'emerald' | 'blue' | 'amber', isActive: boolean) => {
+  const colors = {
+    emerald: {
+      bg: isActive ? 'bg-emerald-500' : 'bg-emerald-100',
+      text: isActive ? 'text-white' : 'text-emerald-600',
+      border: 'border-emerald-200',
+      accent: 'bg-emerald-50',
+      ring: 'ring-emerald-500',
+    },
+    blue: {
+      bg: isActive ? 'bg-blue-500' : 'bg-blue-100',
+      text: isActive ? 'text-white' : 'text-blue-600',
+      border: 'border-blue-200',
+      accent: 'bg-blue-50',
+      ring: 'ring-blue-500',
+    },
+    amber: {
+      bg: isActive ? 'bg-amber-500' : 'bg-amber-100',
+      text: isActive ? 'text-white' : 'text-amber-600',
+      border: 'border-amber-200',
+      accent: 'bg-amber-50',
+      ring: 'ring-amber-500',
+    },
+  }
+  return colors[color]
+}
+
+// ============================================================================
+// SECTION 4: MAIN COMPONENT
+// ============================================================================
+
+export default function PhasesPage() {
+  const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set([1]))
+  const [selectedPhase, setSelectedPhase] = useState<number>(1)
+
+  // ============================================================================
+  // SECTION 5: EVENT HANDLERS
+  // ============================================================================
+
   const handlePhaseIndicatorClick = (phaseNumber: number) => {
     setSelectedPhase(phaseNumber)
-    
-    // Also expand/collapse the corresponding phase card
-    const newExpanded = new Set(expandedPhases)
-    if (newExpanded.has(phaseNumber)) {
-      newExpanded.delete(phaseNumber)
-      setSelectedPhase(null) // Deselect if collapsing
-    } else {
-      // Close all others and open only this one
-      newExpanded.clear()
-      newExpanded.add(phaseNumber)
-    }
+    const newExpanded = new Set<number>()
+    newExpanded.add(phaseNumber)
     setExpandedPhases(newExpanded)
+
+    // Scroll to the phase card
+    const element = document.getElementById(`phase-${phaseNumber}`)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
   }
 
-  // Handle clicking on phase cards
   const togglePhaseExpansion = (phaseNumber: number) => {
     const newExpanded = new Set(expandedPhases)
     if (newExpanded.has(phaseNumber)) {
       newExpanded.delete(phaseNumber)
-      setSelectedPhase(null) // Deselect when closing
+      if (selectedPhase === phaseNumber) {
+        setSelectedPhase(0)
+      }
     } else {
-      // Close all others and open only this one
       newExpanded.clear()
       newExpanded.add(phaseNumber)
-      setSelectedPhase(phaseNumber) // Select when opening
+      setSelectedPhase(phaseNumber)
     }
     setExpandedPhases(newExpanded)
   }
 
-  // Navigation handler for Next.js routing
-  const handleNavigation = (path: string) => {
-    window.location.href = path
-  }
+  // ============================================================================
+  // SECTION 6: RENDER
+  // ============================================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800">
-      {/* ========== NAVIGATION SECTION ========== */}
-      <div className="bg-slate-900/50 backdrop-blur border-b border-slate-700/50">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-medium text-white tracking-wide">CLARENCE</h1>
-              <p className="text-xs text-slate-400 font-light tracking-wider">The Honest Broker</p>
-            </div>
-            <button 
-              onClick={() => handleNavigation('/how-it-works')}
-              className="text-slate-300 hover:text-white text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              ← How CLARENCE Works
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-50">
+      {/* ================================================================== */}
+      {/* SECTION 7: NAVIGATION HEADER */}
+      {/* Matches Contract Studio and Landing Page header */}
+      {/* ================================================================== */}
+      <header className="bg-slate-800 text-white">
+        <div className="container mx-auto px-6">
+          <nav className="flex justify-between items-center h-16">
+            {/* Logo & Brand */}
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">C</span>
+              </div>
+              <div>
+                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                <div className="text-xs text-slate-400">The Honest Broker</div>
+              </div>
+            </Link>
 
-      {/* ========== HERO SECTION ========== */}
-      <div className="container mx-auto px-6 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-medium text-white mb-6 animate-fade-in">
-            The 6-Phase Negotiation Process
-          </h1>
-          <p className="text-lg text-slate-300 max-w-3xl mx-auto font-light leading-relaxed animate-fade-in" style={{ animationDelay: '0.2s', animationFillMode: 'both' }}>
-            CLARENCE guides parties through a structured negotiation framework from initial deal profiling to contract execution.
-          </p>
-        </div>
-
-        {/* ========== PHASE TIMELINE ========== */}
-        <div className="max-w-6xl mx-auto mb-12">
-          <div className="flex justify-between items-center relative">
-            {/* Progress Line Background */}
-            <div className="absolute top-8 left-0 right-0 h-1 bg-slate-700/50 z-0" />
-            
-            {/* Progress Line Active (if phase selected) */}
-            {selectedPhase && (
-              <div 
-                className="absolute top-8 left-0 h-1 bg-slate-500 z-0 transition-all duration-500"
-                style={{ width: `${((selectedPhase - 1) / 5) * 100}%` }}
-              />
-            )}
-            
-            {/* Phase Circle Buttons */}
-            {phases.map((phase) => (
-              <button
-                key={phase.number}
-                onClick={() => handlePhaseIndicatorClick(phase.number)}
-                className="relative z-10 group"
+            {/* Navigation Links */}
+            <div className="flex items-center gap-6">
+              <Link
+                href="/how-it-works"
+                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
               >
-                <div className={`
-                  w-16 h-16 rounded-full flex items-center justify-center font-medium text-lg
-                  transition-all duration-300 transform hover:scale-110
-                  ${selectedPhase === phase.number && expandedPhases.has(phase.number)
-                    ? 'bg-slate-600 text-white shadow-lg shadow-slate-600/30 scale-110' 
-                    : selectedPhase && selectedPhase > phase.number
-                    ? 'bg-slate-700/70 text-slate-300'
-                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'
-                  }
-                `}>
-                  {phase.number}
-                </div>
-                <div className="absolute top-20 left-1/2 transform -translate-x-1/2 w-32 text-center">
-                  <p className="text-xs text-slate-400 font-light whitespace-nowrap">
-                    {phase.subtitle.split(' ').slice(0, 2).join(' ')}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ========== PHASE CARDS LIST ========== */}
-        <div className="max-w-4xl mx-auto space-y-4">
-          {phases.map((phase) => (
-            <div 
-              key={phase.number}
-              className={`bg-slate-800/50 backdrop-blur rounded-xl border overflow-hidden transition-all duration-300 ${
-                expandedPhases.has(phase.number) 
-                  ? 'border-slate-600/70 shadow-lg' 
-                  : 'border-slate-700/50'
-              }`}
-            >
-              {/* Phase Header - Always Visible */}
-              <button
-                onClick={() => togglePhaseExpansion(phase.number)}
-                className="w-full p-6 flex items-center justify-between hover:bg-slate-800/70 transition-colors"
+                How It Works
+              </Link>
+              <Link
+                href="/6-phases"
+                className="text-white text-sm font-medium transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-slate-700/30 rounded-xl flex items-center justify-center">
-                    <span className="text-2xl font-medium text-slate-400">
-                      {phase.number}
-                    </span>
-                  </div>
-                  <div className="text-left">
-                    <h2 className="text-xl font-medium text-white mb-1">
-                      {phase.title}
-                    </h2>
-                    <p className="text-base text-slate-400 font-light">
-                      {phase.subtitle}
-                    </p>
-                  </div>
-                </div>
-                <div 
-                  className="text-slate-500 text-lg transition-transform duration-300"
-                  style={{ transform: expandedPhases.has(phase.number) ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                >
-                  ▼
-                </div>
-              </button>
+                The 6 Phases
+              </Link>
 
-              {/* Phase Details - Expandable */}
-              {expandedPhases.has(phase.number) && (
-                <div className="px-6 pb-6 border-t border-slate-700/50 animate-fade-in">
-                  <div className="pt-6 space-y-3 mb-6">
-                    {phase.description.map((desc, index) => (
-                      <div key={index} className="flex items-start gap-3">
-                        <span className="text-slate-500 mt-1 text-sm">▸</span>
-                        <p className="text-slate-300 leading-relaxed text-sm font-light">{desc}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="bg-slate-700/30 rounded-lg p-5 border border-slate-600/30">
-                    <h3 className="text-base font-medium text-slate-400 mb-2">Key Outcome</h3>
-                    <p className="text-slate-300 text-sm font-light">{phase.keyOutcome}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* ========== SELECTED PHASE NAVIGATION (Bottom Controls) ========== */}
-        {selectedPhase && expandedPhases.has(selectedPhase) && (
-          <div className="max-w-4xl mx-auto mt-8">
-            <div className="bg-slate-900/50 backdrop-blur rounded-xl border border-slate-600/50 p-6">
-              <div className="flex justify-between items-center">
-                <button
-                  onClick={() => {
-                    const prevPhase = Math.max(1, selectedPhase - 1)
-                    handlePhaseIndicatorClick(prevPhase)
-                  }}
-                  disabled={selectedPhase === 1}
-                  className={`
-                    px-5 py-2.5 rounded-lg font-medium text-sm transition-all
-                    ${selectedPhase === 1 
-                      ? 'bg-slate-800/30 text-slate-600 cursor-not-allowed' 
-                      : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700/70 hover:text-white'
-                    }
-                  `}
+              {/* Sign In Buttons */}
+              <div className="flex items-center gap-3 ml-2">
+                <Link
+                  href="/auth/login"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
                 >
-                  ← Previous Phase
-                </button>
-                
-                <span className="text-slate-400 text-sm">
-                  Viewing Phase {selectedPhase} of 6
-                </span>
-                
-                <button
-                  onClick={() => {
-                    const nextPhase = Math.min(6, selectedPhase + 1)
-                    handlePhaseIndicatorClick(nextPhase)
-                  }}
-                  disabled={selectedPhase === 6}
-                  className={`
-                    px-5 py-2.5 rounded-lg font-medium text-sm transition-all
-                    ${selectedPhase === 6 
-                      ? 'bg-slate-800/30 text-slate-600 cursor-not-allowed' 
-                      : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white'
-                    }
-                  `}
+                  Customer Sign In
+                </Link>
+                <a
+                  href="https://www.clarencelegal.ai/provider"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
                 >
-                  Next Phase →
-                </button>
+                  Provider Sign In
+                </a>
               </div>
             </div>
-          </div>
-        )}
+          </nav>
+        </div>
+      </header>
 
-        {/* ========== BOTTOM NAVIGATION ========== */}
-        <div className="mt-16 pt-8 border-t border-slate-700/50">
-          <div className="flex justify-center gap-8">
-            <button 
-              onClick={() => handleNavigation('/')} 
-              className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
-            >
-              Home
-            </button>
-            <button 
-              onClick={() => handleNavigation('/how-it-works')} 
-              className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
-            >
-              How It Works
-            </button>
-            <button 
-              onClick={() => handleNavigation('/terms')} 
-              className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
-            >
-              Terms
-            </button>
-            <button 
-              onClick={() => handleNavigation('/privacy')} 
-              className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
-            >
-              Privacy
-            </button>
+      {/* ================================================================== */}
+      {/* SECTION 8: HERO SECTION */}
+      {/* ================================================================== */}
+      <section className="bg-white border-b border-slate-200">
+        <div className="container mx-auto px-6 py-16">
+          <div className="max-w-3xl mx-auto text-center">
+            <h1 className="text-4xl font-bold text-slate-800 mb-4">
+              The 6-Phase Negotiation Process
+            </h1>
+            <p className="text-lg text-slate-600 leading-relaxed">
+              CLARENCE guides parties through a structured negotiation framework—from initial
+              deal profiling through to contract execution. Each phase builds on the last,
+              creating momentum toward agreement.
+            </p>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* SECTION 9: PHASE TIMELINE */}
+      {/* Interactive timeline with color-coded phases */}
+      {/* ================================================================== */}
+      <section className="bg-slate-100 border-b border-slate-200 py-8">
+        <div className="container mx-auto px-6">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-center justify-between relative">
+              {/* Connecting Line */}
+              <div className="absolute top-6 left-8 right-8 h-1 bg-slate-300"></div>
+
+              {/* Progress Line */}
+              <div
+                className="absolute top-6 left-8 h-1 bg-gradient-to-r from-emerald-500 via-blue-500 to-amber-500 transition-all duration-500"
+                style={{ width: `${Math.max(0, ((selectedPhase - 1) / 5) * (100 - 8))}%` }}
+              ></div>
+
+              {/* Phase Indicators */}
+              {phases.map((phase) => {
+                const colors = getPhaseColors(phase.color, selectedPhase === phase.number)
+                return (
+                  <button
+                    key={phase.number}
+                    onClick={() => handlePhaseIndicatorClick(phase.number)}
+                    className="relative z-10 group flex flex-col items-center"
+                  >
+                    <div className={`
+                      w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg
+                      transition-all duration-300 transform group-hover:scale-110 border-4 border-white shadow-md
+                      ${colors.bg} ${colors.text}
+                      ${selectedPhase === phase.number ? 'ring-4 ring-offset-2 ' + colors.ring : ''}
+                    `}>
+                      {phase.number}
+                    </div>
+                    <div className="mt-3 text-center">
+                      <p className={`text-xs font-medium transition-colors ${selectedPhase === phase.number ? 'text-slate-800' : 'text-slate-500'
+                        }`}>
+                        {phase.subtitle.split(' ').slice(0, 2).join(' ')}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* SECTION 10: PHASE CARDS */}
+      {/* Expandable cards for each phase */}
+      {/* ================================================================== */}
+      <section className="py-12">
+        <div className="container mx-auto px-6">
+          <div className="max-w-4xl mx-auto space-y-4">
+            {phases.map((phase) => {
+              const colors = getPhaseColors(phase.color, false)
+              const isExpanded = expandedPhases.has(phase.number)
+
+              return (
+                <div
+                  key={phase.number}
+                  id={`phase-${phase.number}`}
+                  className={`
+                    bg-white rounded-xl border overflow-hidden transition-all duration-300
+                    ${isExpanded
+                      ? 'border-slate-300 shadow-lg'
+                      : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                    }
+                  `}
+                >
+                  {/* Phase Header - Always Visible */}
+                  <button
+                    onClick={() => togglePhaseExpansion(phase.number)}
+                    className="w-full p-6 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      {/* Phase Number Badge */}
+                      <div className={`
+                        w-14 h-14 rounded-xl flex items-center justify-center
+                        ${colors.bg}
+                      `}>
+                        <span className={`text-xl font-bold ${colors.text}`}>
+                          {phase.number}
+                        </span>
+                      </div>
+
+                      {/* Phase Title */}
+                      <div className="text-left">
+                        <h2 className="text-lg font-semibold text-slate-800">
+                          {phase.title}: {phase.subtitle}
+                        </h2>
+                        <p className="text-sm text-slate-500 mt-1">
+                          {phase.keyOutcome}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Expand/Collapse Icon */}
+                    <div className={`
+                      w-8 h-8 rounded-full flex items-center justify-center
+                      ${isExpanded ? 'bg-slate-200' : 'bg-slate-100'}
+                      transition-all duration-300
+                    `}>
+                      <svg
+                        className={`w-5 h-5 text-slate-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </button>
+
+                  {/* Phase Details - Expandable */}
+                  {isExpanded && (
+                    <div className="px-6 pb-6 border-t border-slate-100">
+                      <div className="pt-6">
+                        {/* Description Points */}
+                        <div className="space-y-3 mb-6">
+                          {phase.description.map((desc, index) => (
+                            <div key={index} className="flex items-start gap-3">
+                              <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${phase.color === 'emerald' ? 'bg-emerald-500' :
+                                  phase.color === 'blue' ? 'bg-blue-500' : 'bg-amber-500'
+                                }`}></div>
+                              <p className="text-slate-600 leading-relaxed">{desc}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Key Outcome Box */}
+                        <div className={`rounded-xl p-5 border ${colors.accent} ${colors.border}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className={`w-5 h-5 ${phase.color === 'emerald' ? 'text-emerald-600' :
+                                phase.color === 'blue' ? 'text-blue-600' : 'text-amber-600'
+                              }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <h3 className="text-sm font-semibold text-slate-700">Key Outcome</h3>
+                          </div>
+                          <p className="text-slate-600">{phase.keyOutcome}</p>
+                        </div>
+
+                        {/* Navigation Buttons */}
+                        <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-100">
+                          <button
+                            onClick={() => phase.number > 1 && handlePhaseIndicatorClick(phase.number - 1)}
+                            disabled={phase.number === 1}
+                            className={`
+                              flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                              ${phase.number === 1
+                                ? 'text-slate-300 cursor-not-allowed'
+                                : 'text-slate-600 hover:bg-slate-100'
+                              }
+                            `}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Previous Phase
+                          </button>
+
+                          <span className="text-sm text-slate-400">
+                            Phase {phase.number} of 6
+                          </span>
+
+                          <button
+                            onClick={() => phase.number < 6 && handlePhaseIndicatorClick(phase.number + 1)}
+                            disabled={phase.number === 6}
+                            className={`
+                              flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                              ${phase.number === 6
+                                ? 'text-slate-300 cursor-not-allowed'
+                                : 'text-blue-600 hover:bg-blue-50'
+                              }
+                            `}
+                          >
+                            Next Phase
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* SECTION 11: CTA SECTION */}
+      {/* ================================================================== */}
+      <section className="py-16 bg-white border-t border-slate-200">
+        <div className="container mx-auto px-6 text-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">
+            Ready to Start Your Negotiation?
+          </h2>
+          <p className="text-slate-600 mb-8 max-w-xl mx-auto">
+            Experience the structured, data-driven approach to contract negotiation.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href="/auth/signup"
+              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all shadow-lg shadow-blue-600/25"
+            >
+              Get Started
+            </Link>
+            <Link
+              href="/how-it-works"
+              className="px-8 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition-all"
+            >
+              Learn How It Works
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ================================================================== */}
+      {/* SECTION 12: FOOTER */}
+      {/* ================================================================== */}
+      <footer className="bg-slate-900 text-slate-400 py-12">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            {/* Brand */}
+            <div className="flex items-center gap-3 mb-6 md:mb-0">
+              <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">C</span>
+              </div>
+              <span className="text-white font-medium">CLARENCE</span>
+            </div>
+
+            {/* Links */}
+            <div className="flex gap-8 text-sm">
+              <Link href="/" className="hover:text-white transition-colors">Home</Link>
+              <Link href="/how-it-works" className="hover:text-white transition-colors">How It Works</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 mt-8 pt-8 text-center text-sm">
+            <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

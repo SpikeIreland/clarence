@@ -39,7 +39,7 @@ export default function Home() {
                 How It Works
               </a>
               <a
-                href="/6-phases"
+                href="/phases"
                 className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
               >
                 The 6 Phases
@@ -230,7 +230,7 @@ export default function Home() {
           {/* Learn More CTA */}
           <div className="text-center mt-12">
             <a
-              href="/6-phases"
+              href="/phases"
               className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors"
             >
               Learn about each phase
@@ -368,7 +368,7 @@ export default function Home() {
             {/* Links */}
             <div className="flex gap-8 text-sm">
               <a href="/how-it-works" className="hover:text-white transition-colors">How It Works</a>
-              <a href="/6-phases" className="hover:text-white transition-colors">The 6 Phases</a>
+              <a href="/phases" className="hover:text-white transition-colors">The 6 Phases</a>
               <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
               <a href="/terms" className="hover:text-white transition-colors">Terms</a>
             </div>
