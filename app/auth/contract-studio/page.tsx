@@ -26,6 +26,38 @@ interface Session {
     status: string
 }
 
+// ============================================================================
+// SECTION 1A: PROVIDER BID INTERFACE (MULTI-PROVIDER SUPPORT)
+// ============================================================================
+
+interface ProviderBid {
+    bidId: string
+    providerId: string | null
+    providerCompany: string
+    providerContactName: string | null
+    providerContactEmail: string
+    status: string
+    intakeComplete: boolean
+    questionnaireComplete: boolean
+    invitedAt: string
+    submittedAt: string | null
+    isCurrentProvider: boolean
+}
+
+// API response type for provider bids
+interface ApiProviderBidResponse {
+    bid_id: string
+    provider_id: string | null
+    provider_company: string
+    provider_contact_name: string | null
+    provider_contact_email: string
+    status: string
+    intake_complete: boolean
+    questionnaire_complete: boolean
+    invited_at: string
+    submitted_at: string | null
+}
+
 interface ContractClause {
     positionId: string
     clauseId: string
@@ -674,6 +706,26 @@ function ContractStudioContent() {
     const [draftStyle, setDraftStyle] = useState<'balanced' | 'customer' | 'provider'>('balanced')
     const [lastDraftedClauseId, setLastDraftedClauseId] = useState<string | null>(null)
 
+    // ============================================================================
+    // SECTION 6E: MULTI-PROVIDER STATE (NEW)
+    // ============================================================================
+
+    const [availableProviders, setAvailableProviders] = useState<ProviderBid[]>([])
+    const [showProviderDropdown, setShowProviderDropdown] = useState(false)
+    const [isLoadingProviders, setIsLoadingProviders] = useState(false)
+    const providerDropdownRef = useRef<HTMLDivElement>(null)
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (providerDropdownRef.current && !providerDropdownRef.current.contains(event.target as Node)) {
+                setShowProviderDropdown(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
     const chatEndRef = useRef<HTMLDivElement>(null)
 
     // ============================================================================
@@ -996,6 +1048,44 @@ function ContractStudioContent() {
             loadClarenceWelcome(session.sessionId)
         }
     }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome])
+
+    // ============================================================================
+    // SECTION 7D2: LOAD AVAILABLE PROVIDERS FOR MULTI-PROVIDER DROPDOWN (NEW)
+    // ============================================================================
+
+    const loadAvailableProviders = useCallback(async (sessionId: string, currentProviderCompany: string) => {
+        setIsLoadingProviders(true)
+        try {
+            const response = await fetch(`${API_BASE}/provider-bids-api?session_id=${sessionId}`)
+            if (response.ok) {
+                const data = await response.json()
+                const providers: ProviderBid[] = (data.bids || []).map((bid: ApiProviderBidResponse) => ({
+                    bidId: bid.bid_id,
+                    providerId: bid.provider_id,
+                    providerCompany: bid.provider_company || 'Unknown Provider',
+                    providerContactName: bid.provider_contact_name,
+                    providerContactEmail: bid.provider_contact_email,
+                    status: bid.status,
+                    intakeComplete: bid.intake_complete || false,
+                    questionnaireComplete: bid.questionnaire_complete || false,
+                    invitedAt: bid.invited_at,
+                    submittedAt: bid.submitted_at,
+                    isCurrentProvider: bid.provider_company === currentProviderCompany
+                }))
+                setAvailableProviders(providers)
+            }
+        } catch (error) {
+            console.error('Failed to load available providers:', error)
+        } finally {
+            setIsLoadingProviders(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        if (session?.sessionId && userInfo?.role === 'customer') {
+            loadAvailableProviders(session.sessionId, session.providerCompany)
+        }
+    }, [session?.sessionId, session?.providerCompany, userInfo?.role, loadAvailableProviders])
 
     // ============================================================================
     // SECTION 7E: AUTO-SCROLL CHAT TO BOTTOM (NEW)
@@ -1770,15 +1860,110 @@ Format it as it would appear in a real contract.`
                         </div>
                     </div>
 
-                    {/* Right: Other Party Status */}
-                    <div className="flex items-center gap-3">
-                        <div className="text-right">
-                            <div className="text-xs text-slate-400">Other Party</div>
-                            <div className="text-sm">
-                                <span className="font-medium">{otherCompany}</span>
-                                <span className="text-xs text-slate-500 ml-2">({otherRole})</span>
+                    {/* Right: Other Party Status / Provider Selector */}
+                    <div className="flex items-center gap-3 relative">
+                        {/* Show provider dropdown for customers */}
+                        {isCustomer ? (
+                            <div className="relative" ref={providerDropdownRef}>
+                                <button
+                                    onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                                    className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg transition"
+                                >
+                                    <div className="text-right">
+                                        <div className="text-xs text-slate-400">Provider</div>
+                                        <div className="text-sm font-medium text-white">{otherCompany}</div>
+                                    </div>
+                                    <svg className={`w-4 h-4 text-slate-400 transition-transform ${showProviderDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {/* Dropdown Menu */}
+                                {showProviderDropdown && (
+                                    <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden">
+                                        <div className="p-3 bg-slate-50 border-b border-slate-200">
+                                            <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Providers on this Deal</div>
+                                        </div>
+
+                                        {/* Provider List */}
+                                        <div className="max-h-64 overflow-y-auto">
+                                            {availableProviders.length > 0 ? (
+                                                availableProviders.map((provider) => (
+                                                    <button
+                                                        key={provider.bidId}
+                                                        onClick={() => {
+                                                            // For now, just close dropdown - full switch would need backend support
+                                                            setShowProviderDropdown(false)
+                                                            if (!provider.isCurrentProvider) {
+                                                                // TODO: Switch to different provider's data
+                                                                alert(`Switching to ${provider.providerCompany} - coming soon!`)
+                                                            }
+                                                        }}
+                                                        className={`w-full px-4 py-3 text-left hover:bg-slate-50 transition border-b border-slate-100 last:border-b-0 ${provider.isCurrentProvider ? 'bg-emerald-50' : ''
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <div className="font-medium text-slate-800">{provider.providerCompany}</div>
+                                                                <div className="text-xs text-slate-500">{provider.providerContactEmail}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {provider.isCurrentProvider && (
+                                                                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Current</span>
+                                                                )}
+                                                                <span className={`text-xs px-2 py-0.5 rounded-full ${provider.questionnaireComplete
+                                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                                        : provider.intakeComplete
+                                                                            ? 'bg-amber-100 text-amber-700'
+                                                                            : 'bg-slate-100 text-slate-600'
+                                                                    }`}>
+                                                                    {provider.questionnaireComplete
+                                                                        ? 'Ready'
+                                                                        : provider.intakeComplete
+                                                                            ? 'Intake Done'
+                                                                            : 'Invited'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className="px-4 py-6 text-center text-slate-500 text-sm">
+                                                    {isLoadingProviders ? 'Loading providers...' : 'No providers invited yet'}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Invite New Provider */}
+                                        <div className="p-3 bg-slate-50 border-t border-slate-200">
+                                            <button
+                                                onClick={() => {
+                                                    setShowProviderDropdown(false)
+                                                    router.push(`/auth/invite-provider?session_id=${session.sessionId}`)
+                                                }}
+                                                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                </svg>
+                                                Invite New Provider
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
+                        ) : (
+                            /* Show simple other party display for providers */
+                            <div className="text-right">
+                                <div className="text-xs text-slate-400">Other Party</div>
+                                <div className="text-sm">
+                                    <span className="font-medium">{otherCompany}</span>
+                                    <span className="text-xs text-slate-500 ml-2">({otherRole})</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Online Status Indicator */}
                         <div className="flex flex-col items-center">
                             <div className={`w-3 h-3 rounded-full ${otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
                             <span className={`text-xs mt-0.5 ${otherPartyStatus.isOnline ? 'text-emerald-400' : 'text-slate-500'}`}>
