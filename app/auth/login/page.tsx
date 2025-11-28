@@ -1,6 +1,7 @@
 'use client'
 import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 // ============================================================================
@@ -9,7 +10,7 @@ import { createClient } from '@/lib/supabase'
 
 function LoginLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
       <div className="text-center">
         <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
         <p className="text-slate-600">Loading...</p>
@@ -26,9 +27,9 @@ function LoginSignupContent() {
   const router = useRouter()
   const supabase = createClient()
 
-  // ========================================================================
+  // ==========================================================================
   // SECTION 3: STATE
-  // ========================================================================
+  // ==========================================================================
 
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login')
   const [loading, setLoading] = useState(false)
@@ -48,9 +49,9 @@ function LoginSignupContent() {
   const [signupCompany, setSignupCompany] = useState('')
   const signupRole = 'customer' // Customers only - providers have separate portal
 
-  // ========================================================================
+  // ==========================================================================
   // SECTION 4: VALIDATION
-  // ========================================================================
+  // ==========================================================================
 
   function validateEmail(email: string): boolean {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -95,9 +96,9 @@ function LoginSignupContent() {
     return null
   }
 
-  // ========================================================================
+  // ==========================================================================
   // SECTION 5: LOGIN HANDLER
-  // ========================================================================
+  // ==========================================================================
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -158,9 +159,9 @@ function LoginSignupContent() {
     }
   }
 
-  // ========================================================================
+  // ==========================================================================
   // SECTION 6: SIGNUP HANDLER
-  // ========================================================================
+  // ==========================================================================
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -230,254 +231,356 @@ function LoginSignupContent() {
     }
   }
 
-  // ========================================================================
+  // ==========================================================================
   // SECTION 7: RENDER
-  // ========================================================================
+  // ==========================================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo/Header */}
-        <div className="text-center mb-8">
-          <div className="inline-block">
-            <div className="text-4xl font-medium text-slate-800 mb-2">CLARENCE</div>
-            <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
-          </div>
-          <p className="text-slate-600 mt-4 text-sm">
-            {activeTab === 'login'
-              ? 'Sign in to your customer account'
-              : 'Create your customer account to get started'
-            }
-          </p>
-        </div>
-
-        {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Tabs */}
-          <div className="flex border-b border-slate-200">
-            <button
-              onClick={() => {
-                setActiveTab('login')
-                setError(null)
-                setSuccess(null)
-              }}
-              className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'login'
-                ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                }`}
-            >
-              Login
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('signup')
-                setError(null)
-                setSuccess(null)
-              }}
-              className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'signup'
-                ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                }`}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          {/* Error/Success Messages */}
-          {error && (
-            <div className="mx-6 mt-6 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="mx-6 mt-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
-              {success}
-            </div>
-          )}
-
-          {/* Login Form */}
-          {activeTab === 'login' && (
-            <form onSubmit={handleLogin} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                  placeholder="you@company.com"
-                  disabled={loading}
-                />
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* ================================================================== */}
+      {/* SECTION 8: NAVIGATION HEADER */}
+      {/* ================================================================== */}
+      <header className="bg-slate-800 text-white">
+        <div className="container mx-auto px-6">
+          <nav className="flex justify-between items-center h-16">
+            {/* Logo & Brand */}
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">C</span>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                  placeholder="••••••••"
-                  disabled={loading}
-                />
+                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                <div className="text-xs text-slate-400">The Honest Broker</div>
               </div>
+            </Link>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2"
+            {/* Navigation Links */}
+            <div className="flex items-center gap-6">
+              <Link
+                href="/how-it-works"
+                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
               >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Signing in...
-                  </>
-                ) : (
-                  'Sign In'
-                )}
-              </button>
+                How It Works
+              </Link>
+              <Link
+                href="/phases"
+                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+              >
+                The 6 Phases
+              </Link>
 
-              <div className="text-center text-sm text-slate-500">
-                Forgot password?{' '}
-                <button type="button" className="text-emerald-600 hover:underline">
-                  Reset it
+              {/* Sign In Buttons */}
+              <div className="flex items-center gap-3 ml-2">
+                <span className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg">
+                  Customer Sign In
+                </span>
+                <a
+                  href="https://www.clarencelegal.ai/provider"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Provider Sign In
+                </a>
+              </div>
+            </div>
+          </nav>
+        </div>
+      </header>
+
+      {/* ================================================================== */}
+      {/* SECTION 9: MAIN CONTENT */}
+      {/* ================================================================== */}
+      <main className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          {/* Header Text */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-slate-800 mb-2">
+              {activeTab === 'login' ? 'Welcome Back' : 'Create Your Account'}
+            </h1>
+            <p className="text-slate-600 text-sm">
+              {activeTab === 'login'
+                ? 'Sign in to your customer account to continue'
+                : 'Get started with CLARENCE contract mediation'
+              }
+            </p>
+          </div>
+
+          {/* Main Card */}
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200">
+              <button
+                onClick={() => {
+                  setActiveTab('login')
+                  setError(null)
+                  setSuccess(null)
+                }}
+                className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'login'
+                  ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('signup')
+                  setError(null)
+                  setSuccess(null)
+                }}
+                className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'signup'
+                  ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {/* Error/Success Messages */}
+            {error && (
+              <div className="mx-6 mt-6 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {error}
+              </div>
+            )}
+            {success && (
+              <div className="mx-6 mt-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 flex items-start gap-2">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {success}
+              </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 10: LOGIN FORM */}
+            {/* ============================================================ */}
+            {activeTab === 'login' && (
+              <form onSubmit={handleLogin} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="you@company.com"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="••••••••"
+                    disabled={loading}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign In'
+                  )}
                 </button>
-              </div>
-            </form>
-          )}
 
-          {/* Signup Form */}
-          {activeTab === 'signup' && (
-            <form onSubmit={handleSignup} className="p-6 space-y-4">
+                <div className="text-center text-sm text-slate-500">
+                  Forgot password?{' '}
+                  <button type="button" className="text-blue-600 hover:underline">
+                    Reset it
+                  </button>
+                </div>
+              </form>
+            )}
 
-              {/* Name Fields */}
-              <div className="grid grid-cols-2 gap-3">
+            {/* ============================================================ */}
+            {/* SECTION 11: SIGNUP FORM */}
+            {/* ============================================================ */}
+            {activeTab === 'signup' && (
+              <form onSubmit={handleSignup} className="p-6 space-y-4">
+                {/* Name Fields */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={signupFirstName}
+                      onChange={(e) => setSignupFirstName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="John"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={signupLastName}
+                      onChange={(e) => setSignupLastName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Smith"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                {/* Company */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    First Name
+                    Company Name
                   </label>
                   <input
                     type="text"
-                    value={signupFirstName}
-                    onChange={(e) => setSignupFirstName(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                    placeholder="John"
+                    value={signupCompany}
+                    onChange={(e) => setSignupCompany(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="Acme Corporation"
                     disabled={loading}
                   />
                 </div>
+
+                {/* Email */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Last Name
+                    Email Address
                   </label>
                   <input
-                    type="text"
-                    value={signupLastName}
-                    onChange={(e) => setSignupLastName(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                    placeholder="Doe"
+                    type="email"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="you@company.com"
                     disabled={loading}
                   />
                 </div>
-              </div>
 
-              {/* Company */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Company Name
-                </label>
-                <input
-                  type="text"
-                  value={signupCompany}
-                  onChange={(e) => setSignupCompany(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                  placeholder="Acme Corporation"
+                {/* Password */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={signupPassword}
+                    onChange={(e) => setSignupPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="••••••••"
+                    disabled={loading}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    value={signupConfirmPassword}
+                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="••••••••"
+                    disabled={loading}
+                  />
+                </div>
+
+                <button
+                  type="submit"
                   disabled={loading}
-                />
-              </div>
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Creating account...
+                    </>
+                  ) : (
+                    'Create Account'
+                  )}
+                </button>
 
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={signupEmail}
-                  onChange={(e) => setSignupEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                  placeholder="you@company.com"
-                  disabled={loading}
-                />
-              </div>
+                <p className="text-xs text-slate-500 text-center">
+                  By signing up, you agree to our{' '}
+                  <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link>
+                  {' '}and{' '}
+                  <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
+                </p>
+              </form>
+            )}
+          </div>
 
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={signupPassword}
-                  onChange={(e) => setSignupPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                  placeholder="••••••••"
-                  disabled={loading}
-                />
-                <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
-              </div>
-
-              {/* Confirm Password */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Confirm Password
-                </label>
-                <input
-                  type="password"
-                  value={signupConfirmPassword}
-                  onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                  placeholder="••••••••"
-                  disabled={loading}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2"
+          {/* Provider Portal Link */}
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
+            <p className="text-sm text-slate-700">
+              Are you a service provider?{' '}
+              <a
+                href="https://www.clarencelegal.ai/provider"
+                className="text-blue-600 font-medium hover:underline"
               >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Creating account...
-                  </>
-                ) : (
-                  'Create Account'
-                )}
-              </button>
-
-              <p className="text-xs text-slate-500 text-center">
-                By signing up, you agree to our Terms of Service and Privacy Policy
-              </p>
-            </form>
-          )}
+                Access the Provider Portal →
+              </a>
+            </p>
+          </div>
         </div>
+      </main>
 
-        {/* Footer */}
-        <div className="text-center mt-6 text-sm text-slate-500">
-          © {new Date().getFullYear()} CLARENCE by Spike Island Studios
+      {/* ================================================================== */}
+      {/* SECTION 12: FOOTER */}
+      {/* ================================================================== */}
+      <footer className="bg-slate-900 text-slate-400 py-8">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            {/* Brand */}
+            <div className="flex items-center gap-3 mb-4 md:mb-0">
+              <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">C</span>
+              </div>
+              <span className="text-white font-medium">CLARENCE</span>
+            </div>
+
+            {/* Links */}
+            <div className="flex gap-8 text-sm">
+              <Link href="/" className="hover:text-white transition-colors">Home</Link>
+              <Link href="/how-it-works" className="hover:text-white transition-colors">How It Works</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 mt-6 pt-6 text-center text-sm">
+            <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
+          </div>
         </div>
-      </div>
+      </footer>
     </div>
   )
 }
 
 // ============================================================================
-// SECTION 8: DEFAULT EXPORT WITH SUSPENSE
+// SECTION 13: DEFAULT EXPORT WITH SUSPENSE
 // ============================================================================
 
 export default function LoginPage() {
