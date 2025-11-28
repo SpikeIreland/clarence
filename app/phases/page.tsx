@@ -204,7 +204,7 @@ export default function PhasesPage() {
                 How It Works
               </Link>
               <Link
-                href="/6-phases"
+                href="/phases"
                 className="text-white text-sm font-medium transition-colors"
               >
                 The 6 Phases
