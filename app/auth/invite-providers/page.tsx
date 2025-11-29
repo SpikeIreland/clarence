@@ -468,7 +468,7 @@ function InviteProvidersContent() {
                 {/* Action Buttons */}
                 <div className="flex justify-between items-center">
                     <button
-                        onClick={() => router.push('/auth/contract-dashboard')}
+                        onClick={() => router.push('/auth/contracts-dashboard')}
                         className="px-6 py-3 text-slate-600 hover:text-slate-800 transition-all"
                     >
                         ← Back to Dashboard
