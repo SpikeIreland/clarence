@@ -1,4 +1,9 @@
 'use client'
+
+// ============================================================================
+// SECTION 1: IMPORTS
+// ============================================================================
+
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -8,8 +13,9 @@ import {
 } from 'recharts'
 
 // ============================================================================
-// SECTION 1: INTERFACES
+// SECTION 2: INTERFACES
 // ============================================================================
+
 interface UserInfo {
   firstName?: string
   lastName?: string
@@ -41,8 +47,9 @@ interface ChatMessage {
 }
 
 // ============================================================================
-// SECTION 2: CONSTANTS
+// SECTION 3: CONSTANTS
 // ============================================================================
+
 const phases: Record<number, { name: string; description: string; color: string }> = {
   1: { name: 'Preliminary', description: 'Deal profile & leverage assessment', color: '#64748b' },
   2: { name: 'Foundation', description: 'Contract foundation', color: '#94a3b8' },
@@ -79,15 +86,17 @@ const dealSizeCategories = [
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 // ============================================================================
-// SECTION 3: MAIN COMPONENT
+// SECTION 4: MAIN COMPONENT
 // ============================================================================
+
 export default function ContractsDashboard() {
   const router = useRouter()
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  // ============================================================================
-  // SECTION 4: STATE DECLARATIONS
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 5: STATE DECLARATIONS
+  // ==========================================================================
+
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,10 +107,12 @@ export default function ContractsDashboard() {
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [chatMinimized, setChatMinimized] = useState(false)
   const [isCreatingContract, setIsCreatingContract] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
 
-  // ============================================================================
-  // SECTION 5: DATA LOADING FUNCTIONS
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 6: DATA LOADING FUNCTIONS
+  // ==========================================================================
+
   const loadUserInfo = useCallback(async () => {
     const auth = localStorage.getItem('clarence_auth')
     if (!auth) {
@@ -140,9 +151,21 @@ export default function ContractsDashboard() {
     }
   }
 
-  // ============================================================================
-  // SECTION 6: CREATE NEW CONTRACT FUNCTION
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 7: SIGN OUT FUNCTION
+  // ==========================================================================
+
+  function handleSignOut() {
+    localStorage.removeItem('clarence_auth')
+    localStorage.removeItem('currentSessionId')
+    localStorage.removeItem('currentSession')
+    router.push('/')
+  }
+
+  // ==========================================================================
+  // SECTION 8: CREATE NEW CONTRACT FUNCTION
+  // ==========================================================================
+
   async function createNewContract() {
     if (isCreatingContract) return
 
@@ -192,9 +215,10 @@ export default function ContractsDashboard() {
     }
   }
 
-  // ============================================================================
-  // SECTION 7: METRICS CALCULATION
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 9: METRICS CALCULATION
+  // ==========================================================================
+
   const getMetricsData = () => {
     const active = sessions.filter(s => s.status !== 'completed').length
     const completed = sessions.filter(s => s.status === 'completed').length
@@ -249,9 +273,10 @@ export default function ContractsDashboard() {
     }
   }
 
-  // ============================================================================
-  // SECTION 8: NAVIGATION FUNCTIONS
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 10: NAVIGATION FUNCTIONS
+  // ==========================================================================
+
   function continueWithClarence(sessionId?: string) {
     if (sessionId) {
       localStorage.setItem('currentSessionId', sessionId)
@@ -296,22 +321,23 @@ export default function ContractsDashboard() {
     }
   }
 
-  // ============================================================================
-  // SECTION 9: UI HELPER FUNCTIONS
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 11: UI HELPER FUNCTIONS
+  // ==========================================================================
+
   function getStatusBadgeClass(status: string) {
     const statusClasses: Record<string, string> = {
-      'created': 'bg-yellow-50 text-yellow-700',
-      'initiated': 'bg-yellow-50 text-yellow-700',
-      'customer_intake_complete': 'bg-blue-50 text-blue-700',
-      'customer_onboarding_complete': 'bg-indigo-50 text-indigo-700',
-      'providers_invited': 'bg-purple-50 text-purple-700',
+      'created': 'bg-amber-100 text-amber-700',
+      'initiated': 'bg-amber-100 text-amber-700',
+      'customer_intake_complete': 'bg-blue-100 text-blue-700',
+      'customer_onboarding_complete': 'bg-indigo-100 text-indigo-700',
+      'providers_invited': 'bg-purple-100 text-purple-700',
       'assessment_complete': 'bg-slate-100 text-slate-700',
-      'completed': 'bg-green-50 text-green-700',
-      'provider_matched': 'bg-purple-50 text-purple-700',
-      'mediation_pending': 'bg-orange-50 text-orange-700',
-      'negotiation_active': 'bg-indigo-50 text-indigo-700',
-      'in_progress': 'bg-indigo-50 text-indigo-700'
+      'completed': 'bg-emerald-100 text-emerald-700',
+      'provider_matched': 'bg-purple-100 text-purple-700',
+      'mediation_pending': 'bg-orange-100 text-orange-700',
+      'negotiation_active': 'bg-blue-100 text-blue-700',
+      'in_progress': 'bg-blue-100 text-blue-700'
     }
     return statusClasses[status] || 'bg-slate-100 text-slate-700'
   }
@@ -340,7 +366,7 @@ export default function ContractsDashboard() {
     if (status === 'completed') {
       return {
         text: '✓ Contract Completed',
-        className: 'bg-slate-400 cursor-not-allowed text-white',
+        className: 'bg-slate-300 cursor-not-allowed text-slate-500',
         disabled: true,
         action: () => { }
       }
@@ -350,7 +376,7 @@ export default function ContractsDashboard() {
     if (status === 'created' || status === 'initiated') {
       return {
         text: 'Continue Setup →',
-        className: 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white',
+        className: 'bg-emerald-600 hover:bg-emerald-700 text-white',
         disabled: false,
         action: () => router.push(`/auth/customer-requirements?session_id=${session.sessionId}`)
       }
@@ -359,7 +385,7 @@ export default function ContractsDashboard() {
     if (status === 'customer_intake_complete') {
       return {
         text: 'Complete Questionnaire →',
-        className: 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white',
+        className: 'bg-blue-600 hover:bg-blue-700 text-white',
         disabled: false,
         action: () => router.push(`/auth/questionnaire?session_id=${session.sessionId}`)
       }
@@ -368,7 +394,7 @@ export default function ContractsDashboard() {
     if (status === 'customer_onboarding_complete') {
       return {
         text: 'Invite Providers →',
-        className: 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white',
+        className: 'bg-purple-600 hover:bg-purple-700 text-white',
         disabled: false,
         action: () => router.push(`/auth/invite-providers?session_id=${session.sessionId}`)
       }
@@ -377,7 +403,7 @@ export default function ContractsDashboard() {
     if (status === 'providers_invited') {
       return {
         text: 'View Provider Status',
-        className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
+        className: 'bg-slate-600 hover:bg-slate-700 text-white',
         disabled: false,
         action: () => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
       }
@@ -390,30 +416,31 @@ export default function ContractsDashboard() {
           text: status === 'assessment_complete'
             ? 'Review Assessment'
             : 'Start Phase 1: Assessment',
-          className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
+          className: 'bg-slate-600 hover:bg-slate-700 text-white',
           disabled: false,
           action: () => navigateToPhase(session)
         }
       case 2:
         return {
           text: 'Continue Phase 2: Foundation',
-          className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
+          className: 'bg-slate-600 hover:bg-slate-700 text-white',
           disabled: false,
           action: () => navigateToPhase(session)
         }
       default:
         return {
           text: 'Open Contract Studio',
-          className: 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white',
+          className: 'bg-blue-600 hover:bg-blue-700 text-white',
           disabled: false,
           action: () => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
         }
     }
   }
 
-  // ============================================================================
-  // SECTION 10: CHAT FUNCTIONS
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 12: CHAT FUNCTIONS
+  // ==========================================================================
+
   async function sendChatMessage() {
     if (!chatInput.trim() || isChatLoading) return
 
@@ -479,9 +506,10 @@ export default function ContractsDashboard() {
     }
   }
 
-  // ============================================================================
-  // SECTION 11: EFFECTS
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 13: EFFECTS
+  // ==========================================================================
+
   useEffect(() => {
     if (showChatOverlay && chatMessages.length === 0) {
       const welcomeMessage: ChatMessage = {
@@ -503,60 +531,155 @@ export default function ContractsDashboard() {
     loadSessions()
   }, [loadUserInfo])
 
-  // ============================================================================
-  // SECTION 12: METRICS DATA
-  // ============================================================================
+  // Close user menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element
+      if (showUserMenu && !target.closest('.user-menu-container')) {
+        setShowUserMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showUserMenu])
+
+  // ==========================================================================
+  // SECTION 14: METRICS DATA
+  // ==========================================================================
+
   const metrics = getMetricsData()
 
-  // ============================================================================
-  // SECTION 13: RENDER - NAVIGATION BAR
-  // ============================================================================
+  // ==========================================================================
+  // SECTION 15: RENDER
+  // ==========================================================================
+
   return (
     <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white shadow-sm border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <Link href="/" className="flex items-center">
-                <div>
-                  <div className="text-2xl font-medium text-slate-700">CLARENCE</div>
-                  <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
-                </div>
-              </Link>
-              <span className="ml-4 text-slate-600 text-sm">Contract Dashboard</span>
+      {/* ================================================================== */}
+      {/* SECTION 16: NAVIGATION HEADER */}
+      {/* Consistent with other pages, adapted for logged-in users */}
+      {/* ================================================================== */}
+      <header className="bg-slate-800 text-white">
+        <div className="container mx-auto px-6">
+          <nav className="flex justify-between items-center h-16">
+            {/* Logo & Brand */}
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">C</span>
+              </div>
+              <div>
+                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                <div className="text-xs text-slate-400">The Honest Broker</div>
+              </div>
+            </Link>
+
+            {/* Center: Current Location */}
+            <div className="hidden md:flex items-center gap-2">
+              <span className="text-slate-400 text-sm">Dashboard</span>
+              <span className="text-slate-600">|</span>
+              <span className="text-emerald-400 text-sm font-medium">{userInfo?.company || 'Your Company'}</span>
             </div>
+
+            {/* Right: User Menu */}
             <div className="flex items-center gap-4">
+              {/* CLARENCE Chat Button */}
               <button
                 onClick={() => setShowChatOverlay(true)}
-                className="bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all"
+                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-colors"
               >
-                💬 CLARENCE Chat
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
+                </svg>
+                Ask CLARENCE
               </button>
-            </div>
-          </div>
-        </div>
-      </nav>
 
-      {/* ============================================================================ */}
-      {/* SECTION 14: MAIN CONTENT */}
-      {/* ============================================================================ */}
+              {/* User Dropdown */}
+              <div className="relative user-menu-container">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                >
+                  <div className="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                    {userInfo?.firstName?.[0]}{userInfo?.lastName?.[0]}
+                  </div>
+                  <span className="hidden sm:block text-sm">{userInfo?.firstName}</span>
+                  <svg className={`w-4 h-4 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Dropdown Menu */}
+                {showUserMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+                    {/* User Info */}
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <div className="font-medium text-slate-800">{userInfo?.firstName} {userInfo?.lastName}</div>
+                      <div className="text-sm text-slate-500">{userInfo?.email}</div>
+                      <div className="text-xs text-slate-400 mt-1">{userInfo?.company}</div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-2">
+                      <Link
+                        href="/how-it-works"
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        How It Works
+                      </Link>
+                      <Link
+                        href="/phases"
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        The 6 Phases
+                      </Link>
+                    </div>
+
+                    {/* Sign Out */}
+                    <div className="border-t border-slate-100 pt-2">
+                      <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        Sign Out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </nav>
+        </div>
+      </header>
+
+      {/* ================================================================== */}
+      {/* SECTION 17: MAIN CONTENT */}
+      {/* ================================================================== */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        {/* Header Banner with Create Button */}
-        <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-6 rounded-xl mb-8">
+        {/* Welcome Banner with Create Button */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-8">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-2xl font-medium mb-2">
+              <h1 className="text-2xl font-bold text-slate-800 mb-1">
                 Welcome back, {userInfo?.firstName || 'User'}
               </h1>
-              <p className="text-slate-300 text-sm">
-                {userInfo?.company || 'Your Company'} | {userInfo?.role === 'admin' ? 'Administrator' : 'Customer Portal'}
+              <p className="text-slate-500 text-sm">
+                Manage your contract negotiations and track progress
               </p>
             </div>
             <button
               onClick={createNewContract}
               disabled={isCreatingContract}
-              className="bg-white/10 hover:bg-white/20 border border-white/30 text-white px-5 py-3 rounded-lg flex items-center gap-2 text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg flex items-center gap-2 text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {isCreatingContract ? (
                 <>
@@ -568,16 +691,80 @@ export default function ContractsDashboard() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
-                  Create New Contract
+                  New Contract
                 </>
               )}
             </button>
           </div>
         </div>
 
-        {/* ============================================================================ */}
-        {/* SECTION 15: COLLAPSIBLE METRICS */}
-        {/* ============================================================================ */}
+        {/* ================================================================ */}
+        {/* SECTION 18: QUICK STATS CARDS */}
+        {/* ================================================================ */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-slate-800">{sessions.length}</div>
+                <div className="text-slate-500 text-sm">Total Contracts</div>
+              </div>
+              <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {sessions.filter(s => s.status !== 'completed').length}
+                </div>
+                <div className="text-slate-500 text-sm">Active Negotiations</div>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-emerald-600">
+                  £{metrics.totalValue.toLocaleString()}
+                </div>
+                <div className="text-slate-500 text-sm">Total Deal Value</div>
+              </div>
+              <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-bold text-amber-600">
+                  {metrics.avgCompletion}%
+                </div>
+                <div className="text-slate-500 text-sm">Avg. Completion</div>
+              </div>
+              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================================================================ */}
+        {/* SECTION 19: COLLAPSIBLE METRICS */}
+        {/* ================================================================ */}
         {sessions.length > 0 && (
           <div className="mb-8">
             <button
@@ -585,7 +772,14 @@ export default function ContractsDashboard() {
               className="w-full bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all"
             >
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-medium text-slate-700">📊 Contract Analytics</h3>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
+                    <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800">Contract Analytics</h3>
+                </div>
                 <svg
                   className={`w-5 h-5 text-slate-500 transition-transform ${showMetrics ? 'rotate-180' : ''}`}
                   fill="none"
@@ -595,14 +789,6 @@ export default function ContractsDashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
-              {!showMetrics && (
-                <div className="flex gap-6 mt-3 text-sm text-slate-600">
-                  <span>Active: {sessions.filter(s => s.status !== 'completed').length}</span>
-                  <span>Completed: {sessions.filter(s => s.status === 'completed').length}</span>
-                  <span>Total Value: £{metrics.totalValue.toLocaleString()}</span>
-                  <span>Avg. Progress: {metrics.avgCompletion}%</span>
-                </div>
-              )}
             </button>
 
             {showMetrics && (
@@ -610,7 +796,7 @@ export default function ContractsDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Active vs Closed */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-base font-medium mb-4 text-slate-700">Active vs Closed Contracts</h3>
+                    <h3 className="text-base font-semibold mb-4 text-slate-800">Active vs Closed</h3>
                     <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
                         <Pie
@@ -634,21 +820,21 @@ export default function ContractsDashboard() {
 
                   {/* Contract Types */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-base font-medium mb-4 text-slate-700">Contracts by Type</h3>
+                    <h3 className="text-base font-semibold mb-4 text-slate-800">By Type</h3>
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={metrics.contractTypeData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis dataKey="type" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={60} />
                         <YAxis tick={{ fontSize: 11 }} />
                         <Tooltip />
-                        <Bar dataKey="count" fill="#64748b" />
+                        <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
 
                   {/* Deal Size Distribution */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-base font-medium mb-4 text-slate-700">Deal Size Distribution</h3>
+                    <h3 className="text-base font-semibold mb-4 text-slate-800">Deal Size Distribution</h3>
                     {metrics.dealSizeData.length > 0 ? (
                       <ResponsiveContainer width="100%" height={200}>
                         <PieChart>
@@ -679,62 +865,34 @@ export default function ContractsDashboard() {
           </div>
         )}
 
-        {/* ============================================================================ */}
-        {/* SECTION 16: QUICK STATS CARDS */}
-        {/* ============================================================================ */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <div className="text-2xl font-medium text-slate-700">{sessions.length}</div>
-            <div className="text-slate-600 text-sm">Total Contracts</div>
-          </div>
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <div className="text-2xl font-medium text-slate-700">
-              {sessions.filter(s => s.status !== 'completed').length}
-            </div>
-            <div className="text-slate-600 text-sm">Active Negotiations</div>
-          </div>
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <div className="text-2xl font-medium text-slate-700">
-              £{metrics.totalValue.toLocaleString()}
-            </div>
-            <div className="text-slate-600 text-sm">Total Deal Value</div>
-          </div>
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-            <div className="text-2xl font-medium text-slate-700">
-              {metrics.avgCompletion}%
-            </div>
-            <div className="text-slate-600 text-sm">Avg. Completion</div>
-          </div>
-        </div>
-
-        {/* ============================================================================ */}
-        {/* SECTION 17: SESSIONS LIST */}
-        {/* ============================================================================ */}
+        {/* ================================================================ */}
+        {/* SECTION 20: SESSIONS LIST */}
+        {/* ================================================================ */}
         <div>
-          <h2 className="text-xl font-medium mb-4 text-slate-800">Your Contracts</h2>
+          <h2 className="text-xl font-bold mb-4 text-slate-800">Your Contracts</h2>
 
           {loading ? (
             <div className="bg-white p-12 rounded-xl text-center border border-slate-200">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-600 mx-auto"></div>
+              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
               <p className="mt-4 text-slate-600">Loading contracts...</p>
             </div>
           ) : sessions.length === 0 ? (
-            /* Empty State with Create Button */
+            /* Empty State */
             <div className="bg-white p-12 rounded-xl text-center border border-slate-200">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium mb-2 text-slate-800">Welcome to CLARENCE!</h3>
-              <p className="text-slate-600 mb-6 text-sm max-w-md mx-auto">
-                {`You don't have any contracts yet. Create your first contract to begin the intelligent negotiation process with CLARENCE.`}
+              <h3 className="text-lg font-semibold mb-2 text-slate-800">No contracts yet</h3>
+              <p className="text-slate-500 mb-6 text-sm max-w-md mx-auto">
+                Create your first contract to begin the intelligent negotiation process with CLARENCE.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={createNewContract}
                   disabled={isCreatingContract}
-                  className="bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-6 py-3 rounded-lg text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isCreatingContract ? (
                     <>
@@ -752,9 +910,12 @@ export default function ContractsDashboard() {
                 </button>
                 <button
                   onClick={() => setShowChatOverlay(true)}
-                  className="border border-slate-300 text-slate-700 px-6 py-3 rounded-lg text-sm hover:bg-slate-50 flex items-center justify-center gap-2"
+                  className="border border-slate-300 text-slate-700 px-6 py-3 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center justify-center gap-2"
                 >
-                  💬 Ask CLARENCE First
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
+                  </svg>
+                  Ask CLARENCE First
                 </button>
               </div>
             </div>
@@ -765,13 +926,13 @@ export default function ContractsDashboard() {
                 const actionButton = getPhaseActionButton(session)
 
                 return (
-                  <div key={session.sessionId} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow">
+                  <div key={session.sessionId} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md hover:border-slate-300 transition-all">
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="text-base font-medium text-slate-800">
+                        <h3 className="text-base font-semibold text-slate-800">
                           {session.sessionNumber || (session?.sessionId || 'NEW')?.substring(0, 8)}
                         </h3>
-                        <p className="text-slate-600 text-sm">{session.serviceRequired || 'Service type pending'}</p>
+                        <p className="text-slate-500 text-sm">{session.serviceRequired || 'Service type pending'}</p>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(session.status)}`}>
                         {getStatusDisplayText(session.status)}
@@ -780,29 +941,33 @@ export default function ContractsDashboard() {
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-sm">
                       <div>
-                        <span className="text-slate-500 text-xs">Customer:</span>
+                        <span className="text-slate-400 text-xs">Customer</span>
                         <p className="font-medium text-slate-700">{session.customerCompany}</p>
                       </div>
                       <div>
-                        <span className="text-slate-500 text-xs">Provider:</span>
+                        <span className="text-slate-400 text-xs">Provider</span>
                         <p className="font-medium text-slate-700">{session.providerCompany || 'Pending'}</p>
                       </div>
                       <div>
-                        <span className="text-slate-500 text-xs">Value:</span>
+                        <span className="text-slate-400 text-xs">Value</span>
                         <p className="font-medium text-slate-700">
                           {session.dealValue ? `£${parseInt(session.dealValue).toLocaleString()}` : 'TBD'}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-500 text-xs">Phase:</span>
+                        <span className="text-slate-400 text-xs">Phase</span>
                         <p className="font-medium text-slate-700">{phases[phase]?.name || 'Setup'}</p>
                       </div>
                     </div>
 
-                    <div className="mb-3">
-                      <div className="w-full bg-slate-200 rounded-full h-1.5">
+                    <div className="mb-4">
+                      <div className="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>Progress</span>
+                        <span>{session.phaseAlignment || 0}%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2">
                         <div
-                          className="bg-slate-600 h-1.5 rounded-full transition-all"
+                          className="bg-blue-600 h-2 rounded-full transition-all"
                           style={{ width: `${session.phaseAlignment || 0}%` }}
                         />
                       </div>
@@ -812,23 +977,26 @@ export default function ContractsDashboard() {
                       <button
                         onClick={actionButton.action}
                         disabled={actionButton.disabled}
-                        className={`flex-1 py-2 px-4 rounded-lg text-sm transition-all ${actionButton.className}`}
+                        className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${actionButton.className}`}
                       >
                         {actionButton.text}
                       </button>
 
                       <button
                         onClick={() => continueWithClarence(session.sessionId)}
-                        className="px-4 py-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg text-sm"
+                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                        title="Chat with CLARENCE"
                       >
-                        💬 Chat
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
+                        </svg>
                       </button>
 
                       <button
                         onClick={() => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)}
-                        className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-sm text-slate-700"
+                        className="px-4 py-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm font-medium text-slate-600 transition-colors"
                       >
-                        View Details
+                        Details
                       </button>
                     </div>
                   </div>
@@ -839,27 +1007,27 @@ export default function ContractsDashboard() {
         </div>
       </div>
 
-      {/* ============================================================================ */}
-      {/* SECTION 18: CHAT OVERLAY */}
-      {/* ============================================================================ */}
+      {/* ================================================================== */}
+      {/* SECTION 21: CHAT OVERLAY */}
+      {/* ================================================================== */}
       {showChatOverlay && (
         <div className={`fixed ${chatMinimized ? 'bottom-4 right-4' : 'inset-0'} z-50 ${chatMinimized ? '' : 'bg-black/50'}`}>
-          <div className={`${chatMinimized ? 'w-80' : 'absolute right-0 top-0 h-full w-full md:w-96'} bg-white ${chatMinimized ? 'rounded-lg shadow-xl' : ''} flex flex-col`}>
+          <div className={`${chatMinimized ? 'w-80' : 'absolute right-0 top-0 h-full w-full md:w-96'} bg-white ${chatMinimized ? 'rounded-xl shadow-xl' : ''} flex flex-col`}>
             {/* Chat Header */}
-            <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-4 flex justify-between items-center rounded-t-lg">
+            <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                  <span className="font-bold">C</span>
+                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                  <span className="font-bold text-sm">C</span>
                 </div>
                 <div>
-                  <div className="font-medium">CLARENCE</div>
-                  <div className="text-xs text-slate-300">Dashboard Assistant</div>
+                  <div className="font-semibold text-sm">CLARENCE</div>
+                  <div className="text-xs text-slate-400">Your negotiation assistant</div>
                 </div>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setChatMinimized(!chatMinimized)}
-                  className="text-white/80 hover:text-white"
+                  className="text-slate-400 hover:text-white transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={chatMinimized ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
@@ -867,7 +1035,7 @@ export default function ContractsDashboard() {
                 </button>
                 <button
                   onClick={() => setShowChatOverlay(false)}
-                  className="text-white/80 hover:text-white"
+                  className="text-slate-400 hover:text-white transition-colors"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -882,12 +1050,20 @@ export default function ContractsDashboard() {
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
                   {chatMessages.map(message => (
                     <div key={message.id} className={`mb-4 ${message.type === 'user' ? 'text-right' : ''}`}>
-                      <div className={`inline-block max-w-[80%] ${message.type === 'user'
-                        ? 'bg-slate-600 text-white rounded-lg px-4 py-2'
-                        : 'bg-white rounded-lg px-4 py-2 shadow-sm border border-slate-200'
+                      <div className={`inline-block max-w-[85%] ${message.type === 'user'
+                        ? 'bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-2'
+                        : 'bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200'
                         }`}>
+                        {message.type === 'clarence' && (
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-5 h-5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">C</span>
+                            </div>
+                            <span className="text-xs font-medium text-emerald-600">CLARENCE</span>
+                          </div>
+                        )}
                         <p className="text-sm">{message.content}</p>
-                        <p className={`text-xs mt-1 ${message.type === 'user' ? 'text-slate-300' : 'text-slate-500'}`}>
+                        <p className={`text-xs mt-1 ${message.type === 'user' ? 'text-blue-200' : 'text-slate-400'}`}>
                           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
@@ -895,11 +1071,11 @@ export default function ContractsDashboard() {
                   ))}
                   {isChatLoading && (
                     <div className="mb-4">
-                      <div className="inline-block bg-white rounded-lg px-4 py-3 shadow-sm border border-slate-200">
-                        <div className="flex gap-2">
-                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-pulse"></div>
-                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                      <div className="inline-block bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                         </div>
                       </div>
                     </div>
@@ -916,14 +1092,16 @@ export default function ContractsDashboard() {
                       onChange={(e) => setChatInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
                       placeholder="Ask about contracts, process, or guidance..."
-                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent text-sm"
+                      className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     />
                     <button
                       onClick={sendChatMessage}
                       disabled={isChatLoading || !chatInput.trim()}
-                      className="px-4 py-2 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
-                      Send
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
                     </button>
                   </div>
                 </div>
@@ -933,14 +1111,14 @@ export default function ContractsDashboard() {
         </div>
       )}
 
-      {/* ============================================================================ */}
-      {/* SECTION 19: FLOATING CHAT BUTTON */}
-      {/* ============================================================================ */}
+      {/* ================================================================== */}
+      {/* SECTION 22: FLOATING CHAT BUTTON */}
+      {/* ================================================================== */}
       {!showChatOverlay && (
         <button
           onClick={() => setShowChatOverlay(true)}
-          className="fixed bottom-8 right-8 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all"
-          title="Open CLARENCE Chat"
+          className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all"
+          title="Chat with CLARENCE"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
