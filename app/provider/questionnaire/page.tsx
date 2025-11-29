@@ -27,6 +27,7 @@ interface Question {
 interface SessionData {
     sessionId: string
     sessionNumber: string
+    providerId: string
     customerCompany: string
     serviceRequired: string
     dealValue: string
@@ -258,6 +259,7 @@ function ProviderQuestionnaireContent() {
 
     const loadSessionData = useCallback(async () => {
         const sessionId = searchParams.get('session_id')
+        const providerId = searchParams.get('provider_id')  // ADD THIS
 
         if (!sessionId) {
             const stored = localStorage.getItem('clarence_provider_session')
@@ -266,6 +268,7 @@ function ProviderQuestionnaireContent() {
                 setSessionData({
                     sessionId: parsed.sessionId,
                     sessionNumber: parsed.sessionNumber || '',
+                    providerId: parsed.providerId || '',  // ADD THIS
                     customerCompany: parsed.customerCompany || 'Customer',
                     serviceRequired: parsed.serviceRequired || 'Service Contract',
                     dealValue: parsed.dealValue || ''
@@ -275,6 +278,16 @@ function ProviderQuestionnaireContent() {
             return
         }
 
+        // Try to get providerId from localStorage if not in URL
+        let finalProviderId = providerId || ''
+        if (!finalProviderId) {
+            const stored = localStorage.getItem('clarence_provider_session')
+            if (stored) {
+                const parsed = JSON.parse(stored)
+                finalProviderId = parsed.providerId || ''
+            }
+        }
+
         try {
             const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
             if (response.ok) {
@@ -282,6 +295,7 @@ function ProviderQuestionnaireContent() {
                 setSessionData({
                     sessionId: sessionId,
                     sessionNumber: data.sessionNumber || data.session_number || '',
+                    providerId: finalProviderId,  // ADD THIS
                     customerCompany: data.customerCompany || data.customer_company || 'Customer',
                     serviceRequired: data.serviceRequired || data.service_required || 'Service Contract',
                     dealValue: data.dealValue || data.deal_value || ''
@@ -293,6 +307,7 @@ function ProviderQuestionnaireContent() {
                     setSessionData({
                         sessionId: sessionId,
                         sessionNumber: parsed.sessionNumber || '',
+                        providerId: parsed.providerId || finalProviderId || '',  // ADD THIS
                         customerCompany: parsed.customerCompany || 'Customer',
                         serviceRequired: parsed.serviceRequired || 'Service Contract',
                         dealValue: parsed.dealValue || ''
@@ -351,6 +366,7 @@ function ProviderQuestionnaireContent() {
         try {
             const submissionData = {
                 sessionId: sessionData.sessionId,
+                providerId: sessionData.providerId,  // ADD THIS
                 partyType: 'provider',
                 answers: answers,
                 submittedAt: new Date().toISOString(),
@@ -372,13 +388,15 @@ function ProviderQuestionnaireContent() {
                     localStorage.setItem('clarence_provider_session', JSON.stringify(parsed))
                 }
 
-                router.push(`/auth/contract-studio?session_id=${sessionData.sessionId}`)
+                // FIXED: Redirect to provider confirmation, not customer contract-studio
+                router.push(`/provider/confirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
             } else {
                 throw new Error('Submission failed')
             }
         } catch (error) {
             console.error('Submission error:', error)
-            router.push(`/auth/contract-studio?session_id=${sessionData.sessionId}`)
+            // FIXED: Even on error, go to provider confirmation
+            router.push(`/provider/confirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
         } finally {
             setSubmitting(false)
         }
