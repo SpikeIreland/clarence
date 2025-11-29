@@ -1,9 +1,15 @@
 'use client'
-import { useState, useEffect, useCallback, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
 
 // ============================================================================
-// SECTION 1: CONSTANTS & TYPES
+// SECTION 1: IMPORTS
+// ============================================================================
+
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+
+// ============================================================================
+// SECTION 2: CONSTANTS & TYPES
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
@@ -27,7 +33,7 @@ interface SessionData {
 }
 
 // ============================================================================
-// SECTION 2: STRATEGIC QUESTIONS (Provider Version)
+// SECTION 3: STRATEGIC QUESTIONS (Provider Version)
 // ============================================================================
 
 const STRATEGIC_QUESTIONS: Question[] = [
@@ -145,17 +151,81 @@ const STRATEGIC_QUESTIONS: Question[] = [
 ]
 
 // ============================================================================
-// SECTION 3: MAIN COMPONENT WRAPPER (Suspense)
+// SECTION 4: SHARED HEADER COMPONENT
+// ============================================================================
+
+function ProviderHeader() {
+    return (
+        <header className="bg-slate-800 text-white">
+            <div className="container mx-auto px-6">
+                <nav className="flex justify-between items-center h-16">
+                    {/* Logo & Brand - Blue gradient for Provider */}
+                    <Link href="/" className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">C</span>
+                        </div>
+                        <div>
+                            <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                            <div className="text-xs text-slate-400">Strategic Assessment</div>
+                        </div>
+                    </Link>
+
+                    {/* Right: Customer Portal Link */}
+                    <div className="flex items-center gap-4">
+                        <Link
+                            href="/auth/login"
+                            className="text-sm text-slate-400 hover:text-white transition-colors"
+                        >
+                            Customer Portal →
+                        </Link>
+                    </div>
+                </nav>
+            </div>
+        </header>
+    )
+}
+
+// ============================================================================
+// SECTION 5: SHARED FOOTER COMPONENT
+// ============================================================================
+
+function ProviderFooter() {
+    return (
+        <footer className="bg-slate-900 text-slate-400 py-8">
+            <div className="container mx-auto px-6">
+                <div className="flex flex-col md:flex-row justify-between items-center">
+                    <div className="flex items-center gap-3 mb-4 md:mb-0">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">C</span>
+                        </div>
+                        <span className="text-white font-medium">CLARENCE</span>
+                        <span className="text-slate-500 text-sm">Provider Portal</span>
+                    </div>
+                    <div className="text-sm">
+                        © {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                    </div>
+                </div>
+            </div>
+        </footer>
+    )
+}
+
+// ============================================================================
+// SECTION 6: MAIN COMPONENT WRAPPER (Suspense)
 // ============================================================================
 
 export default function ProviderQuestionnairePage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-10 h-10 border-3 border-slate-600 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-400">Loading questionnaire...</p>
-                </div>
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+                <ProviderHeader />
+                <main className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="w-10 h-10 border-3 border-slate-300 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-500">Loading questionnaire...</p>
+                    </div>
+                </main>
+                <ProviderFooter />
             </div>
         }>
             <ProviderQuestionnaireContent />
@@ -164,7 +234,7 @@ export default function ProviderQuestionnairePage() {
 }
 
 // ============================================================================
-// SECTION 4: MAIN CONTENT COMPONENT
+// SECTION 7: MAIN CONTENT COMPONENT
 // ============================================================================
 
 function ProviderQuestionnaireContent() {
@@ -172,7 +242,7 @@ function ProviderQuestionnaireContent() {
     const searchParams = useSearchParams()
 
     // ========================================================================
-    // SECTION 5: STATE
+    // SECTION 8: STATE
     // ========================================================================
 
     const [loading, setLoading] = useState(true)
@@ -183,14 +253,13 @@ function ProviderQuestionnaireContent() {
     const [showIntro, setShowIntro] = useState(true)
 
     // ========================================================================
-    // SECTION 6: INITIALIZATION
+    // SECTION 9: INITIALIZATION
     // ========================================================================
 
     const loadSessionData = useCallback(async () => {
         const sessionId = searchParams.get('session_id')
 
         if (!sessionId) {
-            // Try to get from localStorage
             const stored = localStorage.getItem('clarence_provider_session')
             if (stored) {
                 const parsed = JSON.parse(stored)
@@ -207,7 +276,6 @@ function ProviderQuestionnaireContent() {
         }
 
         try {
-            // Fetch session details
             const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
             if (response.ok) {
                 const data = await response.json()
@@ -219,7 +287,6 @@ function ProviderQuestionnaireContent() {
                     dealValue: data.dealValue || data.deal_value || ''
                 })
             } else {
-                // Fallback to localStorage
                 const stored = localStorage.getItem('clarence_provider_session')
                 if (stored) {
                     const parsed = JSON.parse(stored)
@@ -244,7 +311,7 @@ function ProviderQuestionnaireContent() {
     }, [loadSessionData])
 
     // ========================================================================
-    // SECTION 7: ANSWER HANDLERS
+    // SECTION 10: ANSWER HANDLERS
     // ========================================================================
 
     const handleAnswer = (questionId: string, value: string | number) => {
@@ -273,7 +340,7 @@ function ProviderQuestionnaireContent() {
     }
 
     // ========================================================================
-    // SECTION 8: SUBMIT HANDLER
+    // SECTION 11: SUBMIT HANDLER
     // ========================================================================
 
     const handleSubmit = async () => {
@@ -298,7 +365,6 @@ function ProviderQuestionnaireContent() {
             })
 
             if (response.ok) {
-                // Update localStorage
                 const stored = localStorage.getItem('clarence_provider_session')
                 if (stored) {
                     const parsed = JSON.parse(stored)
@@ -306,14 +372,12 @@ function ProviderQuestionnaireContent() {
                     localStorage.setItem('clarence_provider_session', JSON.stringify(parsed))
                 }
 
-                // Navigate to Contract Studio
                 router.push(`/auth/contract-studio?session_id=${sessionData.sessionId}`)
             } else {
                 throw new Error('Submission failed')
             }
         } catch (error) {
             console.error('Submission error:', error)
-            // For demo, proceed anyway
             router.push(`/auth/contract-studio?session_id=${sessionData.sessionId}`)
         } finally {
             setSubmitting(false)
@@ -321,114 +385,113 @@ function ProviderQuestionnaireContent() {
     }
 
     // ========================================================================
-    // SECTION 9: LOADING STATE
+    // SECTION 12: LOADING STATE
     // ========================================================================
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-12 h-12 border-3 border-slate-600 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-400">Preparing your assessment...</p>
-                </div>
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+                <ProviderHeader />
+                <main className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-500">Preparing your assessment...</p>
+                    </div>
+                </main>
+                <ProviderFooter />
             </div>
         )
     }
 
     // ========================================================================
-    // SECTION 10: INTRO SCREEN
+    // SECTION 13: INTRO SCREEN
     // ========================================================================
 
     if (showIntro) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-                <div className="w-full max-w-2xl">
-                    {/* Header */}
-                    <div className="text-center mb-8">
-                        <div className="text-4xl font-light text-white mb-2 tracking-wide">CLARENCE</div>
-                        <div className="text-xs text-emerald-400 tracking-[0.3em] font-light">STRATEGIC ASSESSMENT</div>
-                    </div>
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+                <ProviderHeader />
 
-                    {/* Intro Card */}
-                    <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 p-8">
-                        <div className="text-center mb-8">
-                            <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                                <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <main className="flex-1 flex items-center justify-center p-4 py-12">
+                    <div className="w-full max-w-2xl">
+                        {/* Intro Card */}
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-8">
+                            <div className="text-center mb-8">
+                                <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                </div>
+                                <h1 className="text-2xl font-semibold text-slate-800 mb-3">
+                                    Let&apos;s Talk Strategy
+                                </h1>
+                                <p className="text-slate-500 leading-relaxed max-w-md mx-auto">
+                                    I need to understand your negotiating position to represent your interests effectively.
+                                    These questions are confidential and help me calculate your leverage accurately.
+                                </p>
+                            </div>
+
+                            {/* What to Expect */}
+                            <div className="bg-slate-50 rounded-xl p-6 mb-6 border border-slate-200">
+                                <h3 className="text-slate-800 font-medium mb-4">What to Expect</h3>
+                                <div className="space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                            <span className="text-blue-600 text-xs font-medium">13</span>
+                                        </div>
+                                        <p className="text-sm text-slate-600">Strategic questions about your position and alternatives</p>
+                                    </div>
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                            <svg className="w-3 h-3 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-sm text-slate-600">All answers are completely confidential</p>
+                                    </div>
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                            <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-sm text-slate-600">Takes approximately 5-8 minutes</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Opportunity Context */}
+                            {sessionData && (
+                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-xs text-blue-600 font-medium">Opportunity:</div>
+                                        <div className="text-slate-800 font-medium">{sessionData.customerCompany}</div>
+                                        <div className="text-slate-400">•</div>
+                                        <div className="text-slate-600">{sessionData.serviceRequired}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={() => setShowIntro(false)}
+                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                Begin Assessment
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                                 </svg>
-                            </div>
-                            <h1 className="text-2xl font-light text-white mb-3">
-                                Let&apos;s Talk Strategy
-                            </h1>
-                            <p className="text-slate-400 leading-relaxed max-w-md mx-auto">
-                                I need to understand your negotiating position to represent your interests effectively.
-                                These questions are confidential and help me calculate your leverage accurately.
-                            </p>
+                            </button>
                         </div>
-
-                        {/* What to Expect */}
-                        <div className="bg-slate-700/30 rounded-xl p-6 mb-6">
-                            <h3 className="text-white font-medium mb-4">What to Expect</h3>
-                            <div className="space-y-3">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <span className="text-emerald-400 text-xs font-medium">13</span>
-                                    </div>
-                                    <p className="text-sm text-slate-300">Strategic questions about your position and alternatives</p>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <div className="w-6 h-6 bg-blue-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                    </div>
-                                    <p className="text-sm text-slate-300">All answers are completely confidential</p>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <div className="w-6 h-6 bg-amber-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    </div>
-                                    <p className="text-sm text-slate-300">Takes approximately 5-8 minutes</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Opportunity Context */}
-                        {sessionData && (
-                            <div className="bg-gradient-to-r from-emerald-600/10 to-blue-600/10 border border-emerald-500/20 rounded-xl p-4 mb-6">
-                                <div className="flex items-center gap-3">
-                                    <div className="text-xs text-emerald-400">Opportunity:</div>
-                                    <div className="text-white font-medium">{sessionData.customerCompany}</div>
-                                    <div className="text-slate-500">•</div>
-                                    <div className="text-slate-300">{sessionData.serviceRequired}</div>
-                                </div>
-                            </div>
-                        )}
-
-                        <button
-                            onClick={() => setShowIntro(false)}
-                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-medium transition flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                            Begin Assessment
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                            </svg>
-                        </button>
                     </div>
+                </main>
 
-                    {/* Footer */}
-                    <div className="text-center mt-6 text-xs text-slate-500">
-                        © {new Date().getFullYear()} CLARENCE by Spike Island Studios
-                    </div>
-                </div>
+                <ProviderFooter />
             </div>
         )
     }
 
     // ========================================================================
-    // SECTION 11: MAIN QUESTIONNAIRE RENDER
+    // SECTION 14: MAIN QUESTIONNAIRE RENDER
     // ========================================================================
 
     const question = STRATEGIC_QUESTIONS[currentQuestion]
@@ -436,32 +499,23 @@ function ProviderQuestionnaireContent() {
     const isLastQuestion = currentQuestion === STRATEGIC_QUESTIONS.length - 1
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-            {/* Navigation */}
-            <nav className="bg-slate-800/50 backdrop-blur border-b border-slate-700/50">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-16">
-                        <div className="flex items-center">
-                            <div>
-                                <div className="text-2xl font-light text-white tracking-wide">CLARENCE</div>
-                                <div className="text-xs text-slate-500 tracking-widest font-light">STRATEGIC ASSESSMENT</div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <span className="text-slate-400 text-sm">
-                                Question {currentQuestion + 1} of {STRATEGIC_QUESTIONS.length}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </nav>
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <ProviderHeader />
 
             {/* Progress Bar */}
-            <div className="bg-slate-800/30">
-                <div className="max-w-4xl mx-auto">
-                    <div className="h-1 bg-slate-700/50">
+            <div className="bg-white border-b border-slate-200">
+                <div className="container mx-auto px-6">
+                    <div className="flex items-center justify-between py-3">
+                        <span className="text-sm text-slate-600">
+                            Question {currentQuestion + 1} of {STRATEGIC_QUESTIONS.length}
+                        </span>
+                        <span className="text-sm text-slate-500">
+                            {Math.round(progress)}% Complete
+                        </span>
+                    </div>
+                    <div className="h-1 bg-slate-200 -mx-6">
                         <div
-                            className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
+                            className="h-1 bg-blue-600 transition-all duration-300"
                             style={{ width: `${progress}%` }}
                         />
                     </div>
@@ -469,175 +523,174 @@ function ProviderQuestionnaireContent() {
             </div>
 
             {/* Main Content */}
-            <div className="max-w-2xl mx-auto px-4 py-12">
-                {/* Category Badge */}
-                <div className="mb-6">
-                    <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-xs font-medium">
-                        {question.category}
-                    </span>
-                </div>
-
-                {/* Question Card */}
-                <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 p-8 mb-6">
-                    {/* CLARENCE Avatar */}
-                    <div className="flex items-start gap-4 mb-6">
-                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-blue-500 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <span className="text-white font-bold text-sm">C</span>
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-white text-lg leading-relaxed">{question.question}</p>
-                            {question.helpText && (
-                                <p className="text-slate-400 text-sm mt-2">{question.helpText}</p>
-                            )}
-                        </div>
+            <main className="flex-1 py-12">
+                <div className="max-w-2xl mx-auto px-4">
+                    {/* Category Badge */}
+                    <div className="mb-6">
+                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                            {question.category}
+                        </span>
                     </div>
 
-                    {/* Answer Input */}
-                    <div className="mt-6">
-                        {question.inputType === 'textarea' && (
-                            <textarea
-                                className="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 resize-none"
-                                rows={4}
-                                placeholder={question.placeholder || "Type your answer..."}
-                                value={(answers[question.id] as string) || ''}
-                                onChange={(e) => handleAnswer(question.id, e.target.value)}
-                            />
-                        )}
+                    {/* Question Card */}
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-8 mb-6">
+                        {/* CLARENCE Avatar */}
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                                <span className="text-white font-bold text-sm">C</span>
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-slate-800 text-lg leading-relaxed">{question.question}</p>
+                                {question.helpText && (
+                                    <p className="text-slate-500 text-sm mt-2">{question.helpText}</p>
+                                )}
+                            </div>
+                        </div>
 
-                        {question.inputType === 'scale' && (
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-slate-400 text-sm">Not confident</span>
-                                    <span className="text-2xl font-light text-white">
-                                        {(answers[question.id] as number) || '—'}
-                                    </span>
-                                    <span className="text-slate-400 text-sm">Very confident</span>
-                                </div>
-                                <input
-                                    type="range"
-                                    min="1"
-                                    max="10"
-                                    step="1"
-                                    className="w-full accent-emerald-500"
-                                    value={(answers[question.id] as number) || 5}
-                                    onChange={(e) => handleAnswer(question.id, parseInt(e.target.value))}
+                        {/* Answer Input */}
+                        <div className="mt-6">
+                            {question.inputType === 'textarea' && (
+                                <textarea
+                                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-800 placeholder-slate-400 resize-none"
+                                    rows={4}
+                                    placeholder={question.placeholder || "Type your answer..."}
+                                    value={(answers[question.id] as string) || ''}
+                                    onChange={(e) => handleAnswer(question.id, e.target.value)}
                                 />
-                                <div className="flex justify-between text-xs text-slate-500">
-                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                        <span key={n}>{n}</span>
+                            )}
+
+                            {question.inputType === 'scale' && (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-500 text-sm">Not confident</span>
+                                        <span className="text-2xl font-semibold text-slate-800">
+                                            {(answers[question.id] as number) || '—'}
+                                        </span>
+                                        <span className="text-slate-500 text-sm">Very confident</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="10"
+                                        step="1"
+                                        className="w-full accent-blue-600"
+                                        value={(answers[question.id] as number) || 5}
+                                        onChange={(e) => handleAnswer(question.id, parseInt(e.target.value))}
+                                    />
+                                    <div className="flex justify-between text-xs text-slate-400">
+                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                            <span key={n}>{n}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {question.inputType === 'select' && question.options && (
+                                <div className="space-y-2">
+                                    {question.options.map((option, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => handleAnswer(question.id, option)}
+                                            className={`w-full p-4 rounded-xl text-left transition-all cursor-pointer ${answers[question.id] === option
+                                                ? 'bg-blue-50 border-2 border-blue-500 text-slate-800'
+                                                : 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${answers[question.id] === option
+                                                    ? 'border-blue-500 bg-blue-500'
+                                                    : 'border-slate-300'
+                                                    }`}>
+                                                    {answers[question.id] === option && (
+                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <span className="text-sm">{option}</span>
+                                            </div>
+                                        </button>
                                     ))}
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
+                    </div>
 
-                        {question.inputType === 'select' && question.options && (
-                            <div className="space-y-2">
-                                {question.options.map((option, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => handleAnswer(question.id, option)}
-                                        className={`w-full p-4 rounded-xl text-left transition-all cursor-pointer ${answers[question.id] === option
-                                                ? 'bg-emerald-500/20 border-2 border-emerald-500/50 text-white'
-                                                : 'bg-slate-700/30 border border-slate-600/50 text-slate-300 hover:bg-slate-700/50 hover:border-slate-500/50'
-                                            }`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${answers[question.id] === option
-                                                    ? 'border-emerald-500 bg-emerald-500'
-                                                    : 'border-slate-500'
-                                                }`}>
-                                                {answers[question.id] === option && (
-                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
-                                            </div>
-                                            <span className="text-sm">{option}</span>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
+                    {/* Navigation Buttons */}
+                    <div className="flex justify-between items-center">
+                        <button
+                            onClick={prevQuestion}
+                            disabled={currentQuestion === 0}
+                            className={`px-6 py-2.5 rounded-lg transition flex items-center gap-2 cursor-pointer font-medium ${currentQuestion === 0
+                                ? 'text-slate-300 cursor-not-allowed'
+                                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'
+                                }`}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Previous
+                        </button>
+
+                        {!isLastQuestion ? (
+                            <button
+                                onClick={nextQuestion}
+                                disabled={!isCurrentAnswered()}
+                                className={`px-6 py-2.5 rounded-lg font-medium transition flex items-center gap-2 cursor-pointer ${isCurrentAnswered()
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    }`}
+                            >
+                                Next
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleSubmit}
+                                disabled={!isCurrentAnswered() || submitting}
+                                className={`px-8 py-2.5 rounded-lg font-medium transition flex items-center gap-2 cursor-pointer ${isCurrentAnswered() && !submitting
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    }`}
+                            >
+                                {submitting ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        Submitting...
+                                    </>
+                                ) : (
+                                    <>
+                                        Complete Assessment
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </>
+                                )}
+                            </button>
                         )}
                     </div>
-                </div>
 
-                {/* Navigation Buttons */}
-                <div className="flex justify-between items-center">
-                    <button
-                        onClick={prevQuestion}
-                        disabled={currentQuestion === 0}
-                        className={`px-6 py-2.5 rounded-xl transition flex items-center gap-2 cursor-pointer ${currentQuestion === 0
-                                ? 'text-slate-600 cursor-not-allowed'
-                                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                            }`}
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                        Previous
-                    </button>
-
-                    {!isLastQuestion ? (
-                        <button
-                            onClick={nextQuestion}
-                            disabled={!isCurrentAnswered()}
-                            className={`px-6 py-2.5 rounded-xl font-medium transition flex items-center gap-2 cursor-pointer ${isCurrentAnswered()
-                                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                }`}
-                        >
-                            Next
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleSubmit}
-                            disabled={!isCurrentAnswered() || submitting}
-                            className={`px-8 py-2.5 rounded-xl font-medium transition flex items-center gap-2 cursor-pointer ${isCurrentAnswered() && !submitting
-                                    ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
-                                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                }`}
-                        >
-                            {submitting ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                    Submitting...
-                                </>
-                            ) : (
-                                <>
-                                    Complete Assessment
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                </>
-                            )}
-                        </button>
-                    )}
-                </div>
-
-                {/* Question Navigation Dots */}
-                <div className="flex justify-center mt-8 gap-1.5">
-                    {STRATEGIC_QUESTIONS.map((_, idx) => (
-                        <button
-                            key={idx}
-                            onClick={() => setCurrentQuestion(idx)}
-                            className={`w-2 h-2 rounded-full transition-all cursor-pointer ${idx === currentQuestion
-                                    ? 'bg-emerald-500 w-6'
+                    {/* Question Navigation Dots */}
+                    <div className="flex justify-center mt-8 gap-1.5">
+                        {STRATEGIC_QUESTIONS.map((_, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => setCurrentQuestion(idx)}
+                                className={`w-2 h-2 rounded-full transition-all cursor-pointer ${idx === currentQuestion
+                                    ? 'bg-blue-600 w-6'
                                     : idx < currentQuestion || answers[STRATEGIC_QUESTIONS[idx].id]
-                                        ? 'bg-emerald-500/50'
-                                        : 'bg-slate-600'
-                                }`}
-                        />
-                    ))}
+                                        ? 'bg-blue-300'
+                                        : 'bg-slate-300'
+                                    }`}
+                            />
+                        ))}
+                    </div>
                 </div>
-            </div>
+            </main>
 
-            {/* Footer */}
-            <div className="text-center pb-8 text-xs text-slate-500">
-                © {new Date().getFullYear()} CLARENCE by Spike Island Studios
-            </div>
+            <ProviderFooter />
         </div>
     )
 }
