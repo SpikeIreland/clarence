@@ -66,6 +66,7 @@ interface InviteData {
     bidId: string
     sessionId: string
     sessionNumber: string
+    providerId: string
     customerCompany: string
     serviceRequired: string
     dealValue: string
@@ -259,6 +260,7 @@ function ProviderIntakeContent() {
     const validateToken = useCallback(async () => {
         let sessionId = searchParams.get('session_id')
         let token = searchParams.get('token')
+        let providerId = searchParams.get('provider_id')
 
         console.log('Intake validation - URL params:', { sessionId, token })
 
@@ -277,8 +279,11 @@ function ProviderIntakeContent() {
                     if (!token && sessionData.token) {
                         token = sessionData.token
                     }
+                    if (!providerId && sessionData.providerId) {
+                        providerId = sessionData.providerId
+                    }
 
-                    console.log('Intake validation - After localStorage merge:', { sessionId, token })
+                    console.log('Intake validation - After localStorage merge:', { sessionId, token, providerId })
                 }
             } catch (e) {
                 console.error('Error reading localStorage:', e)
@@ -308,6 +313,7 @@ function ProviderIntakeContent() {
                     setInviteData({
                         bidId: data.bidId || data.bid_id || '',
                         sessionId: data.sessionId || data.session_id || sessionId,
+                        providerId: data.providerId || data.provider_id || '',
                         sessionNumber: data.sessionNumber || data.session_number || '',
                         customerCompany: data.customerCompany || data.customer_company || '',
                         serviceRequired: data.serviceRequired || data.service_required || '',
@@ -341,6 +347,7 @@ function ProviderIntakeContent() {
                             bidId: '',
                             sessionId: sessionId,
                             sessionNumber: sessionData.sessionNumber || '',
+                            providerId: sessionData.providerId || providerId || '',
                             customerCompany: '',
                             serviceRequired: '',
                             dealValue: '',
@@ -375,6 +382,7 @@ function ProviderIntakeContent() {
                         bidId: '',
                         sessionId: sessionId || '',
                         sessionNumber: sessionData.sessionNumber || '',
+                        providerId: sessionData.providerId || providerId || '',
                         customerCompany: '',
                         serviceRequired: '',
                         dealValue: '',
@@ -439,6 +447,7 @@ function ProviderIntakeContent() {
             const submissionData = {
                 sessionId: inviteData.sessionId,
                 sessionNumber: inviteData.sessionNumber,
+                providerId: inviteData.providerId,  // ADD THIS
                 bidId: inviteData.bidId,
                 inviteToken: searchParams.get('token'),
                 ...formData,
@@ -454,7 +463,8 @@ function ProviderIntakeContent() {
             })
 
             if (response.ok) {
-                router.push(`/provider/questionnaire?session_id=${inviteData.sessionId}`)
+                // UPDATED: Pass provider_id to questionnaire
+                router.push(`/provider/questionnaire?session_id=${inviteData.sessionId}&provider_id=${inviteData.providerId}`)
             } else {
                 throw new Error('Submission failed')
             }
