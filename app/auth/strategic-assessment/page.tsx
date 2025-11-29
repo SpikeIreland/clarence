@@ -1137,7 +1137,7 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
     }
 
     // Navigate to Contract Studio (which should show "Invite Provider" state)
-    router.push(`/auth/contract-studio?session_id=${sessionId}&session_number=${sessionNumber}&status=pending_provider`)
+    router.push(`/auth/invite-providers?session_id=${sessionId}&session_number=${sessionNumber}&status=pending_provider`)
   }
 
   // ========================================================================
