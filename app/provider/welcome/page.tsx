@@ -1,19 +1,89 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
 
 // ============================================================================
-// SECTION 1: MAIN COMPONENT WRAPPER (Suspense)
+// SECTION 1: IMPORTS
+// ============================================================================
+
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+
+// ============================================================================
+// SECTION 2: SHARED HEADER COMPONENT
+// ============================================================================
+
+function ProviderHeader() {
+    return (
+        <header className="bg-slate-800 text-white">
+            <div className="container mx-auto px-6">
+                <nav className="flex justify-between items-center h-16">
+                    {/* Logo & Brand - Blue gradient for Provider */}
+                    <Link href="/" className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-lg">C</span>
+                        </div>
+                        <div>
+                            <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                            <div className="text-xs text-slate-400">Provider Portal</div>
+                        </div>
+                    </Link>
+
+                    {/* Right: Customer Portal Link */}
+                    <div className="flex items-center gap-4">
+                        <Link
+                            href="/auth/login"
+                            className="text-sm text-slate-400 hover:text-white transition-colors"
+                        >
+                            Customer Portal →
+                        </Link>
+                    </div>
+                </nav>
+            </div>
+        </header>
+    )
+}
+
+// ============================================================================
+// SECTION 3: SHARED FOOTER COMPONENT
+// ============================================================================
+
+function ProviderFooter() {
+    return (
+        <footer className="bg-slate-900 text-slate-400 py-8">
+            <div className="container mx-auto px-6">
+                <div className="flex flex-col md:flex-row justify-between items-center">
+                    <div className="flex items-center gap-3 mb-4 md:mb-0">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">C</span>
+                        </div>
+                        <span className="text-white font-medium">CLARENCE</span>
+                        <span className="text-slate-500 text-sm">Provider Portal</span>
+                    </div>
+                    <div className="text-sm">
+                        © {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                    </div>
+                </div>
+            </div>
+        </footer>
+    )
+}
+
+// ============================================================================
+// SECTION 4: MAIN COMPONENT WRAPPER (Suspense)
 // ============================================================================
 
 export default function ProviderWelcomePage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-10 h-10 border-3 border-slate-600 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-400">Loading...</p>
-                </div>
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+                <ProviderHeader />
+                <main className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="w-10 h-10 border-3 border-slate-300 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-500">Loading...</p>
+                    </div>
+                </main>
+                <ProviderFooter />
             </div>
         }>
             <ProviderWelcomeContent />
@@ -22,7 +92,7 @@ export default function ProviderWelcomePage() {
 }
 
 // ============================================================================
-// SECTION 2: MAIN CONTENT COMPONENT
+// SECTION 5: MAIN CONTENT COMPONENT
 // ============================================================================
 
 function ProviderWelcomeContent() {
@@ -30,7 +100,7 @@ function ProviderWelcomeContent() {
     const searchParams = useSearchParams()
 
     // ========================================================================
-    // SECTION 3: STATE
+    // SECTION 6: STATE
     // ========================================================================
 
     const [currentStep, setCurrentStep] = useState(0)
@@ -40,15 +110,13 @@ function ProviderWelcomeContent() {
     const [sessionNumber, setSessionNumber] = useState<string | null>(null)
 
     // ========================================================================
-    // SECTION 4: INITIALIZATION
+    // SECTION 7: INITIALIZATION
     // ========================================================================
 
     useEffect(() => {
-        // Get session_id from URL
         const sid = searchParams.get('session_id')
         setSessionId(sid)
 
-        // Get token and session number from localStorage (set during registration)
         try {
             const storedSession = localStorage.getItem('clarence_provider_session')
             if (storedSession) {
@@ -57,7 +125,6 @@ function ProviderWelcomeContent() {
                 setToken(sessionData.token || null)
                 setSessionNumber(sessionData.sessionNumber || null)
 
-                // If no session_id in URL, use from localStorage
                 if (!sid && sessionData.sessionId) {
                     setSessionId(sessionData.sessionId)
                 }
@@ -66,7 +133,6 @@ function ProviderWelcomeContent() {
             console.error('Error reading localStorage:', e)
         }
 
-        // Auto-advance through steps with animation
         const timers: NodeJS.Timeout[] = []
 
         timers.push(setTimeout(() => setCurrentStep(1), 500))
@@ -78,11 +144,10 @@ function ProviderWelcomeContent() {
     }, [searchParams])
 
     // ========================================================================
-    // SECTION 5: NAVIGATION
+    // SECTION 8: NAVIGATION
     // ========================================================================
 
     const handleContinue = () => {
-        // Build URL with both session_id and token
         const params = new URLSearchParams()
         if (sessionId) params.set('session_id', sessionId)
         if (token) params.set('token', token)
@@ -100,7 +165,7 @@ function ProviderWelcomeContent() {
     }
 
     // ========================================================================
-    // SECTION 6: STEP DATA
+    // SECTION 9: STEP DATA
     // ========================================================================
 
     const steps = [
@@ -140,129 +205,125 @@ function ProviderWelcomeContent() {
     ]
 
     // ========================================================================
-    // SECTION 7: RENDER
+    // SECTION 10: RENDER
     // ========================================================================
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
-            <div className="max-w-2xl w-full">
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl font-light text-white mb-2 tracking-wide">
-                        CLARENCE
-                    </h1>
-                    <p className="text-emerald-400 text-sm tracking-widest uppercase">
-                        The Honest Broker
-                    </p>
-                </div>
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <ProviderHeader />
 
-                {/* Welcome Card */}
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700 rounded-2xl p-8">
-                    {/* Session Reference */}
-                    {sessionNumber && (
-                        <div className="text-center mb-6">
-                            <span className="text-xs text-slate-500 uppercase tracking-wider">Session Reference</span>
-                            <p className="text-slate-300 font-mono">{sessionNumber}</p>
-                        </div>
-                    )}
-
-                    {/* CLARENCE Introduction */}
-                    <div className="mb-8">
-                        <div className="flex items-start gap-4 mb-6">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
-                                <span className="text-white text-lg font-medium">C</span>
+            <main className="flex-1 flex items-center justify-center p-6 py-12">
+                <div className="max-w-2xl w-full">
+                    {/* Welcome Card */}
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-8">
+                        {/* Session Reference */}
+                        {sessionNumber && (
+                            <div className="text-center mb-6">
+                                <span className="text-xs text-slate-500 uppercase tracking-wider">Session Reference</span>
+                                <p className="text-slate-700 font-mono font-medium">{sessionNumber}</p>
                             </div>
-                            <div className="bg-slate-700/50 rounded-2xl rounded-tl-none p-4 flex-1">
-                                <p className="text-slate-200 leading-relaxed">
-                                    Welcome! I&apos;m <span className="text-emerald-400 font-medium">CLARENCE</span>, your neutral mediator for this contract negotiation.
-                                </p>
-                                <p className="text-slate-400 text-sm mt-2">
-                                    I&apos;ll guide you through a quick onboarding process before we begin. Everything you share is confidential and used only to facilitate fair negotiations.
-                                </p>
+                        )}
+
+                        {/* CLARENCE Introduction */}
+                        <div className="mb-8">
+                            <div className="flex items-start gap-4 mb-6">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-white text-lg font-medium">C</span>
+                                </div>
+                                <div className="bg-blue-50 border border-blue-100 rounded-2xl rounded-tl-none p-4 flex-1">
+                                    <p className="text-slate-700 leading-relaxed">
+                                        Welcome! I&apos;m <span className="text-blue-600 font-medium">CLARENCE</span>, your neutral mediator for this contract negotiation.
+                                    </p>
+                                    <p className="text-slate-500 text-sm mt-2">
+                                        I&apos;ll guide you through a quick onboarding process before we begin. Everything you share is confidential and used only to facilitate fair negotiations.
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Steps */}
-                    <div className="space-y-4 mb-8">
-                        {steps.map((step, index) => (
-                            <div
-                                key={step.number}
-                                className={`flex items-start gap-4 p-4 rounded-xl transition-all duration-500 ${currentStep >= step.number || showAllSteps
-                                        ? 'bg-slate-700/30 opacity-100 translate-x-0'
+                        {/* Steps */}
+                        <div className="space-y-4 mb-8">
+                            {steps.map((step) => (
+                                <div
+                                    key={step.number}
+                                    className={`flex items-start gap-4 p-4 rounded-xl transition-all duration-500 ${currentStep >= step.number || showAllSteps
+                                        ? 'bg-slate-50 border border-slate-200 opacity-100 translate-x-0'
                                         : 'opacity-0 -translate-x-4'
-                                    }`}
-                            >
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${currentStep >= step.number || showAllSteps
-                                        ? 'bg-emerald-500/20 text-emerald-400'
-                                        : 'bg-slate-700 text-slate-500'
-                                    }`}>
-                                    {step.icon}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-white font-medium">{step.title}</h3>
-                                        <span className="text-xs text-slate-500">{step.duration}</span>
+                                        }`}
+                                >
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-300 ${currentStep >= step.number || showAllSteps
+                                        ? 'bg-blue-100 text-blue-600'
+                                        : 'bg-slate-100 text-slate-400'
+                                        }`}>
+                                        {step.icon}
                                     </div>
-                                    <p className="text-slate-400 text-sm mt-1">{step.description}</p>
+                                    <div className="flex-1">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-slate-800 font-medium">{step.title}</h3>
+                                            <span className="text-xs text-slate-500">{step.duration}</span>
+                                        </div>
+                                        <p className="text-slate-500 text-sm mt-1">{step.description}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
 
-                    {/* CLARENCE Promise */}
-                    <div className={`border-t border-slate-700 pt-6 mb-6 transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'
-                        }`}>
-                        <h4 className="text-emerald-400 text-sm font-medium mb-3">CLARENCE&apos;s Promise</h4>
-                        <ul className="space-y-2 text-sm text-slate-400">
-                            <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Neutral mediation based on market data and factual analysis
-                            </li>
-                            <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Equal visibility into negotiation dynamics for both parties
-                            </li>
-                            <li className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Confidential handling of your strategic information
-                            </li>
-                        </ul>
-                    </div>
+                        {/* CLARENCE Promise */}
+                        <div className={`border-t border-slate-200 pt-6 mb-6 transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'
+                            }`}>
+                            <h4 className="text-blue-600 text-sm font-medium mb-3">CLARENCE&apos;s Promise</h4>
+                            <ul className="space-y-2 text-sm text-slate-600">
+                                <li className="flex items-center gap-2">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Neutral mediation based on market data and factual analysis
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Equal visibility into negotiation dynamics for both parties
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Confidential handling of your strategic information
+                                </li>
+                            </ul>
+                        </div>
 
-                    {/* Continue Button */}
-                    <div className={`transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'}`}>
-                        <button
-                            onClick={handleContinue}
-                            className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl font-medium transition-all duration-300 flex items-center justify-center gap-2"
-                        >
-                            Let&apos;s Begin
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                            </svg>
-                        </button>
-                        <p className="text-center text-slate-500 text-xs mt-3">
-                            Estimated time: 10-15 minutes
-                        </p>
-                    </div>
+                        {/* Continue Button */}
+                        <div className={`transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'}`}>
+                            <button
+                                onClick={handleContinue}
+                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                Let&apos;s Begin
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                            </button>
+                            <p className="text-center text-slate-500 text-xs mt-3">
+                                Estimated time: 10-15 minutes
+                            </p>
+                        </div>
 
-                    {/* Skip Animation */}
-                    {!showAllSteps && (
-                        <button
-                            onClick={handleSkip}
-                            className="w-full mt-4 text-slate-500 hover:text-slate-400 text-sm transition-colors"
-                        >
-                            Skip animation →
-                        </button>
-                    )}
+                        {/* Skip Animation */}
+                        {!showAllSteps && (
+                            <button
+                                onClick={handleSkip}
+                                className="w-full mt-4 text-slate-400 hover:text-slate-600 text-sm transition-colors cursor-pointer"
+                            >
+                                Skip animation →
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            </main>
+
+            <ProviderFooter />
         </div>
     )
 }
