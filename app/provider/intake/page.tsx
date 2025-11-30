@@ -254,167 +254,195 @@ function ProviderIntakeContent() {
     })
 
     // ========================================================================
-    // SECTION 9: TOKEN VALIDATION (with localStorage fallback)
+    // SECTION 9: SESSION VALIDATION (with localStorage fallback)
     // ========================================================================
 
-    const validateToken = useCallback(async () => {
+    const validateSession = useCallback(async () => {
+        // Get params from URL
         let sessionId = searchParams.get('session_id')
         let token = searchParams.get('token')
         let providerId = searchParams.get('provider_id')
 
-        console.log('Intake validation - URL params:', { sessionId, token })
+        console.log('Intake validation - URL params:', { sessionId, token, providerId })
 
-        if (!sessionId || !token) {
-            try {
-                const storedSession = localStorage.getItem('clarence_provider_session')
-                console.log('Intake validation - localStorage raw:', storedSession)
+        // Try localStorage for missing params
+        try {
+            const storedSession = localStorage.getItem('clarence_provider_session')
+            console.log('Intake validation - localStorage raw:', storedSession)
 
-                if (storedSession) {
-                    const sessionData = JSON.parse(storedSession)
-                    console.log('Intake validation - localStorage parsed:', sessionData)
+            if (storedSession) {
+                const sessionData = JSON.parse(storedSession)
+                console.log('Intake validation - localStorage parsed:', sessionData)
 
-                    if (!sessionId && sessionData.sessionId) {
-                        sessionId = sessionData.sessionId
-                    }
-                    if (!token && sessionData.token) {
-                        token = sessionData.token
-                    }
-                    if (!providerId && sessionData.providerId) {
-                        providerId = sessionData.providerId
-                    }
-
-                    console.log('Intake validation - After localStorage merge:', { sessionId, token, providerId })
+                if (!sessionId && sessionData.sessionId) {
+                    sessionId = sessionData.sessionId
                 }
-            } catch (e) {
-                console.error('Error reading localStorage:', e)
+                if (!token && sessionData.token) {
+                    token = sessionData.token
+                }
+                if (!providerId && sessionData.providerId) {
+                    providerId = sessionData.providerId
+                }
+
+                console.log('Intake validation - After localStorage merge:', { sessionId, token, providerId })
             }
+        } catch (e) {
+            console.error('Error reading localStorage:', e)
         }
 
-        if (!sessionId || !token) {
-            console.log('Intake validation - FAILED: Missing session_id or token')
-            setErrorMessage('Invalid invitation link. Please check your email for the correct link.')
+        // Must have sessionId at minimum
+        if (!sessionId) {
+            console.log('Intake validation - FAILED: Missing session_id')
+            setErrorMessage('Invalid session. Please check your email for the correct link.')
             setValidating(false)
             setLoading(false)
             return
         }
 
-        console.log('Intake validation - Calling API with:', { sessionId, token })
+        // STRATEGY: If we have providerId, use session-access validation (post-registration)
+        // If we only have token, use invite validation (pre-registration)
 
-        try {
-            const response = await fetch(`${API_BASE}/validate-provider-invite?session_id=${sessionId}&token=${token}`)
+        if (providerId) {
+            // Provider is already registered - validate using session_id + provider_id
+            console.log('Intake validation - Using provider_id validation:', { sessionId, providerId })
 
-            console.log('Intake validation - API response status:', response.status)
+            try {
+                const response = await fetch(`${API_BASE}/validate-provider-session-access?session_id=${sessionId}&provider_id=${providerId}`)
 
-            if (response.ok) {
-                const data = await response.json()
-                console.log('Intake validation - API response data:', data)
+                console.log('Intake validation - API response status:', response.status)
 
-                if (data.valid) {
-                    setInviteData({
-                        bidId: data.bidId || data.bid_id || '',
-                        sessionId: data.sessionId || data.session_id || sessionId,
-                        providerId: data.providerId || data.provider_id || '',
-                        sessionNumber: data.sessionNumber || data.session_number || '',
-                        customerCompany: data.customerCompany || data.customer_company || '',
-                        serviceRequired: data.serviceRequired || data.service_required || '',
-                        dealValue: data.dealValue || data.deal_value || '',
-                        providerCompany: data.providerCompany || data.provider_company || '',
-                        providerContact: data.providerContact || data.provider_contact_name || '',
-                        providerEmail: data.providerEmail || data.provider_contact_email || '',
-                        status: data.status || data.bidStatus || 'invited'
-                    })
+                if (response.ok) {
+                    const data = await response.json()
+                    console.log('Intake validation - API response data:', data)
 
-                    setFormData(prev => ({
-                        ...prev,
-                        companyName: data.providerCompany || data.provider_company || '',
-                        contactName: data.providerContact || data.provider_contact_name || '',
-                        contactEmail: data.providerEmail || data.provider_contact_email || ''
-                    }))
-
-                    setIsValid(true)
-                    console.log('Intake validation - SUCCESS: Valid invite')
-                } else {
-                    console.log('Intake validation - FAILED: API said invalid -', data.message)
-                    setErrorMessage(data.message || 'This invitation is no longer valid.')
-                }
-            } else {
-                console.log('Intake validation - API error, proceeding with basic validation')
-                try {
-                    const storedSession = localStorage.getItem('clarence_provider_session')
-                    if (storedSession) {
-                        const sessionData = JSON.parse(storedSession)
+                    if (data.valid) {
                         setInviteData({
-                            bidId: '',
-                            sessionId: sessionId,
-                            sessionNumber: sessionData.sessionNumber || '',
-                            providerId: sessionData.providerId || providerId || '',
-                            customerCompany: '',
-                            serviceRequired: '',
-                            dealValue: '',
-                            providerCompany: sessionData.company || '',
-                            providerContact: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
-                            providerEmail: sessionData.email || '',
-                            status: 'invited'
+                            bidId: data.bidId || data.bid_id || '',
+                            sessionId: data.sessionId || data.session_id || sessionId,
+                            providerId: data.providerId || data.provider_id || providerId,
+                            sessionNumber: data.sessionNumber || data.session_number || '',
+                            customerCompany: data.customerCompany || data.customer_company || '',
+                            serviceRequired: data.serviceRequired || data.service_required || '',
+                            dealValue: data.dealValue || data.deal_value || '',
+                            providerCompany: data.providerCompany || data.provider_company || '',
+                            providerContact: data.providerContact || data.provider_contact_name || '',
+                            providerEmail: data.providerEmail || data.provider_contact_email || '',
+                            status: data.status || data.bidStatus || 'registered'
                         })
+
                         setFormData(prev => ({
                             ...prev,
-                            companyName: sessionData.company || '',
-                            contactName: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
-                            contactEmail: sessionData.email || ''
+                            companyName: data.providerCompany || data.provider_company || '',
+                            contactName: data.providerContact || data.provider_contact_name || '',
+                            contactEmail: data.providerEmail || data.provider_contact_email || ''
                         }))
+
                         setIsValid(true)
-                        console.log('Intake validation - SUCCESS via localStorage fallback')
-                    } else {
-                        setErrorMessage('Unable to validate your session. Please return to your invitation link.')
+                        console.log('Intake validation - SUCCESS: Valid session access')
+                        setValidating(false)
+                        setLoading(false)
+                        return
                     }
-                } catch (e) {
-                    console.error('localStorage fallback error:', e)
-                    setErrorMessage('Unable to validate your session. Please return to your invitation link.')
                 }
-            }
-        } catch (error) {
-            console.error('Validation error:', error)
-            try {
-                const storedSession = localStorage.getItem('clarence_provider_session')
-                if (storedSession) {
-                    const sessionData = JSON.parse(storedSession)
-                    setInviteData({
-                        bidId: '',
-                        sessionId: sessionId || '',
-                        sessionNumber: sessionData.sessionNumber || '',
-                        providerId: sessionData.providerId || providerId || '',
-                        customerCompany: '',
-                        serviceRequired: '',
-                        dealValue: '',
-                        providerCompany: sessionData.company || '',
-                        providerContact: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
-                        providerEmail: sessionData.email || '',
-                        status: 'invited'
-                    })
-                    setFormData(prev => ({
-                        ...prev,
-                        companyName: sessionData.company || '',
-                        contactName: `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
-                        contactEmail: sessionData.email || ''
-                    }))
-                    setIsValid(true)
-                    console.log('Intake validation - SUCCESS via localStorage fallback (after error)')
-                } else {
-                    setErrorMessage('Unable to validate your session. Please check your connection and try again.')
-                }
-            } catch (e) {
-                console.error('localStorage fallback error:', e)
-                setErrorMessage('Unable to validate your session. Please check your connection and try again.')
+            } catch (error) {
+                console.error('Session access validation error:', error)
             }
         }
 
+        // Fallback: Try token-based validation (for pre-registration or if provider_id validation failed)
+        if (token) {
+            console.log('Intake validation - Falling back to token validation:', { sessionId, token })
+
+            try {
+                const response = await fetch(`${API_BASE}/validate-provider-invite?session_id=${sessionId}&token=${token}`)
+
+                console.log('Intake validation - API response status:', response.status)
+
+                if (response.ok) {
+                    const data = await response.json()
+                    console.log('Intake validation - API response data:', data)
+
+                    if (data.valid) {
+                        setInviteData({
+                            bidId: data.bidId || data.bid_id || '',
+                            sessionId: data.sessionId || data.session_id || sessionId,
+                            providerId: data.providerId || data.provider_id || providerId || '',
+                            sessionNumber: data.sessionNumber || data.session_number || '',
+                            customerCompany: data.customerCompany || data.customer_company || '',
+                            serviceRequired: data.serviceRequired || data.service_required || '',
+                            dealValue: data.dealValue || data.deal_value || '',
+                            providerCompany: data.providerCompany || data.provider_company || '',
+                            providerContact: data.providerContact || data.provider_contact_name || '',
+                            providerEmail: data.providerEmail || data.provider_contact_email || '',
+                            status: data.status || data.bidStatus || 'invited'
+                        })
+
+                        setFormData(prev => ({
+                            ...prev,
+                            companyName: data.providerCompany || data.provider_company || '',
+                            contactName: data.providerContact || data.provider_contact_name || '',
+                            contactEmail: data.providerEmail || data.provider_contact_email || ''
+                        }))
+
+                        setIsValid(true)
+                        console.log('Intake validation - SUCCESS: Valid invite token')
+                        setValidating(false)
+                        setLoading(false)
+                        return
+                    } else {
+                        console.log('Intake validation - FAILED: API said invalid -', data.message)
+                    }
+                }
+            } catch (error) {
+                console.error('Token validation error:', error)
+            }
+        }
+
+        // Final fallback: Use localStorage data directly
+        try {
+            const storedSession = localStorage.getItem('clarence_provider_session')
+            if (storedSession) {
+                const sessionData = JSON.parse(storedSession)
+                console.log('Intake validation - Using localStorage fallback')
+
+                setInviteData({
+                    bidId: '',
+                    sessionId: sessionId,
+                    sessionNumber: sessionData.sessionNumber || '',
+                    providerId: sessionData.providerId || providerId || '',
+                    customerCompany: sessionData.customerCompany || '',
+                    serviceRequired: sessionData.serviceRequired || '',
+                    dealValue: sessionData.dealValue || '',
+                    providerCompany: sessionData.companyName || sessionData.company || '',
+                    providerContact: sessionData.contactName || `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
+                    providerEmail: sessionData.contactEmail || sessionData.email || '',
+                    status: 'registered'
+                })
+                setFormData(prev => ({
+                    ...prev,
+                    companyName: sessionData.companyName || sessionData.company || '',
+                    contactName: sessionData.contactName || `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
+                    contactEmail: sessionData.contactEmail || sessionData.email || ''
+                }))
+                setIsValid(true)
+                console.log('Intake validation - SUCCESS via localStorage fallback')
+                setValidating(false)
+                setLoading(false)
+                return
+            }
+        } catch (e) {
+            console.error('localStorage fallback error:', e)
+        }
+
+        // All validation methods failed
+        setErrorMessage('Unable to validate your session. Please return to your invitation link.')
         setValidating(false)
         setLoading(false)
     }, [searchParams])
 
     useEffect(() => {
-        validateToken()
-    }, [validateToken])
+        validateSession()
+    }, [validateSession])
 
     // ========================================================================
     // SECTION 10: FORM HANDLERS
