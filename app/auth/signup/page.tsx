@@ -70,6 +70,7 @@ export default function SignupPage() {
   const [passwordStrength, setPasswordStrength] = useState({ score: 0, text: 'Password strength will appear here', class: '' })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null)
+  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false)
 
   // ==========================================================================
   // SECTION 6: LOAD COMPANIES ON MOUNT
@@ -221,23 +222,25 @@ export default function SignupPage() {
       }
 
       if (data.user) {
-        // Check if email confirmation is required
+        // Check if user already exists (identities array is empty)
         if (data.user.identities && data.user.identities.length === 0) {
-          // User already exists
-          setMessage({ text: 'An account with this email already exists. Please sign in instead.', type: 'error' })
+          setMessage({
+            text: 'An account with this email already exists. Please sign in instead.',
+            type: 'error'
+          })
           setLoading(false)
           return
         }
 
-        if (data.session) {
-          // Email confirmation disabled - user is logged in immediately
+        // Check if email is already confirmed
+        const emailConfirmed = data.user.email_confirmed_at !== null
+
+        if (emailConfirmed && data.session) {
+          // Email already confirmed (rare - maybe OAuth or confirmation disabled)
           handleRegistrationSuccess(data.user)
         } else {
-          // Email confirmation required
-          setMessage({
-            text: '✉️ Please check your email to confirm your account. Click the link in the email to complete registration.',
-            type: 'success'
-          })
+          // Email confirmation required - show confirmation UI
+          setShowEmailConfirmation(true)
           setLoading(false)
         }
       }
@@ -275,6 +278,82 @@ export default function SignupPage() {
   // ==========================================================================
   // SECTION 11: RENDER
   // ==========================================================================
+  // ==========================================================================
+  // SECTION 11: RENDER
+  // ==========================================================================
+
+  // Show email confirmation screen
+  if (showEmailConfirmation) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 flex items-center justify-center p-5">
+        <div className="bg-slate-50 rounded-xl shadow-2xl overflow-hidden w-full max-w-md">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-slate-700 to-slate-600 text-white p-8 text-center">
+            <h1 className="text-3xl font-medium mb-2 tracking-wide">CLARENCE</h1>
+            <p className="text-sm text-slate-300 font-light tracking-wider">The Honest Broker</p>
+          </div>
+
+          {/* Confirmation Content */}
+          <div className="p-8 text-center">
+            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+
+            <h2 className="text-2xl font-semibold text-slate-800 mb-3">Check Your Email</h2>
+
+            <p className="text-slate-600 mb-2">
+              We&apos;ve sent a confirmation link to:
+            </p>
+
+            <p className="text-slate-800 font-medium text-lg mb-6">
+              {formData.email}
+            </p>
+
+            <div className="bg-slate-100 rounded-lg p-4 mb-6 text-left">
+              <h3 className="font-medium text-slate-700 mb-2">Next Steps:</h3>
+              <ol className="text-sm text-slate-600 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="bg-slate-300 text-slate-700 rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">1</span>
+                  <span>Open the email from CLARENCE</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="bg-slate-300 text-slate-700 rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">2</span>
+                  <span>Click the &quot;Confirm Email Address&quot; button</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="bg-slate-300 text-slate-700 rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">3</span>
+                  <span>Return here to sign in</span>
+                </li>
+              </ol>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6">
+              <p className="text-sm text-amber-700">
+                <strong>Didn&apos;t receive the email?</strong><br />
+                Check your spam folder or wait a few minutes. Email delivery can take up to 5 minutes.
+              </p>
+            </div>
+
+            <Link
+              href="/auth/login"
+              className="inline-block w-full py-3 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg font-medium text-sm transition-all duration-300 hover:shadow-lg"
+            >
+              Go to Sign In
+            </Link>
+
+            <button
+              onClick={() => setShowEmailConfirmation(false)}
+              className="mt-4 text-sm text-slate-500 hover:text-slate-700"
+            >
+              ← Use a different email
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800 flex items-center justify-center p-5">
