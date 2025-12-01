@@ -982,6 +982,20 @@ export default function ContractsDashboard() {
                         {actionButton.text}
                       </button>
 
+                      {/* Invite More Providers Button - Show for relevant statuses */}
+                      {['providers_invited', 'customer_onboarding_complete', 'negotiation_active', 'in_progress'].includes(session.status) && (
+                        <button
+                          onClick={() => router.push(`/auth/invite-providers?session_id=${session.sessionId}&session_number=${session.sessionNumber || ''}`)}
+                          className="px-4 py-2.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+                          title="Invite more providers"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                          </svg>
+                          <span className="hidden sm:inline">Invite</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => continueWithClarence(session.sessionId)}
                         className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
