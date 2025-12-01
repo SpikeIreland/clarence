@@ -16,7 +16,7 @@ interface ProcessStep {
 }
 
 // ============================================================================
-// SECTION 2: PROCESS STEPS DATA
+// SECTION 2: PROCESS STEPS DATA - UPDATED PER JOHN'S FEEDBACK (SCHEDULE A)
 // ============================================================================
 
 const processSteps: ProcessStep[] = [
@@ -24,13 +24,10 @@ const processSteps: ProcessStep[] = [
     id: 1,
     title: "Deal Definition",
     icon: "📋",
-    description: "CLARENCE creates a comprehensive deal profile from party inputs",
+    description: "CLARENCE creates a comprehensive deal profile from party inputs.",
     details: [
-      "CLARENCE will ask the parties for a number of details from which it will create a comprehensive deal profile",
-      "These details will auto-populate into the relevant parts of the contract negotiation process",
-      "Expected length of term will go into the Phase 2 term clause",
-      "Expected service levels will display in the Phase 5 services schedule",
-      "All information gathered becomes the foundation for the negotiation"
+      "CLARENCE will ask the parties for several data points from which it will create a comprehensive deal profile.",
+      "These data points become the foundation for the negotiation and auto-populate into the relevant parts of the contract negotiation process."
     ],
     color: 'emerald'
   },
@@ -38,13 +35,10 @@ const processSteps: ProcessStep[] = [
     id: 2,
     title: "Party Fit",
     icon: "🤝",
-    description: "Detailed assessment of compatibility between negotiating parties",
+    description: "CLARENCE conducts a detailed compatibility assessment of compatibility between negotiating parties.",
     details: [
-      "CLARENCE will obtain detailed information about each party",
-      "Present a comprehensive fit assessment",
-      "Work with the parties to understand compatibility",
-      "Find ways to optimize the fit between parties",
-      "Mitigate concerns in areas where the fit is less optimal"
+      "CLARENCE elicits detailed information about each party and provides a comprehensive fit assessment.",
+      "From the assessment, it finds ways to optimize the fit between parties and mitigate concerns in areas where the fit is less optimal."
     ],
     color: 'emerald'
   },
@@ -52,13 +46,10 @@ const processSteps: ProcessStep[] = [
     id: 3,
     title: "Leverage Assessment",
     icon: "⚖️",
-    description: "Realistic evaluation of each party's negotiating position",
+    description: "CLARENCE derives an objective, data driven evaluation of each party's negotiating position.",
     details: [
-      "CLARENCE considers several data points to assess parties' respective leverage",
-      "Provides for a realistic negotiation process",
-      "Includes point weighting in relation to each party's position selection",
-      "Accounts for leverage throughout the negotiation",
-      "Ensures balanced and fair outcomes based on actual negotiating power"
+      "CLARENCE gathers several data points to assess parties' respective leverage to provide for a realistic negotiation process.",
+      "As the parties select clause positions and CLARENCE mediates between the parties, the leverage position is tracked against the starting baseline and trade offs are suggested to achieve an optimal contract outcome."
     ],
     color: 'blue'
   },
@@ -66,14 +57,14 @@ const processSteps: ProcessStep[] = [
     id: 4,
     title: "6-Phase Negotiation Process",
     icon: "🔄",
-    description: "Structured negotiation through six comprehensive phases",
+    description: "CLARENCE leads a structured negotiation comprised of six broad phases:",
     details: [
-      "Phase 1 – Deal profile, party fit and leverage",
-      "Phase 2 – Contract foundation",
-      "Phase 3 – Gap narrowing",
-      "Phase 4 – Points of contention",
-      "Phase 5 – Deal drivers (the schedules)",
-      "Phase 6 – Final review and closure"
+      "Phase 1 – Deal profile, party fit and leverage assessment.",
+      "Phase 2 – Establishing the contract foundation.",
+      "Phase 3 – Narrowing the gaps.",
+      "Phase 4 – Addressing points of contention.",
+      "Phase 5 – Agreeing deal drivers (the schedules).",
+      "Phase 6 – Final review and closure."
     ],
     color: 'blue'
   },
@@ -81,13 +72,10 @@ const processSteps: ProcessStep[] = [
     id: 5,
     title: "CLARENCE Chat",
     icon: "💬",
-    description: "AI advisor for position selection and compromise brokering",
+    description: "CLARENCE is an agentic AI-powered mediator brokering an optimal contract outcome between the parties.",
     details: [
-      "Always available to pragmatically advise parties on position selection",
-      "Provides guidance on points of law and business considerations",
-      "Informed by knowledge of contract type, jurisdiction, and regulatory landscape",
-      "Considers deal profile and leverage in all recommendations",
-      "Transparently brokers compromises between parties to efficiently produce optimal outcomes"
+      "CLARENCE is always available to pragmatically advise parties on position selection and provide nuanced guidance on possible trade offs, points of law and business considerations.",
+      "Possessing the knowledge of an experienced law partner, with an expert understanding of different contract types, jurisdictions, and regulatory frameworks, CLARENCE will transparently and efficiently guide the parties to optimal compromise based on a continuous algorithmic leverage assessment against the leverage baseline."
     ],
     color: 'amber'
   },
@@ -95,13 +83,10 @@ const processSteps: ProcessStep[] = [
     id: 6,
     title: "Contract Generation",
     icon: "📄",
-    description: "Real-time contract updates as negotiations progress",
+    description: "Real-time contract updates as the negotiations progress.",
     details: [
-      "CLARENCE updates the draft contract in real time as negotiation progresses",
-      "Reflects positions agreed between the parties immediately",
-      "Maintains clear drafting language throughout the contract evolution",
-      "Ensures internal consistency across all contract sections",
-      "Produces professional, legally sound documentation"
+      "CLARENCE updates the draft contract in real time as negotiation progresses immediately reflecting the positions agreed between the parties.",
+      "This ensures clear, consistent and high quality contract drafting as the negotiation progresses."
     ],
     color: 'amber'
   },
@@ -109,13 +94,10 @@ const processSteps: ProcessStep[] = [
     id: 7,
     title: "Contract Governance",
     icon: "🛡️",
-    description: "Post-signature relationship management tools",
+    description: "Post-signature contract governance handbook.",
     details: [
-      "CLARENCE prepares a comprehensive contract handbook for the parties",
-      "Clearly outlines key obligations for each party",
-      "Details governance mechanisms to be implemented",
-      "Ensures harmonious post-signature relationship",
-      "Provides ongoing reference for contract management"
+      "CLARENCE prepares a comprehensive contract handbook for the parties immediately as the negotiation concludes.",
+      "The handbook clearly outlines each parties' key obligations and details the governance mechanisms to be implemented, giving the business relationship the best chances of success."
     ],
     color: 'emerald'
   }
@@ -227,7 +209,7 @@ export default function HowItWorksPage() {
       </header>
 
       {/* ================================================================== */}
-      {/* SECTION 8: HERO SECTION */}
+      {/* SECTION 8: HERO SECTION - UPDATED PER JOHN'S FEEDBACK */}
       {/* ================================================================== */}
       <section className="bg-white border-b border-slate-200">
         <div className="container mx-auto px-6 py-16">
@@ -236,14 +218,15 @@ export default function HowItWorksPage() {
               <h1 className="text-4xl font-bold text-slate-800 mb-4">
                 How CLARENCE Works
               </h1>
+              {/* UPDATED: Added "and AI-guided" per John's feedback */}
               <p className="text-lg text-slate-600 leading-relaxed max-w-2xl mx-auto">
-                A structured, transparent approach to contract negotiation that produces
+                A structured, transparent and AI-guided approach to contract negotiation that produces
                 balanced, optimal, and durable agreements.
               </p>
             </div>
 
-            {/* Value Propositions */}
-            <div className="grid md:grid-cols-3 gap-6">
+            {/* Value Propositions - UPDATED: Added 4th icon "Leverage Assessed" */}
+            <div className="grid md:grid-cols-4 gap-6">
               <div className="text-center p-6">
                 <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4">
                   <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -273,8 +256,21 @@ export default function HowItWorksPage() {
                   </svg>
                 </div>
                 <h3 className="font-semibold text-slate-800 mb-2">Expert Knowledge</h3>
+                {/* UPDATED: Text per John's feedback */}
                 <p className="text-sm text-slate-600">
-                  Expertise akin to a leading practitioner with decades of experience
+                  AI-powered expertise akin to a leading practitioner with decades of experience
+                </p>
+              </div>
+              {/* NEW: 4th icon "Leverage Assessed" per John's feedback */}
+              <div className="text-center p-6">
+                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-slate-800 mb-2">Leverage Assessed</h3>
+                <p className="text-sm text-slate-600">
+                  Positions alignment and mediation is tracked against an objective baseline leverage assessment
                 </p>
               </div>
             </div>
@@ -283,7 +279,7 @@ export default function HowItWorksPage() {
       </section>
 
       {/* ================================================================== */}
-      {/* SECTION 9: PROCESS STEPS */}
+      {/* SECTION 9: PROCESS STEPS - UPDATED WITH SCHEDULE A CONTENT */}
       {/* ================================================================== */}
       <section className="py-16">
         <div className="container mx-auto px-6">
@@ -381,7 +377,7 @@ export default function HowItWorksPage() {
                                 <p className="text-slate-700">
                                   <span className="font-medium">Explore in detail:</span>{' '}
                                   <Link href="/phases" className={`font-semibold hover:underline ${colors.text}`}>
-                                    View the complete 6-Phase breakdown →
+                                    View the 6-Phase breakdown →
                                   </Link>
                                 </p>
                               </div>
@@ -427,17 +423,20 @@ export default function HowItWorksPage() {
       </section>
 
       {/* ================================================================== */}
-      {/* SECTION 11: FOOTER */}
+      {/* SECTION 11: FOOTER - UPDATED with tagline */}
       {/* ================================================================== */}
       <footer className="bg-slate-900 text-slate-400 py-12">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            {/* Brand */}
+            {/* Brand - UPDATED to include tagline */}
             <div className="flex items-center gap-3 mb-6 md:mb-0">
               <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">C</span>
               </div>
-              <span className="text-white font-medium">CLARENCE</span>
+              <div>
+                <span className="text-white font-medium">CLARENCE</span>
+                <span className="text-slate-500 text-sm ml-2">The Honest Broker</span>
+              </div>
             </div>
 
             {/* Links */}
