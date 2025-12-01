@@ -160,15 +160,26 @@ function InviteProvidersContent() {
     }
 
     const removeProvider = (id: string) => {
-        setProviders(prev => prev.filter(p => p.id !== id))
+        if (window.confirm('Remove this provider from the invite list?')) {
+            setProviders(prev => prev.filter(p => p.id !== id))
+        }
+    }
+
+    const resetProviderStatus = (id: string) => {
+        setProviders(prev => prev.map(p =>
+            p.id === id ? { ...p, status: 'pending' as const, errorMessage: undefined } : p
+        ))
     }
 
     // ========================================================================
     // SECTION 8: SEND INVITATIONS
     // ========================================================================
     const sendInvitations = async () => {
-        if (providers.length === 0) {
-            alert('Please add at least one provider to invite')
+        // Only send pending providers (allows retry of failed ones)
+        const pendingProviders = providers.filter(p => p.status === 'pending')
+
+        if (pendingProviders.length === 0) {
+            alert('No pending invitations to send')
             return
         }
 
@@ -176,8 +187,11 @@ function InviteProvidersContent() {
 
         setIsSubmitting(true)
 
+        let successCount = 0
+        let failCount = 0
+
         // Send invitations one by one
-        for (const provider of providers) {
+        for (const provider of pendingProviders) {
             // Update status to sending
             setProviders(prev => prev.map(p =>
                 p.id === provider.id ? { ...p, status: 'sending' as const } : p
@@ -205,17 +219,20 @@ function InviteProvidersContent() {
                     setProviders(prev => prev.map(p =>
                         p.id === provider.id ? { ...p, status: 'sent' as const } : p
                     ))
+                    successCount++
                 } else {
                     const error = await response.json()
                     setProviders(prev => prev.map(p =>
                         p.id === provider.id ? { ...p, status: 'error' as const, errorMessage: error.message || 'Failed to send' } : p
                     ))
+                    failCount++
                 }
             } catch (error) {
                 console.error('Error sending invitation:', error)
                 setProviders(prev => prev.map(p =>
                     p.id === provider.id ? { ...p, status: 'error' as const, errorMessage: 'Network error' } : p
                 ))
+                failCount++
             }
 
             // Small delay between sends
@@ -224,15 +241,22 @@ function InviteProvidersContent() {
 
         setIsSubmitting(false)
 
-        // Check if all sent successfully
-        const allSuccessful = providers.every(p => p.status === 'sent')
-        if (allSuccessful) {
+        // Check if at least one was sent successfully
+        const anySuccessful = providers.some(p => p.status === 'sent')
+        if (anySuccessful) {
             setAllSent(true)
+        }
+
+        // Show summary
+        if (failCount > 0 && successCount > 0) {
+            alert(`${successCount} invitation(s) sent successfully. ${failCount} failed - you can retry or remove them.`)
+        } else if (failCount > 0 && successCount === 0) {
+            alert(`Failed to send invitations. Please check the errors and retry.`)
         }
     }
 
     const proceedToWaiting = () => {
-        router.push(`/auth/contract-dashboard?session_id=${session?.sessionId}`)
+        router.push(`/auth/contracts-dashboard?session_id=${session?.sessionId}`)
     }
 
     // ========================================================================
@@ -404,22 +428,22 @@ function InviteProvidersContent() {
                                 <div
                                     key={provider.id}
                                     className={`flex items-center justify-between p-4 rounded-lg border ${provider.status === 'sent'
-                                            ? 'bg-emerald-50 border-emerald-200'
-                                            : provider.status === 'error'
-                                                ? 'bg-red-50 border-red-200'
-                                                : provider.status === 'sending'
-                                                    ? 'bg-blue-50 border-blue-200'
-                                                    : 'bg-slate-50 border-slate-200'
+                                        ? 'bg-emerald-50 border-emerald-200'
+                                        : provider.status === 'error'
+                                            ? 'bg-red-50 border-red-200'
+                                            : provider.status === 'sending'
+                                                ? 'bg-blue-50 border-blue-200'
+                                                : 'bg-slate-50 border-slate-200'
                                         }`}
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${provider.status === 'sent'
-                                                ? 'bg-emerald-500'
-                                                : provider.status === 'error'
-                                                    ? 'bg-red-500'
-                                                    : provider.status === 'sending'
-                                                        ? 'bg-blue-500'
-                                                        : 'bg-slate-400'
+                                            ? 'bg-emerald-500'
+                                            : provider.status === 'error'
+                                                ? 'bg-red-500'
+                                                : provider.status === 'sending'
+                                                    ? 'bg-blue-500'
+                                                    : 'bg-slate-400'
                                             }`}>
                                             {provider.status === 'sent' ? '✓' :
                                                 provider.status === 'error' ? '!' :
@@ -438,25 +462,61 @@ function InviteProvidersContent() {
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`text-xs px-2 py-1 rounded ${provider.status === 'sent'
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : provider.status === 'error'
-                                                    ? 'bg-red-100 text-red-700'
-                                                    : provider.status === 'sending'
-                                                        ? 'bg-blue-100 text-blue-700'
-                                                        : 'bg-slate-100 text-slate-600'
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : provider.status === 'error'
+                                                ? 'bg-red-100 text-red-700'
+                                                : provider.status === 'sending'
+                                                    ? 'bg-blue-100 text-blue-700'
+                                                    : 'bg-slate-100 text-slate-600'
                                             }`}>
                                             {provider.status === 'sent' ? 'Invitation Sent' :
                                                 provider.status === 'error' ? 'Failed' :
                                                     provider.status === 'sending' ? 'Sending...' :
                                                         'Ready to Send'}
                                         </span>
+
+                                        {/* Action buttons based on status */}
                                         {provider.status === 'pending' && (
                                             <button
                                                 onClick={() => removeProvider(provider.id)}
-                                                className="text-slate-400 hover:text-red-500 transition-all"
+                                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+                                                title="Remove provider"
                                             >
-                                                ✕
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
                                             </button>
+                                        )}
+
+                                        {provider.status === 'error' && (
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={() => resetProviderStatus(provider.id)}
+                                                    className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition-all"
+                                                    title="Retry sending"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => removeProvider(provider.id)}
+                                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+                                                    title="Remove provider"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {provider.status === 'sent' && (
+                                            <span className="text-emerald-500">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </span>
                                         )}
                                     </div>
                                 </div>
@@ -474,29 +534,35 @@ function InviteProvidersContent() {
                         ← Back to Dashboard
                     </button>
 
-                    {allSent ? (
-                        <button
-                            onClick={proceedToWaiting}
-                            className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg hover:from-emerald-700 hover:to-emerald-800 font-medium transition-all"
-                        >
-                            Continue to Dashboard →
-                        </button>
-                    ) : (
-                        <button
-                            onClick={sendInvitations}
-                            disabled={providers.length === 0 || isSubmitting}
-                            className="px-8 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-lg hover:from-slate-700 hover:to-slate-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed font-medium transition-all flex items-center gap-2"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Sending Invitations...
-                                </>
-                            ) : (
-                                <>Send {providers.length} Invitation{providers.length !== 1 ? 's' : ''} →</>
-                            )}
-                        </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {/* Show "Continue" button once any invitations have been sent */}
+                        {allSent && (
+                            <button
+                                onClick={proceedToWaiting}
+                                className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg hover:from-emerald-700 hover:to-emerald-800 font-medium transition-all"
+                            >
+                                Continue to Dashboard →
+                            </button>
+                        )}
+
+                        {/* Always show send button if there are pending providers */}
+                        {providers.some(p => p.status === 'pending') && (
+                            <button
+                                onClick={sendInvitations}
+                                disabled={isSubmitting}
+                                className="px-8 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-lg hover:from-slate-700 hover:to-slate-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed font-medium transition-all flex items-center gap-2"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Sending...
+                                    </>
+                                ) : (
+                                    <>Send {providers.filter(p => p.status === 'pending').length} Invitation{providers.filter(p => p.status === 'pending').length !== 1 ? 's' : ''}</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Help Text */}
