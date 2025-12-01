@@ -106,6 +106,7 @@ function ProviderWelcomeContent() {
     const [currentStep, setCurrentStep] = useState(0)
     const [showAllSteps, setShowAllSteps] = useState(false)
     const [sessionId, setSessionId] = useState<string | null>(null)
+    const [providerId, setProviderId] = useState<string | null>(null)
     const [token, setToken] = useState<string | null>(null)
     const [sessionNumber, setSessionNumber] = useState<string | null>(null)
 
@@ -114,27 +115,43 @@ function ProviderWelcomeContent() {
     // ========================================================================
 
     useEffect(() => {
+        // Get params from URL first
         const sid = searchParams.get('session_id')
-        setSessionId(sid)
+        const pid = searchParams.get('provider_id')
+        const tkn = searchParams.get('token')
 
+        setSessionId(sid)
+        setProviderId(pid)
+        setToken(tkn)
+
+        // Then try localStorage for any missing values
         try {
-            const storedSession = localStorage.getItem('clarence_provider_session')
+            const storedSession = localStorage.getItem('clarence_provider_session') ||
+                localStorage.getItem('providerSession')
             if (storedSession) {
                 const sessionData = JSON.parse(storedSession)
                 console.log('Welcome page - loaded session data:', sessionData)
-                setToken(sessionData.token || null)
-                setSessionNumber(sessionData.sessionNumber || null)
 
+                // Fill in missing values from localStorage
                 if (!sid && sessionData.sessionId) {
                     setSessionId(sessionData.sessionId)
+                }
+                if (!pid && sessionData.providerId) {
+                    setProviderId(sessionData.providerId)
+                }
+                if (!tkn && sessionData.token) {
+                    setToken(sessionData.token)
+                }
+                if (sessionData.sessionNumber) {
+                    setSessionNumber(sessionData.sessionNumber)
                 }
             }
         } catch (e) {
             console.error('Error reading localStorage:', e)
         }
 
+        // Animation timers
         const timers: NodeJS.Timeout[] = []
-
         timers.push(setTimeout(() => setCurrentStep(1), 500))
         timers.push(setTimeout(() => setCurrentStep(2), 1500))
         timers.push(setTimeout(() => setCurrentStep(3), 2500))
@@ -149,8 +166,17 @@ function ProviderWelcomeContent() {
 
     const handleContinue = () => {
         const params = new URLSearchParams()
+
+        // Always include session_id
         if (sessionId) params.set('session_id', sessionId)
-        if (token) params.set('token', token)
+
+        // PRIORITY: Use provider_id if available (post-registration)
+        // Fall back to token only if no provider_id (pre-registration)
+        if (providerId) {
+            params.set('provider_id', providerId)
+        } else if (token) {
+            params.set('token', token)
+        }
 
         const queryString = params.toString()
         const url = queryString ? `/provider/intake?${queryString}` : '/provider/intake'
