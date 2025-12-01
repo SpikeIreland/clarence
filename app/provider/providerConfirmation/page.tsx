@@ -27,9 +27,11 @@ export default function ProviderConfirmationPage() {
 function ProviderConfirmationContent() {
     const searchParams = useSearchParams()
     const [sessionId, setSessionId] = useState<string | null>(null)
+    const [providerId, setProviderId] = useState<string | null>(null)
 
     useEffect(() => {
         setSessionId(searchParams.get('session_id'))
+        setProviderId(searchParams.get('provider_id'))
     }, [searchParams])
 
     // ========================================================================
@@ -153,7 +155,18 @@ function ProviderConfirmationContent() {
                 <div className="text-center space-y-4">
                     <p className="text-slate-600">A confirmation email has been sent with these details.</p>
 
-                    <div className="flex justify-center gap-4">
+                    <div className="flex flex-col sm:flex-row justify-center gap-4">
+                        {sessionId && (
+                            <Link
+                                href={`/provider/contract-studio?session_id=${sessionId}${providerId ? `&provider_id=${providerId}` : ''}`}
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium flex items-center justify-center gap-2"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Go to Contract Studio
+                            </Link>
+                        )}
                         <Link
                             href="/"
                             className="px-6 py-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-all font-medium"
