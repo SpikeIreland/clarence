@@ -263,25 +263,46 @@ function ProviderIntakeContent() {
         let token = searchParams.get('token')
         let providerId = searchParams.get('provider_id')
 
+        // Storage for registration data from localStorage
+        let storedRegistrationData: {
+            companyName?: string
+            contactName?: string
+            contactEmail?: string
+            contactPhone?: string
+            companySize?: string
+            industry?: string
+            sessionId?: string
+            sessionNumber?: string
+            providerId?: string
+            token?: string
+            customerCompany?: string
+            serviceRequired?: string
+            dealValue?: string
+        } | null = null
+
         console.log('Intake validation - URL params:', { sessionId, token, providerId })
 
-        // Try localStorage for missing params
+        // Try localStorage for missing params AND registration data
         try {
-            const storedSession = localStorage.getItem('clarence_provider_session')
+            // Check both localStorage keys for compatibility
+            const storedSession = localStorage.getItem('clarence_provider_session') ||
+                localStorage.getItem('providerSession')
             console.log('Intake validation - localStorage raw:', storedSession)
 
             if (storedSession) {
-                const sessionData = JSON.parse(storedSession)
-                console.log('Intake validation - localStorage parsed:', sessionData)
+                storedRegistrationData = JSON.parse(storedSession)
+                console.log('Intake validation - localStorage parsed:', storedRegistrationData)
 
-                if (!sessionId && sessionData.sessionId) {
-                    sessionId = sessionData.sessionId
-                }
-                if (!token && sessionData.token) {
-                    token = sessionData.token
-                }
-                if (!providerId && sessionData.providerId) {
-                    providerId = sessionData.providerId
+                if (storedRegistrationData) {
+                    if (!sessionId && storedRegistrationData.sessionId) {
+                        sessionId = storedRegistrationData.sessionId
+                    }
+                    if (!token && storedRegistrationData.token) {
+                        token = storedRegistrationData.token
+                    }
+                    if (!providerId && storedRegistrationData.providerId) {
+                        providerId = storedRegistrationData.providerId
+                    }
                 }
 
                 console.log('Intake validation - After localStorage merge:', { sessionId, token, providerId })
@@ -297,6 +318,36 @@ function ProviderIntakeContent() {
             setValidating(false)
             setLoading(false)
             return
+        }
+
+        // Helper function to pre-populate form with best available data
+        const prePopulateForm = (apiData: Record<string, unknown> = {}) => {
+            // Priority: API data > localStorage data > empty
+            setFormData(prev => ({
+                ...prev,
+                // Company Info - prefer API, fallback to localStorage
+                companyName: (apiData.providerCompany as string) ||
+                    (apiData.provider_company as string) ||
+                    storedRegistrationData?.companyName ||
+                    prev.companyName || '',
+                contactName: (apiData.providerContact as string) ||
+                    (apiData.provider_contact_name as string) ||
+                    storedRegistrationData?.contactName ||
+                    prev.contactName || '',
+                contactEmail: (apiData.providerEmail as string) ||
+                    (apiData.provider_contact_email as string) ||
+                    storedRegistrationData?.contactEmail ||
+                    prev.contactEmail || '',
+                contactPhone: storedRegistrationData?.contactPhone || prev.contactPhone || '',
+
+                // These are ONLY from localStorage (not in API response)
+                companySize: storedRegistrationData?.companySize || prev.companySize || '',
+
+                // Map industry to industrySpecializations array if present
+                industrySpecializations: storedRegistrationData?.industry
+                    ? [storedRegistrationData.industry]
+                    : prev.industrySpecializations || []
+            }))
         }
 
         // STRATEGY: If we have providerId, use session-access validation (post-registration)
@@ -320,22 +371,18 @@ function ProviderIntakeContent() {
                             bidId: data.bidId || data.bid_id || '',
                             sessionId: data.sessionId || data.session_id || sessionId,
                             providerId: data.providerId || data.provider_id || providerId,
-                            sessionNumber: data.sessionNumber || data.session_number || '',
-                            customerCompany: data.customerCompany || data.customer_company || '',
-                            serviceRequired: data.serviceRequired || data.service_required || '',
-                            dealValue: data.dealValue || data.deal_value || '',
-                            providerCompany: data.providerCompany || data.provider_company || '',
-                            providerContact: data.providerContact || data.provider_contact_name || '',
-                            providerEmail: data.providerEmail || data.provider_contact_email || '',
+                            sessionNumber: data.sessionNumber || data.session_number || storedRegistrationData?.sessionNumber || '',
+                            customerCompany: data.customerCompany || data.customer_company || storedRegistrationData?.customerCompany || '',
+                            serviceRequired: data.serviceRequired || data.service_required || storedRegistrationData?.serviceRequired || '',
+                            dealValue: data.dealValue || data.deal_value || storedRegistrationData?.dealValue || '',
+                            providerCompany: data.providerCompany || data.provider_company || storedRegistrationData?.companyName || '',
+                            providerContact: data.providerContact || data.provider_contact_name || storedRegistrationData?.contactName || '',
+                            providerEmail: data.providerEmail || data.provider_contact_email || storedRegistrationData?.contactEmail || '',
                             status: data.status || data.bidStatus || 'registered'
                         })
 
-                        setFormData(prev => ({
-                            ...prev,
-                            companyName: data.providerCompany || data.provider_company || '',
-                            contactName: data.providerContact || data.provider_contact_name || '',
-                            contactEmail: data.providerEmail || data.provider_contact_email || ''
-                        }))
+                        // Pre-populate form with API + localStorage data
+                        prePopulateForm(data)
 
                         setIsValid(true)
                         console.log('Intake validation - SUCCESS: Valid session access')
@@ -367,22 +414,18 @@ function ProviderIntakeContent() {
                             bidId: data.bidId || data.bid_id || '',
                             sessionId: data.sessionId || data.session_id || sessionId,
                             providerId: data.providerId || data.provider_id || providerId || '',
-                            sessionNumber: data.sessionNumber || data.session_number || '',
-                            customerCompany: data.customerCompany || data.customer_company || '',
-                            serviceRequired: data.serviceRequired || data.service_required || '',
-                            dealValue: data.dealValue || data.deal_value || '',
-                            providerCompany: data.providerCompany || data.provider_company || '',
-                            providerContact: data.providerContact || data.provider_contact_name || '',
-                            providerEmail: data.providerEmail || data.provider_contact_email || '',
+                            sessionNumber: data.sessionNumber || data.session_number || storedRegistrationData?.sessionNumber || '',
+                            customerCompany: data.customerCompany || data.customer_company || storedRegistrationData?.customerCompany || '',
+                            serviceRequired: data.serviceRequired || data.service_required || storedRegistrationData?.serviceRequired || '',
+                            dealValue: data.dealValue || data.deal_value || storedRegistrationData?.dealValue || '',
+                            providerCompany: data.providerCompany || data.provider_company || storedRegistrationData?.companyName || '',
+                            providerContact: data.providerContact || data.provider_contact_name || storedRegistrationData?.contactName || '',
+                            providerEmail: data.providerEmail || data.provider_contact_email || storedRegistrationData?.contactEmail || '',
                             status: data.status || data.bidStatus || 'invited'
                         })
 
-                        setFormData(prev => ({
-                            ...prev,
-                            companyName: data.providerCompany || data.provider_company || '',
-                            contactName: data.providerContact || data.provider_contact_name || '',
-                            contactEmail: data.providerEmail || data.provider_contact_email || ''
-                        }))
+                        // Pre-populate form with API + localStorage data
+                        prePopulateForm(data)
 
                         setIsValid(true)
                         console.log('Intake validation - SUCCESS: Valid invite token')
@@ -399,39 +442,31 @@ function ProviderIntakeContent() {
         }
 
         // Final fallback: Use localStorage data directly
-        try {
-            const storedSession = localStorage.getItem('clarence_provider_session')
-            if (storedSession) {
-                const sessionData = JSON.parse(storedSession)
-                console.log('Intake validation - Using localStorage fallback')
+        if (storedRegistrationData && storedRegistrationData.sessionId) {
+            console.log('Intake validation - Using localStorage fallback')
 
-                setInviteData({
-                    bidId: '',
-                    sessionId: sessionId,
-                    sessionNumber: sessionData.sessionNumber || '',
-                    providerId: sessionData.providerId || providerId || '',
-                    customerCompany: sessionData.customerCompany || '',
-                    serviceRequired: sessionData.serviceRequired || '',
-                    dealValue: sessionData.dealValue || '',
-                    providerCompany: sessionData.companyName || sessionData.company || '',
-                    providerContact: sessionData.contactName || `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
-                    providerEmail: sessionData.contactEmail || sessionData.email || '',
-                    status: 'registered'
-                })
-                setFormData(prev => ({
-                    ...prev,
-                    companyName: sessionData.companyName || sessionData.company || '',
-                    contactName: sessionData.contactName || `${sessionData.firstName || ''} ${sessionData.lastName || ''}`.trim(),
-                    contactEmail: sessionData.contactEmail || sessionData.email || ''
-                }))
-                setIsValid(true)
-                console.log('Intake validation - SUCCESS via localStorage fallback')
-                setValidating(false)
-                setLoading(false)
-                return
-            }
-        } catch (e) {
-            console.error('localStorage fallback error:', e)
+            setInviteData({
+                bidId: '',
+                sessionId: sessionId,
+                sessionNumber: storedRegistrationData.sessionNumber || '',
+                providerId: storedRegistrationData.providerId || providerId || '',
+                customerCompany: storedRegistrationData.customerCompany || '',
+                serviceRequired: storedRegistrationData.serviceRequired || '',
+                dealValue: storedRegistrationData.dealValue || '',
+                providerCompany: storedRegistrationData.companyName || '',
+                providerContact: storedRegistrationData.contactName || '',
+                providerEmail: storedRegistrationData.contactEmail || '',
+                status: 'registered'
+            })
+
+            // Pre-populate form from localStorage only
+            prePopulateForm({})
+
+            setIsValid(true)
+            console.log('Intake validation - SUCCESS via localStorage fallback')
+            setValidating(false)
+            setLoading(false)
+            return
         }
 
         // All validation methods failed
@@ -439,10 +474,6 @@ function ProviderIntakeContent() {
         setValidating(false)
         setLoading(false)
     }, [searchParams])
-
-    useEffect(() => {
-        validateSession()
-    }, [validateSession])
 
     // ========================================================================
     // SECTION 10: FORM HANDLERS

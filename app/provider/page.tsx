@@ -185,12 +185,22 @@ function ProviderPortalContent() {
                 setTokenData(data);
 
                 if (data.alreadyRegistered && data.providerId) {
-                    localStorage.setItem('providerSession', JSON.stringify({
+                    // Store session data for already registered providers
+                    const sessionData = {
                         providerId: data.providerId,
                         sessionId: data.sessionId,
-                        companyName: data.providerCompany,
-                        token: token
-                    }));
+                        sessionNumber: data.sessionNumber || '',
+                        token: token,
+                        companyName: data.providerCompany || '',
+                        customerCompany: data.customerCompany || '',
+                        serviceRequired: data.contractType || '',
+                        dealValue: data.dealValue || '',
+                        registeredAt: new Date().toISOString()
+                    };
+
+                    localStorage.setItem('providerSession', JSON.stringify(sessionData));
+                    localStorage.setItem('clarence_provider_session', JSON.stringify(sessionData));
+
                     router.push(`/provider/welcome?session_id=${data.sessionId}&provider_id=${data.providerId}`);
                     return;
                 }
@@ -251,15 +261,31 @@ function ProviderPortalContent() {
             const result = await response.json();
 
             if (result.success) {
-                localStorage.setItem('providerSession', JSON.stringify({
+                // Store ALL registration data for intake page pre-population
+                // Using BOTH keys for backwards compatibility
+                const sessionData = {
                     providerId: result.providerId,
                     sessionId: formData.sessionId,
+                    sessionNumber: tokenData?.sessionNumber || '',
+                    token: formData.token,
+                    // Company info
                     companyName: formData.companyName,
                     contactName: formData.contactName,
                     contactEmail: formData.contactEmail,
-                    token: formData.token,
+                    contactPhone: formData.contactPhone,
+                    companySize: formData.companySize,
+                    industry: formData.industry,
+                    // Contract context
+                    customerCompany: tokenData?.customerCompany || '',
+                    serviceRequired: tokenData?.contractType || '',
+                    dealValue: tokenData?.dealValue || '',
+                    // Metadata
                     registeredAt: new Date().toISOString()
-                }));
+                };
+
+                // Store in BOTH localStorage keys for compatibility
+                localStorage.setItem('providerSession', JSON.stringify(sessionData));
+                localStorage.setItem('clarence_provider_session', JSON.stringify(sessionData));
 
                 router.push(`/provider/welcome?session_id=${formData.sessionId}&provider_id=${result.providerId}`);
             } else {
