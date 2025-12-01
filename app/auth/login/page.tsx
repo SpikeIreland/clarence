@@ -35,6 +35,7 @@ function LoginSignupContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false)
 
   // Login form
   const [loginEmail, setLoginEmail] = useState('')
@@ -183,6 +184,7 @@ function LoginSignupContent() {
         email: signupEmail,
         password: signupPassword,
         options: {
+          emailRedirectTo: 'https://www.clarencelegal.ai/auth/callback',
           data: {
             first_name: signupFirstName,
             last_name: signupLastName,
@@ -195,14 +197,22 @@ function LoginSignupContent() {
       if (signUpError) throw signUpError
 
       if (data.user) {
-        // Check if email confirmation is required
+        // Check if user already exists (identities array is empty)
         if (data.user.identities && data.user.identities.length === 0) {
-          setSuccess('Please check your email to confirm your account before logging in.')
+          setError('An account with this email already exists. Please sign in instead.')
           setActiveTab('login')
-        } else {
+          setLoginEmail(signupEmail) // Pre-fill login email
+          setLoading(false)
+          return
+        }
+
+        // Check if email is confirmed (session exists only if confirmed or confirmation disabled)
+        const emailConfirmed = data.user.email_confirmed_at !== null
+
+        if (emailConfirmed && data.session) {
+          // Email already confirmed (confirmation disabled in Supabase)
           setSuccess('Account created successfully! Redirecting...')
 
-          // Store user info in localStorage
           const authData = {
             userInfo: {
               userId: data.user.id,
@@ -216,10 +226,12 @@ function LoginSignupContent() {
           }
           localStorage.setItem('clarence_auth', JSON.stringify(authData))
 
-          // Redirect to dashboard after short delay
           setTimeout(() => {
             router.push('/auth/contracts-dashboard')
           }, 1500)
+        } else {
+          // Email confirmation required - show confirmation message
+          setShowEmailConfirmation(true)
         }
       }
     } catch (err: unknown) {
@@ -234,6 +246,104 @@ function LoginSignupContent() {
   // ==========================================================================
   // SECTION 7: RENDER
   // ==========================================================================
+
+  // ==========================================================================
+  // SECTION 7: RENDER
+  // ==========================================================================
+
+  // Show email confirmation screen after signup
+  if (showEmailConfirmation) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        {/* Header */}
+        <header className="bg-slate-800 text-white">
+          <div className="container mx-auto px-6">
+            <nav className="flex justify-between items-center h-16">
+              <Link href="/" className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">C</span>
+                </div>
+                <div>
+                  <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                  <div className="text-xs text-slate-400">The Honest Broker</div>
+                </div>
+              </Link>
+            </nav>
+          </div>
+        </header>
+
+        {/* Email Confirmation Content */}
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-md">
+            <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+              {/* Success Header */}
+              <div className="bg-emerald-50 p-8 text-center border-b border-emerald-100">
+                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-semibold text-slate-800 mb-2">Check Your Email</h2>
+                <p className="text-slate-600 text-sm">We&apos;ve sent a confirmation link to:</p>
+                <p className="text-emerald-700 font-medium mt-1">{signupEmail}</p>
+              </div>
+
+              {/* Instructions */}
+              <div className="p-6">
+                <div className="bg-slate-50 rounded-lg p-4 mb-6">
+                  <h3 className="font-medium text-slate-700 mb-3 text-sm">Next Steps:</h3>
+                  <ol className="space-y-3 text-sm text-slate-600">
+                    <li className="flex items-start gap-3">
+                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">1</span>
+                      <span>Open the email from CLARENCE</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">2</span>
+                      <span>Click &quot;Confirm Email Address&quot;</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">3</span>
+                      <span>Return here to sign in</span>
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-sm text-amber-700">
+                  <strong>Didn&apos;t receive the email?</strong><br />
+                  Check your spam folder. Emails can take up to 5 minutes to arrive.
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowEmailConfirmation(false)
+                    setActiveTab('login')
+                    setLoginEmail(signupEmail)
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-medium transition"
+                >
+                  Go to Sign In
+                </button>
+
+                <button
+                  onClick={() => setShowEmailConfirmation(false)}
+                  className="w-full mt-3 text-sm text-slate-500 hover:text-slate-700"
+                >
+                  ← Use a different email
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="bg-slate-900 text-slate-400 py-6">
+          <div className="container mx-auto px-6 text-center text-sm">
+            <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
+          </div>
+        </footer>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
