@@ -475,6 +475,10 @@ function ProviderIntakeContent() {
         setLoading(false)
     }, [searchParams])
 
+    useEffect(() => {
+        validateSession()
+    }, [validateSession])
+
     // ========================================================================
     // SECTION 10: FORM HANDLERS
     // ========================================================================
