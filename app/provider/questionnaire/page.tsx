@@ -389,14 +389,14 @@ function ProviderQuestionnaireContent() {
                 }
 
                 // FIXED: Redirect to provider confirmation, not customer contract-studio
-                router.push(`/provider/confirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
+                router.push(`/provider/providerConfirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
             } else {
                 throw new Error('Submission failed')
             }
         } catch (error) {
             console.error('Submission error:', error)
             // FIXED: Even on error, go to provider confirmation
-            router.push(`/provider/confirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
+            router.push(`/provider/providerConfirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
         } finally {
             setSubmitting(false)
         }
