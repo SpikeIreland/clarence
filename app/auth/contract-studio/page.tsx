@@ -780,7 +780,9 @@ function ContractStudioContent() {
     const [isChatLoading, setIsChatLoading] = useState(false)
     const [activeTab, setActiveTab] = useState<'dynamics' | 'tradeoffs' | 'history' | 'draft'>('dynamics')
     const [showLeverageDetails, setShowLeverageDetails] = useState(false)
-    const [chatUnreadCount, setChatUnreadCount] = useState(0)
+    const [isChatOpen, setIsChatOpen] = useState(false)
+    const [chatUnreadCount, setChatUnreadCount] = useState(3)
+
 
     // ============================================================================
     // SECTION 6B: POSITION ADJUSTMENT STATE (NEW)
