@@ -276,175 +276,292 @@ interface ClarenceAIResponse {
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 // ============================================================================
-// SECTION 2A: POSITION OPTIONS LOOKUP (JOHN'S APPENDIX A)
+// SECTION 2A: POSITION OPTIONS LOOKUP (MAPPED TO ACTUAL DATABASE CLAUSE NAMES)
 // ============================================================================
 
+// Maps actual clause_name values from contract_clauses table to position options
+// Based on John Hayward's Appendix A negotiation framework
+
 const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
-    'implied_services': [
+    // ========== SERVICE DELIVERY ==========
+    'Scope of Services': [
         { value: 1, label: 'Listed services only', description: 'Only those services explicitly listed in the contract' },
-        { value: 2, label: 'Plus reasonable adjuncts', description: 'Listed services plus those seen as a reasonable adjunct to the services' },
+        { value: 2, label: 'Plus reasonable adjuncts', description: 'Listed services plus those seen as a reasonable adjunct' },
         { value: 3, label: 'Plus inherent services', description: 'Plus those inherent in and ordinarily part of the services' },
         { value: 4, label: 'Maximum scope', description: 'Plus those previously done by transferring personnel and within scope of transferring contracts' }
     ],
-    'due_diligence': [
+    'Due Diligence': [
         { value: 1, label: 'No DD clause', description: 'No due diligence clause included' },
-        { value: 2, label: 'DD with material inaccuracy claims', description: 'DD clause included but right to claim for material inaccuracies' },
-        { value: 3, label: 'DD with reasonable efforts', description: 'Claims limited to those provider could not have uncovered exercising commercially reasonable efforts' },
+        { value: 2, label: 'DD with material claims', description: 'DD clause included but right to claim for material inaccuracies' },
+        { value: 3, label: 'DD with reasonable efforts', description: 'Claims limited to those provider could not have uncovered exercising reasonable efforts' },
         { value: 4, label: 'Full DD conducted', description: 'All due diligence conducted, provider accepts full responsibility' }
     ],
-    'payment_terms': [
-        { value: 1, label: '30 days', description: '30 days from date of receipt by customer' },
-        { value: 2, label: '60 days', description: '60 days from date of receipt by customer' },
-        { value: 3, label: '90 days', description: '90 days from date of receipt by customer' },
-        { value: 4, label: '120 days', description: '120 days from date of receipt by customer' }
+    'Customer Dependencies': [
+        { value: 1, label: 'Minimal dependencies', description: 'Very limited customer obligations' },
+        { value: 2, label: 'Standard dependencies', description: 'Reasonable customer inputs required' },
+        { value: 3, label: 'Extensive list', description: 'Comprehensive list of customer obligations' },
+        { value: 4, label: 'Maximum dependencies', description: 'Extensive obligations including "reasonably required" inputs' }
     ],
-    'late_payment': [
-        { value: 1, label: '10% per annum', description: '10% per annum calculated on a monthly basis' },
-        { value: 2, label: 'Lower of 10% or legal rate', description: 'The lower of 10% or the legal rate of interest' },
-        { value: 3, label: 'Base + 4%', description: '4% above the base lending rate' },
-        { value: 4, label: 'Base + 2%', description: '2% above the base lending rate' },
+    'Transition & Transformation': [
+        { value: 1, label: 'Best efforts', description: 'Supplier uses best efforts to complete on time' },
+        { value: 2, label: 'Reasonable endeavours', description: 'Reasonable endeavours with limited penalties' },
+        { value: 3, label: 'Fixed plans', description: 'Binding obligation with reasonable financial penalties' },
+        { value: 4, label: 'Strict obligation', description: 'Binding obligation with penalties and long stop termination right' }
+    ],
+    'Relief Events': [
+        { value: 1, label: 'No relief provision', description: 'Contract silent on relief; prevention principle applies' },
+        { value: 2, label: 'Limited relief', description: 'Relief for major force majeure events only' },
+        { value: 3, label: 'Standard relief', description: 'Standard force majeure and customer-caused delays' },
+        { value: 4, label: 'Broad relief', description: 'Comprehensive relief provisions favoring supplier' }
+    ],
+
+    // ========== SERVICE LEVELS ==========
+    'At Risk Amount': [
+        { value: 1, label: '5% at-risk', description: '5% of monthly charges at risk' },
+        { value: 2, label: '8% at-risk', description: '8% of monthly charges at risk' },
+        { value: 3, label: '10% at-risk', description: '10% of monthly charges at risk' },
+        { value: 4, label: '12.5% at-risk', description: '12.5% of monthly charges at risk' },
+        { value: 5, label: '15% at-risk', description: '15% of monthly charges at risk' },
+        { value: 6, label: '20% at-risk', description: '20% of monthly charges at risk' }
+    ],
+    'Link to Damages': [
+        { value: 1, label: 'Sole remedy', description: 'Service credits are the sole and exclusive remedy' },
+        { value: 2, label: 'Primary remedy', description: 'Service credits primary but damages for persistent breach' },
+        { value: 3, label: 'Not exclusive', description: 'Service credits expressly not the sole remedy' },
+        { value: 4, label: 'Plus full damages', description: 'Service credits plus right to claim all direct damages' }
+    ],
+    'Earn-back / Bonus': [
+        { value: 1, label: 'No earn-back', description: 'No earn-back or bonus provisions' },
+        { value: 2, label: 'Same SL only', description: 'Earn-back against same service level only' },
+        { value: 3, label: 'Within category', description: 'Earn-back within same service level category' },
+        { value: 4, label: 'General earn-back', description: 'Earn-back across all service levels each month' }
+    ],
+    'Termination & Step In': [
+        { value: 1, label: 'Material breach only', description: 'Termination only for material breach of SLAs' },
+        { value: 2, label: 'Persistent breach', description: 'Termination for persistent SLA failures' },
+        { value: 3, label: 'Defined breaches', description: 'Termination for defined SLA breaches (less than material)' },
+        { value: 4, label: 'Any SLA breach', description: 'Broad termination rights for service level failures' }
+    ],
+    'Non-Financial Remedies': [
+        { value: 1, label: 'No escalation', description: 'No formal escalation process' },
+        { value: 2, label: 'Basic escalation', description: 'Escalation to account manager level' },
+        { value: 3, label: 'Senior escalation', description: 'Escalation to senior management with correction plan' },
+        { value: 4, label: 'Executive escalation', description: 'Escalation to executive level with binding remediation' }
+    ],
+
+    // ========== TERMINATION ==========
+    'Term Renewal / Extension': [
+        { value: 1, label: 'No extension right', description: 'No automatic extension rights' },
+        { value: 2, label: 'Single extension', description: 'One extension period with mutual agreement' },
+        { value: 3, label: 'Two extensions', description: 'Two separate 1-year extension rights' },
+        { value: 4, label: 'Flexible extensions', description: 'Multiple extensions; supplier cannot refuse' }
+    ],
+    'Renewal / Extension Pricing': [
+        { value: 1, label: 'Market rates', description: 'Extension at then-current market rates' },
+        { value: 2, label: 'Capped increase', description: 'Maximum 5% increase on extension' },
+        { value: 3, label: 'Index-linked', description: 'Pricing adjusted by inflation index only' },
+        { value: 4, label: 'Same pricing', description: 'No difference in pricing during extended term' }
+    ],
+    'Customer Termination Right': [
+        { value: 1, label: 'Material breach only', description: 'Termination only for material unremedied breach' },
+        { value: 2, label: 'Standard rights', description: 'Material breach plus insolvency events' },
+        { value: 3, label: 'Extended rights', description: 'Including persistent defaults and SLA breaches' },
+        { value: 4, label: 'Extensive rights', description: 'Extensive list including non-material persistent defaults' }
+    ],
+    'Supplier Termination Right': [
+        { value: 1, label: 'Any material breach', description: 'Termination for any material customer breach' },
+        { value: 2, label: 'Payment default', description: 'Termination for payment default after notice' },
+        { value: 3, label: 'Material non-payment', description: 'Material non-payment after extended notice' },
+        { value: 4, label: 'Very limited', description: 'Limited to material non-payment after lengthy notice' }
+    ],
+    'Termination for Convenience': [
+        { value: 1, label: 'Mutual - 180 days', description: 'Mutual right with 180 days notice' },
+        { value: 2, label: 'Customer - 180 days', description: 'Customer only with 180 days notice' },
+        { value: 3, label: 'Customer - 90 days', description: 'Customer only with 90 days notice' },
+        { value: 4, label: 'Customer - 60 days', description: 'Customer only with 60 days notice' },
+        { value: 5, label: 'Customer - 30 days', description: 'Customer only with 30 days notice' },
+        { value: 6, label: 'Customer - immediate', description: 'Customer can terminate with 0-6 months notice' }
+    ],
+    'Exit Assistance': [
+        { value: 1, label: '3 months', description: '3 months post-termination assistance' },
+        { value: 2, label: '6 months', description: '6 months post-termination assistance' },
+        { value: 3, label: '9 months', description: '9 months with month-to-month extension option' },
+        { value: 4, label: '12 months', description: '12 months minimum, starting when notice given' }
+    ],
+    'Termination Fee': [
+        { value: 1, label: 'Full remaining term', description: 'All charges for remaining contract term' },
+        { value: 2, label: 'Unrecovered + 3 months', description: 'Unrecovered costs plus 3 months charges' },
+        { value: 3, label: 'Sliding scale', description: 'Sliding scale: 3 months Y1, 2 months Y2, 1 month Y3' },
+        { value: 4, label: 'Unrecovered only', description: 'Unrecovered costs but no winddown charge' },
+        { value: 5, label: 'No fee', description: 'No termination fee payable' }
+    ],
+    'Step In Rights': [
+        { value: 1, label: 'No step-in', description: 'No step-in rights (extreme, hard to exercise)' },
+        { value: 2, label: 'Material breach only', description: 'Step-in for material unremedied breach only' },
+        { value: 3, label: 'Service degradation', description: 'For service degradation left unremedied' },
+        { value: 4, label: 'Any unremedied issue', description: 'For any unremedied issue without materiality threshold' }
+    ],
+
+    // ========== INTELLECTUAL PROPERTY ==========
+    'Ownership of New IP': [
+        { value: 1, label: 'Supplier owns all', description: 'Supplier owns all new IP created' },
+        { value: 2, label: 'Supplier with license', description: 'Supplier owns but customer has perpetual license' },
+        { value: 3, label: 'Joint ownership', description: 'Joint ownership of new IP' },
+        { value: 4, label: 'Customer owns new', description: 'Customer owns all new IP except supplier modifications' }
+    ],
+    'Scope of Usage Rights': [
+        { value: 1, label: 'Term only', description: 'Rights to use during contract term only' },
+        { value: 2, label: 'Term + transition', description: 'Term plus transition period' },
+        { value: 3, label: 'Perpetual limited', description: 'Perpetual but limited to specific uses' },
+        { value: 4, label: 'Unlimited perpetual', description: 'Unlimited and unrestricted post-termination' }
+    ],
+    'Protection Against 3rd Party IPR Claims': [
+        { value: 1, label: 'No indemnity', description: 'No indemnity for IP claims' },
+        { value: 2, label: 'Proven infringement', description: 'Indemnity for proven infringement only' },
+        { value: 3, label: 'Full indemnity', description: 'Full indemnity for all losses from allegations' },
+        { value: 4, label: 'Full + control', description: 'Full indemnity; customer controls defense' }
+    ],
+
+    // ========== EMPLOYMENT ==========
+    'Control of Key Personnel': [
+        { value: 1, label: 'No control', description: 'No customer control over personnel' },
+        { value: 2, label: 'Consultation', description: 'Customer consulted on key personnel changes' },
+        { value: 3, label: 'Consent required', description: 'Customer consent for key personnel changes' },
+        { value: 4, label: 'Absolute veto', description: 'Absolute right of veto/removal for key personnel' }
+    ],
+    'Employee Related Costs': [
+        { value: 1, label: 'Customer indemnified', description: 'Customer indemnified on entry and exit' },
+        { value: 2, label: 'Split indemnity', description: 'Customer on entry, Supplier on exit' },
+        { value: 3, label: 'Mutual indemnities', description: 'Mutual indemnities on entry and exit' },
+        { value: 4, label: 'Supplier indemnified', description: 'Supplier indemnified on entry and exit' }
+    ],
+
+    // ========== CHARGES AND PAYMENT ==========
+    'Certainty of Pricing': [
+        { value: 1, label: 'Market adjustment', description: 'Annual adjustment to market rates' },
+        { value: 2, label: 'High index', description: 'CPI/RPI adjustment uncapped' },
+        { value: 3, label: 'Capped index', description: 'Low index applicable with a cap' },
+        { value: 4, label: 'Fixed pricing', description: 'No change in first year; low index thereafter' }
+    ],
+    'Interest / Late Payment Sanctions': [
+        { value: 1, label: '10% per annum', description: '10% per annum from due date' },
+        { value: 2, label: 'Base + 8%', description: '8% above base rate' },
+        { value: 3, label: 'Base + 4%', description: '4% above base rate' },
+        { value: 4, label: 'Base + 2%', description: '2% above base; only after 30 days notice' },
         { value: 5, label: 'No interest', description: 'No late payment interest' }
     ],
-    'cola': [
-        { value: 1, label: 'Full COLA', description: 'Based on cost of living index in delivery location' },
-        { value: 2, label: 'COLA capped at 4%', description: 'Same but capped at 4%' },
-        { value: 3, label: 'COLA capped at 2%', description: 'Same but capped at 2%' },
-        { value: 4, label: 'Fixed pricing', description: 'No COLA - prices fixed for term' }
+    'Benchmarking': [
+        { value: 1, label: 'No benchmarking', description: 'No benchmarking rights' },
+        { value: 2, label: 'Advisory only', description: 'Benchmarking for information only' },
+        { value: 3, label: 'Median adjustment', description: 'Adjustment to median within 6 months' },
+        { value: 4, label: 'Upper quartile', description: 'Upper quartile; automatic adjustment in 3 months' }
     ],
-    'vat': [
-        { value: 1, label: 'VAT inclusive', description: 'Prices include VAT/sales tax' },
-        { value: 2, label: 'VAT exclusive', description: 'Prices exclude VAT/sales tax (standard)' }
+    'Time for Payment': [
+        { value: 1, label: '14 days', description: '14 days from invoice' },
+        { value: 2, label: '30 days', description: '30 days from invoice' },
+        { value: 3, label: '45 days', description: '45 days from invoice' },
+        { value: 4, label: '60 days', description: '60 days from invoice' },
+        { value: 5, label: '90 days', description: '90 days from invoice' }
     ],
-    'liability_cap': [
-        { value: 1, label: '100% aggregate (whole term)', description: 'Aggregate cap for whole term = 100% of annual fees' },
-        { value: 2, label: '150% aggregate', description: 'Aggregate cap = 150% of annual fees' },
-        { value: 3, label: '150% or agreed amount', description: 'Greater of agreed amount and 150% of annual fees' },
-        { value: 4, label: '150% annual cap', description: 'Annual cap = 150% of annual fees' },
-        { value: 5, label: '150% annual or agreed', description: 'Annual cap = greater of agreed amount and 150% of annual fees' },
-        { value: 6, label: '200% annual cap', description: 'Annual cap per year = 200% of annual fees' }
+
+    // ========== LIABILITY ==========
+    'Cap for Supplier': [
+        { value: 1, label: '50% annual', description: 'Aggregate cap at 50% of annual charges' },
+        { value: 2, label: '100% annual', description: 'Aggregate cap at 100% of annual charges' },
+        { value: 3, label: '150% annual', description: 'Aggregate cap at 150% of annual charges' },
+        { value: 4, label: '200% annual', description: 'Aggregate cap at 200% of annual charges' },
+        { value: 5, label: 'Per-claim 150%', description: 'Per-claim cap at 150% of annual charges' },
+        { value: 6, label: 'Per-claim 200%', description: 'Per-claim cap at 200% of annual charges' }
     ],
-    'excluded_losses': [
-        { value: 1, label: 'Broadest exclusion', description: 'Exclude indirect/consequential AND lost profits, anticipated savings, wasted expenditure' },
-        { value: 2, label: 'Standard exclusion', description: 'Exclude indirect/consequential AND lost profits, anticipated savings (not wasted expenditure)' },
-        { value: 3, label: 'Including lost profits', description: 'Exclude indirect/consequential including lost profits, anticipated savings' },
-        { value: 4, label: 'Excluding lost profits', description: 'Exclude indirect/consequential but NOT lost profits, anticipated savings' },
-        { value: 5, label: 'Foreseeable damages', description: 'Exclude indirect/consequential but include reasonably foreseeable damages' },
-        { value: 6, label: 'No exclusion', description: 'No exclusion for indirect or consequential losses' }
+    'Cap for Customer': [
+        { value: 1, label: '50% annual', description: 'Customer liability at 50% of annual charges' },
+        { value: 2, label: '100% annual', description: 'Customer liability at 100% of annual charges' },
+        { value: 3, label: '150% annual', description: 'Customer liability at 150% of annual charges' },
+        { value: 4, label: 'Unlimited', description: 'No cap on customer liability' }
     ],
-    'unlimited_losses': [
-        { value: 1, label: 'Statutory only', description: 'Death/personal injury (negligence), fraud, implied terms under Sale of Goods/Supply of Services Acts' },
-        { value: 2, label: 'Plus gross misconduct', description: 'Statutory plus gross misconduct' },
-        { value: 3, label: 'Plus gross negligence', description: 'Statutory plus gross misconduct and gross negligence' },
-        { value: 4, label: 'Plus wilful default', description: 'Statutory plus gross misconduct, gross negligence, and wilful default' }
+    'Exclusions': [
+        { value: 1, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' },
+        { value: 2, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
+        { value: 3, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
+        { value: 4, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' }
     ],
-    'service_credits': [
-        { value: 1, label: '5% at-risk', description: '5% monthly at-risk' },
-        { value: 2, label: '8% at-risk', description: '8% monthly at-risk' },
-        { value: 3, label: '12% at-risk', description: '12% monthly at-risk' },
-        { value: 4, label: '15% at-risk', description: '15% monthly at-risk' },
-        { value: 5, label: '20% at-risk', description: '20% monthly at-risk' }
+    'Unlimited Losses': [
+        { value: 1, label: 'Statutory only', description: 'Death/PI and employee claims only' },
+        { value: 2, label: 'Plus confidentiality', description: 'Statutory plus confidentiality breach' },
+        { value: 3, label: 'Plus IP', description: 'Statutory plus IP and confidentiality' },
+        { value: 4, label: 'Plus gross negligence', description: 'Statutory plus gross negligence and wilful default' }
     ],
-    'persistent_breach': [
-        { value: 1, label: 'No termination right', description: 'Subject-matter covered by credit regime only' },
-        { value: 2, label: '4 breaches / 6 months', description: '4 breaches of same service level in 6-month period' },
-        { value: 3, label: '3 breaches / 6 months', description: '3 breaches of same service level in 6-month period' },
-        { value: 4, label: '2 breaches / 6 months', description: '2 breaches of same service level in 6-month period' }
+
+    // ========== DATA PROTECTION ==========
+    'Appointment of Sub-Processors': [
+        { value: 1, label: 'Supplier discretion', description: 'Supplier can appoint at discretion' },
+        { value: 2, label: 'Notify only', description: 'Supplier notifies customer of appointments' },
+        { value: 3, label: 'Object right', description: 'Customer can object within defined period' },
+        { value: 4, label: 'Prior consent', description: 'Prior written consent required for each' }
     ],
-    'step_in': [
-        { value: 1, label: 'No step-in right', description: 'No step-in right (extreme and very hard to exercise in practice)' },
-        { value: 2, label: '2 months / 100% fees', description: 'Limited to max 2 months and 100% of monthly fees per month' },
-        { value: 3, label: '3 months / 125% fees', description: 'Limited to max 3 months and 125% of monthly fees per month' },
-        { value: 4, label: '4 months / 150% fees', description: 'Limited to max 4 months and 150% of monthly fees per month' },
-        { value: 5, label: '6 months / 200% fees', description: 'Limited to max 6 months and 200% of monthly fees per month' },
-        { value: 6, label: 'Unlimited', description: 'No time or financial limit on step-in' }
+    'Security Incidents': [
+        { value: 1, label: '72 hours', description: 'Notification within 72 hours' },
+        { value: 2, label: '48 hours', description: 'Notification within 48 hours' },
+        { value: 3, label: '24 hours', description: 'Notification within 24 hours' },
+        { value: 4, label: '12 hours', description: 'Notification within 12 hours of awareness' }
     ],
-    'initial_term': [
-        { value: 1, label: '5 years', description: '5 year initial term' },
-        { value: 2, label: '3 years', description: '3 year initial term' },
-        { value: 3, label: '2 years', description: '2 year initial term' },
-        { value: 4, label: '1 year', description: '1 year initial term' }
-    ],
-    'renewal_term': [
-        { value: 1, label: 'No renewal option', description: 'No renewal option - requires mutual agreement to renew' },
-        { value: 2, label: 'Up to 12 months', description: 'Customer right to extend up to 12 months on existing terms' },
-        { value: 3, label: 'Up to 2 years', description: 'Customer right to extend up to 2 years on existing terms' },
-        { value: 4, label: 'Up to 3 years', description: 'Customer right to extend up to 3 years on existing terms' }
-    ],
-    'termination_convenience': [
-        { value: 1, label: 'Mutual - 180 days', description: 'Mutual right with 180 days notice' },
-        { value: 2, label: 'Customer only - 180 days', description: 'Customer only with 180 days notice' },
-        { value: 3, label: 'Customer only - 120 days', description: 'Customer only with 120 days notice' },
-        { value: 4, label: 'Customer only - 90 days', description: 'Customer only with 90 days notice' },
-        { value: 5, label: 'Customer only - 60 days', description: 'Customer only with 60 days notice' },
-        { value: 6, label: 'Customer only - 30 days', description: 'Customer only with 30 days notice' }
-    ],
-    'termination_fee': [
-        { value: 1, label: 'Unrecovered + 3 months', description: 'Unrecovered costs plus 3 months charges (based on prior 6-month average)' },
-        { value: 2, label: 'Sliding scale', description: 'Unrecovered costs plus sliding scale: 3 months (Y1), 2 months (Y2), 1 month (Y3), nil thereafter' },
-        { value: 3, label: 'Unrecovered costs only', description: 'Unrecovered costs but no winddown charge' },
-        { value: 4, label: 'No termination fee', description: 'No termination fee' }
-    ],
-    'key_personnel': [
-        { value: 1, label: 'Request only', description: 'Customer can request removal but no right to require or agree replacement' },
-        { value: 2, label: 'Request with consent', description: 'Customer can request, vendor cannot unreasonably withhold, reasonable input on replacement' },
-        { value: 3, label: 'Full control', description: 'Customer has right to require removal and agree replacement' }
-    ],
-    'employee_costs': [
-        { value: 1, label: 'Vendor indemnified both', description: 'Vendor indemnified on entry and exit' },
-        { value: 2, label: 'Split indemnity', description: 'Customer indemnified on entry, Vendor indemnified on exit' },
-        { value: 3, label: 'Customer indemnified both', description: 'Customer indemnified on entry and exit' },
-        { value: 4, label: 'Customer exit only', description: 'No indemnity on entry, Customer indemnified on exit' },
-        { value: 5, label: 'No indemnities', description: 'No indemnity on entry or exit' }
-    ],
-    'set_off': [
-        { value: 1, label: 'No set-off', description: 'No right of set-off' },
-        { value: 2, label: 'With approval', description: 'Set-off of undisputed amounts with notice and vendor approval' },
-        { value: 3, label: 'With notice', description: 'Set-off of undisputed amounts with notice' },
-        { value: 4, label: 'Undisputed amounts', description: 'Set-off of undisputed amounts' },
-        { value: 5, label: 'Any amounts', description: 'Set-off of any amounts owing' }
-    ],
-    'assignment': [
-        { value: 1, label: 'Both - unrestricted', description: 'Both parties can assign without consent' },
-        { value: 2, label: 'Both - affiliates only', description: 'Both can assign to affiliates without consent; third parties require consent' },
-        { value: 3, label: 'Both - financial standing', description: 'Both can assign to affiliates of equal financial standing; consent for third parties' },
-        { value: 4, label: 'Customer - financial standing', description: 'Only customer can assign to affiliates of equal financial standing; consent for third parties' },
-        { value: 5, label: 'Customer - affiliates', description: 'Only customer can assign to affiliates without consent; provider consent for third parties' },
-        { value: 6, label: 'Customer - unrestricted', description: 'Only customer can assign to any third party' }
-    ],
-    'governing_law': [
-        { value: 1, label: 'Customer jurisdiction', description: 'England and Wales (customer location)' },
-        { value: 2, label: 'Vendor jurisdiction', description: 'Country/US state where vendor is located' },
-        { value: 3, label: 'Neutral jurisdiction', description: 'Third country, e.g., Switzerland' },
-        { value: 4, label: 'Arbitration', description: 'English law but international arbitration (e.g., SIAC)' }
+    'Audit Rights': [
+        { value: 1, label: 'No audit', description: 'No audit rights' },
+        { value: 2, label: 'Third party only', description: 'Third party audit reports only' },
+        { value: 3, label: 'Annual on-site', description: 'On-site audit once per year with notice' },
+        { value: 4, label: 'Unlimited audit', description: 'On-site audits at any time with reasonable notice' }
     ]
 }
 
+// Helper function to find position options for a clause
 function getPositionOptionsForClause(clauseId: string, clauseName: string): PositionOption[] | null {
-    // Try direct lookup by clauseId
-    const idKey = clauseId.toLowerCase().replace(/[-\s]/g, '_')
-    if (CLAUSE_POSITION_OPTIONS[idKey]) {
-        return CLAUSE_POSITION_OPTIONS[idKey]
+    // First: Direct match on clauseName (most reliable)
+    if (CLAUSE_POSITION_OPTIONS[clauseName]) {
+        return CLAUSE_POSITION_OPTIONS[clauseName]
     }
 
-    // Try by clause name
-    const nameKey = clauseName.toLowerCase().replace(/[\s-]+/g, '_')
-    if (CLAUSE_POSITION_OPTIONS[nameKey]) {
-        return CLAUSE_POSITION_OPTIONS[nameKey]
-    }
-
-    // Fuzzy match
-    const searchTerms = [
-        'payment', 'late', 'cola', 'vat', 'liability', 'excluded', 'unlimited',
-        'service_credits', 'persistent', 'step_in', 'initial_term', 'renewal',
-        'termination', 'key_personnel', 'employee', 'set_off', 'assignment', 'governing'
-    ]
-
-    for (const term of searchTerms) {
-        if (nameKey.includes(term) && CLAUSE_POSITION_OPTIONS[term]) {
-            return CLAUSE_POSITION_OPTIONS[term]
+    // Second: Try normalized clauseName (lowercase, trimmed)
+    const normalizedName = clauseName.trim()
+    for (const [key, options] of Object.entries(CLAUSE_POSITION_OPTIONS)) {
+        if (key.toLowerCase() === normalizedName.toLowerCase()) {
+            return options
         }
     }
 
+    // Third: Keyword matching for partial matches
+    const nameWords = clauseName.toLowerCase()
+
+    // Map keywords to lookup keys
+    const keywordMap: Record<string, string> = {
+        'payment': 'Time for Payment',
+        'interest': 'Interest / Late Payment Sanctions',
+        'late payment': 'Interest / Late Payment Sanctions',
+        'pricing': 'Certainty of Pricing',
+        'benchmarking': 'Benchmarking',
+        'liability cap': 'Cap for Supplier',
+        'supplier cap': 'Cap for Supplier',
+        'customer cap': 'Cap for Customer',
+        'termination for convenience': 'Termination for Convenience',
+        'exit assistance': 'Exit Assistance',
+        'step in': 'Step In Rights',
+        'key personnel': 'Control of Key Personnel',
+        'sub-processor': 'Appointment of Sub-Processors',
+        'security incident': 'Security Incidents',
+        'audit': 'Audit Rights',
+        'scope of services': 'Scope of Services',
+        'due diligence': 'Due Diligence',
+        'at risk': 'At Risk Amount',
+        'earn-back': 'Earn-back / Bonus',
+        'earn back': 'Earn-back / Bonus'
+    }
+
+    for (const [keyword, lookupKey] of Object.entries(keywordMap)) {
+        if (nameWords.includes(keyword)) {
+            return CLAUSE_POSITION_OPTIONS[lookupKey] || null
+        }
+    }
+
+    // No match found - will use numeric slider fallback
     return null
 }
 
@@ -1529,27 +1646,82 @@ function ContractStudioContent() {
     const clauseStats = calculateClauseStats(clauseTree)
 
     // ============================================================================
-    // SECTION 10: POSITION ADJUSTMENT PANEL COMPONENT
+    // SECTION 10: POSITION ADJUSTMENT PANEL COMPONENT (WITH SCALE MAPPING)
     // ============================================================================
+
+    // Helper function to map database position (1-10) to option value
+    function mapDbPositionToOptionValue(
+        dbPosition: number,
+        optionCount: number
+    ): number {
+        // DB scale: 1-10
+        // Option scale: 1-optionCount
+        // Linear mapping: dbPosition 1 → option 1, dbPosition 10 → option optionCount
+        const normalized = (dbPosition - 1) / 9  // 0 to 1
+        const optionValue = normalized * (optionCount - 1) + 1
+        return Math.round(optionValue)
+    }
+
+    // Helper function to map option value back to database position (1-10)
+    function mapOptionValueToDbPosition(
+        optionValue: number,
+        optionCount: number
+    ): number {
+        // Option scale: 1-optionCount → DB scale: 1-10
+        const normalized = (optionValue - 1) / (optionCount - 1)  // 0 to 1
+        const dbPosition = normalized * 9 + 1
+        return Math.round(dbPosition * 10) / 10  // Round to 1 decimal
+    }
 
     const PositionAdjustmentPanel = () => {
         if (!selectedClause || !userInfo) return null
 
         const isCustomer = userInfo.role === 'customer'
-        const myPosition = isCustomer ? selectedClause.customerPosition : selectedClause.providerPosition
-        const otherPosition = isCustomer ? selectedClause.providerPosition : selectedClause.customerPosition
-        const originalPosition = isCustomer ? selectedClause.originalCustomerPosition : selectedClause.originalProviderPosition
+        const myDbPosition = isCustomer ? selectedClause.customerPosition : selectedClause.providerPosition
+        const otherDbPosition = isCustomer ? selectedClause.providerPosition : selectedClause.customerPosition
+        const originalDbPosition = isCustomer ? selectedClause.originalCustomerPosition : selectedClause.originalProviderPosition
+        const clarenceDbPosition = selectedClause.clarenceRecommendation
         const myWeight = isCustomer ? selectedClause.customerWeight : selectedClause.providerWeight
 
-        const hasChanged = originalPosition !== null && myPosition !== originalPosition
-        const isProposing = isAdjusting && proposedPosition !== myPosition
+        const hasChanged = originalDbPosition !== null && myDbPosition !== originalDbPosition
         const hasPositionOptions = selectedClause.positionOptions && selectedClause.positionOptions.length > 0
+        const optionCount = hasPositionOptions ? selectedClause.positionOptions!.length : 10
 
-        const getPositionLabel = (value: number | null): string => {
-            if (value === null) return 'Not set'
-            if (!hasPositionOptions) return `Position ${value}`
-            const option = selectedClause.positionOptions?.find(o => o.value === value)
-            return option?.label || `Position ${value}`
+        // Map database positions to option values for display
+        const myOptionValue = myDbPosition !== null
+            ? mapDbPositionToOptionValue(myDbPosition, optionCount)
+            : null
+        const otherOptionValue = otherDbPosition !== null
+            ? mapDbPositionToOptionValue(otherDbPosition, optionCount)
+            : null
+        const clarenceOptionValue = clarenceDbPosition !== null
+            ? mapDbPositionToOptionValue(clarenceDbPosition, optionCount)
+            : null
+        const originalOptionValue = originalDbPosition !== null
+            ? mapDbPositionToOptionValue(originalDbPosition, optionCount)
+            : null
+
+        // Track proposed position in OPTION value space (for UI)
+        // But proposedPosition state is in DB scale (1-10) for consistency with handlers
+        const proposedOptionValue = proposedPosition !== null && hasPositionOptions
+            ? mapDbPositionToOptionValue(proposedPosition, optionCount)
+            : null
+
+        const isProposing = isAdjusting && proposedPosition !== myDbPosition
+
+        // Handle option card click - convert option value to DB position
+        const handleOptionSelect = (optionValue: number) => {
+            const dbPosition = mapOptionValueToDbPosition(optionValue, optionCount)
+            handlePositionDrag(dbPosition)
+        }
+
+        // Get label for a database position value
+        const getPositionLabel = (dbPos: number | null): string => {
+            if (dbPos === null) return 'Not set'
+            if (!hasPositionOptions) return `Position ${dbPos.toFixed(1)}`
+            const optVal = mapDbPositionToOptionValue(dbPos, optionCount)
+            const option = selectedClause.positionOptions?.find(o => o.value === optVal)
+            return option?.label || `Position ${optVal}`
         }
 
         return (
@@ -1561,7 +1733,7 @@ function ContractStudioContent() {
                         <h4 className="font-semibold text-slate-800">Your Position</h4>
                         {hasChanged && (
                             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                                Changed from {getPositionLabel(originalPosition)}
+                                Changed from {getPositionLabel(originalDbPosition)}
                             </span>
                         )}
                     </div>
@@ -1574,22 +1746,83 @@ function ContractStudioContent() {
                 {/* Position Options View */}
                 {hasPositionOptions ? (
                     <div className="space-y-3">
+                        {/* Visual Position Bar */}
+                        <div className="relative h-8 bg-gradient-to-r from-blue-100 via-slate-100 to-emerald-100 rounded-full border border-slate-200 mb-4">
+                            {/* Position markers */}
+                            {otherOptionValue !== null && (
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10"
+                                    style={{
+                                        left: `${((otherOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                        transform: 'translate(-50%, -50%)',
+                                        backgroundColor: isCustomer ? '#3b82f6' : '#10b981',
+                                        borderColor: isCustomer ? '#1d4ed8' : '#047857',
+                                        color: 'white'
+                                    }}
+                                    title={`${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}`}
+                                >
+                                    {isCustomer ? 'P' : 'C'}
+                                </div>
+                            )}
+                            {clarenceOptionValue !== null && (
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-purple-500 border-2 border-purple-700 flex items-center justify-center text-xs font-bold text-white z-10"
+                                    style={{
+                                        left: `${((clarenceOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                        transform: 'translate(-50%, -50%)'
+                                    }}
+                                    title={`CLARENCE: ${getPositionLabel(clarenceDbPosition)}`}
+                                >
+                                    ★
+                                </div>
+                            )}
+                            {myOptionValue !== null && (
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-3 flex items-center justify-center text-xs font-bold z-20"
+                                    style={{
+                                        left: `${((myOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                        transform: 'translate(-50%, -50%)',
+                                        backgroundColor: isCustomer ? '#10b981' : '#3b82f6',
+                                        borderColor: isCustomer ? '#047857' : '#1d4ed8',
+                                        color: 'white',
+                                        borderWidth: '3px'
+                                    }}
+                                    title={`You: ${getPositionLabel(myDbPosition)}`}
+                                >
+                                    {isCustomer ? 'C' : 'P'}
+                                </div>
+                            )}
+                            {proposedOptionValue !== null && proposedOptionValue !== myOptionValue && (
+                                <div
+                                    className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-amber-500 border-2 border-amber-600 flex items-center justify-center text-xs font-bold text-white z-15 animate-pulse"
+                                    style={{
+                                        left: `${((proposedOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                        transform: 'translate(-50%, -50%)'
+                                    }}
+                                    title={`Proposed: ${getPositionLabel(proposedPosition)}`}
+                                >
+                                    ?
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Option Cards */}
                         <div className="space-y-2">
                             {selectedClause.positionOptions!.map((option) => {
-                                const isMyPosition = myPosition === option.value
-                                const isOtherPosition = otherPosition === option.value
-                                const isRecommended = selectedClause.clarenceRecommendation === option.value
-                                const isProposed = proposedPosition === option.value && proposedPosition !== myPosition
+                                const isMyPosition = myOptionValue === option.value
+                                const isOtherPosition = otherOptionValue === option.value
+                                const isRecommended = clarenceOptionValue === option.value
+                                const isProposedOption = proposedOptionValue === option.value && proposedOptionValue !== myOptionValue
 
                                 return (
                                     <div
                                         key={option.value}
                                         onClick={() => {
                                             if (!isMyPosition) {
-                                                handlePositionDrag(option.value)
+                                                handleOptionSelect(option.value)
                                             }
                                         }}
-                                        className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${isProposed
+                                        className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${isProposedOption
                                                 ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200'
                                                 : isMyPosition
                                                     ? `${isCustomer ? 'bg-emerald-50 border-emerald-400' : 'bg-blue-50 border-blue-400'}`
@@ -1612,7 +1845,7 @@ function ContractStudioContent() {
                                                             Your Position
                                                         </span>
                                                     )}
-                                                    {isOtherPosition && (
+                                                    {isOtherPosition && !isMyPosition && (
                                                         <span className={`px-2 py-0.5 text-xs font-medium rounded ${isCustomer ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
                                                             }`}>
                                                             {isCustomer ? 'Provider' : 'Customer'}
@@ -1623,7 +1856,7 @@ function ContractStudioContent() {
                                                             <span>★</span> CLARENCE
                                                         </span>
                                                     )}
-                                                    {isProposed && (
+                                                    {isProposedOption && (
                                                         <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded animate-pulse">
                                                             ⟳ Proposed
                                                         </span>
@@ -1632,13 +1865,14 @@ function ContractStudioContent() {
                                                 <p className="text-xs text-slate-500 mt-1">{option.description}</p>
                                             </div>
 
+                                            {/* Selection indicator */}
                                             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isMyPosition
                                                     ? `${isCustomer ? 'border-emerald-500 bg-emerald-500' : 'border-blue-500 bg-blue-500'}`
-                                                    : isProposed
+                                                    : isProposedOption
                                                         ? 'border-amber-500 bg-amber-500'
                                                         : 'border-slate-300'
                                                 }`}>
-                                                {(isMyPosition || isProposed) && (
+                                                {(isMyPosition || isProposedOption) && (
                                                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                                     </svg>
@@ -1649,9 +1883,29 @@ function ContractStudioContent() {
                                 )
                             })}
                         </div>
+
+                        {/* Legend */}
+                        <div className="flex flex-wrap gap-4 text-xs text-slate-500 pt-2 border-t border-slate-200">
+                            <div className="flex items-center gap-1">
+                                <div className={`w-4 h-4 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
+                                <span>You</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <div className={`w-4 h-4 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                                <span>{isCustomer ? 'Provider' : 'Customer'}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <div className="w-4 h-4 rounded-full bg-purple-500"></div>
+                                <span>CLARENCE</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <div className="w-4 h-4 rounded-full bg-amber-500"></div>
+                                <span>Proposed</span>
+                            </div>
+                        </div>
                     </div>
                 ) : (
-                    /* Numeric Slider Fallback */
+                    /* Numeric Slider Fallback - for clauses without position options */
                     <div className="space-y-4">
                         <div className="flex items-center gap-4">
                             <div className="flex-1">
@@ -1660,14 +1914,14 @@ function ContractStudioContent() {
                                     min="1"
                                     max="10"
                                     step="0.5"
-                                    value={proposedPosition ?? myPosition ?? 5}
+                                    value={proposedPosition ?? myDbPosition ?? 5}
                                     onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
-                                    className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer"
+                                    className="w-full h-3 bg-gradient-to-r from-blue-200 via-slate-200 to-emerald-200 rounded-full appearance-none cursor-pointer"
                                 />
                                 <div className="flex justify-between mt-1 px-1">
-                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                        <div key={n} className="text-xs text-slate-400">{n}</div>
-                                    ))}
+                                    <span className="text-xs text-blue-600">Provider</span>
+                                    <span className="text-xs text-slate-400">Neutral</span>
+                                    <span className="text-xs text-emerald-600">Customer</span>
                                 </div>
                             </div>
                             <div className="w-20">
@@ -1676,11 +1930,17 @@ function ContractStudioContent() {
                                     min="1"
                                     max="10"
                                     step="0.5"
-                                    value={proposedPosition ?? myPosition ?? 5}
+                                    value={proposedPosition ?? myDbPosition ?? 5}
                                     onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
                                     className="w-full px-3 py-2 text-center text-lg font-bold border border-slate-300 rounded-lg"
                                 />
                             </div>
+                        </div>
+
+                        {/* Position markers for slider view */}
+                        <div className="flex justify-between text-xs text-slate-500">
+                            <span>Your Position: <strong>{myDbPosition?.toFixed(1) ?? 'Not set'}</strong></span>
+                            <span>{isCustomer ? 'Provider' : 'Customer'}: <strong>{otherDbPosition?.toFixed(1) ?? 'Not set'}</strong></span>
                         </div>
                     </div>
                 )}
@@ -1705,15 +1965,33 @@ function ContractStudioContent() {
                             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             }`}
                     >
-                        {isCommitting ? 'Setting...' : 'Set Position'}
+                        {isCommitting ? (
+                            <>
+                                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Setting...
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Set Position
+                            </>
+                        )}
                     </button>
 
                     {hasChanged && (
                         <button
                             onClick={() => setShowResetConfirm(true)}
                             disabled={isCommitting}
-                            className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition"
+                            className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition flex items-center gap-2"
                         >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
                             Reset
                         </button>
                     )}
@@ -1725,7 +2003,8 @@ function ContractStudioContent() {
                         <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-xl">
                             <h3 className="text-lg font-semibold text-slate-800 mb-2">Reset Position?</h3>
                             <p className="text-slate-600 mb-4">
-                                This will restore your position on <strong>{selectedClause.clauseName}</strong> back to <strong>{getPositionLabel(originalPosition)}</strong>.
+                                This will restore your position on <strong>{selectedClause.clauseName}</strong> back to{' '}
+                                <strong>{getPositionLabel(originalDbPosition)}</strong>.
                             </p>
                             <div className="flex gap-3">
                                 <button
@@ -1753,10 +2032,16 @@ function ContractStudioContent() {
                             selectedClause.gapSize <= 3 ? 'text-amber-600' :
                                 'text-red-600'
                             }`}>
-                            {selectedClause.gapSize.toFixed(1)} position{selectedClause.gapSize !== 1 ? 's' : ''} apart
-                            {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
+                            {selectedClause.gapSize.toFixed(1)} points apart
+                            {selectedClause.gapSize <= 1 && ' ✓ Nearly Aligned'}
+                            {selectedClause.gapSize > 4 && ' ⚠ Significant Gap'}
                         </span>
                     </div>
+                    {hasPositionOptions && (
+                        <div className="text-xs text-slate-400 mt-1">
+                            You: {getPositionLabel(myDbPosition)} → {isCustomer ? 'Provider' : 'Customer'}: {getPositionLabel(otherDbPosition)}
+                        </div>
+                    )}
                 </div>
             </div>
         )
