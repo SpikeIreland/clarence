@@ -1823,12 +1823,12 @@ function ContractStudioContent() {
                                             }
                                         }}
                                         className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${isProposedOption
-                                                ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200'
-                                                : isMyPosition
-                                                    ? `${isCustomer ? 'bg-emerald-50 border-emerald-400' : 'bg-blue-50 border-blue-400'}`
-                                                    : isOtherPosition
-                                                        ? `${isCustomer ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`
-                                                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                            ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200'
+                                            : isMyPosition
+                                                ? `${isCustomer ? 'bg-emerald-50 border-emerald-400' : 'bg-blue-50 border-blue-400'}`
+                                                : isOtherPosition
+                                                    ? `${isCustomer ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`
+                                                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                                             }`}
                                     >
                                         <div className="flex items-start justify-between gap-3">
@@ -1867,10 +1867,10 @@ function ContractStudioContent() {
 
                                             {/* Selection indicator */}
                                             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isMyPosition
-                                                    ? `${isCustomer ? 'border-emerald-500 bg-emerald-500' : 'border-blue-500 bg-blue-500'}`
-                                                    : isProposedOption
-                                                        ? 'border-amber-500 bg-amber-500'
-                                                        : 'border-slate-300'
+                                                ? `${isCustomer ? 'border-emerald-500 bg-emerald-500' : 'border-blue-500 bg-blue-500'}`
+                                                : isProposedOption
+                                                    ? 'border-amber-500 bg-amber-500'
+                                                    : 'border-slate-300'
                                                 }`}>
                                                 {(isMyPosition || isProposedOption) && (
                                                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2114,6 +2114,83 @@ function ContractStudioContent() {
                         </div>
                     </div>
                 </div>
+
+                {/* Visual Leverage Bar */}
+                <div className="relative">
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-emerald-600 font-medium w-24">{session.customerCompany.split(' ')[0]}</span>
+                        <div className="flex-1"></div>
+                        <span className="text-xs text-blue-600 font-medium w-24 text-right">{session.providerCompany.split(' ')[0]}</span>
+                    </div>
+
+                    <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative">
+                        {/* Leverage Score marker */}
+                        <div
+                            className="absolute top-0 bottom-0 w-1 bg-slate-800 z-10"
+                            style={{ left: `${displayLeverage.leverageScoreCustomer}%`, transform: 'translateX(-50%)' }}
+                        >
+                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-600 whitespace-nowrap">
+                                ◆ {displayLeverage.leverageScoreCustomer}%
+                            </div>
+                        </div>
+
+                        {/* Leverage Tracker fill */}
+                        <div
+                            className={`h-full transition-all duration-500 ${displayLeverage.leverageTrackerCustomer > displayLeverage.leverageScoreCustomer
+                                ? 'bg-emerald-500'
+                                : displayLeverage.leverageTrackerCustomer < displayLeverage.leverageScoreCustomer
+                                    ? 'bg-amber-500'
+                                    : 'bg-slate-400'
+                                }`}
+                            style={{ width: `${displayLeverage.leverageTrackerCustomer}%` }}
+                        ></div>
+
+                        <div className="absolute top-0 bottom-0 left-1/2 w-px bg-slate-300"></div>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-6 mt-2 text-xs text-slate-500">
+                        <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-slate-800 transform rotate-45"></div>
+                            <span>Leverage Score (baseline)</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <div className="w-3 h-2 bg-emerald-500 rounded-sm"></div>
+                            <span>Leverage Tracker (current)</span>
+                        </div>
+                    </div>
+                </div>
+
+                {showLeverageDetails && (
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                        <div className="text-xs font-medium text-slate-600 mb-3">Leverage Score Breakdown</div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                                <span className="text-xs text-slate-600">Market Dynamics</span>
+                                <span className={`text-xs font-medium ${displayLeverage.marketDynamicsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.marketDynamicsScore >= 0 ? '+' : ''}{displayLeverage.marketDynamicsScore}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                                <span className="text-xs text-slate-600">Economic Factors</span>
+                                <span className={`text-xs font-medium ${displayLeverage.economicFactorsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.economicFactorsScore >= 0 ? '+' : ''}{displayLeverage.economicFactorsScore}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                                <span className="text-xs text-slate-600">Strategic Position</span>
+                                <span className={`text-xs font-medium ${displayLeverage.strategicPositionScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.strategicPositionScore >= 0 ? '+' : ''}{displayLeverage.strategicPositionScore}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                                <span className="text-xs text-slate-600">BATNA Strength</span>
+                                <span className={`text-xs font-medium ${displayLeverage.batnaScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {displayLeverage.batnaScore >= 0 ? '+' : ''}{displayLeverage.batnaScore}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )
     }
