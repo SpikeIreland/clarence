@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
-import { PartyChatPanel } from './components/party-chat-component'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -60,6 +59,20 @@ interface ApiProviderBidResponse {
     submitted_at: string | null
 }
 
+// ============================================================================
+// SECTION 1B: POSITION OPTION INTERFACE (FROM JOHN'S APPENDIX A)
+// ============================================================================
+
+interface PositionOption {
+    value: number
+    label: string
+    description: string
+}
+
+// ============================================================================
+// SECTION 1C: CONTRACT CLAUSE INTERFACE
+// ============================================================================
+
 interface ContractClause {
     positionId: string
     clauseId: string
@@ -102,10 +115,13 @@ interface ContractClause {
     // UI State
     isExpanded?: boolean
     children?: ContractClause[]
+
+    // Position options from John's Appendix A
+    positionOptions?: PositionOption[] | null
 }
 
 // ============================================================================
-// SECTION 1B: POSITION ADJUSTMENT TYPES (NEW)
+// SECTION 1D: POSITION ADJUSTMENT TYPES
 // ============================================================================
 
 interface PositionAdjustment {
@@ -121,19 +137,14 @@ interface PositionAdjustment {
 }
 
 interface LeverageData {
-    // Leverage Score (from onboarding - fixed baseline)
     leverageScoreCustomer: number
     leverageScoreProvider: number
     leverageScoreCalculatedAt: string
-
-    // Leverage Tracker (from current positions - changes)
     leverageTrackerCustomer: number
     leverageTrackerProvider: number
     alignmentPercentage: number
     isAligned: boolean
     leverageTrackerCalculatedAt: string
-
-    // Factor Breakdown
     marketDynamicsScore: number
     marketDynamicsRationale: string
     economicFactorsScore: number
@@ -172,7 +183,7 @@ interface PartyStatus {
     userName: string | null
 }
 
-// API Response Types (for mapping from N8N API)
+// API Response Types
 interface ApiClauseResponse {
     positionId: string
     clauseId: string
@@ -199,6 +210,7 @@ interface ApiClauseResponse {
     priorityLevel: number
     status: string
     isExpanded: boolean
+    positionOptions?: PositionOption[] | null
 }
 
 interface ApiMessageResponse {
@@ -223,7 +235,7 @@ interface ApiMessageResponse {
 }
 
 // ============================================================================
-// SECTION 1C: TRADE-OFF TYPES
+// SECTION 1E: TRADE-OFF TYPES
 // ============================================================================
 
 interface TradeOffOpportunity {
@@ -240,7 +252,7 @@ interface TradeOffOpportunity {
 }
 
 // ============================================================================
-// SECTION 1D: CLARENCE AI TYPES
+// SECTION 1F: CLARENCE AI TYPES
 // ============================================================================
 
 interface ClarenceAIResponse {
@@ -264,14 +276,184 @@ interface ClarenceAIResponse {
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 // ============================================================================
+// SECTION 2A: POSITION OPTIONS LOOKUP (JOHN'S APPENDIX A)
+// ============================================================================
+
+const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
+    'implied_services': [
+        { value: 1, label: 'Listed services only', description: 'Only those services explicitly listed in the contract' },
+        { value: 2, label: 'Plus reasonable adjuncts', description: 'Listed services plus those seen as a reasonable adjunct to the services' },
+        { value: 3, label: 'Plus inherent services', description: 'Plus those inherent in and ordinarily part of the services' },
+        { value: 4, label: 'Maximum scope', description: 'Plus those previously done by transferring personnel and within scope of transferring contracts' }
+    ],
+    'due_diligence': [
+        { value: 1, label: 'No DD clause', description: 'No due diligence clause included' },
+        { value: 2, label: 'DD with material inaccuracy claims', description: 'DD clause included but right to claim for material inaccuracies' },
+        { value: 3, label: 'DD with reasonable efforts', description: 'Claims limited to those provider could not have uncovered exercising commercially reasonable efforts' },
+        { value: 4, label: 'Full DD conducted', description: 'All due diligence conducted, provider accepts full responsibility' }
+    ],
+    'payment_terms': [
+        { value: 1, label: '30 days', description: '30 days from date of receipt by customer' },
+        { value: 2, label: '60 days', description: '60 days from date of receipt by customer' },
+        { value: 3, label: '90 days', description: '90 days from date of receipt by customer' },
+        { value: 4, label: '120 days', description: '120 days from date of receipt by customer' }
+    ],
+    'late_payment': [
+        { value: 1, label: '10% per annum', description: '10% per annum calculated on a monthly basis' },
+        { value: 2, label: 'Lower of 10% or legal rate', description: 'The lower of 10% or the legal rate of interest' },
+        { value: 3, label: 'Base + 4%', description: '4% above the base lending rate' },
+        { value: 4, label: 'Base + 2%', description: '2% above the base lending rate' },
+        { value: 5, label: 'No interest', description: 'No late payment interest' }
+    ],
+    'cola': [
+        { value: 1, label: 'Full COLA', description: 'Based on cost of living index in delivery location' },
+        { value: 2, label: 'COLA capped at 4%', description: 'Same but capped at 4%' },
+        { value: 3, label: 'COLA capped at 2%', description: 'Same but capped at 2%' },
+        { value: 4, label: 'Fixed pricing', description: 'No COLA - prices fixed for term' }
+    ],
+    'vat': [
+        { value: 1, label: 'VAT inclusive', description: 'Prices include VAT/sales tax' },
+        { value: 2, label: 'VAT exclusive', description: 'Prices exclude VAT/sales tax (standard)' }
+    ],
+    'liability_cap': [
+        { value: 1, label: '100% aggregate (whole term)', description: 'Aggregate cap for whole term = 100% of annual fees' },
+        { value: 2, label: '150% aggregate', description: 'Aggregate cap = 150% of annual fees' },
+        { value: 3, label: '150% or agreed amount', description: 'Greater of agreed amount and 150% of annual fees' },
+        { value: 4, label: '150% annual cap', description: 'Annual cap = 150% of annual fees' },
+        { value: 5, label: '150% annual or agreed', description: 'Annual cap = greater of agreed amount and 150% of annual fees' },
+        { value: 6, label: '200% annual cap', description: 'Annual cap per year = 200% of annual fees' }
+    ],
+    'excluded_losses': [
+        { value: 1, label: 'Broadest exclusion', description: 'Exclude indirect/consequential AND lost profits, anticipated savings, wasted expenditure' },
+        { value: 2, label: 'Standard exclusion', description: 'Exclude indirect/consequential AND lost profits, anticipated savings (not wasted expenditure)' },
+        { value: 3, label: 'Including lost profits', description: 'Exclude indirect/consequential including lost profits, anticipated savings' },
+        { value: 4, label: 'Excluding lost profits', description: 'Exclude indirect/consequential but NOT lost profits, anticipated savings' },
+        { value: 5, label: 'Foreseeable damages', description: 'Exclude indirect/consequential but include reasonably foreseeable damages' },
+        { value: 6, label: 'No exclusion', description: 'No exclusion for indirect or consequential losses' }
+    ],
+    'unlimited_losses': [
+        { value: 1, label: 'Statutory only', description: 'Death/personal injury (negligence), fraud, implied terms under Sale of Goods/Supply of Services Acts' },
+        { value: 2, label: 'Plus gross misconduct', description: 'Statutory plus gross misconduct' },
+        { value: 3, label: 'Plus gross negligence', description: 'Statutory plus gross misconduct and gross negligence' },
+        { value: 4, label: 'Plus wilful default', description: 'Statutory plus gross misconduct, gross negligence, and wilful default' }
+    ],
+    'service_credits': [
+        { value: 1, label: '5% at-risk', description: '5% monthly at-risk' },
+        { value: 2, label: '8% at-risk', description: '8% monthly at-risk' },
+        { value: 3, label: '12% at-risk', description: '12% monthly at-risk' },
+        { value: 4, label: '15% at-risk', description: '15% monthly at-risk' },
+        { value: 5, label: '20% at-risk', description: '20% monthly at-risk' }
+    ],
+    'persistent_breach': [
+        { value: 1, label: 'No termination right', description: 'Subject-matter covered by credit regime only' },
+        { value: 2, label: '4 breaches / 6 months', description: '4 breaches of same service level in 6-month period' },
+        { value: 3, label: '3 breaches / 6 months', description: '3 breaches of same service level in 6-month period' },
+        { value: 4, label: '2 breaches / 6 months', description: '2 breaches of same service level in 6-month period' }
+    ],
+    'step_in': [
+        { value: 1, label: 'No step-in right', description: 'No step-in right (extreme and very hard to exercise in practice)' },
+        { value: 2, label: '2 months / 100% fees', description: 'Limited to max 2 months and 100% of monthly fees per month' },
+        { value: 3, label: '3 months / 125% fees', description: 'Limited to max 3 months and 125% of monthly fees per month' },
+        { value: 4, label: '4 months / 150% fees', description: 'Limited to max 4 months and 150% of monthly fees per month' },
+        { value: 5, label: '6 months / 200% fees', description: 'Limited to max 6 months and 200% of monthly fees per month' },
+        { value: 6, label: 'Unlimited', description: 'No time or financial limit on step-in' }
+    ],
+    'initial_term': [
+        { value: 1, label: '5 years', description: '5 year initial term' },
+        { value: 2, label: '3 years', description: '3 year initial term' },
+        { value: 3, label: '2 years', description: '2 year initial term' },
+        { value: 4, label: '1 year', description: '1 year initial term' }
+    ],
+    'renewal_term': [
+        { value: 1, label: 'No renewal option', description: 'No renewal option - requires mutual agreement to renew' },
+        { value: 2, label: 'Up to 12 months', description: 'Customer right to extend up to 12 months on existing terms' },
+        { value: 3, label: 'Up to 2 years', description: 'Customer right to extend up to 2 years on existing terms' },
+        { value: 4, label: 'Up to 3 years', description: 'Customer right to extend up to 3 years on existing terms' }
+    ],
+    'termination_convenience': [
+        { value: 1, label: 'Mutual - 180 days', description: 'Mutual right with 180 days notice' },
+        { value: 2, label: 'Customer only - 180 days', description: 'Customer only with 180 days notice' },
+        { value: 3, label: 'Customer only - 120 days', description: 'Customer only with 120 days notice' },
+        { value: 4, label: 'Customer only - 90 days', description: 'Customer only with 90 days notice' },
+        { value: 5, label: 'Customer only - 60 days', description: 'Customer only with 60 days notice' },
+        { value: 6, label: 'Customer only - 30 days', description: 'Customer only with 30 days notice' }
+    ],
+    'termination_fee': [
+        { value: 1, label: 'Unrecovered + 3 months', description: 'Unrecovered costs plus 3 months charges (based on prior 6-month average)' },
+        { value: 2, label: 'Sliding scale', description: 'Unrecovered costs plus sliding scale: 3 months (Y1), 2 months (Y2), 1 month (Y3), nil thereafter' },
+        { value: 3, label: 'Unrecovered costs only', description: 'Unrecovered costs but no winddown charge' },
+        { value: 4, label: 'No termination fee', description: 'No termination fee' }
+    ],
+    'key_personnel': [
+        { value: 1, label: 'Request only', description: 'Customer can request removal but no right to require or agree replacement' },
+        { value: 2, label: 'Request with consent', description: 'Customer can request, vendor cannot unreasonably withhold, reasonable input on replacement' },
+        { value: 3, label: 'Full control', description: 'Customer has right to require removal and agree replacement' }
+    ],
+    'employee_costs': [
+        { value: 1, label: 'Vendor indemnified both', description: 'Vendor indemnified on entry and exit' },
+        { value: 2, label: 'Split indemnity', description: 'Customer indemnified on entry, Vendor indemnified on exit' },
+        { value: 3, label: 'Customer indemnified both', description: 'Customer indemnified on entry and exit' },
+        { value: 4, label: 'Customer exit only', description: 'No indemnity on entry, Customer indemnified on exit' },
+        { value: 5, label: 'No indemnities', description: 'No indemnity on entry or exit' }
+    ],
+    'set_off': [
+        { value: 1, label: 'No set-off', description: 'No right of set-off' },
+        { value: 2, label: 'With approval', description: 'Set-off of undisputed amounts with notice and vendor approval' },
+        { value: 3, label: 'With notice', description: 'Set-off of undisputed amounts with notice' },
+        { value: 4, label: 'Undisputed amounts', description: 'Set-off of undisputed amounts' },
+        { value: 5, label: 'Any amounts', description: 'Set-off of any amounts owing' }
+    ],
+    'assignment': [
+        { value: 1, label: 'Both - unrestricted', description: 'Both parties can assign without consent' },
+        { value: 2, label: 'Both - affiliates only', description: 'Both can assign to affiliates without consent; third parties require consent' },
+        { value: 3, label: 'Both - financial standing', description: 'Both can assign to affiliates of equal financial standing; consent for third parties' },
+        { value: 4, label: 'Customer - financial standing', description: 'Only customer can assign to affiliates of equal financial standing; consent for third parties' },
+        { value: 5, label: 'Customer - affiliates', description: 'Only customer can assign to affiliates without consent; provider consent for third parties' },
+        { value: 6, label: 'Customer - unrestricted', description: 'Only customer can assign to any third party' }
+    ],
+    'governing_law': [
+        { value: 1, label: 'Customer jurisdiction', description: 'England and Wales (customer location)' },
+        { value: 2, label: 'Vendor jurisdiction', description: 'Country/US state where vendor is located' },
+        { value: 3, label: 'Neutral jurisdiction', description: 'Third country, e.g., Switzerland' },
+        { value: 4, label: 'Arbitration', description: 'English law but international arbitration (e.g., SIAC)' }
+    ]
+}
+
+function getPositionOptionsForClause(clauseId: string, clauseName: string): PositionOption[] | null {
+    // Try direct lookup by clauseId
+    const idKey = clauseId.toLowerCase().replace(/[-\s]/g, '_')
+    if (CLAUSE_POSITION_OPTIONS[idKey]) {
+        return CLAUSE_POSITION_OPTIONS[idKey]
+    }
+
+    // Try by clause name
+    const nameKey = clauseName.toLowerCase().replace(/[\s-]+/g, '_')
+    if (CLAUSE_POSITION_OPTIONS[nameKey]) {
+        return CLAUSE_POSITION_OPTIONS[nameKey]
+    }
+
+    // Fuzzy match
+    const searchTerms = [
+        'payment', 'late', 'cola', 'vat', 'liability', 'excluded', 'unlimited',
+        'service_credits', 'persistent', 'step_in', 'initial_term', 'renewal',
+        'termination', 'key_personnel', 'employee', 'set_off', 'assignment', 'governing'
+    ]
+
+    for (const term of searchTerms) {
+        if (nameKey.includes(term) && CLAUSE_POSITION_OPTIONS[term]) {
+            return CLAUSE_POSITION_OPTIONS[term]
+        }
+    }
+
+    return null
+}
+
+// ============================================================================
 // SECTION 2B: CLARENCE AI API FUNCTIONS
 // ============================================================================
 
 const CLARENCE_AI_URL = `${API_BASE}/clarence-ai`
 
-/**
- * Call CLARENCE AI with specified prompt type
- */
 async function callClarenceAI(
     sessionId: string,
     promptType: 'welcome' | 'clause_explain' | 'chat' | 'position_change',
@@ -313,12 +495,9 @@ async function callClarenceAI(
 }
 
 // ============================================================================
-// SECTION 2C: POSITION UPDATE API FUNCTION (NEW)
+// SECTION 2C: POSITION UPDATE API FUNCTION
 // ============================================================================
 
-/**
- * Commit a position change to the database
- */
 async function commitPositionChange(
     sessionId: string,
     positionId: string,
@@ -351,95 +530,9 @@ async function commitPositionChange(
 }
 
 // ============================================================================
-// SECTION 2D: EXISTING API FUNCTIONS
+// SECTION 2D: DATA FETCH FUNCTIONS
 // ============================================================================
 
-// Fetch session and clause data for Contract Studio
-async function fetchContractStudioData(sessionId: string): Promise<{
-    session: Session
-    clauses: ContractClause[]
-    leverage: LeverageData
-} | null> {
-    try {
-        const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
-        if (!response.ok) throw new Error('Failed to fetch contract studio data')
-        const data = await response.json()
-
-        // Map API response to our interfaces
-        const session: Session = {
-            sessionId: data.session.sessionId,
-            sessionNumber: data.session.sessionNumber,
-            customerCompany: data.session.customerCompany,
-            providerCompany: data.session.providerCompany,
-            serviceType: data.session.contractType || 'IT Services',
-            dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
-            phase: parsePhaseFromState(data.session.phase),
-            status: data.session.status
-        }
-
-        // Map clauses from API (convert string numbers to actual numbers)
-        const clauses: ContractClause[] = data.clauses.map((c: ApiClauseResponse) => {
-            const customerPos = c.customerPosition ? parseFloat(c.customerPosition) : null
-            const providerPos = c.providerPosition ? parseFloat(c.providerPosition) : null
-
-            return {
-                positionId: c.positionId,
-                clauseId: c.clauseId,
-                clauseNumber: c.clauseNumber,
-                clauseName: c.clauseName,
-                category: c.category,
-                description: c.description,
-                parentPositionId: c.parentPositionId,
-                clauseLevel: c.clauseLevel,
-                displayOrder: c.displayOrder,
-                customerPosition: customerPos,
-                providerPosition: providerPos,
-                originalCustomerPosition: customerPos, // Store original for reset
-                originalProviderPosition: providerPos, // Store original for reset
-                currentCompromise: c.currentCompromise ? parseFloat(c.currentCompromise) : null,
-                clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(c.aiSuggestedCompromise) : null,
-                industryStandard: null,
-                gapSize: c.gapSize ? parseFloat(c.gapSize) : 0,
-                customerWeight: c.customerWeight,
-                providerWeight: c.providerWeight,
-                isDealBreakerCustomer: c.isDealBreakerCustomer,
-                isDealBreakerProvider: c.isDealBreakerProvider,
-                clauseContent: c.clauseContent,
-                customerNotes: c.customerNotes,
-                providerNotes: c.providerNotes,
-                status: c.status,
-                isExpanded: c.isExpanded
-            }
-        })
-
-        // Map leverage data
-        const leverage: LeverageData = {
-            leverageScoreCustomer: data.leverage.leverageScoreCustomer,
-            leverageScoreProvider: data.leverage.leverageScoreProvider,
-            leverageScoreCalculatedAt: data.leverage.leverageScoreCalculatedAt,
-            leverageTrackerCustomer: data.leverage.leverageTrackerCustomer,
-            leverageTrackerProvider: data.leverage.leverageTrackerProvider,
-            alignmentPercentage: data.leverage.alignmentPercentage,
-            isAligned: data.leverage.isAligned,
-            leverageTrackerCalculatedAt: data.leverage.leverageTrackerCalculatedAt,
-            marketDynamicsScore: data.leverage.marketDynamicsScore,
-            marketDynamicsRationale: data.leverage.marketDynamicsRationale,
-            economicFactorsScore: data.leverage.economicFactorsScore,
-            economicFactorsRationale: data.leverage.economicFactorsRationale,
-            strategicPositionScore: data.leverage.strategicPositionScore,
-            strategicPositionRationale: data.leverage.strategicPositionRationale,
-            batnaScore: data.leverage.batnaScore,
-            batnaRationale: data.leverage.batnaRationale
-        }
-
-        return { session, clauses, leverage }
-    } catch (error) {
-        console.error('Error fetching contract studio data:', error)
-        return null
-    }
-}
-
-// Helper: Format currency from numeric value
 function formatCurrency(value: string | number | null, currency: string): string {
     if (!value) return '£0'
     const num = typeof value === 'string' ? parseFloat(value) : value
@@ -452,19 +545,8 @@ function formatCurrency(value: string | number | null, currency: string): string
     return `${symbol}${num.toLocaleString()}`
 }
 
-// Helper: Format position values (can be % or currency depending on clause)
-function formatPositionValue(value: number): string {
-    if (value >= 1000000) {
-        return `£${(value / 1000000).toFixed(1)}M`
-    } else if (value >= 1000) {
-        return `£${(value / 1000).toFixed(0)}K`
-    }
-    return `${value}`
-}
-
-// Helper: Parse phase number from negotiation state
 function parsePhaseFromState(state: string | null): number {
-    if (!state) return 2 // Default to phase 2
+    if (!state) return 2
     const phaseMap: Record<string, number> = {
         'deal_profiling': 1,
         'initial_positions': 2,
@@ -478,7 +560,6 @@ function parsePhaseFromState(state: string | null): number {
     return phaseMap[state] || 2
 }
 
-// Fetch clause-specific chat messages
 async function fetchClauseChat(sessionId: string, positionId: string | null): Promise<ClauseChatMessage[]> {
     try {
         const url = positionId
@@ -488,7 +569,6 @@ async function fetchClauseChat(sessionId: string, positionId: string | null): Pr
         if (!response.ok) throw new Error('Failed to fetch clause chat')
         const data = await response.json()
 
-        // Handle both array response and object with messages array
         const messages = Array.isArray(data) ? data : (data.messages || [])
 
         return messages.map((m: ApiMessageResponse) => ({
@@ -509,10 +589,8 @@ async function fetchClauseChat(sessionId: string, positionId: string | null): Pr
     }
 }
 
-// Check other party's online status
 async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'provider'): Promise<PartyStatus> {
     try {
-        // TODO: Replace with actual API endpoint for real-time status
         return {
             isOnline: Math.random() > 0.3,
             lastSeen: new Date(Date.now() - 300000).toISOString(),
@@ -525,52 +603,29 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 }
 
 // ============================================================================
-// SECTION 3: LEVERAGE CALCULATION FUNCTIONS (NEW)
+// SECTION 3: LEVERAGE CALCULATION FUNCTIONS
 // ============================================================================
 
-/**
- * Calculate the leverage impact of a position change
- * Based on John's requirements:
- * 1. Position selection (where the slider moved to)
- * 2. Point allocation (gap between old and new)
- * 3. Clause weight (high-weight clauses have more impact)
- */
 function calculateLeverageImpact(
     oldPosition: number,
     newPosition: number,
     clauseWeight: number,
     party: 'customer' | 'provider'
 ): number {
-    // Calculate raw movement
     const positionDelta = newPosition - oldPosition
-
-    // Weight the impact (weight is 1-10, normalize to multiplier)
-    const weightMultiplier = clauseWeight / 5 // So weight 5 = 1x, weight 10 = 2x
-
-    // Calculate leverage impact
-    // Positive = customer gains leverage, Negative = provider gains leverage
-    // For customer: moving UP (higher position) = conceding to customer-favorable = no leverage change
-    // For customer: moving DOWN = conceding toward provider = losing leverage
-    // Scale: Each point on a weight-5 clause = ~1% leverage shift
+    const weightMultiplier = clauseWeight / 5
 
     let leverageImpact: number
 
     if (party === 'customer') {
-        // Customer moving down = giving ground = losing leverage
-        // Customer moving up = standing firm = no change (can't gain by own movement)
         leverageImpact = positionDelta < 0 ? positionDelta * weightMultiplier * 0.5 : 0
     } else {
-        // Provider moving up = giving ground to customer = customer gains leverage
-        // Provider moving down = standing firm = no change
         leverageImpact = positionDelta > 0 ? positionDelta * weightMultiplier * 0.5 : 0
     }
 
-    return Math.round(leverageImpact * 10) / 10 // Round to 1 decimal
+    return Math.round(leverageImpact * 10) / 10
 }
 
-/**
- * Recalculate the Leverage Tracker based on all position changes
- */
 function recalculateLeverageTracker(
     baseLeverageCustomer: number,
     baseLeverageProvider: number,
@@ -594,7 +649,6 @@ function recalculateLeverageTracker(
         }
     })
 
-    // Apply adjustment (bounded between 20 and 80)
     const newCustomerLeverage = Math.max(20, Math.min(80, baseLeverageCustomer + totalAdjustment))
     const newProviderLeverage = 100 - newCustomerLeverage
 
@@ -604,17 +658,11 @@ function recalculateLeverageTracker(
     }
 }
 
-/**
- * Calculate new gap size after position change
- */
 function calculateGapSize(customerPosition: number | null, providerPosition: number | null): number {
     if (customerPosition === null || providerPosition === null) return 0
     return Math.abs(customerPosition - providerPosition)
 }
 
-/**
- * Determine clause status based on gap size
- */
 function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
     if (gapSize <= 1) return 'aligned'
     if (gapSize <= 3) return 'negotiating'
@@ -630,12 +678,10 @@ function buildClauseTree(clauses: ContractClause[]): ContractClause[] {
     const clauseMap = new Map<string, ContractClause>()
     const rootClauses: ContractClause[] = []
 
-    // First pass: create map
     clauses.forEach(clause => {
         clauseMap.set(clause.positionId, { ...clause, children: [] })
     })
 
-    // Second pass: build tree
     clauses.forEach(clause => {
         const current = clauseMap.get(clause.positionId)!
         if (clause.parentPositionId && clauseMap.has(clause.parentPositionId)) {
@@ -668,15 +714,6 @@ function getStatusBgColor(status: string): string {
     }
 }
 
-function getStatusIcon(status: string): string {
-    switch (status) {
-        case 'aligned': return '✓'
-        case 'negotiating': return '⟷'
-        case 'disputed': return '!'
-        default: return '○'
-    }
-}
-
 function calculateClauseStats(clauses: ContractClause[]): {
     aligned: number
     negotiating: number
@@ -697,10 +734,6 @@ function calculateClauseStats(clauses: ContractClause[]): {
     clauses.forEach(countStatus)
     return stats
 }
-
-// ============================================================================
-// SECTION 4B: TRADE-OFF DETECTION ALGORITHM
-// ============================================================================
 
 function detectTradeOffOpportunities(clauses: ContractClause[], selectedClause?: ContractClause | null): TradeOffOpportunity[] {
     const opportunities: TradeOffOpportunity[] = []
@@ -780,74 +813,28 @@ function ContractStudioContent() {
     const [isChatLoading, setIsChatLoading] = useState(false)
     const [activeTab, setActiveTab] = useState<'dynamics' | 'tradeoffs' | 'history' | 'draft'>('dynamics')
     const [showLeverageDetails, setShowLeverageDetails] = useState(false)
-    const [isChatOpen, setIsChatOpen] = useState(false)
-    const [chatUnreadCount, setChatUnreadCount] = useState(3)
 
-
-    // ============================================================================
-    // SECTION 6B: POSITION ADJUSTMENT STATE (NEW)
-    // ============================================================================
-
+    // Position adjustment state
     const [proposedPosition, setProposedPosition] = useState<number | null>(null)
     const [isAdjusting, setIsAdjusting] = useState(false)
     const [pendingLeverageImpact, setPendingLeverageImpact] = useState<number>(0)
     const [isCommitting, setIsCommitting] = useState(false)
     const [showResetConfirm, setShowResetConfirm] = useState(false)
 
-    // ============================================================================
-    // SECTION 6C: CLARENCE AI STATE
-    // ============================================================================
-
+    // CLARENCE AI state
     const [clarenceWelcomeLoaded, setClarenceWelcomeLoaded] = useState(false)
     const [lastExplainedClauseId, setLastExplainedClauseId] = useState<string | null>(null)
 
-    // ============================================================================
-    // SECTION 6D: TRADE-OFF STATE
-    // ============================================================================
-
+    // Trade-off state
     const [tradeOffOpportunities, setTradeOffOpportunities] = useState<TradeOffOpportunity[]>([])
-    const [selectedTradeOff, setSelectedTradeOff] = useState<TradeOffOpportunity | null>(null)
-    const [tradeOffExplanation, setTradeOffExplanation] = useState<string | null>(null)
-    const [isLoadingTradeOff, setIsLoadingTradeOff] = useState(false)
 
-    // ============================================================================
-    // SECTION 6E: DRAFT TAB STATE
-    // ============================================================================
-
-    const [draftLanguage, setDraftLanguage] = useState<string | null>(null)
-    const [isLoadingDraft, setIsLoadingDraft] = useState(false)
-    const [draftStyle, setDraftStyle] = useState<'balanced' | 'customer' | 'provider'>('balanced')
-    const [lastDraftedClauseId, setLastDraftedClauseId] = useState<string | null>(null)
-
-    // ============================================================================
-    // SECTION 6F: MULTI-PROVIDER STATE
-    // ============================================================================
-
-    const [availableProviders, setAvailableProviders] = useState<ProviderBid[]>([])
-    const [showProviderDropdown, setShowProviderDropdown] = useState(false)
-    const [isLoadingProviders, setIsLoadingProviders] = useState(false)
-    const providerDropdownRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (providerDropdownRef.current && !providerDropdownRef.current.contains(event.target as Node)) {
-                setShowProviderDropdown(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
-
-    // chatEndRef removed - replaced by latestMessageRef in Section 7F
-
-    // ============================================================================
-    // SECTION 6G: SESSION STATUS STATE
-    // ============================================================================
-
+    // Session status state
     const [sessionStatus, setSessionStatus] = useState<SessionStatus>('pending_provider')
     const [providerEmail, setProviderEmail] = useState('')
     const [inviteSending, setInviteSending] = useState(false)
     const [inviteSent, setInviteSent] = useState(false)
+
+    const latestMessageRef = useRef<HTMLDivElement>(null)
 
     // ============================================================================
     // SECTION 7: DATA LOADING
@@ -908,7 +895,7 @@ function ContractStudioContent() {
 
             setSessionStatus('ready')
 
-            const session: Session = {
+            const sessionData: Session = {
                 sessionId: data.session.sessionId,
                 sessionNumber: data.session.sessionNumber,
                 customerCompany: data.session.customerCompany,
@@ -919,7 +906,7 @@ function ContractStudioContent() {
                 status: data.session.status
             }
 
-            const clauses: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
+            const clauseData: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
                 const customerPos = c.customerPosition ? parseFloat(c.customerPosition) : null
                 const providerPos = c.providerPosition ? parseFloat(c.providerPosition) : null
 
@@ -948,12 +935,13 @@ function ContractStudioContent() {
                     clauseContent: c.clauseContent,
                     customerNotes: c.customerNotes,
                     providerNotes: c.providerNotes,
-                    status: c.status,
-                    isExpanded: c.isExpanded
+                    status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                    isExpanded: c.isExpanded,
+                    positionOptions: c.positionOptions || getPositionOptionsForClause(c.clauseId, c.clauseName)
                 }
             })
 
-            const leverage: LeverageData = data.leverage || {
+            const leverageData: LeverageData = data.leverage || {
                 leverageScoreCustomer: 50,
                 leverageScoreProvider: 50,
                 leverageScoreCalculatedAt: '',
@@ -972,7 +960,7 @@ function ContractStudioContent() {
                 batnaRationale: ''
             }
 
-            return { session, clauses, leverage }
+            return { session: sessionData, clauses: clauseData, leverage: leverageData }
         } catch (error) {
             console.error('Error fetching contract studio data:', error)
             setSessionStatus('pending_provider')
@@ -981,13 +969,8 @@ function ContractStudioContent() {
     }, [])
 
     const loadClauseChat = useCallback(async (sessionId: string, positionId: string | null) => {
-        const apiMessages = await fetchClauseChat(sessionId, positionId)
-        return apiMessages
+        return await fetchClauseChat(sessionId, positionId)
     }, [])
-
-    // ============================================================================
-    // SECTION 7B: CLARENCE AI WELCOME MESSAGE LOADER
-    // ============================================================================
 
     const loadClarenceWelcome = useCallback(async (sessionId: string) => {
         if (clarenceWelcomeLoaded) return
@@ -1020,10 +1003,6 @@ function ContractStudioContent() {
             setIsChatLoading(false)
         }
     }, [clarenceWelcomeLoaded])
-
-    // ============================================================================
-    // SECTION 7C: CLARENCE AI CLAUSE EXPLAINER
-    // ============================================================================
 
     const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause) => {
         if (lastExplainedClauseId === clause.clauseId) return
@@ -1120,7 +1099,6 @@ function ContractStudioContent() {
                     })
                 }
 
-                // LOG: Contract Studio loaded in pending provider state
                 eventLogger.setSession(sessionId)
                 eventLogger.setUser(user.userId || '')
                 eventLogger.completed('contract_negotiation', 'contract_studio_loaded', {
@@ -1149,7 +1127,6 @@ function ContractStudioContent() {
                 const status = await checkPartyStatus(sessionId, otherRole)
                 setOtherPartyStatus(status)
 
-                // LOG: Contract Studio loaded successfully
                 eventLogger.setSession(sessionId)
                 eventLogger.setUser(user.userId || '')
                 eventLogger.completed('contract_negotiation', 'contract_studio_loaded', {
@@ -1167,83 +1144,24 @@ function ContractStudioContent() {
         init()
     }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router])
 
-    // ============================================================================
-    // SECTION 7D: LOAD CLARENCE WELCOME WHEN SESSION IS READY
-    // ============================================================================
-
     useEffect(() => {
         if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading) {
             loadClarenceWelcome(session.sessionId)
         }
     }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome])
 
-    // ============================================================================
-    // SECTION 7E: LOAD AVAILABLE PROVIDERS
-    // ============================================================================
-
-    const loadAvailableProviders = useCallback(async (sessionId: string, currentProviderCompany: string) => {
-        setIsLoadingProviders(true)
-        try {
-            const response = await fetch(`${API_BASE}/provider-bids-api?session_id=${sessionId}`)
-            if (response.ok) {
-                const data = await response.json()
-                const providers: ProviderBid[] = (data.bids || []).map((bid: ApiProviderBidResponse) => ({
-                    bidId: bid.bid_id,
-                    providerId: bid.provider_id,
-                    providerCompany: bid.provider_company || 'Unknown Provider',
-                    providerContactName: bid.provider_contact_name,
-                    providerContactEmail: bid.provider_contact_email,
-                    status: bid.status,
-                    intakeComplete: bid.intake_complete || false,
-                    questionnaireComplete: bid.questionnaire_complete || false,
-                    invitedAt: bid.invited_at,
-                    submittedAt: bid.submitted_at,
-                    isCurrentProvider: bid.provider_company === currentProviderCompany
-                }))
-                setAvailableProviders(providers)
-            }
-        } catch (error) {
-            console.error('Failed to load available providers:', error)
-        } finally {
-            setIsLoadingProviders(false)
-        }
-    }, [])
-
     useEffect(() => {
-        if (session?.sessionId && userInfo?.role === 'customer') {
-            loadAvailableProviders(session.sessionId, session.providerCompany)
-        }
-    }, [session?.sessionId, session?.providerCompany, userInfo?.role, loadAvailableProviders])
-
-    // ============================================================================
-    // SECTION 7F: AUTO-SCROLL CHAT TO SHOW NEW MESSAGES FROM TOP
-    // ============================================================================
-
-    const latestMessageRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-        // Scroll to show the TOP of the newest message, not the bottom
         if (latestMessageRef.current) {
             latestMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }
     }, [chatMessages])
 
-    // ============================================================================
-    // SECTION 7G: CALCULATE TRADE-OFFS WHEN CLAUSES OR SELECTION CHANGES
-    // ============================================================================
-
     useEffect(() => {
         if (clauses.length > 0) {
             const opportunities = detectTradeOffOpportunities(clauses, selectedClause)
             setTradeOffOpportunities(opportunities)
-            setSelectedTradeOff(null)
-            setTradeOffExplanation(null)
         }
     }, [clauses, selectedClause])
-
-    // ============================================================================
-    // SECTION 7H: RESET PROPOSED POSITION WHEN CLAUSE CHANGES
-    // ============================================================================
 
     useEffect(() => {
         if (selectedClause && userInfo) {
@@ -1260,32 +1178,12 @@ function ContractStudioContent() {
     // SECTION 8: EVENT HANDLERS
     // ============================================================================
 
-    // ============================================================================
-    // SECTION 8A: POSITION ADJUSTMENT HANDLERS (NEW)
-    // ============================================================================
-
-    /**
-     * Handle slider/input change (live preview, no commit yet)
-     */
     const handlePositionDrag = (newPosition: number) => {
         if (!selectedClause || !userInfo || !leverage) return
 
-        const previousProposed = proposedPosition
         setProposedPosition(newPosition)
         setIsAdjusting(true)
 
-        // LOG: Position slider adjusted (debounced - only log significant changes)
-        if (previousProposed === null || Math.abs(newPosition - previousProposed) >= 0.5) {
-            eventLogger.completed('contract_negotiation', 'position_slider_adjusted', {
-                sessionId: session?.sessionId,
-                clauseId: selectedClause.clauseId,
-                clauseName: selectedClause.clauseName,
-                newPosition: newPosition,
-                userRole: userInfo.role
-            })
-        }
-
-        // Calculate pending leverage impact for preview
         const originalPosition = userInfo.role === 'customer'
             ? selectedClause.originalCustomerPosition
             : selectedClause.originalProviderPosition
@@ -1305,9 +1203,6 @@ function ContractStudioContent() {
         }
     }
 
-    /**
-     * Handle SET button click - commit the position change
-     */
     const handleSetPosition = async () => {
         if (!selectedClause || !userInfo || !session || !leverage || proposedPosition === null) return
 
@@ -1315,19 +1210,14 @@ function ContractStudioContent() {
             ? selectedClause.customerPosition
             : selectedClause.providerPosition
 
-        // Don't commit if nothing changed
         if (currentPosition === proposedPosition) {
             setIsAdjusting(false)
             return
         }
 
-        // LOG: Position commit started
-        eventLogger.started('contract_negotiation', 'position_committed')
-
         setIsCommitting(true)
 
         try {
-            // 1. Commit to database
             const result = await commitPositionChange(
                 session.sessionId,
                 selectedClause.positionId,
@@ -1337,7 +1227,6 @@ function ContractStudioContent() {
             )
 
             if (result.success) {
-                // 2. Update local clause state
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
                         const newGap = calculateGapSize(
@@ -1358,13 +1247,11 @@ function ContractStudioContent() {
                 setClauses(updatedClauses)
                 setClauseTree(buildClauseTree(updatedClauses))
 
-                // 3. Update selected clause
                 const updatedSelectedClause = updatedClauses.find(c => c.positionId === selectedClause.positionId)
                 if (updatedSelectedClause) {
                     setSelectedClause(updatedSelectedClause)
                 }
 
-                // 4. Recalculate leverage tracker
                 const newLeverage = recalculateLeverageTracker(
                     leverage.leverageScoreCustomer,
                     leverage.leverageScoreProvider,
@@ -1379,51 +1266,16 @@ function ContractStudioContent() {
                     leverageTrackerCalculatedAt: new Date().toISOString()
                 })
 
-                // LOG: Position committed successfully
-                eventLogger.completed('contract_negotiation', 'position_committed', {
-                    sessionId: session.sessionId,
-                    clauseId: selectedClause.clauseId,
-                    clauseName: selectedClause.clauseName,
-                    previousPosition: currentPosition,
-                    newPosition: proposedPosition,
-                    leverageImpact: pendingLeverageImpact,
-                    newCustomerLeverage: newLeverage.customerLeverage,
-                    newProviderLeverage: newLeverage.providerLeverage,
-                    userRole: userInfo.role
-                })
-
-                // 5. Trigger CLARENCE response to position change
-                await triggerClarencePositionResponse(
-                    selectedClause,
-                    currentPosition!,
-                    proposedPosition,
-                    pendingLeverageImpact,
-                    newLeverage.customerLeverage,
-                    newLeverage.providerLeverage
-                )
-
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
-            } else {
-                // LOG: Position commit failed
-                eventLogger.failed('contract_negotiation', 'position_committed', 'API returned failure', 'COMMIT_FAILED')
-                console.error('Failed to commit position change')
             }
         } catch (error) {
-            // LOG: Position commit error
-            eventLogger.failed('contract_negotiation', 'position_committed',
-                error instanceof Error ? error.message : 'Unknown error',
-                'COMMIT_ERROR'
-            )
             console.error('Error setting position:', error)
         } finally {
             setIsCommitting(false)
         }
     }
 
-    /**
-     * Handle RESET button - restore to original position
-     */
     const handleResetPosition = async () => {
         if (!selectedClause || !userInfo || !session || !leverage) return
 
@@ -1431,30 +1283,21 @@ function ContractStudioContent() {
             ? selectedClause.originalCustomerPosition
             : selectedClause.originalProviderPosition
 
-        const currentPosition = userInfo.role === 'customer'
-            ? selectedClause.customerPosition
-            : selectedClause.providerPosition
-
         if (originalPosition === null) return
-
-        // LOG: Position reset started
-        eventLogger.started('contract_negotiation', 'position_reset')
 
         setShowResetConfirm(false)
         setIsCommitting(true)
 
         try {
-            // Commit original position back
             const result = await commitPositionChange(
                 session.sessionId,
                 selectedClause.positionId,
                 userInfo.role as 'customer' | 'provider',
                 originalPosition,
-                0 // Reset leverage impact
+                0
             )
 
             if (result.success) {
-                // Update local state
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
                         const newGap = calculateGapSize(
@@ -1480,7 +1323,6 @@ function ContractStudioContent() {
                     setSelectedClause(updatedSelectedClause)
                 }
 
-                // Recalculate leverage
                 const newLeverage = recalculateLeverageTracker(
                     leverage.leverageScoreCustomer,
                     leverage.leverageScoreProvider,
@@ -1495,118 +1337,18 @@ function ContractStudioContent() {
                     leverageTrackerCalculatedAt: new Date().toISOString()
                 })
 
-                // LOG: Position reset successful
-                eventLogger.completed('contract_negotiation', 'position_reset', {
-                    sessionId: session.sessionId,
-                    clauseId: selectedClause.clauseId,
-                    clauseName: selectedClause.clauseName,
-                    previousPosition: currentPosition,
-                    resetToPosition: originalPosition,
-                    userRole: userInfo.role
-                })
-
                 setProposedPosition(originalPosition)
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
-            } else {
-                // LOG: Reset failed
-                eventLogger.failed('contract_negotiation', 'position_reset', 'API returned failure', 'RESET_FAILED')
             }
         } catch (error) {
-            // LOG: Reset error
-            eventLogger.failed('contract_negotiation', 'position_reset',
-                error instanceof Error ? error.message : 'Unknown error',
-                'RESET_ERROR'
-            )
             console.error('Error resetting position:', error)
         } finally {
             setIsCommitting(false)
         }
     }
 
-    /**
-     * Trigger CLARENCE to respond to a position change
-     */
-    const triggerClarencePositionResponse = async (
-        clause: ContractClause,
-        oldPosition: number,
-        newPosition: number,
-        leverageImpact: number,
-        newCustomerLeverage: number,
-        newProviderLeverage: number
-    ) => {
-        if (!session || !userInfo) return
-
-        setIsChatLoading(true)
-
-        try {
-            const response = await callClarenceAI(session.sessionId, 'position_change', {
-                clauseId: clause.clauseId,
-                positionChange: {
-                    clauseName: clause.clauseName,
-                    party: userInfo.role || 'customer',
-                    oldPosition,
-                    newPosition,
-                    clauseWeight: userInfo.role === 'customer' ? clause.customerWeight : clause.providerWeight,
-                    leverageImpact,
-                    currentLeverageCustomer: newCustomerLeverage,
-                    currentLeverageProvider: newProviderLeverage
-                }
-            })
-
-            if (response?.success && response.response) {
-                // Add system notification about the change
-                const notificationMessage: ClauseChatMessage = {
-                    messageId: `notification-${Date.now()}`,
-                    sessionId: session.sessionId,
-                    positionId: clause.positionId,
-                    sender: userInfo.role as 'customer' | 'provider',
-                    senderUserId: userInfo.userId || null,
-                    message: `Position updated on ${clause.clauseName}: ${oldPosition} → ${newPosition}`,
-                    messageType: 'position_change',
-                    relatedPositionChange: true,
-                    triggeredBy: 'position_set',
-                    createdAt: new Date().toISOString()
-                }
-
-                // Add CLARENCE response
-                const clarenceMessage: ClauseChatMessage = {
-                    messageId: `clarence-position-${Date.now()}`,
-                    sessionId: session.sessionId,
-                    positionId: clause.positionId,
-                    sender: 'clarence',
-                    senderUserId: null,
-                    message: response.response,
-                    messageType: 'auto_response',
-                    relatedPositionChange: true,
-                    triggeredBy: 'position_change',
-                    createdAt: new Date().toISOString()
-                }
-
-                setChatMessages(prev => [...prev, notificationMessage, clarenceMessage])
-            }
-        } catch (error) {
-            console.error('Failed to get CLARENCE response:', error)
-        } finally {
-            setIsChatLoading(false)
-        }
-    }
-
-    // ============================================================================
-    // SECTION 8B: CLAUSE SELECT WITH CLARENCE EXPLANATION
-    // ============================================================================
-
     const handleClauseSelect = (clause: ContractClause) => {
-        // LOG: Clause selected
-        eventLogger.completed('contract_negotiation', 'clause_selected', {
-            sessionId: session?.sessionId,
-            clauseId: clause.clauseId,
-            clauseNumber: clause.clauseNumber,
-            clauseName: clause.clauseName,
-            status: clause.status,
-            gapSize: clause.gapSize
-        })
-
         setSelectedClause(clause)
         setActiveTab('dynamics')
 
@@ -1631,22 +1373,10 @@ function ContractStudioContent() {
         setClauseTree(toggleExpanded(clauseTree))
     }
 
-    // ============================================================================
-    // SECTION 8C: SEND MESSAGE WITH REAL CLARENCE AI
-    // ============================================================================
-
     const handleSendMessage = async () => {
         if (!chatInput.trim() || !session || !userInfo) return
 
         const userMessage = chatInput.trim()
-
-        // LOG: Chat message sent
-        eventLogger.completed('contract_negotiation', 'chat_message_sent', {
-            sessionId: session.sessionId,
-            clauseId: selectedClause?.clauseId || null,
-            messageLength: userMessage.length,
-            userRole: userInfo.role
-        })
 
         const newMessage: ClauseChatMessage = {
             messageId: `msg-${Date.now()}`,
@@ -1686,55 +1416,9 @@ function ContractStudioContent() {
                 }
 
                 setChatMessages(prev => [...prev, clarenceResponse])
-
-                // LOG: CLARENCE response received
-                eventLogger.completed('contract_negotiation', 'clarence_response_received', {
-                    sessionId: session.sessionId,
-                    promptType: 'chat',
-                    responseLength: response.response.length
-                })
-            } else {
-                const errorMessage: ClauseChatMessage = {
-                    messageId: `error-${Date.now()}`,
-                    sessionId: session.sessionId,
-                    positionId: selectedClause?.positionId || null,
-                    sender: 'clarence',
-                    senderUserId: null,
-                    message: 'I apologize, but I encountered an issue processing your request. Please try again.',
-                    messageType: 'auto_response',
-                    relatedPositionChange: false,
-                    triggeredBy: 'error',
-                    createdAt: new Date().toISOString()
-                }
-
-                setChatMessages(prev => [...prev, errorMessage])
-
-                // LOG: CLARENCE response failed
-                eventLogger.failed('contract_negotiation', 'clarence_response_received', 'Empty or failed response', 'RESPONSE_FAILED')
             }
         } catch (error) {
             console.error('CLARENCE chat error:', error)
-
-            const errorMessage: ClauseChatMessage = {
-                messageId: `error-${Date.now()}`,
-                sessionId: session.sessionId,
-                positionId: selectedClause?.positionId || null,
-                sender: 'clarence',
-                senderUserId: null,
-                message: 'I apologize, but I encountered a connection issue. Please try again in a moment.',
-                messageType: 'auto_response',
-                relatedPositionChange: false,
-                triggeredBy: 'error',
-                createdAt: new Date().toISOString()
-            }
-
-            setChatMessages(prev => [...prev, errorMessage])
-
-            // LOG: CLARENCE error
-            eventLogger.failed('contract_negotiation', 'clarence_response_received',
-                error instanceof Error ? error.message : 'Connection error',
-                'CONNECTION_ERROR'
-            )
         } finally {
             setIsChatLoading(false)
         }
@@ -1747,162 +1431,8 @@ function ContractStudioContent() {
         }
     }
 
-    // ============================================================================
-    // SECTION 8D: QUICK ACTION HANDLER
-    // ============================================================================
-
-    const handleQuickAction = async (message: string) => {
-        if (!session || !userInfo || isChatLoading) return
-
-        // LOG: Quick action clicked
-        eventLogger.completed('contract_negotiation', 'quick_action_clicked', {
-            sessionId: session.sessionId,
-            actionType: message.includes('trade-off') ? 'trade_off' : 'industry_data',
-            clauseId: selectedClause?.clauseId
-        })
-
-        const newMessage: ClauseChatMessage = {
-            messageId: `msg-${Date.now()}`,
-            sessionId: session.sessionId,
-            positionId: selectedClause?.positionId || null,
-            sender: userInfo.role || 'customer',
-            senderUserId: userInfo.userId || null,
-            message: message,
-            messageType: 'discussion',
-            relatedPositionChange: false,
-            triggeredBy: 'quick_action',
-            createdAt: new Date().toISOString()
-        }
-
-        setChatMessages(prev => [...prev, newMessage])
-        setIsChatLoading(true)
-
-        try {
-            const response = await callClarenceAI(session.sessionId, 'chat', {
-                message: message,
-                clauseId: selectedClause?.clauseId
-            })
-
-            if (response?.success && response.response) {
-                const clarenceResponse: ClauseChatMessage = {
-                    messageId: `clarence-${Date.now()}`,
-                    sessionId: session.sessionId,
-                    positionId: selectedClause?.positionId || null,
-                    sender: 'clarence',
-                    senderUserId: null,
-                    message: response.response,
-                    messageType: 'auto_response',
-                    relatedPositionChange: false,
-                    triggeredBy: 'quick_action',
-                    createdAt: new Date().toISOString()
-                }
-
-                setChatMessages(prev => [...prev, clarenceResponse])
-            } else {
-                const errorMessage: ClauseChatMessage = {
-                    messageId: `error-${Date.now()}`,
-                    sessionId: session.sessionId,
-                    positionId: selectedClause?.positionId || null,
-                    sender: 'clarence',
-                    senderUserId: null,
-                    message: 'I apologize, but I encountered an issue processing your request. Please try again.',
-                    messageType: 'auto_response',
-                    relatedPositionChange: false,
-                    triggeredBy: 'error',
-                    createdAt: new Date().toISOString()
-                }
-
-                setChatMessages(prev => [...prev, errorMessage])
-            }
-        } catch (error) {
-            console.error('CLARENCE quick action error:', error)
-
-            const errorMessage: ClauseChatMessage = {
-                messageId: `error-${Date.now()}`,
-                sessionId: session.sessionId,
-                positionId: selectedClause?.positionId || null,
-                sender: 'clarence',
-                senderUserId: null,
-                message: 'I apologize, but I encountered a connection issue. Please try again in a moment.',
-                messageType: 'auto_response',
-                relatedPositionChange: false,
-                triggeredBy: 'error',
-                createdAt: new Date().toISOString()
-            }
-
-            setChatMessages(prev => [...prev, errorMessage])
-        } finally {
-            setIsChatLoading(false)
-        }
-    }
-
-    // ============================================================================
-    // SECTION 8E: TRADE-OFF HANDLERS
-    // ============================================================================
-
-    const explainTradeOff = useCallback(async (tradeOff: TradeOffOpportunity) => {
-        if (!session?.sessionId) return
-
-        setSelectedTradeOff(tradeOff)
-        setIsLoadingTradeOff(true)
-        setTradeOffExplanation(null)
-
-        try {
-            const message = `Analyze this trade-off opportunity between "${tradeOff.clauseA.clauseName}" and "${tradeOff.clauseB.clauseName}".`
-
-            const response = await callClarenceAI(session.sessionId, 'chat', { message })
-
-            if (response?.success && response.response) {
-                setTradeOffExplanation(response.response)
-            } else {
-                setTradeOffExplanation('Unable to analyze this trade-off at the moment. Please try again.')
-            }
-        } catch (error) {
-            console.error('Trade-off explanation error:', error)
-            setTradeOffExplanation('An error occurred while analyzing this trade-off.')
-        } finally {
-            setIsLoadingTradeOff(false)
-        }
-    }, [session?.sessionId])
-
-    // ============================================================================
-    // SECTION 8F: DRAFT LANGUAGE HANDLER
-    // ============================================================================
-
-    const generateDraftLanguage = useCallback(async (clause: ContractClause, style: 'balanced' | 'customer' | 'provider' = 'balanced') => {
-        if (!session?.sessionId) return
-
-        setIsLoadingDraft(true)
-        setDraftStyle(style)
-        setLastDraftedClauseId(clause.clauseId)
-
-        try {
-            const message = `Generate professional contract clause language for "${clause.clauseName}" in a ${style} style.`
-
-            const response = await callClarenceAI(session.sessionId, 'chat', { message })
-
-            if (response?.success && response.response) {
-                setDraftLanguage(response.response)
-            } else {
-                setDraftLanguage('Unable to generate draft language at the moment. Please try again.')
-            }
-        } catch (error) {
-            console.error('Draft generation error:', error)
-            setDraftLanguage('An error occurred while generating the draft.')
-        } finally {
-            setIsLoadingDraft(false)
-        }
-    }, [session?.sessionId])
-
-    // ============================================================================
-    // SECTION 8G: INVITE PROVIDER HANDLER
-    // ============================================================================
-
     const handleSendInvite = async () => {
         if (!providerEmail.trim() || !session) return
-
-        // LOG: Provider invite started
-        eventLogger.started('contract_negotiation', 'provider_invite_sent')
 
         setInviteSending(true)
 
@@ -1925,25 +1455,12 @@ function ContractStudioContent() {
             })
 
             if (response.ok) {
-                // LOG: Provider invite successful
-                eventLogger.completed('contract_negotiation', 'provider_invite_sent', {
-                    sessionId: session.sessionId,
-                    providerEmail: providerEmail
-                })
-
                 setInviteSent(true)
                 setSessionStatus('provider_invited')
             } else {
-                // LOG: Provider invite failed
-                eventLogger.failed('contract_negotiation', 'provider_invite_sent', 'API returned error', 'INVITE_FAILED')
                 alert('Failed to send invitation. Please try again.')
             }
         } catch (error) {
-            // LOG: Provider invite error
-            eventLogger.failed('contract_negotiation', 'provider_invite_sent',
-                error instanceof Error ? error.message : 'Network error',
-                'INVITE_ERROR'
-            )
             console.error('Error sending invite:', error)
             alert('Failed to send invitation. Please check your connection and try again.')
         }
@@ -1959,7 +1476,6 @@ function ContractStudioContent() {
         return <ContractStudioLoading />
     }
 
-    // Show pending provider view if provider hasn't completed intake
     if (sessionStatus === 'pending_provider' || sessionStatus === 'provider_invited' || sessionStatus === 'leverage_pending') {
         return <PendingProviderView
             session={session}
@@ -2013,7 +1529,7 @@ function ContractStudioContent() {
     const clauseStats = calculateClauseStats(clauseTree)
 
     // ============================================================================
-    // SECTION 10: POSITION ADJUSTMENT PANEL COMPONENT (NEW)
+    // SECTION 10: POSITION ADJUSTMENT PANEL COMPONENT
     // ============================================================================
 
     const PositionAdjustmentPanel = () => {
@@ -2027,6 +1543,14 @@ function ContractStudioContent() {
 
         const hasChanged = originalPosition !== null && myPosition !== originalPosition
         const isProposing = isAdjusting && proposedPosition !== myPosition
+        const hasPositionOptions = selectedClause.positionOptions && selectedClause.positionOptions.length > 0
+
+        const getPositionLabel = (value: number | null): string => {
+            if (value === null) return 'Not set'
+            if (!hasPositionOptions) return `Position ${value}`
+            const option = selectedClause.positionOptions?.find(o => o.value === value)
+            return option?.label || `Position ${value}`
+        }
 
         return (
             <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl border border-slate-200 p-5 mb-4">
@@ -2037,120 +1561,142 @@ function ContractStudioContent() {
                         <h4 className="font-semibold text-slate-800">Your Position</h4>
                         {hasChanged && (
                             <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                                Changed from {originalPosition}
+                                Changed from {getPositionLabel(originalPosition)}
                             </span>
                         )}
                     </div>
                     <div className="text-sm text-slate-500">
                         Weight: <span className="font-semibold text-slate-700">{myWeight}/10</span>
+                        {myWeight >= 8 && <span className="ml-1 text-amber-600">★ High Priority</span>}
                     </div>
                 </div>
 
-                {/* Current Position Display */}
-                <div className="flex items-center gap-4 mb-4">
-                    <div className="flex-1">
-                        <div className="flex items-center justify-between text-sm mb-2">
-                            <span className="text-slate-500">Provider Favorable</span>
-                            <span className="text-slate-500">Customer Favorable</span>
+                {/* Position Options View */}
+                {hasPositionOptions ? (
+                    <div className="space-y-3">
+                        <div className="space-y-2">
+                            {selectedClause.positionOptions!.map((option) => {
+                                const isMyPosition = myPosition === option.value
+                                const isOtherPosition = otherPosition === option.value
+                                const isRecommended = selectedClause.clarenceRecommendation === option.value
+                                const isProposed = proposedPosition === option.value && proposedPosition !== myPosition
+
+                                return (
+                                    <div
+                                        key={option.value}
+                                        onClick={() => {
+                                            if (!isMyPosition) {
+                                                handlePositionDrag(option.value)
+                                            }
+                                        }}
+                                        className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${isProposed
+                                                ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200'
+                                                : isMyPosition
+                                                    ? `${isCustomer ? 'bg-emerald-50 border-emerald-400' : 'bg-blue-50 border-blue-400'}`
+                                                    : isOtherPosition
+                                                        ? `${isCustomer ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`
+                                                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                            }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-xs text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">
+                                                        ({option.value})
+                                                    </span>
+                                                    <span className="text-sm font-semibold text-slate-800">{option.label}</span>
+
+                                                    {isMyPosition && (
+                                                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${isCustomer ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                                                            }`}>
+                                                            Your Position
+                                                        </span>
+                                                    )}
+                                                    {isOtherPosition && (
+                                                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${isCustomer ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
+                                                            }`}>
+                                                            {isCustomer ? 'Provider' : 'Customer'}
+                                                        </span>
+                                                    )}
+                                                    {isRecommended && (
+                                                        <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded flex items-center gap-1">
+                                                            <span>★</span> CLARENCE
+                                                        </span>
+                                                    )}
+                                                    {isProposed && (
+                                                        <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded animate-pulse">
+                                                            ⟳ Proposed
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-1">{option.description}</p>
+                                            </div>
+
+                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isMyPosition
+                                                    ? `${isCustomer ? 'border-emerald-500 bg-emerald-500' : 'border-blue-500 bg-blue-500'}`
+                                                    : isProposed
+                                                        ? 'border-amber-500 bg-amber-500'
+                                                        : 'border-slate-300'
+                                                }`}>
+                                                {(isMyPosition || isProposed) && (
+                                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
-
-                        {/* Position Slider */}
-                        <div className="relative">
-                            <input
-                                type="range"
-                                min="1"
-                                max="10"
-                                step="0.5"
-                                value={proposedPosition ?? myPosition ?? 5}
-                                onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
-                                className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer
-                                    [&::-webkit-slider-thumb]:appearance-none
-                                    [&::-webkit-slider-thumb]:w-6
-                                    [&::-webkit-slider-thumb]:h-6
-                                    [&::-webkit-slider-thumb]:rounded-full
-                                    [&::-webkit-slider-thumb]:bg-emerald-500
-                                    [&::-webkit-slider-thumb]:border-2
-                                    [&::-webkit-slider-thumb]:border-white
-                                    [&::-webkit-slider-thumb]:shadow-lg
-                                    [&::-webkit-slider-thumb]:cursor-grab
-                                    [&::-webkit-slider-thumb]:active:cursor-grabbing
-                                    [&::-moz-range-thumb]:w-6
-                                    [&::-moz-range-thumb]:h-6
-                                    [&::-moz-range-thumb]:rounded-full
-                                    [&::-moz-range-thumb]:bg-emerald-500
-                                    [&::-moz-range-thumb]:border-2
-                                    [&::-moz-range-thumb]:border-white
-                                    [&::-moz-range-thumb]:shadow-lg"
-                            />
-
-                            {/* Scale markers */}
-                            <div className="flex justify-between mt-1 px-1">
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                    <div key={n} className="text-xs text-slate-400">{n}</div>
-                                ))}
+                    </div>
+                ) : (
+                    /* Numeric Slider Fallback */
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                            <div className="flex-1">
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    step="0.5"
+                                    value={proposedPosition ?? myPosition ?? 5}
+                                    onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
+                                    className="w-full h-3 bg-slate-200 rounded-full appearance-none cursor-pointer"
+                                />
+                                <div className="flex justify-between mt-1 px-1">
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                        <div key={n} className="text-xs text-slate-400">{n}</div>
+                                    ))}
+                                </div>
                             </div>
-
-                            {/* Other party marker */}
-                            {otherPosition !== null && (
-                                <div
-                                    className="absolute top-0 w-0.5 h-3 bg-blue-500"
-                                    style={{ left: `${((otherPosition - 1) / 9) * 100}%` }}
-                                    title={`${isCustomer ? 'Provider' : 'Customer'} position: ${otherPosition}`}
-                                >
-                                    <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 whitespace-nowrap">
-                                        ▼ {isCustomer ? 'Provider' : 'Customer'}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* CLARENCE recommendation marker */}
-                            {selectedClause.clarenceRecommendation !== null && (
-                                <div
-                                    className="absolute top-0 w-0.5 h-3 bg-purple-500"
-                                    style={{ left: `${((selectedClause.clarenceRecommendation - 1) / 9) * 100}%` }}
-                                    title={`CLARENCE recommends: ${selectedClause.clarenceRecommendation}`}
-                                >
-                                    <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-xs text-purple-600 whitespace-nowrap">
-                                        ◆ Suggested
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Numeric input */}
-                    <div className="w-20">
-                        <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            step="0.5"
-                            value={proposedPosition ?? myPosition ?? 5}
-                            onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
-                            className="w-full px-3 py-2 text-center text-lg font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                    </div>
-                </div>
-
-                {/* Leverage Impact Preview (shows when adjusting) */}
-                {isProposing && pendingLeverageImpact !== 0 && (
-                    <div className={`p-3 rounded-lg mb-4 ${pendingLeverageImpact < 0 ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-                        <div className="flex items-center gap-2">
-                            <svg className={`w-5 h-5 ${pendingLeverageImpact < 0 ? 'text-amber-600' : 'text-emerald-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span className={`text-sm ${pendingLeverageImpact < 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
-                                <strong>Leverage Impact:</strong> This move will {pendingLeverageImpact < 0 ? 'cost you' : 'gain you'}{' '}
-                                <span className="font-bold">{Math.abs(pendingLeverageImpact).toFixed(1)}%</span> leverage
-                                {myWeight >= 7 && ' (high-weight clause)'}
-                            </span>
+                            <div className="w-20">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="10"
+                                    step="0.5"
+                                    value={proposedPosition ?? myPosition ?? 5}
+                                    onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
+                                    className="w-full px-3 py-2 text-center text-lg font-bold border border-slate-300 rounded-lg"
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
 
+                {/* Leverage Impact Preview */}
+                {isProposing && pendingLeverageImpact !== 0 && (
+                    <div className={`p-3 rounded-lg mt-4 ${pendingLeverageImpact < 0 ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+                        <span className={`text-sm ${pendingLeverageImpact < 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
+                            <strong>Leverage Impact:</strong> This move will {pendingLeverageImpact < 0 ? 'cost you' : 'gain you'}{' '}
+                            <span className="font-bold">{Math.abs(pendingLeverageImpact).toFixed(1)}%</span> leverage
+                        </span>
+                    </div>
+                )}
+
                 {/* Action Buttons */}
-                <div className="flex gap-3">
-                    {/* SET Button */}
+                <div className="flex gap-3 mt-4">
                     <button
                         onClick={handleSetPosition}
                         disabled={!isProposing || isCommitting}
@@ -2159,31 +1705,15 @@ function ContractStudioContent() {
                             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             }`}
                     >
-                        {isCommitting ? (
-                            <>
-                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                Setting...
-                            </>
-                        ) : (
-                            <>
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Set Position
-                            </>
-                        )}
+                        {isCommitting ? 'Setting...' : 'Set Position'}
                     </button>
 
-                    {/* RESET Button (only show if changed from original) */}
                     {hasChanged && (
                         <button
                             onClick={() => setShowResetConfirm(true)}
                             disabled={isCommitting}
-                            className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition flex items-center gap-2"
+                            className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
                             Reset
                         </button>
                     )}
@@ -2195,7 +1725,7 @@ function ContractStudioContent() {
                         <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-xl">
                             <h3 className="text-lg font-semibold text-slate-800 mb-2">Reset Position?</h3>
                             <p className="text-slate-600 mb-4">
-                                This will restore your position on <strong>{selectedClause.clauseName}</strong> back to the original value of <strong>{originalPosition}</strong>.
+                                This will restore your position on <strong>{selectedClause.clauseName}</strong> back to <strong>{getPositionLabel(originalPosition)}</strong>.
                             </p>
                             <div className="flex gap-3">
                                 <button
@@ -2223,7 +1753,7 @@ function ContractStudioContent() {
                             selectedClause.gapSize <= 3 ? 'text-amber-600' :
                                 'text-red-600'
                             }`}>
-                            {selectedClause.gapSize.toFixed(1)} points
+                            {selectedClause.gapSize.toFixed(1)} position{selectedClause.gapSize !== 1 ? 's' : ''} apart
                             {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
                         </span>
                     </div>
@@ -2246,14 +1776,7 @@ function ContractStudioContent() {
                     <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
                         <button
-                            onClick={() => {
-                                // LOG: Leverage details toggled
-                                eventLogger.completed('contract_negotiation', 'leverage_details_toggled', {
-                                    sessionId: session.sessionId,
-                                    expanded: !showLeverageDetails
-                                })
-                                setShowLeverageDetails(!showLeverageDetails)
-                            }}
+                            onClick={() => setShowLeverageDetails(!showLeverageDetails)}
                             className="text-xs text-slate-400 hover:text-slate-600"
                         >
                             {showLeverageDetails ? 'Hide Details' : 'Show Details'}
@@ -2306,83 +1829,6 @@ function ContractStudioContent() {
                         </div>
                     </div>
                 </div>
-
-                {/* Visual Leverage Bar */}
-                <div className="relative">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-emerald-600 font-medium w-24">{session.customerCompany.split(' ')[0]}</span>
-                        <div className="flex-1"></div>
-                        <span className="text-xs text-blue-600 font-medium w-24 text-right">{session.providerCompany.split(' ')[0]}</span>
-                    </div>
-
-                    <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative">
-                        {/* Leverage Score marker */}
-                        <div
-                            className="absolute top-0 bottom-0 w-1 bg-slate-800 z-10"
-                            style={{ left: `${displayLeverage.leverageScoreCustomer}%`, transform: 'translateX(-50%)' }}
-                        >
-                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-600 whitespace-nowrap">
-                                ◆ {displayLeverage.leverageScoreCustomer}%
-                            </div>
-                        </div>
-
-                        {/* Leverage Tracker fill */}
-                        <div
-                            className={`h-full transition-all duration-500 ${displayLeverage.leverageTrackerCustomer > displayLeverage.leverageScoreCustomer
-                                ? 'bg-emerald-500'
-                                : displayLeverage.leverageTrackerCustomer < displayLeverage.leverageScoreCustomer
-                                    ? 'bg-amber-500'
-                                    : 'bg-slate-400'
-                                }`}
-                            style={{ width: `${displayLeverage.leverageTrackerCustomer}%` }}
-                        ></div>
-
-                        <div className="absolute top-0 bottom-0 left-1/2 w-px bg-slate-300"></div>
-                    </div>
-
-                    <div className="flex items-center justify-center gap-6 mt-2 text-xs text-slate-500">
-                        <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 bg-slate-800 transform rotate-45"></div>
-                            <span>Leverage Score (baseline)</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <div className="w-3 h-2 bg-emerald-500 rounded-sm"></div>
-                            <span>Leverage Tracker (current)</span>
-                        </div>
-                    </div>
-                </div>
-
-                {showLeverageDetails && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                        <div className="text-xs font-medium text-slate-600 mb-3">Leverage Score Breakdown</div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">Market Dynamics</span>
-                                <span className={`text-xs font-medium ${displayLeverage.marketDynamicsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.marketDynamicsScore >= 0 ? '+' : ''}{displayLeverage.marketDynamicsScore}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">Economic Factors</span>
-                                <span className={`text-xs font-medium ${displayLeverage.economicFactorsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.economicFactorsScore >= 0 ? '+' : ''}{displayLeverage.economicFactorsScore}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">Strategic Position</span>
-                                <span className={`text-xs font-medium ${displayLeverage.strategicPositionScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.strategicPositionScore >= 0 ? '+' : ''}{displayLeverage.strategicPositionScore}
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">BATNA Strength</span>
-                                <span className={`text-xs font-medium ${displayLeverage.batnaScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.batnaScore >= 0 ? '+' : ''}{displayLeverage.batnaScore}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         )
     }
@@ -2461,30 +1907,15 @@ function ContractStudioContent() {
 
     // ============================================================================
     // SECTION 13: PARTY STATUS BANNER COMPONENT
-    // Two-row layout per John's feedback (Dec 2025)
-    // Row 1: Navigation (Dashboard) | Title (centered) | User dropdown
-    // Row 2: Customer info | Session details (centered) | Provider info
     // ============================================================================
 
     const PartyStatusBanner = () => {
         const isCustomer = userInfo.role === 'customer'
-        const myCompany = isCustomer ? session.customerCompany : session.providerCompany
-        const otherCompany = isCustomer ? session.providerCompany : session.customerCompany
-        const myRole = isCustomer ? 'Customer' : 'Provider'
-        const otherRole = isCustomer ? 'Provider' : 'Customer'
-
-        // Determine which company goes on which side (Customer always left, Provider always right)
-        const customerCompany = session.customerCompany
-        const providerCompany = session.providerCompany
 
         return (
             <div className="bg-slate-800 text-white">
-                {/* ============================================================ */}
-                {/* ROW 1: Navigation Row */}
-                {/* ============================================================ */}
                 <div className="px-6 py-2 border-b border-slate-700">
                     <div className="flex items-center justify-between">
-                        {/* Left: Dashboard Button */}
                         <button
                             onClick={() => router.push('/auth/contracts-dashboard')}
                             className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
@@ -2495,7 +1926,6 @@ function ContractStudioContent() {
                             <span className="text-sm">Dashboard</span>
                         </button>
 
-                        {/* Center: Title */}
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                                 <span className="text-white font-bold text-sm">C</span>
@@ -2506,30 +1936,25 @@ function ContractStudioContent() {
                             </div>
                         </div>
 
-                        {/* Right: User Info / Logged in status */}
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
                             <span className="text-sm text-slate-300">
-                                {userInfo.firstName ? `${userInfo.firstName} ${userInfo.lastName}` : myCompany}
+                                {userInfo.firstName} {userInfo.lastName}
                             </span>
                             <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded">
-                                {myRole}
+                                {isCustomer ? 'Customer' : 'Provider'}
                             </span>
                         </div>
                     </div>
                 </div>
 
-                {/* ============================================================ */}
-                {/* ROW 2: Session Context Row */}
-                {/* ============================================================ */}
                 <div className="px-6 py-3">
                     <div className="flex items-center justify-between">
-                        {/* Left: Customer Info (always on left) */}
                         <div className="flex items-center gap-3 min-w-[200px]">
                             <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
                             <div>
                                 <div className="text-xs text-slate-400">Customer</div>
-                                <div className="text-sm font-medium text-emerald-400">{customerCompany}</div>
+                                <div className="text-sm font-medium text-emerald-400">{session.customerCompany}</div>
                             </div>
                             {isCustomer && (
                                 <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">
@@ -2538,7 +1963,6 @@ function ContractStudioContent() {
                             )}
                         </div>
 
-                        {/* Center: Session Details (truly centered) */}
                         <div className="flex items-center gap-8">
                             <div className="text-center">
                                 <div className="text-xs text-slate-400">Session</div>
@@ -2561,7 +1985,6 @@ function ContractStudioContent() {
                             </div>
                         </div>
 
-                        {/* Right: Provider Info (always on right) + Party Chat */}
                         <div className="flex items-center gap-3 min-w-[200px] justify-end">
                             {!isCustomer && (
                                 <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
@@ -2570,39 +1993,9 @@ function ContractStudioContent() {
                             )}
                             <div className="text-right">
                                 <div className="text-xs text-slate-400">Provider</div>
-                                <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
+                                <div className="text-sm font-medium text-blue-400">{session.providerCompany}</div>
                             </div>
                             <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
-
-                            {/* Party Chat Toggle - Only show if user is customer (chatting with provider) */}
-                            {isCustomer && (
-                                <button
-                                    onClick={() => setIsChatOpen(true)}
-                                    className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition"
-                                    title={`Chat with ${providerCompany}`}
-                                >
-                                    <svg
-                                        className="w-5 h-5 text-slate-400 hover:text-emerald-400 transition"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                        />
-                                    </svg>
-
-                                    {/* Unread Badge */}
-                                    {chatUnreadCount > 0 && (
-                                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                                            {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
-                                        </span>
-                                    )}
-                                </button>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -2618,7 +2011,7 @@ function ContractStudioContent() {
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <PartyStatusBanner />
 
-            <div className="flex h-[calc(100vh-52px)] overflow-hidden">
+            <div className="flex h-[calc(100vh-100px)] overflow-hidden">
                 {/* LEFT PANEL: Clause Navigation */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
                     <div className="flex-shrink-0 p-4 border-b border-slate-200">
@@ -2681,16 +2074,7 @@ function ContractStudioContent() {
                                     {(['dynamics', 'tradeoffs', 'history', 'draft'] as const).map(tab => (
                                         <button
                                             key={tab}
-                                            onClick={() => {
-                                                // LOG: Tab changed
-                                                eventLogger.completed('contract_negotiation', 'workspace_tab_changed', {
-                                                    sessionId: session.sessionId,
-                                                    fromTab: activeTab,
-                                                    toTab: tab,
-                                                    clauseId: selectedClause?.clauseId
-                                                })
-                                                setActiveTab(tab)
-                                            }}
+                                            onClick={() => setActiveTab(tab)}
                                             className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
                                                 ? 'bg-white text-slate-800 shadow-sm'
                                                 : 'text-slate-500 hover:text-slate-700'
@@ -2708,15 +2092,13 @@ function ContractStudioContent() {
                     <div className="flex-1 overflow-y-auto p-4 pt-0">
                         {activeTab === 'dynamics' && selectedClause && (
                             <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
-                                {/* POSITION ADJUSTMENT PANEL (NEW) */}
                                 <PositionAdjustmentPanel />
 
-                                {/* Position Comparison (read-only view of both positions) */}
+                                {/* Position Comparison */}
                                 <div className="mb-6">
                                     <h3 className="text-sm font-semibold text-slate-700 mb-4">Position Overview</h3>
 
                                     <div className="grid grid-cols-2 gap-4">
-                                        {/* Customer Position */}
                                         <div className={`p-4 rounded-lg ${userInfo.role === 'customer' ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50'}`}>
                                             <div className="flex items-center gap-2 mb-2">
                                                 <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
@@ -2731,7 +2113,6 @@ function ContractStudioContent() {
                                             </div>
                                         </div>
 
-                                        {/* Provider Position */}
                                         <div className={`p-4 rounded-lg ${userInfo.role === 'provider' ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
                                             <div className="flex items-center gap-2 mb-2">
                                                 <div className="w-3 h-3 rounded-full bg-blue-500"></div>
@@ -2747,39 +2128,18 @@ function ContractStudioContent() {
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* CLARENCE Recommendation */}
-                                {selectedClause.clarenceRecommendation !== null && (
-                                    <div className="p-4 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl border border-purple-100">
-                                        <div className="flex items-start gap-3">
-                                            <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                                <span className="text-white font-bold text-sm">C</span>
-                                            </div>
-                                            <div>
-                                                <div className="text-sm font-medium text-purple-800 mb-1">CLARENCE Recommendation</div>
-                                                <div className="text-xl font-bold text-purple-700">
-                                                    Position {selectedClause.clarenceRecommendation}
-                                                </div>
-                                                <div className="text-xs text-purple-600 mt-1">
-                                                    Based on leverage balance of {displayLeverage.leverageScoreCustomer}:{displayLeverage.leverageScoreProvider}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         )}
 
-                        {/* Other tabs remain similar to before... */}
                         {activeTab === 'tradeoffs' && selectedClause && (
                             <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
-                                <p className="text-slate-600">Trade-offs panel - see original code for full implementation</p>
+                                <p className="text-slate-600">Trade-offs panel</p>
                             </div>
                         )}
 
                         {activeTab === 'draft' && selectedClause && (
                             <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
-                                <p className="text-slate-600">Draft language panel - see original code for full implementation</p>
+                                <p className="text-slate-600">Draft language panel</p>
                             </div>
                         )}
 
@@ -2815,10 +2175,6 @@ function ContractStudioContent() {
                                     }
                                 </div>
                             </div>
-                            <div className="flex items-center gap-1">
-                                <div className={`w-2 h-2 rounded-full ${isChatLoading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></div>
-                                <span className="text-xs text-slate-400">{isChatLoading ? 'Thinking...' : 'Ready'}</span>
-                            </div>
                         </div>
                     </div>
 
@@ -2830,39 +2186,16 @@ function ContractStudioContent() {
                                 <div
                                     key={msg.messageId}
                                     ref={isLatestMessage ? latestMessageRef : null}
-                                    className={`flex ${msg.sender === 'customer' ? 'justify-end' : msg.sender === 'provider' ? 'justify-end' : 'justify-start'}`}
+                                    className={`flex ${msg.sender === 'customer' || msg.sender === 'provider' ? 'justify-end' : 'justify-start'}`}
                                 >
-                                    <div className={`max-w-[85%] rounded-lg p-3 ${msg.messageType === 'position_change'
-                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                        : msg.sender === 'clarence'
-                                            ? 'bg-white text-slate-700 border border-slate-200'
-                                            : msg.sender === 'customer'
-                                                ? 'bg-emerald-500 text-white'
-                                                : 'bg-blue-500 text-white'
+                                    <div className={`max-w-[85%] rounded-lg p-3 ${msg.sender === 'clarence'
+                                        ? 'bg-white text-slate-700 border border-slate-200'
+                                        : msg.sender === 'customer'
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-blue-500 text-white'
                                         }`}>
-                                        {msg.sender === 'clarence' && (
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
-                                                    <span className="text-white text-xs font-bold">C</span>
-                                                </div>
-                                                <span className="text-xs font-medium text-emerald-700">CLARENCE</span>
-                                                {msg.relatedPositionChange && (
-                                                    <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Position Response</span>
-                                                )}
-                                            </div>
-                                        )}
-                                        {msg.messageType === 'position_change' && (
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                                </svg>
-                                                <span className="text-xs font-medium text-amber-700">Position Update</span>
-                                            </div>
-                                        )}
                                         <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                                        <div className={`text-xs mt-2 ${msg.messageType === 'position_change' ? 'text-amber-600' :
-                                            msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'
-                                            }`}>
+                                        <div className={`text-xs mt-2 ${msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'}`}>
                                             {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </div>
                                     </div>
@@ -2890,11 +2223,8 @@ function ContractStudioContent() {
                                 value={chatInput}
                                 onChange={(e) => setChatInput(e.target.value)}
                                 onKeyPress={handleKeyPress}
-                                placeholder={selectedClause
-                                    ? `Ask about ${selectedClause.clauseName}...`
-                                    : "Ask CLARENCE anything..."
-                                }
-                                className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                placeholder="Ask CLARENCE anything..."
+                                className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 disabled={isChatLoading}
                             />
                             <button
@@ -2905,23 +2235,6 @@ function ContractStudioContent() {
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                 </svg>
-                            </button>
-                        </div>
-
-                        <div className="flex gap-2 mt-2">
-                            <button
-                                onClick={() => handleQuickAction('What trade-offs could help us reach agreement faster?')}
-                                disabled={isChatLoading}
-                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-600 rounded-lg transition"
-                            >
-                                Suggest Trade-off
-                            </button>
-                            <button
-                                onClick={() => handleQuickAction('What is the industry standard for this clause?')}
-                                disabled={isChatLoading}
-                                className="flex-1 px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 disabled:bg-slate-50 disabled:text-slate-400 text-slate-600 rounded-lg transition"
-                            >
-                                Industry Data
                             </button>
                         </div>
                     </div>
@@ -2951,12 +2264,10 @@ interface PendingProviderViewProps {
 function PendingProviderView({
     session,
     sessionStatus,
-    setSessionStatus,
     providerEmail,
     setProviderEmail,
     inviteSending,
     inviteSent,
-    setInviteSent,
     handleSendInvite,
     router
 }: PendingProviderViewProps) {
@@ -3020,20 +2331,12 @@ function PendingProviderView({
                         )}
 
                         {(sessionStatus === 'provider_invited' || inviteSent) && (
-                            <div className="flex flex-col gap-3 max-w-md mx-auto">
-                                <button
-                                    onClick={() => router.push('/auth/contracts-dashboard')}
-                                    className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
-                                >
-                                    ← Return to Dashboard
-                                </button>
-                                <button
-                                    onClick={() => setSessionStatus('ready')}
-                                    className="px-6 py-2 bg-slate-600 text-white rounded-lg"
-                                >
-                                    Preview Contract Studio →
-                                </button>
-                            </div>
+                            <button
+                                onClick={() => router.push('/auth/contracts-dashboard')}
+                                className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
+                            >
+                                ← Return to Dashboard
+                            </button>
                         )}
                     </div>
                 </div>
