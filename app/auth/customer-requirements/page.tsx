@@ -965,7 +965,7 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
 
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Decision Timeline
+                        Time to Agree Contract
                     </label>
                     <select
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"

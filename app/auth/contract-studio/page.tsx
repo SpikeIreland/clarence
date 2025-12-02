@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
+import { PartyChatPanel } from './components/party-chat-component'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -779,6 +780,7 @@ function ContractStudioContent() {
     const [isChatLoading, setIsChatLoading] = useState(false)
     const [activeTab, setActiveTab] = useState<'dynamics' | 'tradeoffs' | 'history' | 'draft'>('dynamics')
     const [showLeverageDetails, setShowLeverageDetails] = useState(false)
+    const [chatUnreadCount, setChatUnreadCount] = useState(0)
 
     // ============================================================================
     // SECTION 6B: POSITION ADJUSTMENT STATE (NEW)
@@ -2452,6 +2454,9 @@ function ContractStudioContent() {
 
     // ============================================================================
     // SECTION 13: PARTY STATUS BANNER COMPONENT
+    // Two-row layout per John's feedback (Dec 2025)
+    // Row 1: Navigation (Dashboard) | Title (centered) | User dropdown
+    // Row 2: Customer info | Session details (centered) | Provider info
     // ============================================================================
 
     const PartyStatusBanner = () => {
@@ -2461,10 +2466,18 @@ function ContractStudioContent() {
         const myRole = isCustomer ? 'Customer' : 'Provider'
         const otherRole = isCustomer ? 'Provider' : 'Customer'
 
+        // Determine which company goes on which side (Customer always left, Provider always right)
+        const customerCompany = session.customerCompany
+        const providerCompany = session.providerCompany
+
         return (
-            <div className="bg-slate-800 text-white px-6 py-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+            <div className="bg-slate-800 text-white">
+                {/* ============================================================ */}
+                {/* ROW 1: Navigation Row */}
+                {/* ============================================================ */}
+                <div className="px-6 py-2 border-b border-slate-700">
+                    <div className="flex items-center justify-between">
+                        {/* Left: Dashboard Button */}
                         <button
                             onClick={() => router.push('/auth/contracts-dashboard')}
                             className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
@@ -2474,53 +2487,115 @@ function ContractStudioContent() {
                             </svg>
                             <span className="text-sm">Dashboard</span>
                         </button>
-                        <div className="w-px h-6 bg-slate-600"></div>
+
+                        {/* Center: Title */}
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">C</span>
+                            </div>
+                            <div>
+                                <span className="font-semibold text-white tracking-wide">CLARENCE</span>
+                                <span className="text-slate-400 text-sm ml-2">Contract Studio</span>
+                            </div>
+                        </div>
+
+                        {/* Right: User Info / Logged in status */}
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                            <span className="text-sm">
-                                Logged in as <span className="font-semibold text-emerald-400">{myCompany}</span>
+                            <span className="text-sm text-slate-300">
+                                {userInfo.firstName ? `${userInfo.firstName} ${userInfo.lastName}` : myCompany}
                             </span>
-                            <span className="text-xs text-slate-400 bg-slate-700 px-2 py-0.5 rounded">
+                            <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded">
                                 {myRole}
                             </span>
                         </div>
                     </div>
+                </div>
 
-                    <div className="flex items-center gap-6">
-                        <div className="text-center">
-                            <div className="text-xs text-slate-400">Session</div>
-                            <div className="text-sm font-mono">{session.sessionNumber}</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-xs text-slate-400">Deal Value</div>
-                            <div className="text-sm font-semibold text-emerald-400">{session.dealValue}</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-xs text-slate-400">Phase</div>
-                            <div className="text-sm">
-                                <span className="inline-flex items-center gap-1">
-                                    <span className="w-5 h-5 bg-emerald-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                                        {session.phase}
-                                    </span>
-                                    <span className="text-slate-300">of 6</span>
+                {/* ============================================================ */}
+                {/* ROW 2: Session Context Row */}
+                {/* ============================================================ */}
+                <div className="px-6 py-3">
+                    <div className="flex items-center justify-between">
+                        {/* Left: Customer Info (always on left) */}
+                        <div className="flex items-center gap-3 min-w-[200px]">
+                            <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
+                            <div>
+                                <div className="text-xs text-slate-400">Customer</div>
+                                <div className="text-sm font-medium text-emerald-400">{customerCompany}</div>
+                            </div>
+                            {isCustomer && (
+                                <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">
+                                    You
                                 </span>
-                            </div>
+                            )}
                         </div>
-                    </div>
 
-                    <div className="flex items-center gap-3">
-                        <div className="text-right">
-                            <div className="text-xs text-slate-400">Other Party</div>
-                            <div className="text-sm">
-                                <span className="font-medium">{otherCompany}</span>
-                                <span className="text-xs text-slate-500 ml-2">({otherRole})</span>
+                        {/* Center: Session Details (truly centered) */}
+                        <div className="flex items-center gap-8">
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Session</div>
+                                <div className="text-sm font-mono text-white">{session.sessionNumber}</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Deal Value</div>
+                                <div className="text-sm font-semibold text-emerald-400">{session.dealValue}</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Phase</div>
+                                <div className="text-sm">
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="w-5 h-5 bg-emerald-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                                            {session.phase}
+                                        </span>
+                                        <span className="text-slate-300">of 6</span>
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex flex-col items-center">
-                            <div className={`w-3 h-3 rounded-full ${otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500'}`}></div>
-                            <span className={`text-xs mt-0.5 ${otherPartyStatus.isOnline ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                {otherPartyStatus.isOnline ? 'Online' : 'Offline'}
-                            </span>
+
+                        {/* Right: Provider Info (always on right) + Party Chat */}
+                        <div className="flex items-center gap-3 min-w-[200px] justify-end">
+                            {!isCustomer && (
+                                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
+                                    You
+                                </span>
+                            )}
+                            <div className="text-right">
+                                <div className="text-xs text-slate-400">Provider</div>
+                                <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
+                            </div>
+                            <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
+
+                            {/* Party Chat Toggle - Only show if user is customer (chatting with provider) */}
+                            {isCustomer && (
+                                <button
+                                    onClick={() => setIsChatOpen(true)}
+                                    className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition"
+                                    title={`Chat with ${providerCompany}`}
+                                >
+                                    <svg
+                                        className="w-5 h-5 text-slate-400 hover:text-emerald-400 transition"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                        />
+                                    </svg>
+
+                                    {/* Unread Badge */}
+                                    {chatUnreadCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                                            {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
