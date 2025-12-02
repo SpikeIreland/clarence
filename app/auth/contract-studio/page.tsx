@@ -838,7 +838,7 @@ function ContractStudioContent() {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
-    const chatEndRef = useRef<HTMLDivElement>(null)
+    // chatEndRef removed - replaced by latestMessageRef in Section 7F
 
     // ============================================================================
     // SECTION 6G: SESSION STATUS STATE
@@ -1216,11 +1216,16 @@ function ContractStudioContent() {
     }, [session?.sessionId, session?.providerCompany, userInfo?.role, loadAvailableProviders])
 
     // ============================================================================
-    // SECTION 7F: AUTO-SCROLL CHAT TO BOTTOM
+    // SECTION 7F: AUTO-SCROLL CHAT TO SHOW NEW MESSAGES FROM TOP
     // ============================================================================
 
+    const latestMessageRef = useRef<HTMLDivElement>(null)
+
     useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        // Scroll to show the TOP of the newest message, not the bottom
+        if (latestMessageRef.current) {
+            latestMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
     }, [chatMessages])
 
     // ============================================================================
@@ -2818,47 +2823,52 @@ function ContractStudioContent() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
-                        {chatMessages.map((msg) => (
-                            <div
-                                key={msg.messageId}
-                                className={`flex ${msg.sender === 'customer' ? 'justify-end' : msg.sender === 'provider' ? 'justify-end' : 'justify-start'}`}
-                            >
-                                <div className={`max-w-[85%] rounded-lg p-3 ${msg.messageType === 'position_change'
-                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                    : msg.sender === 'clarence'
-                                        ? 'bg-white text-slate-700 border border-slate-200'
-                                        : msg.sender === 'customer'
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-blue-500 text-white'
-                                    }`}>
-                                    {msg.sender === 'clarence' && (
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
-                                                <span className="text-white text-xs font-bold">C</span>
-                                            </div>
-                                            <span className="text-xs font-medium text-emerald-700">CLARENCE</span>
-                                            {msg.relatedPositionChange && (
-                                                <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Position Response</span>
-                                            )}
-                                        </div>
-                                    )}
-                                    {msg.messageType === 'position_change' && (
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                            </svg>
-                                            <span className="text-xs font-medium text-amber-700">Position Update</span>
-                                        </div>
-                                    )}
-                                    <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                                    <div className={`text-xs mt-2 ${msg.messageType === 'position_change' ? 'text-amber-600' :
-                                        msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'
+                        {chatMessages.map((msg, index) => {
+                            const isLatestMessage = index === chatMessages.length - 1
+
+                            return (
+                                <div
+                                    key={msg.messageId}
+                                    ref={isLatestMessage ? latestMessageRef : null}
+                                    className={`flex ${msg.sender === 'customer' ? 'justify-end' : msg.sender === 'provider' ? 'justify-end' : 'justify-start'}`}
+                                >
+                                    <div className={`max-w-[85%] rounded-lg p-3 ${msg.messageType === 'position_change'
+                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                        : msg.sender === 'clarence'
+                                            ? 'bg-white text-slate-700 border border-slate-200'
+                                            : msg.sender === 'customer'
+                                                ? 'bg-emerald-500 text-white'
+                                                : 'bg-blue-500 text-white'
                                         }`}>
-                                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {msg.sender === 'clarence' && (
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                                                    <span className="text-white text-xs font-bold">C</span>
+                                                </div>
+                                                <span className="text-xs font-medium text-emerald-700">CLARENCE</span>
+                                                {msg.relatedPositionChange && (
+                                                    <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Position Response</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {msg.messageType === 'position_change' && (
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                                                </svg>
+                                                <span className="text-xs font-medium text-amber-700">Position Update</span>
+                                            </div>
+                                        )}
+                                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                                        <div className={`text-xs mt-2 ${msg.messageType === 'position_change' ? 'text-amber-600' :
+                                            msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'
+                                            }`}>
+                                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            )
+                        })}
 
                         {isChatLoading && (
                             <div className="flex justify-start">
@@ -2871,8 +2881,6 @@ function ContractStudioContent() {
                                 </div>
                             </div>
                         )}
-
-                        <div ref={chatEndRef} />
                     </div>
 
                     <div className="flex-shrink-0 p-4 border-t border-slate-200 bg-white">
