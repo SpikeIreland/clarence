@@ -7,6 +7,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { eventLogger } from '@/lib/eventLogger';
 
 // ============================================================
 // SECTION 2: TYPE DEFINITIONS
@@ -159,8 +160,19 @@ function ProviderPortalContent() {
         const sessionId = searchParams.get('session_id');
 
         if (token) {
+            // LOG: Invitation link clicked (arrived with token)
+            eventLogger.completed('provider_onboarding', 'invitation_link_clicked', {
+                hasToken: true,
+                hasSessionId: !!sessionId
+            });
+
             setView('validating');
             validateToken(token, sessionId || '');
+        } else {
+            // LOG: Provider portal loaded (no token - landing page)
+            eventLogger.completed('provider_onboarding', 'provider_portal_loaded', {
+                hasToken: false
+            });
         }
     }, [searchParams]);
 
@@ -169,6 +181,9 @@ function ProviderPortalContent() {
     // ============================================================
 
     const validateToken = async (token: string, sessionId: string) => {
+        // LOG: Token validation started
+        eventLogger.started('provider_onboarding', 'invite_token_validated');
+
         try {
             const response = await fetch(
                 `https://spikeislandstudios.app.n8n.cloud/webhook/validate-provider-token?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sessionId)}`,
@@ -183,6 +198,17 @@ function ProviderPortalContent() {
 
             if (data.valid) {
                 setTokenData(data);
+
+                // LOG: Token validated successfully
+                eventLogger.completed('provider_onboarding', 'invite_token_validated', {
+                    sessionId: data.sessionId,
+                    sessionNumber: data.sessionNumber,
+                    alreadyRegistered: data.alreadyRegistered,
+                    customerCompany: data.customerCompany
+                });
+
+                // Set session context for future events
+                eventLogger.setSession(data.sessionId);
 
                 if (data.alreadyRegistered && data.providerId) {
                     // Store session data for already registered providers
@@ -201,6 +227,12 @@ function ProviderPortalContent() {
                     localStorage.setItem('providerSession', JSON.stringify(sessionData));
                     localStorage.setItem('clarence_provider_session', JSON.stringify(sessionData));
 
+                    // LOG: Redirect to welcome (already registered)
+                    eventLogger.completed('provider_onboarding', 'redirect_to_provider_welcome', {
+                        providerId: data.providerId,
+                        alreadyRegistered: true
+                    });
+
                     router.push(`/provider/welcome?session_id=${data.sessionId}&provider_id=${data.providerId}`);
                     return;
                 }
@@ -213,11 +245,15 @@ function ProviderPortalContent() {
                 }));
                 setView('register');
             } else {
+                // LOG: Token validation failed
+                eventLogger.failed('provider_onboarding', 'invite_token_validated', data.error || 'Invalid token', 'INVALID_TOKEN');
                 setView('error');
                 setErrorMessage(data.error || 'Invalid or expired invitation token.');
             }
         } catch (error) {
             console.error('Token validation error:', error);
+            // LOG: Token validation exception
+            eventLogger.failed('provider_onboarding', 'invite_token_validated', error instanceof Error ? error.message : 'Validation failed', 'VALIDATION_EXCEPTION');
             setView('error');
             setErrorMessage('Unable to validate invitation. Please check your token and try again.');
         }
@@ -226,6 +262,11 @@ function ProviderPortalContent() {
     const handleManualTokenSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (manualToken.trim()) {
+            // LOG: Manual token entry
+            eventLogger.completed('provider_onboarding', 'invitation_link_clicked', {
+                hasToken: true,
+                manualEntry: true
+            });
             setView('validating');
             validateToken(manualToken.trim(), '');
         }
@@ -236,8 +277,13 @@ function ProviderPortalContent() {
         setIsSubmitting(true);
         setErrorMessage('');
 
+        // LOG: Registration form submitted
+        eventLogger.started('provider_onboarding', 'provider_intake_form_submitted');
+
         try {
             if (!formData.companyName || !formData.contactName || !formData.contactEmail) {
+                // LOG: Validation failed
+                eventLogger.failed('provider_onboarding', 'provider_intake_form_submitted', 'Missing required fields', 'VALIDATION_ERROR');
                 throw new Error('Please fill in all required fields.');
             }
 
@@ -261,31 +307,45 @@ function ProviderPortalContent() {
             const result = await response.json();
 
             if (result.success) {
+                // LOG: Provider record created
+                eventLogger.completed('provider_onboarding', 'provider_record_created', {
+                    providerId: result.providerId,
+                    sessionId: formData.sessionId,
+                    companyName: formData.companyName
+                });
+
                 // Store ALL registration data for intake page pre-population
-                // Using BOTH keys for backwards compatibility
                 const sessionData = {
                     providerId: result.providerId,
                     sessionId: formData.sessionId,
                     sessionNumber: tokenData?.sessionNumber || '',
                     token: formData.token,
-                    // Company info
                     companyName: formData.companyName,
                     contactName: formData.contactName,
                     contactEmail: formData.contactEmail,
                     contactPhone: formData.contactPhone,
                     companySize: formData.companySize,
                     industry: formData.industry,
-                    // Contract context
                     customerCompany: tokenData?.customerCompany || '',
                     serviceRequired: tokenData?.contractType || '',
                     dealValue: tokenData?.dealValue || '',
-                    // Metadata
                     registeredAt: new Date().toISOString()
                 };
 
-                // Store in BOTH localStorage keys for compatibility
                 localStorage.setItem('providerSession', JSON.stringify(sessionData));
                 localStorage.setItem('clarence_provider_session', JSON.stringify(sessionData));
+
+                // LOG: Registration completed, redirecting
+                eventLogger.completed('provider_onboarding', 'provider_intake_form_submitted', {
+                    providerId: result.providerId,
+                    sessionId: formData.sessionId
+                });
+
+                // LOG: Redirect to welcome
+                eventLogger.completed('provider_onboarding', 'redirect_to_provider_welcome', {
+                    providerId: result.providerId,
+                    alreadyRegistered: false
+                });
 
                 router.push(`/provider/welcome?session_id=${formData.sessionId}&provider_id=${result.providerId}`);
             } else {
@@ -293,6 +353,8 @@ function ProviderPortalContent() {
             }
         } catch (error) {
             console.error('Registration error:', error);
+            // LOG: Registration failed
+            eventLogger.failed('provider_onboarding', 'provider_intake_form_submitted', error instanceof Error ? error.message : 'Registration failed', 'REGISTRATION_ERROR');
             setErrorMessage(error instanceof Error ? error.message : 'Registration failed. Please try again.');
         } finally {
             setIsSubmitting(false);

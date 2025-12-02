@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { eventLogger } from '@/lib/eventLogger'
 
 // ============================================================================
 // SECTION 1: MAIN COMPONENT WRAPPER (Suspense)
@@ -30,8 +31,30 @@ function ProviderConfirmationContent() {
     const [providerId, setProviderId] = useState<string | null>(null)
 
     useEffect(() => {
-        setSessionId(searchParams.get('session_id'))
-        setProviderId(searchParams.get('provider_id'))
+        const sid = searchParams.get('session_id')
+        const pid = searchParams.get('provider_id')
+
+        setSessionId(sid)
+        setProviderId(pid)
+
+        // Set session context
+        if (sid) {
+            eventLogger.setSession(sid)
+        }
+
+        // LOG: Confirmation page loaded - provider onboarding complete!
+        eventLogger.completed('provider_onboarding', 'provider_confirmation_page_loaded', {
+            sessionId: sid,
+            providerId: pid,
+            timestamp: new Date().toISOString()
+        })
+
+        // LOG: Provider onboarding journey complete
+        eventLogger.completed('provider_onboarding', 'provider_onboarding_journey_complete', {
+            sessionId: sid,
+            providerId: pid,
+            completedAt: new Date().toISOString()
+        })
     }, [searchParams])
 
     // ========================================================================
@@ -159,6 +182,13 @@ function ProviderConfirmationContent() {
                         {sessionId && (
                             <Link
                                 href={`/provider/contract-studio?session_id=${sessionId}${providerId ? `&provider_id=${providerId}` : ''}`}
+                                onClick={() => {
+                                    // LOG: Provider proceeding to Contract Studio
+                                    eventLogger.completed('provider_onboarding', 'provider_contract_studio_clicked', {
+                                        sessionId: sessionId,
+                                        providerId: providerId
+                                    })
+                                }}
                                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium flex items-center justify-center gap-2"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -169,6 +199,13 @@ function ProviderConfirmationContent() {
                         )}
                         <Link
                             href="/"
+                            onClick={() => {
+                                // LOG: Provider returned home
+                                eventLogger.completed('provider_onboarding', 'provider_return_home_clicked', {
+                                    sessionId: sessionId,
+                                    providerId: providerId
+                                })
+                            }}
                             className="px-6 py-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-all font-medium"
                         >
                             Return Home

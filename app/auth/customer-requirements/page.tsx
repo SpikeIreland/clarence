@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { eventLogger } from '@/lib/eventLogger';
 
 // ============================================================================
 // SECTION 1: INTERFACES
@@ -191,6 +192,8 @@ function CustomerRequirementsForm() {
         if (urlSessionId) {
             setSessionId(urlSessionId)
             setFormData(prev => ({ ...prev, sessionId: urlSessionId }))
+            // LOG: Set session context for event logger
+            eventLogger.setSession(urlSessionId)
         }
 
         if (urlSessionNumber) {
@@ -209,6 +212,10 @@ function CustomerRequirementsForm() {
                     contactName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim(),
                     contactEmail: authData.userInfo?.email || ''
                 }))
+                // LOG: Set user context
+                if (authData.userInfo?.userId) {
+                    eventLogger.setUser(authData.userInfo.userId)
+                }
             } catch (e) {
                 console.error('Error parsing auth data:', e)
             }
@@ -221,6 +228,12 @@ function CustomerRequirementsForm() {
             content: `Welcome! I'm CLARENCE, your contract negotiation assistant. I'm here to help you complete your requirements form.\n\nFeel free to ask me about:\n• What information to provide\n• How your answers affect leverage\n• Best practices for contract terms\n\nHow can I help you today?`,
             timestamp: new Date()
         }])
+
+        // LOG: Requirements form loaded
+        eventLogger.completed('customer_requirements', 'requirements_form_loaded', {
+            sessionId: urlSessionId,
+            sessionNumber: urlSessionNumber
+        })
 
         setInitialLoading(false)
     }, [searchParams])
@@ -265,15 +278,29 @@ function CustomerRequirementsForm() {
     const handleSubmit = async () => {
         if (!validatePriorityPoints()) {
             alert('Please adjust priority points to not exceed 25')
+            // LOG: Validation failed
+            eventLogger.failed('customer_requirements', 'requirements_form_validated', 'Priority points exceed 25', 'VALIDATION_ERROR')
             return
         }
 
         if (!sessionId) {
             alert('Session ID is missing. Please go back to dashboard and create a new contract.')
+            // LOG: Missing session
+            eventLogger.failed('customer_requirements', 'requirements_form_validated', 'Session ID missing', 'SESSION_MISSING')
             return
         }
 
+        // LOG: Form validated successfully
+        eventLogger.completed('customer_requirements', 'requirements_form_validated', {
+            sessionId: sessionId,
+            totalSteps: totalSteps
+        })
+
         setLoading(true)
+
+        // LOG: Form submission started
+        eventLogger.started('customer_requirements', 'requirements_form_submitted')
+
         try {
             const submissionData = {
                 ...formData,
@@ -308,6 +335,18 @@ function CustomerRequirementsForm() {
                     console.log('Requirements submitted (empty response)')
                 }
 
+                // LOG: Form submitted successfully
+                eventLogger.completed('customer_requirements', 'requirements_form_submitted', {
+                    sessionId: sessionId,
+                    sessionNumber: sessionNumber,
+                    formVersion: '7.0'
+                })
+
+                // LOG: Redirect to questionnaire
+                eventLogger.completed('customer_requirements', 'redirect_to_questionnaire', {
+                    sessionId: sessionId
+                })
+
                 // Redirect to strategic assessment (next phase)
                 router.push(`/auth/strategic-assessment?session_id=${sessionId}&session_number=${sessionNumber}`)
             } else {
@@ -326,6 +365,13 @@ function CustomerRequirementsForm() {
             }
         } catch (error) {
             console.error('Submission error:', error)
+            // LOG: Submission failed
+            eventLogger.failed(
+                'customer_requirements',
+                'requirements_form_submitted',
+                error instanceof Error ? error.message : 'Unknown error',
+                'SUBMISSION_ERROR'
+            )
             alert('Failed to submit requirements. Please try again.')
         } finally {
             setLoading(false)
@@ -419,7 +465,15 @@ function CustomerRequirementsForm() {
     // ========================================================================
     // SECTION 12: STEP NAVIGATION
     // ========================================================================
-    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, totalSteps))
+    const nextStep = () => {
+        // LOG: Section completed (optional granular tracking)
+        eventLogger.completed('customer_requirements', `requirements_section_${currentStep}_completed`, {
+            sectionName: getStepName(currentStep),
+            sessionId: sessionId
+        })
+        setCurrentStep(prev => Math.min(prev + 1, totalSteps))
+    }
+
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
 
     // ========================================================================

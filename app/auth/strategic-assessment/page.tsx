@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { eventLogger } from '@/lib/eventLogger';
 
 // ========== SECTION 1: INTERFACES ==========
 interface ConversationMessage {
@@ -408,6 +409,9 @@ function IntelligentQuestionnaireContent() {
 
       setSessionId(sid)
 
+      // LOG: Set session context
+      eventLogger.setSession(sid)
+
       try {
         // FIXED: Use correct API endpoint
         const response = await fetch(`https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sid}`)
@@ -423,14 +427,25 @@ function IntelligentQuestionnaireContent() {
 
           setExistingData(requirements)
 
+          // LOG: Page loaded with data
+          eventLogger.completed('customer_questionnaire', 'questionnaire_page_loaded', {
+            sessionId: sid,
+            sessionNumber: data.sessionNumber,
+            hasExistingData: true
+          })
+
           // Start intelligent conversation
           startIntelligentConversation(requirements)
         } else {
           // No existing data - shouldn't happen in normal flow
+          // LOG: Failed to load data
+          eventLogger.failed('customer_questionnaire', 'questionnaire_page_loaded', 'No requirements data found', 'DATA_NOT_FOUND')
           addClarenceMessage("I don't have your requirements data yet. Please complete the Customer Requirements form first.")
         }
       } catch (error) {
         console.error('Error loading requirements:', error)
+        // LOG: Error loading data
+        eventLogger.failed('customer_questionnaire', 'questionnaire_page_loaded', error instanceof Error ? error.message : 'Failed to load requirements', 'LOAD_ERROR')
         addClarenceMessage("I had trouble loading your requirements. Let me try a different approach...")
       }
 
@@ -797,6 +812,14 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
         ...prev,
         [currentQuestion.key]: input
       }))
+
+      // LOG: Question answered
+      eventLogger.completed('customer_questionnaire', `questionnaire_q${currentQuestionIndex + 1}_answered`, {
+        questionKey: currentQuestion.key,
+        questionIndex: currentQuestionIndex + 1,
+        totalQuestions: STRATEGIC_QUESTIONS.length,
+        sessionId: sessionId
+      })
     }
 
     // Move to next question
@@ -871,6 +894,13 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
       providerLeverage: 0,
       breakdown: customerFactors,
       reasoning: "Full leverage calculation pending provider intake."
+    })
+
+    // LOG: Questionnaire completed
+    eventLogger.completed('customer_questionnaire', 'questionnaire_form_submitted', {
+      sessionId: sessionId,
+      totalQuestionsAnswered: Object.keys(strategicAnswers).length,
+      totalQuestions: STRATEGIC_QUESTIONS.length
     })
 
     setIsTyping(false)
@@ -1114,6 +1144,9 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
   const handleProceedToStudio = async () => {
     if (!sessionId) return
 
+    // LOG: Saving assessment data
+    eventLogger.started('customer_questionnaire', 'questionnaire_data_saved')
+
     // Save strategic answers (NOT leverage - that comes later)
     try {
       const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
@@ -1131,10 +1164,26 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
 
       if (!response.ok) {
         console.error('Failed to save strategic assessment:', await response.text())
+        // LOG: Save failed
+        eventLogger.failed('customer_questionnaire', 'questionnaire_data_saved', 'Failed to save assessment', 'SAVE_ERROR')
+      } else {
+        // LOG: Save succeeded
+        eventLogger.completed('customer_questionnaire', 'questionnaire_data_saved', {
+          sessionId: sessionId,
+          status: 'customer_assessment_complete'
+        })
       }
     } catch (error) {
       console.error('Error saving assessment:', error)
+      // LOG: Save exception
+      eventLogger.failed('customer_questionnaire', 'questionnaire_data_saved', error instanceof Error ? error.message : 'Save error', 'SAVE_EXCEPTION')
     }
+
+    // LOG: Redirect to invite provider
+    eventLogger.completed('customer_questionnaire', 'redirect_to_invite_provider', {
+      sessionId: sessionId,
+      sessionNumber: sessionNumber
+    })
 
     // Navigate to Contract Studio (which should show "Invite Provider" state)
     router.push(`/auth/invite-providers?session_id=${sessionId}&session_number=${sessionNumber}&status=pending_provider`)

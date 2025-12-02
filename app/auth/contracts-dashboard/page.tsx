@@ -11,6 +11,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
+import { eventLogger } from '@/lib/eventLogger';
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -171,9 +172,13 @@ export default function ContractsDashboard() {
 
     setIsCreatingContract(true)
 
+    // LOG: Create contract button clicked
+    eventLogger.started('contract_session_creation', 'create_contract_clicked');
+
     try {
       const auth = localStorage.getItem('clarence_auth')
       if (!auth) {
+        eventLogger.failed('contract_session_creation', 'create_contract_clicked', 'Not authenticated', 'AUTH_REQUIRED');
         router.push('/auth/login')
         return
       }
@@ -196,19 +201,34 @@ export default function ContractsDashboard() {
         const data = await response.json()
         console.log('New session created:', data)
 
+        // LOG: Session created successfully
+        eventLogger.completed('contract_session_creation', 'session_record_created', {
+          sessionId: data.sessionId,
+          sessionNumber: data.sessionNumber
+        });
+
         // Store the new session ID and redirect to Customer Requirements
         localStorage.setItem('currentSessionId', data.sessionId)
         localStorage.setItem('newSessionNumber', data.sessionNumber)
+
+        // LOG: Redirect to requirements
+        eventLogger.completed('contract_session_creation', 'redirect_to_requirements', {
+          sessionId: data.sessionId
+        });
 
         // Redirect to Customer Requirements form with session ID
         router.push(`/auth/customer-requirements?session_id=${data.sessionId}&session_number=${data.sessionNumber}`)
       } else {
         const errorData = await response.json()
         console.error('Failed to create session:', errorData)
+        // LOG: Session creation failed
+        eventLogger.failed('contract_session_creation', 'session_record_created', 'Failed to create session', 'API_ERROR');
         alert('Failed to create new contract. Please try again.')
       }
     } catch (error) {
       console.error('Error creating contract:', error)
+      // LOG: Exception during creation
+      eventLogger.failed('contract_session_creation', 'create_contract_clicked', error instanceof Error ? error.message : 'Unknown error', 'EXCEPTION');
       alert('Failed to create new contract. Please try again.')
     } finally {
       setIsCreatingContract(false)
@@ -279,6 +299,11 @@ export default function ContractsDashboard() {
 
   function continueWithClarence(sessionId?: string) {
     if (sessionId) {
+      // LOG: Opening CLARENCE chat for existing session
+      eventLogger.completed('contract_studio', 'clarence_chat_opened', {
+        sessionId: sessionId,
+        source: 'dashboard'
+      });
       localStorage.setItem('currentSessionId', sessionId)
       router.push(`/auth/chat?sessionId=${sessionId}`)
     } else {
@@ -287,6 +312,15 @@ export default function ContractsDashboard() {
   }
 
   function navigateToPhase(session: Session, providerId?: string) {
+    // LOG: Existing contract selected
+    eventLogger.completed('contract_session_creation', 'existing_contract_selected', {
+      sessionId: session.sessionId,
+      sessionNumber: session.sessionNumber,
+      phase: session.phase,
+      status: session.status,
+      providerId: providerId
+    });
+
     localStorage.setItem('currentSessionId', session.sessionId)
     localStorage.setItem('currentSession', JSON.stringify(session))
 
@@ -542,6 +576,33 @@ export default function ContractsDashboard() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showUserMenu])
+
+  // ==========================================================================
+  // SECTION 13B: EVENT LOGGING
+  // ==========================================================================
+
+  useEffect(() => {
+    // Set user context when userInfo is available
+    if (userInfo?.userId) {
+      eventLogger.setUser(userInfo.userId);
+    }
+
+    // Log dashboard loaded
+    eventLogger.completed('contract_session_creation', 'dashboard_loaded', {
+      userEmail: userInfo?.email,
+      company: userInfo?.company
+    });
+  }, [userInfo]);
+
+  // Log when sessions data is fetched
+  useEffect(() => {
+    if (!loading && sessions !== null) {
+      eventLogger.completed('contract_session_creation', 'dashboard_data_fetched', {
+        totalSessions: sessions.length,
+        activeSessions: sessions.filter(s => s.status !== 'completed').length
+      });
+    }
+  }, [loading, sessions]);
 
   // ==========================================================================
   // SECTION 14: METRICS DATA

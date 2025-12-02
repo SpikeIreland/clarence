@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
+import { eventLogger } from '@/lib/eventLogger';
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -104,6 +105,15 @@ export default function SignupPage() {
   }
 
   // ==========================================================================
+  // SECTION 6B: EVENT LOGGING - PAGE LOAD
+  // ==========================================================================
+
+  useEffect(() => {
+    // Log signup page loaded (no session context yet - user hasn't signed up)
+    eventLogger.completed('customer_onboarding', 'signup_page_loaded');
+  }, []);
+
+  // ==========================================================================
   // SECTION 7: COMPANY SEARCH & SELECTION
   // ==========================================================================
 
@@ -181,21 +191,30 @@ export default function SignupPage() {
     // Validation
     if (formData.password !== formData.confirmPassword) {
       setMessage({ text: 'Passwords do not match', type: 'error' })
+      // LOG: Validation failure
+      eventLogger.failed('customer_onboarding', 'signup_form_submitted', 'Passwords do not match', 'VALIDATION_ERROR');
       return
     }
 
     if (formData.password.length < 8) {
       setMessage({ text: 'Password must be at least 8 characters', type: 'error' })
+      // LOG: Validation failure
+      eventLogger.failed('customer_onboarding', 'signup_form_submitted', 'Password too short', 'VALIDATION_ERROR');
       return
     }
 
     if (!formData.acceptTerms) {
       setMessage({ text: 'Please accept the terms and conditions', type: 'error' })
+      // LOG: Validation failure
+      eventLogger.failed('customer_onboarding', 'signup_form_submitted', 'Terms not accepted', 'VALIDATION_ERROR');
       return
     }
 
     setLoading(true)
     setMessage({ text: 'Creating your account...', type: 'info' })
+
+    // LOG: Form submission started (passed validation)
+    eventLogger.started('customer_onboarding', 'signup_form_submitted');
 
     try {
       // Create auth account with Supabase directly
@@ -228,18 +247,39 @@ export default function SignupPage() {
             text: 'An account with this email already exists. Please sign in instead.',
             type: 'error'
           })
+          // LOG: User already exists
+          eventLogger.failed('customer_onboarding', 'signup_form_submitted', 'Account already exists', 'USER_EXISTS');
           setLoading(false)
           return
         }
+
+        // LOG: Auth user created successfully
+        eventLogger.completed('customer_onboarding', 'auth_user_created', {
+          userId: data.user.id,
+          hasCompanyId: !!formData.companyId
+        });
 
         // Check if email is already confirmed
         const emailConfirmed = data.user.email_confirmed_at !== null
 
         if (emailConfirmed && data.session) {
           // Email already confirmed (rare - maybe OAuth or confirmation disabled)
+          // LOG: Signup completed (no verification needed)
+          eventLogger.completed('customer_onboarding', 'signup_form_submitted', {
+            userId: data.user.id,
+            emailConfirmed: true
+          });
           handleRegistrationSuccess(data.user)
         } else {
           // Email confirmation required - show confirmation UI
+          // LOG: Signup form completed, verification email sent
+          eventLogger.completed('customer_onboarding', 'signup_form_submitted', {
+            userId: data.user.id,
+            emailConfirmed: false
+          });
+          eventLogger.completed('customer_onboarding', 'verification_email_sent', {
+            userId: data.user.id
+          });
           setShowEmailConfirmation(true)
           setLoading(false)
         }
@@ -248,6 +288,8 @@ export default function SignupPage() {
     } catch (error) {
       console.error('Sign up error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Registration failed'
+      // LOG: Signup failed
+      eventLogger.failed('customer_onboarding', 'signup_form_submitted', errorMessage, 'SIGNUP_ERROR');
       setMessage({ text: errorMessage, type: 'error' })
       setLoading(false)
     }

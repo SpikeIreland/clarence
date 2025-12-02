@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { eventLogger } from '@/lib/eventLogger';
 
 // ============================================================================
 // SECTION 2: CONSTANTS & TYPES
@@ -259,7 +260,7 @@ function ProviderQuestionnaireContent() {
 
     const loadSessionData = useCallback(async () => {
         const sessionId = searchParams.get('session_id')
-        const providerId = searchParams.get('provider_id')  // ADD THIS
+        const providerId = searchParams.get('provider_id')
 
         if (!sessionId) {
             const stored = localStorage.getItem('clarence_provider_session')
@@ -268,15 +269,31 @@ function ProviderQuestionnaireContent() {
                 setSessionData({
                     sessionId: parsed.sessionId,
                     sessionNumber: parsed.sessionNumber || '',
-                    providerId: parsed.providerId || '',  // ADD THIS
+                    providerId: parsed.providerId || '',
                     customerCompany: parsed.customerCompany || 'Customer',
                     serviceRequired: parsed.serviceRequired || 'Service Contract',
                     dealValue: parsed.dealValue || ''
                 })
+
+                // LOG: Page loaded from localStorage
+                if (parsed.sessionId) {
+                    eventLogger.setSession(parsed.sessionId)
+                    eventLogger.completed('provider_onboarding', 'provider_questionnaire_page_loaded', {
+                        sessionId: parsed.sessionId,
+                        providerId: parsed.providerId,
+                        source: 'localStorage'
+                    })
+                }
+            } else {
+                // LOG: Page load failed - no session
+                eventLogger.failed('provider_onboarding', 'provider_questionnaire_page_loaded', 'No session data available', 'NO_SESSION')
             }
             setLoading(false)
             return
         }
+
+        // Set session context early
+        eventLogger.setSession(sessionId)
 
         // Try to get providerId from localStorage if not in URL
         let finalProviderId = providerId || ''
@@ -295,10 +312,18 @@ function ProviderQuestionnaireContent() {
                 setSessionData({
                     sessionId: sessionId,
                     sessionNumber: data.sessionNumber || data.session_number || '',
-                    providerId: finalProviderId,  // ADD THIS
+                    providerId: finalProviderId,
                     customerCompany: data.customerCompany || data.customer_company || 'Customer',
                     serviceRequired: data.serviceRequired || data.service_required || 'Service Contract',
                     dealValue: data.dealValue || data.deal_value || ''
+                })
+
+                // LOG: Page loaded successfully from API
+                eventLogger.completed('provider_onboarding', 'provider_questionnaire_page_loaded', {
+                    sessionId: sessionId,
+                    providerId: finalProviderId,
+                    customerCompany: data.customerCompany || data.customer_company,
+                    source: 'api'
                 })
             } else {
                 const stored = localStorage.getItem('clarence_provider_session')
@@ -307,15 +332,27 @@ function ProviderQuestionnaireContent() {
                     setSessionData({
                         sessionId: sessionId,
                         sessionNumber: parsed.sessionNumber || '',
-                        providerId: parsed.providerId || finalProviderId || '',  // ADD THIS
+                        providerId: parsed.providerId || finalProviderId || '',
                         customerCompany: parsed.customerCompany || 'Customer',
                         serviceRequired: parsed.serviceRequired || 'Service Contract',
                         dealValue: parsed.dealValue || ''
+                    })
+
+                    // LOG: Page loaded from localStorage fallback
+                    eventLogger.completed('provider_onboarding', 'provider_questionnaire_page_loaded', {
+                        sessionId: sessionId,
+                        providerId: parsed.providerId || finalProviderId,
+                        source: 'localStorage_fallback'
                     })
                 }
             }
         } catch (error) {
             console.error('Failed to load session:', error)
+            // LOG: Page load failed
+            eventLogger.failed('provider_onboarding', 'provider_questionnaire_page_loaded',
+                error instanceof Error ? error.message : 'Failed to load session',
+                'API_ERROR'
+            )
         }
 
         setLoading(false)
@@ -335,6 +372,17 @@ function ProviderQuestionnaireContent() {
 
     const nextQuestion = () => {
         if (currentQuestion < STRATEGIC_QUESTIONS.length - 1) {
+            const question = STRATEGIC_QUESTIONS[currentQuestion]
+
+            // LOG: Question answered
+            eventLogger.completed('provider_onboarding', `provider_questionnaire_q${currentQuestion + 1}_answered`, {
+                questionKey: question.id,
+                questionIndex: currentQuestion + 1,
+                category: question.category,
+                sessionId: sessionData?.sessionId,
+                providerId: sessionData?.providerId
+            })
+
             setCurrentQuestion(prev => prev + 1)
         }
     }
@@ -363,10 +411,23 @@ function ProviderQuestionnaireContent() {
 
         setSubmitting(true)
 
+        // LOG: Final question answered (question 13)
+        const lastQuestion = STRATEGIC_QUESTIONS[currentQuestion]
+        eventLogger.completed('provider_onboarding', `provider_questionnaire_q${currentQuestion + 1}_answered`, {
+            questionKey: lastQuestion.id,
+            questionIndex: currentQuestion + 1,
+            category: lastQuestion.category,
+            sessionId: sessionData.sessionId,
+            providerId: sessionData.providerId
+        })
+
+        // LOG: Submission started
+        eventLogger.started('provider_onboarding', 'provider_questionnaire_submitted')
+
         try {
             const submissionData = {
                 sessionId: sessionData.sessionId,
-                providerId: sessionData.providerId,  // ADD THIS
+                providerId: sessionData.providerId,
                 partyType: 'provider',
                 answers: answers,
                 submittedAt: new Date().toISOString(),
@@ -388,14 +449,40 @@ function ProviderQuestionnaireContent() {
                     localStorage.setItem('clarence_provider_session', JSON.stringify(parsed))
                 }
 
-                // FIXED: Redirect to provider confirmation, not customer contract-studio
+                // LOG: Questionnaire submitted successfully
+                eventLogger.completed('provider_onboarding', 'provider_questionnaire_submitted', {
+                    sessionId: sessionData.sessionId,
+                    providerId: sessionData.providerId,
+                    questionCount: STRATEGIC_QUESTIONS.length,
+                    answeredCount: Object.keys(answers).length
+                })
+
+                // LOG: Redirect to confirmation
+                eventLogger.completed('provider_onboarding', 'redirect_to_provider_confirmation', {
+                    sessionId: sessionData.sessionId,
+                    providerId: sessionData.providerId
+                })
+
                 router.push(`/provider/providerConfirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
             } else {
                 throw new Error('Submission failed')
             }
         } catch (error) {
             console.error('Submission error:', error)
-            // FIXED: Even on error, go to provider confirmation
+
+            // LOG: Submission failed
+            eventLogger.failed('provider_onboarding', 'provider_questionnaire_submitted',
+                error instanceof Error ? error.message : 'Submission failed',
+                'SUBMISSION_ERROR'
+            )
+
+            // Still redirect to confirmation (graceful degradation)
+            eventLogger.completed('provider_onboarding', 'redirect_to_provider_confirmation', {
+                sessionId: sessionData.sessionId,
+                providerId: sessionData.providerId,
+                afterError: true
+            })
+
             router.push(`/provider/providerConfirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
         } finally {
             setSubmitting(false)
@@ -491,7 +578,15 @@ function ProviderQuestionnaireContent() {
                             )}
 
                             <button
-                                onClick={() => setShowIntro(false)}
+                                onClick={() => {
+                                    // LOG: Assessment started
+                                    eventLogger.completed('provider_onboarding', 'provider_questionnaire_started', {
+                                        sessionId: sessionData?.sessionId,
+                                        providerId: sessionData?.providerId,
+                                        customerCompany: sessionData?.customerCompany
+                                    })
+                                    setShowIntro(false)
+                                }}
                                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition flex items-center justify-center gap-2 cursor-pointer"
                             >
                                 Begin Assessment

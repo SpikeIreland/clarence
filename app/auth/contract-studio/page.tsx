@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { eventLogger } from '@/lib/eventLogger'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -1115,6 +1116,16 @@ function ContractStudioContent() {
                     })
                 }
 
+                // LOG: Contract Studio loaded in pending provider state
+                eventLogger.setSession(sessionId)
+                eventLogger.setUser(user.userId || '')
+                eventLogger.completed('contract_negotiation', 'contract_studio_loaded', {
+                    sessionId: sessionId,
+                    sessionNumber: sessionNumber || '',
+                    userRole: user.role,
+                    status: 'pending_provider'
+                })
+
                 setLoading(false)
                 return
             }
@@ -1133,6 +1144,17 @@ function ContractStudioContent() {
                 const otherRole = user.role === 'customer' ? 'provider' : 'customer'
                 const status = await checkPartyStatus(sessionId, otherRole)
                 setOtherPartyStatus(status)
+
+                // LOG: Contract Studio loaded successfully
+                eventLogger.setSession(sessionId)
+                eventLogger.setUser(user.userId || '')
+                eventLogger.completed('contract_negotiation', 'contract_studio_loaded', {
+                    sessionId: sessionId,
+                    sessionNumber: data.session.sessionNumber,
+                    userRole: user.role,
+                    clauseCount: data.clauses.length,
+                    alignmentPercentage: data.leverage?.alignmentPercentage
+                })
             }
 
             setLoading(false)
@@ -1239,8 +1261,20 @@ function ContractStudioContent() {
     const handlePositionDrag = (newPosition: number) => {
         if (!selectedClause || !userInfo || !leverage) return
 
+        const previousProposed = proposedPosition
         setProposedPosition(newPosition)
         setIsAdjusting(true)
+
+        // LOG: Position slider adjusted (debounced - only log significant changes)
+        if (previousProposed === null || Math.abs(newPosition - previousProposed) >= 0.5) {
+            eventLogger.completed('contract_negotiation', 'position_slider_adjusted', {
+                sessionId: session?.sessionId,
+                clauseId: selectedClause.clauseId,
+                clauseName: selectedClause.clauseName,
+                newPosition: newPosition,
+                userRole: userInfo.role
+            })
+        }
 
         // Calculate pending leverage impact for preview
         const originalPosition = userInfo.role === 'customer'
@@ -1277,6 +1311,9 @@ function ContractStudioContent() {
             setIsAdjusting(false)
             return
         }
+
+        // LOG: Position commit started
+        eventLogger.started('contract_negotiation', 'position_committed')
 
         setIsCommitting(true)
 
@@ -1333,6 +1370,19 @@ function ContractStudioContent() {
                     leverageTrackerCalculatedAt: new Date().toISOString()
                 })
 
+                // LOG: Position committed successfully
+                eventLogger.completed('contract_negotiation', 'position_committed', {
+                    sessionId: session.sessionId,
+                    clauseId: selectedClause.clauseId,
+                    clauseName: selectedClause.clauseName,
+                    previousPosition: currentPosition,
+                    newPosition: proposedPosition,
+                    leverageImpact: pendingLeverageImpact,
+                    newCustomerLeverage: newLeverage.customerLeverage,
+                    newProviderLeverage: newLeverage.providerLeverage,
+                    userRole: userInfo.role
+                })
+
                 // 5. Trigger CLARENCE response to position change
                 await triggerClarencePositionResponse(
                     selectedClause,
@@ -1346,9 +1396,16 @@ function ContractStudioContent() {
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
             } else {
+                // LOG: Position commit failed
+                eventLogger.failed('contract_negotiation', 'position_committed', 'API returned failure', 'COMMIT_FAILED')
                 console.error('Failed to commit position change')
             }
         } catch (error) {
+            // LOG: Position commit error
+            eventLogger.failed('contract_negotiation', 'position_committed',
+                error instanceof Error ? error.message : 'Unknown error',
+                'COMMIT_ERROR'
+            )
             console.error('Error setting position:', error)
         } finally {
             setIsCommitting(false)
@@ -1365,7 +1422,14 @@ function ContractStudioContent() {
             ? selectedClause.originalCustomerPosition
             : selectedClause.originalProviderPosition
 
+        const currentPosition = userInfo.role === 'customer'
+            ? selectedClause.customerPosition
+            : selectedClause.providerPosition
+
         if (originalPosition === null) return
+
+        // LOG: Position reset started
+        eventLogger.started('contract_negotiation', 'position_reset')
 
         setShowResetConfirm(false)
         setIsCommitting(true)
@@ -1422,11 +1486,29 @@ function ContractStudioContent() {
                     leverageTrackerCalculatedAt: new Date().toISOString()
                 })
 
+                // LOG: Position reset successful
+                eventLogger.completed('contract_negotiation', 'position_reset', {
+                    sessionId: session.sessionId,
+                    clauseId: selectedClause.clauseId,
+                    clauseName: selectedClause.clauseName,
+                    previousPosition: currentPosition,
+                    resetToPosition: originalPosition,
+                    userRole: userInfo.role
+                })
+
                 setProposedPosition(originalPosition)
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
+            } else {
+                // LOG: Reset failed
+                eventLogger.failed('contract_negotiation', 'position_reset', 'API returned failure', 'RESET_FAILED')
             }
         } catch (error) {
+            // LOG: Reset error
+            eventLogger.failed('contract_negotiation', 'position_reset',
+                error instanceof Error ? error.message : 'Unknown error',
+                'RESET_ERROR'
+            )
             console.error('Error resetting position:', error)
         } finally {
             setIsCommitting(false)
@@ -1506,6 +1588,16 @@ function ContractStudioContent() {
     // ============================================================================
 
     const handleClauseSelect = (clause: ContractClause) => {
+        // LOG: Clause selected
+        eventLogger.completed('contract_negotiation', 'clause_selected', {
+            sessionId: session?.sessionId,
+            clauseId: clause.clauseId,
+            clauseNumber: clause.clauseNumber,
+            clauseName: clause.clauseName,
+            status: clause.status,
+            gapSize: clause.gapSize
+        })
+
         setSelectedClause(clause)
         setActiveTab('dynamics')
 
@@ -1538,6 +1630,14 @@ function ContractStudioContent() {
         if (!chatInput.trim() || !session || !userInfo) return
 
         const userMessage = chatInput.trim()
+
+        // LOG: Chat message sent
+        eventLogger.completed('contract_negotiation', 'chat_message_sent', {
+            sessionId: session.sessionId,
+            clauseId: selectedClause?.clauseId || null,
+            messageLength: userMessage.length,
+            userRole: userInfo.role
+        })
 
         const newMessage: ClauseChatMessage = {
             messageId: `msg-${Date.now()}`,
@@ -1577,6 +1677,13 @@ function ContractStudioContent() {
                 }
 
                 setChatMessages(prev => [...prev, clarenceResponse])
+
+                // LOG: CLARENCE response received
+                eventLogger.completed('contract_negotiation', 'clarence_response_received', {
+                    sessionId: session.sessionId,
+                    promptType: 'chat',
+                    responseLength: response.response.length
+                })
             } else {
                 const errorMessage: ClauseChatMessage = {
                     messageId: `error-${Date.now()}`,
@@ -1592,6 +1699,9 @@ function ContractStudioContent() {
                 }
 
                 setChatMessages(prev => [...prev, errorMessage])
+
+                // LOG: CLARENCE response failed
+                eventLogger.failed('contract_negotiation', 'clarence_response_received', 'Empty or failed response', 'RESPONSE_FAILED')
             }
         } catch (error) {
             console.error('CLARENCE chat error:', error)
@@ -1610,6 +1720,12 @@ function ContractStudioContent() {
             }
 
             setChatMessages(prev => [...prev, errorMessage])
+
+            // LOG: CLARENCE error
+            eventLogger.failed('contract_negotiation', 'clarence_response_received',
+                error instanceof Error ? error.message : 'Connection error',
+                'CONNECTION_ERROR'
+            )
         } finally {
             setIsChatLoading(false)
         }
@@ -1628,6 +1744,13 @@ function ContractStudioContent() {
 
     const handleQuickAction = async (message: string) => {
         if (!session || !userInfo || isChatLoading) return
+
+        // LOG: Quick action clicked
+        eventLogger.completed('contract_negotiation', 'quick_action_clicked', {
+            sessionId: session.sessionId,
+            actionType: message.includes('trade-off') ? 'trade_off' : 'industry_data',
+            clauseId: selectedClause?.clauseId
+        })
 
         const newMessage: ClauseChatMessage = {
             messageId: `msg-${Date.now()}`,
@@ -1769,6 +1892,9 @@ function ContractStudioContent() {
     const handleSendInvite = async () => {
         if (!providerEmail.trim() || !session) return
 
+        // LOG: Provider invite started
+        eventLogger.started('contract_negotiation', 'provider_invite_sent')
+
         setInviteSending(true)
 
         try {
@@ -1790,12 +1916,25 @@ function ContractStudioContent() {
             })
 
             if (response.ok) {
+                // LOG: Provider invite successful
+                eventLogger.completed('contract_negotiation', 'provider_invite_sent', {
+                    sessionId: session.sessionId,
+                    providerEmail: providerEmail
+                })
+
                 setInviteSent(true)
                 setSessionStatus('provider_invited')
             } else {
+                // LOG: Provider invite failed
+                eventLogger.failed('contract_negotiation', 'provider_invite_sent', 'API returned error', 'INVITE_FAILED')
                 alert('Failed to send invitation. Please try again.')
             }
         } catch (error) {
+            // LOG: Provider invite error
+            eventLogger.failed('contract_negotiation', 'provider_invite_sent',
+                error instanceof Error ? error.message : 'Network error',
+                'INVITE_ERROR'
+            )
             console.error('Error sending invite:', error)
             alert('Failed to send invitation. Please check your connection and try again.')
         }
@@ -2007,8 +2146,8 @@ function ContractStudioContent() {
                         onClick={handleSetPosition}
                         disabled={!isProposing || isCommitting}
                         className={`flex-1 py-3 px-4 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${isProposing && !isCommitting
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             }`}
                     >
                         {isCommitting ? (
@@ -2072,8 +2211,8 @@ function ContractStudioContent() {
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-600">Gap to other party:</span>
                         <span className={`font-semibold ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
-                                selectedClause.gapSize <= 3 ? 'text-amber-600' :
-                                    'text-red-600'
+                            selectedClause.gapSize <= 3 ? 'text-amber-600' :
+                                'text-red-600'
                             }`}>
                             {selectedClause.gapSize.toFixed(1)} points
                             {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
@@ -2098,7 +2237,14 @@ function ContractStudioContent() {
                     <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
                         <button
-                            onClick={() => setShowLeverageDetails(!showLeverageDetails)}
+                            onClick={() => {
+                                // LOG: Leverage details toggled
+                                eventLogger.completed('contract_negotiation', 'leverage_details_toggled', {
+                                    sessionId: session.sessionId,
+                                    expanded: !showLeverageDetails
+                                })
+                                setShowLeverageDetails(!showLeverageDetails)
+                            }}
                             className="text-xs text-slate-400 hover:text-slate-600"
                         >
                             {showLeverageDetails ? 'Hide Details' : 'Show Details'}
@@ -2133,16 +2279,16 @@ function ContractStudioContent() {
                     </div>
 
                     <div className={`rounded-lg p-3 ${Math.abs(customerShift) > 0
-                            ? (isCustomerGaining ? 'bg-emerald-50' : 'bg-amber-50')
-                            : 'bg-slate-50'
+                        ? (isCustomerGaining ? 'bg-emerald-50' : 'bg-amber-50')
+                        : 'bg-slate-50'
                         }`}>
                         <div className="text-xs text-slate-500 mb-1">Leverage Tracker</div>
                         <div className="text-lg font-bold text-slate-800">
                             {displayLeverage.leverageTrackerCustomer} : {displayLeverage.leverageTrackerProvider}
                         </div>
                         <div className={`text-xs ${Math.abs(customerShift) > 0
-                                ? (isCustomerGaining ? 'text-emerald-600' : 'text-amber-600')
-                                : 'text-slate-400'
+                            ? (isCustomerGaining ? 'text-emerald-600' : 'text-amber-600')
+                            : 'text-slate-400'
                             }`}>
                             {Math.abs(customerShift) > 0
                                 ? `${isCustomerGaining ? '↑' : '↓'} ${Math.abs(customerShift)}% from baseline`
@@ -2174,10 +2320,10 @@ function ContractStudioContent() {
                         {/* Leverage Tracker fill */}
                         <div
                             className={`h-full transition-all duration-500 ${displayLeverage.leverageTrackerCustomer > displayLeverage.leverageScoreCustomer
-                                    ? 'bg-emerald-500'
-                                    : displayLeverage.leverageTrackerCustomer < displayLeverage.leverageScoreCustomer
-                                        ? 'bg-amber-500'
-                                        : 'bg-slate-400'
+                                ? 'bg-emerald-500'
+                                : displayLeverage.leverageTrackerCustomer < displayLeverage.leverageScoreCustomer
+                                    ? 'bg-amber-500'
+                                    : 'bg-slate-400'
                                 }`}
                             style={{ width: `${displayLeverage.leverageTrackerCustomer}%` }}
                         ></div>
@@ -2453,7 +2599,16 @@ function ContractStudioContent() {
                                     {(['dynamics', 'tradeoffs', 'history', 'draft'] as const).map(tab => (
                                         <button
                                             key={tab}
-                                            onClick={() => setActiveTab(tab)}
+                                            onClick={() => {
+                                                // LOG: Tab changed
+                                                eventLogger.completed('contract_negotiation', 'workspace_tab_changed', {
+                                                    sessionId: session.sessionId,
+                                                    fromTab: activeTab,
+                                                    toTab: tab,
+                                                    clauseId: selectedClause?.clauseId
+                                                })
+                                                setActiveTab(tab)
+                                            }}
                                             className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
                                                 ? 'bg-white text-slate-800 shadow-sm'
                                                 : 'text-slate-500 hover:text-slate-700'
@@ -2592,12 +2747,12 @@ function ContractStudioContent() {
                                 className={`flex ${msg.sender === 'customer' ? 'justify-end' : msg.sender === 'provider' ? 'justify-end' : 'justify-start'}`}
                             >
                                 <div className={`max-w-[85%] rounded-lg p-3 ${msg.messageType === 'position_change'
-                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                        : msg.sender === 'clarence'
-                                            ? 'bg-white text-slate-700 border border-slate-200'
-                                            : msg.sender === 'customer'
-                                                ? 'bg-emerald-500 text-white'
-                                                : 'bg-blue-500 text-white'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                    : msg.sender === 'clarence'
+                                        ? 'bg-white text-slate-700 border border-slate-200'
+                                        : msg.sender === 'customer'
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-blue-500 text-white'
                                     }`}>
                                     {msg.sender === 'clarence' && (
                                         <div className="flex items-center gap-2 mb-2">
@@ -2620,7 +2775,7 @@ function ContractStudioContent() {
                                     )}
                                     <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
                                     <div className={`text-xs mt-2 ${msg.messageType === 'position_change' ? 'text-amber-600' :
-                                            msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'
+                                        msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'
                                         }`}>
                                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                     </div>

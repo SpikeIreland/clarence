@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { eventLogger } from '@/lib/eventLogger';
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -384,6 +385,14 @@ function ProviderIntakeContent() {
                         // Pre-populate form with API + localStorage data
                         prePopulateForm(data)
 
+                        // LOG: Intake form loaded via provider_id validation
+                        eventLogger.setSession(data.sessionId || data.session_id || sessionId)
+                        eventLogger.completed('provider_onboarding', 'provider_intake_form_loaded', {
+                            sessionId: data.sessionId || data.session_id || sessionId,
+                            providerId: data.providerId || data.provider_id || providerId,
+                            source: 'provider_id_validation'
+                        })
+
                         setIsValid(true)
                         console.log('Intake validation - SUCCESS: Valid session access')
                         setValidating(false)
@@ -427,6 +436,14 @@ function ProviderIntakeContent() {
                         // Pre-populate form with API + localStorage data
                         prePopulateForm(data)
 
+                        // LOG: Intake form loaded via token validation
+                        eventLogger.setSession(data.sessionId || data.session_id || sessionId)
+                        eventLogger.completed('provider_onboarding', 'provider_intake_form_loaded', {
+                            sessionId: data.sessionId || data.session_id || sessionId,
+                            providerId: data.providerId || data.provider_id || providerId,
+                            source: 'token_validation'
+                        })
+
                         setIsValid(true)
                         console.log('Intake validation - SUCCESS: Valid invite token')
                         setValidating(false)
@@ -462,6 +479,14 @@ function ProviderIntakeContent() {
             // Pre-populate form from localStorage only
             prePopulateForm({})
 
+            // LOG: Intake form loaded via localStorage fallback
+            eventLogger.setSession(sessionId)
+            eventLogger.completed('provider_onboarding', 'provider_intake_form_loaded', {
+                sessionId: sessionId,
+                providerId: storedRegistrationData.providerId || providerId,
+                source: 'localStorage_fallback'
+            })
+
             setIsValid(true)
             console.log('Intake validation - SUCCESS via localStorage fallback')
             setValidating(false)
@@ -470,6 +495,8 @@ function ProviderIntakeContent() {
         }
 
         // All validation methods failed
+        // LOG: Validation failed
+        eventLogger.failed('provider_onboarding', 'provider_intake_form_loaded', 'Unable to validate session', 'VALIDATION_FAILED')
         setErrorMessage('Unable to validate your session. Please return to your invitation link.')
         setValidating(false)
         setLoading(false)
@@ -506,11 +533,14 @@ function ProviderIntakeContent() {
 
         setSubmitting(true)
 
+        // LOG: Form submission started
+        eventLogger.started('provider_onboarding', 'provider_capabilities_submitted')
+
         try {
             const submissionData = {
                 sessionId: inviteData.sessionId,
                 sessionNumber: inviteData.sessionNumber,
-                providerId: inviteData.providerId,  // ADD THIS
+                providerId: inviteData.providerId,
                 bidId: inviteData.bidId,
                 inviteToken: searchParams.get('token'),
                 ...formData,
@@ -526,13 +556,34 @@ function ProviderIntakeContent() {
             })
 
             if (response.ok) {
-                // UPDATED: Pass provider_id to questionnaire
+                // LOG: Capabilities saved successfully
+                eventLogger.completed('provider_onboarding', 'provider_capabilities_submitted', {
+                    sessionId: inviteData.sessionId,
+                    providerId: inviteData.providerId,
+                    primaryServices: formData.primaryServices?.length || 0,
+                    hasCertifications: !!(formData.iso27001 || formData.soc2TypeII || formData.gdprCompliant)
+                })
+
+                // LOG: Redirect to questionnaire
+                eventLogger.completed('provider_onboarding', 'redirect_to_provider_questionnaire', {
+                    sessionId: inviteData.sessionId,
+                    providerId: inviteData.providerId
+                })
+
+                // Navigate to questionnaire
                 router.push(`/provider/questionnaire?session_id=${inviteData.sessionId}&provider_id=${inviteData.providerId}`)
             } else {
                 throw new Error('Submission failed')
             }
         } catch (error) {
             console.error('Submission error:', error)
+            // LOG: Submission failed
+            eventLogger.failed(
+                'provider_onboarding',
+                'provider_capabilities_submitted',
+                error instanceof Error ? error.message : 'Submission failed',
+                'SUBMISSION_ERROR'
+            )
             alert('Failed to submit capabilities. Please try again.')
         } finally {
             setSubmitting(false)
@@ -543,7 +594,16 @@ function ProviderIntakeContent() {
     // SECTION 12: STEP NAVIGATION
     // ========================================================================
 
-    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, totalSteps))
+    const nextStep = () => {
+        // LOG: Section completed
+        eventLogger.completed('provider_onboarding', `provider_intake_section_${currentStep}_completed`, {
+            sectionName: getStepName(currentStep),
+            sessionId: inviteData?.sessionId,
+            providerId: inviteData?.providerId
+        })
+        setCurrentStep(prev => Math.min(prev + 1, totalSteps))
+    }
+
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
 
     const getStepName = (step: number): string => {

@@ -7,6 +7,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { eventLogger } from '@/lib/eventLogger';
 
 // ============================================================================
 // SECTION 2: SHARED HEADER COMPONENT
@@ -124,6 +125,11 @@ function ProviderWelcomeContent() {
         setProviderId(pid)
         setToken(tkn)
 
+        // Set event logger context
+        if (sid) {
+            eventLogger.setSession(sid)
+        }
+
         // Then try localStorage for any missing values
         try {
             const storedSession = localStorage.getItem('clarence_provider_session') ||
@@ -135,6 +141,7 @@ function ProviderWelcomeContent() {
                 // Fill in missing values from localStorage
                 if (!sid && sessionData.sessionId) {
                     setSessionId(sessionData.sessionId)
+                    eventLogger.setSession(sessionData.sessionId)
                 }
                 if (!pid && sessionData.providerId) {
                     setProviderId(sessionData.providerId)
@@ -149,6 +156,13 @@ function ProviderWelcomeContent() {
         } catch (e) {
             console.error('Error reading localStorage:', e)
         }
+
+        // LOG: Welcome page loaded
+        eventLogger.completed('provider_onboarding', 'provider_welcome_page_loaded', {
+            sessionId: sid,
+            providerId: pid,
+            hasToken: !!tkn
+        })
 
         // Animation timers
         const timers: NodeJS.Timeout[] = []
@@ -165,6 +179,12 @@ function ProviderWelcomeContent() {
     // ========================================================================
 
     const handleContinue = () => {
+        // LOG: Provider clicked continue
+        eventLogger.completed('provider_onboarding', 'provider_continue_clicked', {
+            sessionId: sessionId,
+            providerId: providerId
+        })
+
         const params = new URLSearchParams()
 
         // Always include session_id
@@ -180,6 +200,13 @@ function ProviderWelcomeContent() {
 
         const queryString = params.toString()
         const url = queryString ? `/provider/intake?${queryString}` : '/provider/intake'
+
+        // LOG: Redirect to intake
+        eventLogger.completed('provider_onboarding', 'redirect_to_provider_intake', {
+            sessionId: sessionId,
+            providerId: providerId,
+            destination: url
+        })
 
         console.log('Navigating to:', url)
         router.push(url)
