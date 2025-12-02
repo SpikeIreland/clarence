@@ -181,7 +181,7 @@ function ProviderConfirmationContent() {
                     <div className="flex flex-col sm:flex-row justify-center gap-4">
                         {sessionId && (
                             <Link
-                                href={`/contract-studio?session_id=${sessionId}${providerId ? `&provider_id=${providerId}` : ''}`}
+                                href={`/auth/contract-studio?session_id=${sessionId}${providerId ? `&provider_id=${providerId}` : ''}`}
                                 onClick={() => {
                                     // LOG: Provider proceeding to Contract Studio
                                     eventLogger.completed('provider_onboarding', 'provider_contract_studio_clicked', {
