@@ -727,20 +727,39 @@ function calculateLeverageImpact(
     oldPosition: number,
     newPosition: number,
     clauseWeight: number,
-    party: 'customer' | 'provider'
+    party: 'customer' | 'provider',
+    otherPartyPosition: number
 ): number {
+    // Calculate movement
     const positionDelta = newPosition - oldPosition
+
+    // Weight multiplier (weight 5 = 1x, weight 10 = 2x, weight 1 = 0.2x)
     const weightMultiplier = clauseWeight / 5
 
-    let leverageImpact: number
+    // Scale factor for impact (each point on weight-5 clause = ~0.5% leverage)
+    const scaleFactor = 0.5
+
+    let leverageImpact = 0
 
     if (party === 'customer') {
-        leverageImpact = positionDelta < 0 ? positionDelta * weightMultiplier * 0.5 : 0
+        // Customer moving DOWN (lower number) = moving toward provider-favorable
+        // This is being ACCOMMODATING = GAINS leverage credits
+        if (positionDelta < 0) {
+            // Moving toward provider = gain leverage
+            leverageImpact = Math.abs(positionDelta) * weightMultiplier * scaleFactor
+        }
+        // Moving up (away from provider) = no gain (standing firm/pushing harder)
     } else {
-        leverageImpact = positionDelta > 0 ? positionDelta * weightMultiplier * 0.5 : 0
+        // Provider moving UP (higher number) = moving toward customer-favorable
+        // This means CUSTOMER gains leverage (provider is accommodating)
+        if (positionDelta > 0) {
+            // Provider accommodating = customer gains leverage
+            leverageImpact = positionDelta * weightMultiplier * scaleFactor
+        }
+        // Provider moving down = no customer gain
     }
 
-    return Math.round(leverageImpact * 10) / 10
+    return Math.round(leverageImpact * 10) / 10 // Round to 1 decimal
 }
 
 function recalculateLeverageTracker(
@@ -749,41 +768,100 @@ function recalculateLeverageTracker(
     clauses: ContractClause[],
     userRole: 'customer' | 'provider'
 ): { customerLeverage: number; providerLeverage: number } {
-    let totalAdjustment = 0
+    let totalCustomerGain = 0
+    let totalProviderGain = 0
 
+    // Iterate through ALL clauses to calculate aggregate leverage shift
     clauses.forEach(clause => {
-        const originalPos = userRole === 'customer'
-            ? clause.originalCustomerPosition
-            : clause.originalProviderPosition
-        const currentPos = userRole === 'customer'
-            ? clause.customerPosition
-            : clause.providerPosition
+        // Skip parent categories (no positions)
+        if (clause.clauseLevel === 0 || clause.customerPosition === null) return
 
-        if (originalPos !== null && currentPos !== null && originalPos !== currentPos) {
-            const weight = userRole === 'customer' ? clause.customerWeight : clause.providerWeight
-            const impact = calculateLeverageImpact(originalPos, currentPos, weight, userRole)
-            totalAdjustment += impact
+        // Get original and current positions for BOTH parties
+        const originalCustomerPos = clause.originalCustomerPosition ?? clause.customerPosition
+        const originalProviderPos = clause.originalProviderPosition ?? clause.providerPosition
+        const currentCustomerPos = clause.customerPosition
+        const currentProviderPos = clause.providerPosition
+
+        // Get weights (default to 5 if not set)
+        const customerWeight = clause.customerWeight ?? 5
+        const providerWeight = clause.providerWeight ?? 5
+
+        // Calculate customer's movement
+        if (originalCustomerPos !== null && currentCustomerPos !== null) {
+            const customerDelta = currentCustomerPos - originalCustomerPos
+
+            // Customer moving DOWN = accommodating = gains leverage credits
+            if (customerDelta < 0) {
+                const impact = Math.abs(customerDelta) * (customerWeight / 5) * 0.5
+                totalCustomerGain += impact
+            }
+        }
+
+        // Calculate provider's movement (affects customer leverage)
+        if (originalProviderPos !== null && currentProviderPos !== null) {
+            const providerDelta = currentProviderPos - originalProviderPos
+
+            // Provider moving UP = accommodating customer = customer gains leverage
+            if (providerDelta > 0) {
+                const impact = providerDelta * (providerWeight / 5) * 0.5
+                totalCustomerGain += impact
+            }
+            // Provider moving DOWN = provider gaining = provider gains leverage
+            if (providerDelta < 0) {
+                const impact = Math.abs(providerDelta) * (providerWeight / 5) * 0.5
+                totalProviderGain += impact
+            }
         }
     })
 
-    const newCustomerLeverage = Math.max(20, Math.min(80, baseLeverageCustomer + totalAdjustment))
+    // Calculate net adjustment
+    const netAdjustment = totalCustomerGain - totalProviderGain
+
+    // Apply to base leverage (clamped to 15-85 range to prevent extreme swings)
+    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + netAdjustment)))
     const newProviderLeverage = 100 - newCustomerLeverage
 
     return {
-        customerLeverage: Math.round(newCustomerLeverage),
-        providerLeverage: Math.round(newProviderLeverage)
+        customerLeverage: newCustomerLeverage,
+        providerLeverage: newProviderLeverage
     }
 }
 
-function calculateGapSize(customerPosition: number | null, providerPosition: number | null): number {
-    if (customerPosition === null || providerPosition === null) return 0
-    return Math.abs(customerPosition - providerPosition)
+function calculateAlignmentPercentage(clauses: ContractClause[]): number {
+    // Filter to only negotiable clauses (level 1, with positions)
+    const negotiableClauses = clauses.filter(c =>
+        c.clauseLevel === 1 &&
+        c.customerPosition !== null &&
+        c.providerPosition !== null
+    )
+
+    if (negotiableClauses.length === 0) return 0
+
+    // Count aligned clauses (gap <= 1 point)
+    const alignedCount = negotiableClauses.filter(c => {
+        const gap = Math.abs((c.customerPosition ?? 0) - (c.providerPosition ?? 0))
+        return gap <= 1
+    }).length
+
+    // Calculate percentage
+    return Math.round((alignedCount / negotiableClauses.length) * 100)
 }
 
-function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
-    if (gapSize <= 1) return 'aligned'
-    if (gapSize <= 3) return 'negotiating'
-    if (gapSize > 4) return 'disputed'
+/**
+ * Helper to determine gap between positions
+ */
+function calculateGap(customerPos: number | null, providerPos: number | null): number {
+    if (customerPos === null || providerPos === null) return 0
+    return Math.abs(customerPos - providerPos)
+}
+
+/**
+ * Helper to determine clause status based on gap
+ */
+function determineClauseStatus(gap: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
+    if (gap <= 1) return 'aligned'
+    if (gap <= 3) return 'negotiating'
+    if (gap > 4) return 'disputed'
     return 'pending'
 }
 
@@ -1310,11 +1388,16 @@ function ContractStudioContent() {
                 ? selectedClause.customerWeight
                 : selectedClause.providerWeight
 
+            const otherPosition = userInfo.role === 'customer'
+                ? selectedClause.providerPosition ?? 5
+                : selectedClause.customerPosition ?? 5
+
             const impact = calculateLeverageImpact(
                 originalPosition,
                 newPosition,
                 weight,
-                userInfo.role as 'customer' | 'provider'
+                userInfo.role as 'customer' | 'provider',
+                otherPosition
             )
             setPendingLeverageImpact(impact)
         }
@@ -1346,7 +1429,7 @@ function ContractStudioContent() {
             if (result.success) {
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
-                        const newGap = calculateGapSize(
+                        const newGap = calculateGap(
                             userInfo.role === 'customer' ? proposedPosition : c.customerPosition,
                             userInfo.role === 'provider' ? proposedPosition : c.providerPosition
                         )
@@ -1417,7 +1500,7 @@ function ContractStudioContent() {
             if (result.success) {
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
-                        const newGap = calculateGapSize(
+                        const newGap = calculateGap(
                             userInfo.role === 'customer' ? originalPosition : c.customerPosition,
                             userInfo.role === 'provider' ? originalPosition : c.providerPosition
                         )
@@ -2052,64 +2135,86 @@ function ContractStudioContent() {
     // ============================================================================
 
     const LeverageIndicator = () => {
+        // Calculate the shift from baseline
         const customerShift = displayLeverage.leverageTrackerCustomer - displayLeverage.leverageScoreCustomer
         const isCustomerGaining = customerShift > 0
 
+        // Calculate dynamic alignment percentage
+        const dynamicAlignmentPercentage = calculateAlignmentPercentage(clauses)
+
+        // Get actual leverage factor scores from the data
+        const marketDynamicsScore = displayLeverage.marketDynamicsScore ?? 50
+        const economicFactorsScore = displayLeverage.economicFactorsScore ?? 50
+        const strategicPositionScore = displayLeverage.strategicPositionScore ?? 50
+        const batnaScore = displayLeverage.batnaScore ?? 50
+
         return (
             <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+                {/* Header Row */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
                         <button
-                            onClick={() => setShowLeverageDetails(!showLeverageDetails)}
+                            onClick={() => {
+                                // LOG: Leverage details toggled
+                                if (typeof eventLogger !== 'undefined') {
+                                    eventLogger.completed('contract_negotiation', 'leverage_details_toggled', {
+                                        sessionId: session?.sessionId,
+                                        expanded: !showLeverageDetails
+                                    })
+                                }
+                                setShowLeverageDetails(!showLeverageDetails)
+                            }}
                             className="text-xs text-slate-400 hover:text-slate-600"
                         >
                             {showLeverageDetails ? 'Hide Details' : 'Show Details'}
                         </button>
                     </div>
 
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${displayLeverage.alignmentPercentage >= 90
+                    {/* Dynamic Alignment Badge */}
+                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${dynamicAlignmentPercentage >= 90
                         ? 'bg-emerald-100 text-emerald-700'
-                        : displayLeverage.alignmentPercentage >= 70
+                        : dynamicAlignmentPercentage >= 70
                             ? 'bg-amber-100 text-amber-700'
                             : 'bg-red-100 text-red-700'
                         }`}>
-                        {displayLeverage.alignmentPercentage}% Aligned
+                        {dynamicAlignmentPercentage}% Aligned
                     </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                {/* Two-Card Layout: Baseline and Tracker */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    {/* Card 1: Leverage Baseline (was "Leverage Score") */}
                     <div className="bg-slate-50 rounded-lg p-3">
-                        <div className="text-xs text-slate-500 mb-1">Leverage Score</div>
-                        <div className="text-lg font-bold text-slate-800">
+                        <div className="flex items-center gap-1 mb-1">
+                            <span className="text-sm">◆</span>
+                            <span className="text-xs text-slate-500">Leverage Baseline</span>
+                        </div>
+                        <div className="text-lg font-bold text-slate-800 text-center">
                             {displayLeverage.leverageScoreCustomer} : {displayLeverage.leverageScoreProvider}
                         </div>
-                        <div className="text-xs text-slate-400">Fixed baseline</div>
+                        <div className="text-xs text-slate-400 text-center">Assessed Score</div>
                     </div>
 
-                    <div className="bg-slate-50 rounded-lg p-3">
-                        <div className="text-xs text-slate-500 mb-1">Alignment Score</div>
-                        <div className="text-lg font-bold text-emerald-600">
-                            {displayLeverage.alignmentPercentage}%
-                        </div>
-                        <div className="text-xs text-slate-400">Progress to agreement</div>
-                    </div>
-
+                    {/* Card 2: Leverage Tracker (was "Alignment Score" - now shows real-time leverage) */}
                     <div className={`rounded-lg p-3 ${Math.abs(customerShift) > 0
                         ? (isCustomerGaining ? 'bg-emerald-50' : 'bg-amber-50')
                         : 'bg-slate-50'
                         }`}>
-                        <div className="text-xs text-slate-500 mb-1">Leverage Tracker</div>
-                        <div className="text-lg font-bold text-slate-800">
+                        <div className="flex items-center gap-1 mb-1">
+                            <span className="text-sm">⬡</span>
+                            <span className="text-xs text-slate-500">Leverage Tracker</span>
+                        </div>
+                        <div className="text-lg font-bold text-slate-800 text-center">
                             {displayLeverage.leverageTrackerCustomer} : {displayLeverage.leverageTrackerProvider}
                         </div>
-                        <div className={`text-xs ${Math.abs(customerShift) > 0
+                        <div className={`text-xs text-center ${Math.abs(customerShift) > 0
                             ? (isCustomerGaining ? 'text-emerald-600' : 'text-amber-600')
                             : 'text-slate-400'
                             }`}>
                             {Math.abs(customerShift) > 0
-                                ? `${isCustomerGaining ? '↑' : '↓'} ${Math.abs(customerShift)}% from baseline`
-                                : 'No change yet'
+                                ? `${isCustomerGaining ? '↑' : '↓'} ${Math.abs(customerShift).toFixed(1)}% from baseline`
+                                : 'Real-time score'
                             }
                         </div>
                     </div>
@@ -2118,77 +2223,155 @@ function ContractStudioContent() {
                 {/* Visual Leverage Bar */}
                 <div className="relative">
                     <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-emerald-600 font-medium w-24">{session.customerCompany.split(' ')[0]}</span>
+                        <span className="text-xs text-emerald-600 font-medium w-24">
+                            {session?.customerCompany?.split(' ')[0] || 'Customer'}
+                        </span>
                         <div className="flex-1"></div>
-                        <span className="text-xs text-blue-600 font-medium w-24 text-right">{session.providerCompany.split(' ')[0]}</span>
+                        <span className="text-xs text-blue-600 font-medium w-24 text-right">
+                            {session?.providerCompany?.split(' ')[0] || 'Provider'}
+                        </span>
                     </div>
 
                     <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative">
-                        {/* Leverage Score marker */}
+                        {/* Baseline marker (Diamond) */}
                         <div
                             className="absolute top-0 bottom-0 w-1 bg-slate-800 z-10"
-                            style={{ left: `${displayLeverage.leverageScoreCustomer}%`, transform: 'translateX(-50%)' }}
+                            style={{
+                                left: `${displayLeverage.leverageScoreCustomer}%`,
+                                transform: 'translateX(-50%)'
+                            }}
                         >
                             <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-600 whitespace-nowrap">
                                 ◆ {displayLeverage.leverageScoreCustomer}%
                             </div>
                         </div>
 
-                        {/* Leverage Tracker fill */}
+                        {/* Tracker fill */}
                         <div
                             className={`h-full transition-all duration-500 ${displayLeverage.leverageTrackerCustomer > displayLeverage.leverageScoreCustomer
                                 ? 'bg-emerald-500'
                                 : displayLeverage.leverageTrackerCustomer < displayLeverage.leverageScoreCustomer
                                     ? 'bg-amber-500'
-                                    : 'bg-slate-400'
+                                    : 'bg-slate-300'
                                 }`}
                             style={{ width: `${displayLeverage.leverageTrackerCustomer}%` }}
-                        ></div>
+                        />
 
-                        <div className="absolute top-0 bottom-0 left-1/2 w-px bg-slate-300"></div>
+                        {/* Tracker marker (Hexagon) - only show if different from baseline */}
+                        {Math.abs(customerShift) > 0.5 && (
+                            <div
+                                className="absolute top-0 bottom-0 w-0.5 bg-slate-600 z-20"
+                                style={{
+                                    left: `${displayLeverage.leverageTrackerCustomer}%`,
+                                    transform: 'translateX(-50%)'
+                                }}
+                            >
+                                <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-500 whitespace-nowrap">
+                                    ⬡ {displayLeverage.leverageTrackerCustomer}%
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="flex items-center justify-center gap-6 mt-2 text-xs text-slate-500">
-                        <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 bg-slate-800 transform rotate-45"></div>
-                            <span>Leverage Score (baseline)</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <div className="w-3 h-2 bg-emerald-500 rounded-sm"></div>
-                            <span>Leverage Tracker (current)</span>
-                        </div>
+                    {/* Legend */}
+                    <div className="flex items-center justify-center gap-4 mt-6 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 bg-slate-800 rounded-sm"></span>
+                            ◆ Baseline
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 bg-emerald-500 rounded-sm"></span>
+                            ⬡ Tracker (gaining)
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 bg-amber-500 rounded-sm"></span>
+                            ⬡ Tracker (conceding)
+                        </span>
                     </div>
                 </div>
 
+                {/* Expandable 4-Factor Breakdown */}
                 {showLeverageDetails && (
                     <div className="mt-4 pt-4 border-t border-slate-200">
-                        <div className="text-xs font-medium text-slate-600 mb-3">Leverage Score Breakdown</div>
+                        <h4 className="text-xs font-semibold text-slate-600 mb-3">Leverage Factors (from Assessment)</h4>
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">Market Dynamics</span>
-                                <span className={`text-xs font-medium ${displayLeverage.marketDynamicsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.marketDynamicsScore >= 0 ? '+' : ''}{displayLeverage.marketDynamicsScore}
-                                </span>
+                            {/* Market Dynamics */}
+                            <div className="bg-slate-50 rounded-lg p-2">
+                                <div className="text-xs text-slate-500 mb-1">Market Dynamics</div>
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-sm font-bold ${marketDynamicsScore >= 60 ? 'text-emerald-600' :
+                                        marketDynamicsScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        }`}>
+                                        {marketDynamicsScore}
+                                    </span>
+                                    <span className="text-xs text-slate-400">/ 100</span>
+                                </div>
+                                {displayLeverage.marketDynamicsRationale && (
+                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                        {displayLeverage.marketDynamicsRationale}
+                                    </p>
+                                )}
                             </div>
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">Economic Factors</span>
-                                <span className={`text-xs font-medium ${displayLeverage.economicFactorsScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.economicFactorsScore >= 0 ? '+' : ''}{displayLeverage.economicFactorsScore}
-                                </span>
+
+                            {/* Economic Factors */}
+                            <div className="bg-slate-50 rounded-lg p-2">
+                                <div className="text-xs text-slate-500 mb-1">Economic Factors</div>
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-sm font-bold ${economicFactorsScore >= 60 ? 'text-emerald-600' :
+                                        economicFactorsScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        }`}>
+                                        {economicFactorsScore}
+                                    </span>
+                                    <span className="text-xs text-slate-400">/ 100</span>
+                                </div>
+                                {displayLeverage.economicFactorsRationale && (
+                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                        {displayLeverage.economicFactorsRationale}
+                                    </p>
+                                )}
                             </div>
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">Strategic Position</span>
-                                <span className={`text-xs font-medium ${displayLeverage.strategicPositionScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.strategicPositionScore >= 0 ? '+' : ''}{displayLeverage.strategicPositionScore}
-                                </span>
+
+                            {/* Strategic Position */}
+                            <div className="bg-slate-50 rounded-lg p-2">
+                                <div className="text-xs text-slate-500 mb-1">Strategic Position</div>
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-sm font-bold ${strategicPositionScore >= 60 ? 'text-emerald-600' :
+                                        strategicPositionScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        }`}>
+                                        {strategicPositionScore}
+                                    </span>
+                                    <span className="text-xs text-slate-400">/ 100</span>
+                                </div>
+                                {displayLeverage.strategicPositionRationale && (
+                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                        {displayLeverage.strategicPositionRationale}
+                                    </p>
+                                )}
                             </div>
-                            <div className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                                <span className="text-xs text-slate-600">BATNA Strength</span>
-                                <span className={`text-xs font-medium ${displayLeverage.batnaScore >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {displayLeverage.batnaScore >= 0 ? '+' : ''}{displayLeverage.batnaScore}
-                                </span>
+
+                            {/* BATNA */}
+                            <div className="bg-slate-50 rounded-lg p-2">
+                                <div className="text-xs text-slate-500 mb-1">BATNA Analysis</div>
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-sm font-bold ${batnaScore >= 60 ? 'text-emerald-600' :
+                                        batnaScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        }`}>
+                                        {batnaScore}
+                                    </span>
+                                    <span className="text-xs text-slate-400">/ 100</span>
+                                </div>
+                                {displayLeverage.batnaRationale && (
+                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                        {displayLeverage.batnaRationale}
+                                    </p>
+                                )}
                             </div>
                         </div>
+
+                        {/* Factor explanation */}
+                        <p className="text-xs text-slate-400 mt-3 text-center">
+                            Scores above 50 favor Customer • Scores below 50 favor Provider
+                        </p>
                     </div>
                 )}
             </div>
