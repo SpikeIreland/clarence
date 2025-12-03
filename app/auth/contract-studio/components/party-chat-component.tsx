@@ -10,6 +10,7 @@ interface PartyMessage {
     sessionId: string
     providerId?: string
     senderType: 'customer' | 'provider'
+    senderUserId?: string
     senderName: string
     messageText: string
     relatedClauseId?: string
@@ -24,6 +25,7 @@ interface PartyChatPanelProps {
     providerName: string
     currentUserType: 'customer' | 'provider'
     currentUserName: string
+    currentUserId?: string
     isProviderOnline?: boolean
     isOpen: boolean
     onClose: () => void
@@ -37,8 +39,29 @@ interface ToastNotification {
     timestamp: Date
 }
 
+// API Response types
+interface ApiMessageResponse {
+    message_id: string
+    session_id: string
+    provider_id?: string
+    sender_type: string
+    sender_user_id?: string
+    sender_name: string
+    message_text: string
+    related_clause_id?: string
+    is_read: boolean
+    read_at?: string
+    created_at: string
+}
+
 // ============================================================================
-// SECTION 2: TOAST NOTIFICATION COMPONENT
+// SECTION 2: API CONFIGURATION
+// ============================================================================
+
+const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+// ============================================================================
+// SECTION 3: TOAST NOTIFICATION COMPONENT
 // ============================================================================
 
 interface ToastProps {
@@ -98,7 +121,7 @@ function ChatToast({ notification, onDismiss, onOpen }: ToastProps) {
 }
 
 // ============================================================================
-// SECTION 3: TOAST CONTAINER COMPONENT
+// SECTION 4: TOAST CONTAINER COMPONENT
 // ============================================================================
 
 interface ToastContainerProps {
@@ -125,7 +148,7 @@ function ToastContainer({ toasts, onDismiss, onOpenChat }: ToastContainerProps) 
 }
 
 // ============================================================================
-// SECTION 4: MESSAGE BUBBLE COMPONENT
+// SECTION 5: MESSAGE BUBBLE COMPONENT
 // ============================================================================
 
 interface MessageBubbleProps {
@@ -186,7 +209,7 @@ function MessageBubble({ message, isOwnMessage }: MessageBubbleProps) {
 }
 
 // ============================================================================
-// SECTION 5: TYPING INDICATOR COMPONENT
+// SECTION 6: TYPING INDICATOR COMPONENT
 // ============================================================================
 
 function TypingIndicator({ name }: { name: string }) {
@@ -203,7 +226,27 @@ function TypingIndicator({ name }: { name: string }) {
 }
 
 // ============================================================================
-// SECTION 6: MAIN PARTY CHAT PANEL COMPONENT
+// SECTION 7: HELPER FUNCTION - Transform API Response
+// ============================================================================
+
+function transformApiMessage(apiMsg: ApiMessageResponse): PartyMessage {
+    return {
+        messageId: apiMsg.message_id,
+        sessionId: apiMsg.session_id,
+        providerId: apiMsg.provider_id,
+        senderType: apiMsg.sender_type as 'customer' | 'provider',
+        senderUserId: apiMsg.sender_user_id,
+        senderName: apiMsg.sender_name,
+        messageText: apiMsg.message_text,
+        relatedClauseId: apiMsg.related_clause_id,
+        isRead: apiMsg.is_read,
+        readAt: apiMsg.read_at,
+        createdAt: apiMsg.created_at
+    }
+}
+
+// ============================================================================
+// SECTION 8: MAIN PARTY CHAT PANEL COMPONENT
 // ============================================================================
 
 export function PartyChatPanel({
@@ -212,6 +255,7 @@ export function PartyChatPanel({
     providerName,
     currentUserType,
     currentUserName,
+    currentUserId,
     isProviderOnline = false,
     isOpen,
     onClose,
@@ -223,8 +267,9 @@ export function PartyChatPanel({
     const [isLoading, setIsLoading] = useState(false)
     const [isSending, setIsSending] = useState(false)
     const [unreadCount, setUnreadCount] = useState(0)
-    const [isOtherTyping, setIsOtherTyping] = useState(false)
+    const [isOtherTyping] = useState(false) // For future real-time typing indicators
     const [toasts, setToasts] = useState<ToastNotification[]>([])
+    const [lastMessageCount, setLastMessageCount] = useState(0)
 
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -232,78 +277,42 @@ export function PartyChatPanel({
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
     // ============================================================================
-    // SECTION 6A: MOCK DATA FOR DEMOS
-    // ============================================================================
-
-    const mockMessages: PartyMessage[] = [
-        {
-            messageId: '1',
-            sessionId,
-            providerId,
-            senderType: 'provider',
-            senderName: providerName,
-            messageText: 'Hi there! I\'ve reviewed your initial requirements and I think we can work together on this contract. Do you have any initial concerns about the liability clauses?',
-            isRead: true,
-            createdAt: new Date(Date.now() - 3600000).toISOString()
-        },
-        {
-            messageId: '2',
-            sessionId,
-            providerId,
-            senderType: 'customer',
-            senderName: currentUserName,
-            messageText: 'Thanks for reaching out! Yes, we\'re particularly focused on ensuring the liability cap is reasonable given the deal value. What\'s your standard approach?',
-            isRead: true,
-            createdAt: new Date(Date.now() - 3000000).toISOString()
-        },
-        {
-            messageId: '3',
-            sessionId,
-            providerId,
-            senderType: 'provider',
-            senderName: providerName,
-            messageText: 'We typically cap liability at 100% of annual contract value for general claims, with carve-outs for data breaches where we offer higher coverage. Would that work for your requirements?',
-            isRead: true,
-            createdAt: new Date(Date.now() - 2400000).toISOString()
-        },
-        {
-            messageId: '4',
-            sessionId,
-            providerId,
-            senderType: 'customer',
-            senderName: currentUserName,
-            messageText: 'That sounds reasonable as a starting point. Let me discuss with my team and get back to you. In the meantime, I\'ve adjusted our position on Payment Terms - can you take a look?',
-            isRead: true,
-            createdAt: new Date(Date.now() - 1800000).toISOString()
-        },
-        {
-            messageId: '5',
-            sessionId,
-            providerId,
-            senderType: 'provider',
-            senderName: providerName,
-            messageText: 'I see the change to 45-day payment terms. That works for us. I\'ll update our position to match. Looking forward to progressing on the remaining clauses!',
-            isRead: false,
-            createdAt: new Date(Date.now() - 300000).toISOString()
-        }
-    ]
-
-    // ============================================================================
-    // SECTION 6B: API FUNCTIONS (Placeholders for N8N integration)
+    // SECTION 8A: API FUNCTIONS
     // ============================================================================
 
     const fetchMessages = useCallback(async () => {
         try {
-            // TODO: Replace with actual N8N webhook call
-            // const response = await fetch(`/api/n8n/party-chat-messages?sessionId=${sessionId}&providerId=${providerId}`)
-            // const data = await response.json()
-            // setMessages(data.messages)
+            const response = await fetch(
+                `${API_BASE}/party-chat-messages?session_id=${sessionId}&limit=100`
+            )
 
-            // For demo: Use mock data
-            setMessages(mockMessages)
+            if (!response.ok) {
+                throw new Error('Failed to fetch messages')
+            }
 
-            // Calculate unread count
-            const unread = mockMessages.filter(
+            const data = await response.json()
+
+            // Handle response - could be { success, messages } or direct array
+            const apiMessages: ApiMessageResponse[] = data.messages || data || []
+
+            // Transform API response to our interface
+            const transformedMessages = apiMessages.map(transformApiMessage)
+
+            // Check for new messages (for toast notifications)
+            if (transformedMessages.length > lastMessageCount && lastMessageCount > 0) {
+                const newMessages = transformedMessages.slice(lastMessageCount)
+                newMessages.forEach(msg => {
+                    if (msg.senderType !== currentUserType && !isOpen) {
+                        addToast(msg)
+                    }
+                })
+            }
+            setLastMessageCount(transformedMessages.length)
+
+            setMessages(transformedMessages)
+
+            // Calculate unread count (messages from other party that are unread)
+            const unread = transformedMessages.filter(
                 m => !m.isRead && m.senderType !== currentUserType
             ).length
             setUnreadCount(unread)
@@ -312,72 +321,80 @@ export function PartyChatPanel({
         } catch (error) {
             console.error('Failed to fetch messages:', error)
         }
-    }, [sessionId, providerId, currentUserType, onUnreadCountChange, providerName, currentUserName])
+    }, [sessionId, currentUserType, onUnreadCountChange, isOpen, lastMessageCount])
 
     const sendMessage = async () => {
         if (!inputText.trim() || isSending) return
 
         setIsSending(true)
+        const messageText = inputText.trim()
+        setInputText('') // Clear input immediately for better UX
 
         try {
-            // TODO: Replace with actual N8N webhook call
-            // await fetch('/api/n8n/party-chat-send', { ... })
+            const response = await fetch(`${API_BASE}/party-chat-send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    provider_id: providerId || null,
+                    sender_type: currentUserType,
+                    sender_user_id: currentUserId || null,
+                    sender_name: currentUserName,
+                    message_text: messageText
+                })
+            })
 
-            // For demo: Add message locally
-            const newMessage: PartyMessage = {
-                messageId: Date.now().toString(),
-                sessionId,
-                providerId,
-                senderType: currentUserType,
-                senderName: currentUserName,
-                messageText: inputText.trim(),
-                isRead: false,
-                createdAt: new Date().toISOString()
+            if (!response.ok) {
+                throw new Error('Failed to send message')
             }
 
-            setMessages(prev => [...prev, newMessage])
-            setInputText('')
+            const data = await response.json()
 
-            // Simulate provider response for demo
-            setTimeout(() => {
-                setIsOtherTyping(true)
-                setTimeout(() => {
-                    setIsOtherTyping(false)
-                    const responseMessage: PartyMessage = {
-                        messageId: (Date.now() + 1).toString(),
-                        sessionId,
-                        providerId,
-                        senderType: 'provider',
-                        senderName: providerName,
-                        messageText: 'Thanks for that update. I\'ll review and respond shortly.',
-                        isRead: false,
-                        createdAt: new Date().toISOString()
-                    }
-                    setMessages(prev => [...prev, responseMessage])
-
-                    // Show toast if chat is closed
-                    if (!isOpen) {
-                        addToast(responseMessage)
-                    }
-                }, 2000)
-            }, 1000)
+            // Add the new message to local state immediately
+            if (data.success && data.message) {
+                const newMessage = transformApiMessage(
+                    Array.isArray(data.message) ? data.message[0] : data.message
+                )
+                setMessages(prev => [...prev, newMessage])
+                setLastMessageCount(prev => prev + 1)
+            } else {
+                // Fallback: refetch all messages
+                await fetchMessages()
+            }
 
         } catch (error) {
             console.error('Failed to send message:', error)
+            // Restore the input text if send failed
+            setInputText(messageText)
         } finally {
             setIsSending(false)
         }
     }
 
     const markAsRead = useCallback(async () => {
-        try {
-            // TODO: Replace with actual N8N webhook call
+        if (unreadCount === 0) return
 
-            // For demo: Mark all as read locally
+        try {
+            const response = await fetch(`${API_BASE}/party-chat-mark-read`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    reader_type: currentUserType
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to mark messages as read')
+            }
+
+            // Update local state
             setMessages(prev => prev.map(m => ({
                 ...m,
-                isRead: true,
-                readAt: m.isRead ? m.readAt : new Date().toISOString()
+                isRead: m.senderType !== currentUserType ? true : m.isRead,
+                readAt: m.senderType !== currentUserType && !m.isRead
+                    ? new Date().toISOString()
+                    : m.readAt
             })))
             setUnreadCount(0)
             onUnreadCountChange?.(0)
@@ -385,10 +402,10 @@ export function PartyChatPanel({
         } catch (error) {
             console.error('Failed to mark messages as read:', error)
         }
-    }, [onUnreadCountChange])
+    }, [sessionId, currentUserType, onUnreadCountChange, unreadCount])
 
     // ============================================================================
-    // SECTION 6C: TOAST MANAGEMENT
+    // SECTION 8B: TOAST MANAGEMENT
     // ============================================================================
 
     const addToast = (message: PartyMessage) => {
@@ -401,10 +418,6 @@ export function PartyChatPanel({
             timestamp: new Date(message.createdAt)
         }
         setToasts(prev => [...prev, toast])
-
-        // Update unread count
-        setUnreadCount(prev => prev + 1)
-        onUnreadCountChange?.(unreadCount + 1)
     }
 
     const dismissToast = useCallback((id: string) => {
@@ -412,21 +425,25 @@ export function PartyChatPanel({
     }, [])
 
     // ============================================================================
-    // SECTION 6D: EFFECTS
+    // SECTION 8C: EFFECTS
     // ============================================================================
 
     // Initial load
     useEffect(() => {
-        fetchMessages()
-    }, [fetchMessages])
+        setIsLoading(true)
+        fetchMessages().finally(() => setIsLoading(false))
+    }, []) // Only run once on mount
 
     // Polling for new messages
     useEffect(() => {
-        if (isOpen) {
-            pollingIntervalRef.current = setInterval(fetchMessages, 10000)
-        } else {
-            pollingIntervalRef.current = setInterval(fetchMessages, 30000)
+        // Clear any existing interval
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
         }
+
+        // Set up polling based on chat open state
+        const pollInterval = isOpen ? 5000 : 15000 // 5s when open, 15s when closed
+        pollingIntervalRef.current = setInterval(fetchMessages, pollInterval)
 
         return () => {
             if (pollingIntervalRef.current) {
@@ -437,7 +454,7 @@ export function PartyChatPanel({
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && messages.length > 0) {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }
     }, [messages, isOpen])
@@ -457,10 +474,30 @@ export function PartyChatPanel({
     }, [isOpen])
 
     // ============================================================================
-    // SECTION 6E: RENDER
+    // SECTION 8D: RENDER
     // ============================================================================
 
     const otherPartyName = currentUserType === 'customer' ? providerName : 'Customer'
+
+    // Group messages by date for date dividers
+    const formatDateDivider = (dateString: string) => {
+        const date = new Date(dateString)
+        const today = new Date()
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+
+        if (date.toDateString() === today.toDateString()) {
+            return 'Today'
+        } else if (date.toDateString() === yesterday.toDateString()) {
+            return 'Yesterday'
+        } else {
+            return date.toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'short'
+            })
+        }
+    }
 
     return (
         <>
@@ -468,7 +505,7 @@ export function PartyChatPanel({
             <ToastContainer
                 toasts={toasts}
                 onDismiss={dismissToast}
-                onOpenChat={() => { }} // Toast click handled by parent
+                onOpenChat={() => { }}
             />
 
             {/* Backdrop */}
@@ -538,21 +575,42 @@ export function PartyChatPanel({
                         </div>
                     ) : (
                         <>
-                            {/* Date Divider */}
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="flex-1 h-px bg-slate-700" />
-                                <span className="text-xs text-slate-500">Today</span>
-                                <div className="flex-1 h-px bg-slate-700" />
-                            </div>
+                            {/* Date Divider for first message */}
+                            {messages.length > 0 && (
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="flex-1 h-px bg-slate-700" />
+                                    <span className="text-xs text-slate-500">
+                                        {formatDateDivider(messages[0].createdAt)}
+                                    </span>
+                                    <div className="flex-1 h-px bg-slate-700" />
+                                </div>
+                            )}
 
                             {/* Messages */}
-                            {messages.map(message => (
-                                <MessageBubble
-                                    key={message.messageId}
-                                    message={message}
-                                    isOwnMessage={message.senderType === currentUserType}
-                                />
-                            ))}
+                            {messages.map((message, index) => {
+                                // Check if we need a date divider before this message
+                                const showDateDivider = index > 0 &&
+                                    new Date(message.createdAt).toDateString() !==
+                                    new Date(messages[index - 1].createdAt).toDateString()
+
+                                return (
+                                    <div key={message.messageId}>
+                                        {showDateDivider && (
+                                            <div className="flex items-center gap-3 my-4">
+                                                <div className="flex-1 h-px bg-slate-700" />
+                                                <span className="text-xs text-slate-500">
+                                                    {formatDateDivider(message.createdAt)}
+                                                </span>
+                                                <div className="flex-1 h-px bg-slate-700" />
+                                            </div>
+                                        )}
+                                        <MessageBubble
+                                            message={message}
+                                            isOwnMessage={message.senderType === currentUserType}
+                                        />
+                                    </div>
+                                )
+                            })}
 
                             {/* Typing Indicator */}
                             {isOtherTyping && <TypingIndicator name={otherPartyName} />}
@@ -573,6 +631,7 @@ export function PartyChatPanel({
                             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                             placeholder={`Message ${otherPartyName}...`}
                             className="flex-1 bg-slate-700 text-white placeholder-slate-400 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            disabled={isSending}
                         />
 
                         <button
