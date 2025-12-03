@@ -78,9 +78,6 @@ interface StrategicAnswers {
   // Relationship priorities
   relationshipVsTerms: string
   longTermVision: string
-  // Provider-specific
-  providerConcerns: string
-  trustLevel: string
 }
 
 type QuestionKey = keyof StrategicAnswers
@@ -219,7 +216,7 @@ const getBiddersDisplay = (bidders: string): string => {
 const STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   {
     key: 'batnaSpecifics',
-    question: "You mentioned having alternative options. Walk me through your Plan B specifically - if this provider walked away tomorrow, what would you actually do?",
+    question: "You mentioned having alternative options. Walk me through your Plan B specifically - if negotiations with your preferred provider(s) fell through tomorrow, what would you actually do?",
     context: (data) => data.numberOfBidders ? `I see you've identified ${data.numberOfBidders} competing providers.` : undefined
   },
   {
@@ -261,14 +258,6 @@ const STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   {
     key: 'longTermVision',
     question: "Where do you see this provider relationship in 3-5 years? Is this a tactical fix or strategic partnership?",
-  },
-  {
-    key: 'providerConcerns',
-    question: "What worries you most about this provider specifically? Any concerns you haven't raised yet?",
-  },
-  {
-    key: 'trustLevel',
-    question: "Based on your interactions so far, how much do you trust this provider to deliver? And what would increase that trust?",
   }
 ]
 
@@ -321,15 +310,9 @@ function IntelligentQuestionnaireContent() {
       questionIndices: [9, 10],
     },
     {
-      id: 'trust',
-      name: 'Provider Trust',
-      icon: '🔍',
-      questionIndices: [11, 12],
-    },
-    {
-      id: 'complete',  // Changed from 'result'
-      name: 'Invite Provider',  // Changed from 'Leverage Result'
-      icon: '✉️',  // Changed from '🏆'
+      id: 'complete',
+      name: 'Invite Provider',
+      icon: '✉️',
       questionIndices: [] as number[],
     }
   ]
