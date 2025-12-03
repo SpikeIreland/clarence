@@ -777,64 +777,89 @@ function calculateLeverageImpact(
     return Math.round(leverageImpact * 10) / 10 // Round to 1 decimal
 }
 
+/**
+ * Recalculate the Leverage Tracker based on ALL position changes across ALL clauses
+ * DEBUG VERSION - includes console logging
+ */
 function recalculateLeverageTracker(
     baseLeverageCustomer: number,
     baseLeverageProvider: number,
     clauses: ContractClause[],
     userRole: 'customer' | 'provider'
 ): { customerLeverage: number; providerLeverage: number } {
+
+    console.log('=== LEVERAGE TRACKER RECALCULATION ===')
+    console.log('Base leverage:', baseLeverageCustomer, ':', baseLeverageProvider)
+    console.log('User role:', userRole)
+    console.log('Total clauses:', clauses.length)
+
     let totalCustomerGain = 0
     let totalProviderGain = 0
 
-    // Iterate through ALL clauses to calculate aggregate leverage shift
     clauses.forEach(clause => {
         // Skip parent categories (no positions)
         if (clause.clauseLevel === 0 || clause.customerPosition === null) return
 
-        // Get original and current positions for BOTH parties
-        const originalCustomerPos = clause.originalCustomerPosition ?? clause.customerPosition
-        const originalProviderPos = clause.originalProviderPosition ?? clause.providerPosition
+        const originalCustomerPos = clause.originalCustomerPosition
+        const originalProviderPos = clause.originalProviderPosition
         const currentCustomerPos = clause.customerPosition
         const currentProviderPos = clause.providerPosition
 
-        // Get weights (default to 5 if not set)
-        const customerWeight = clause.customerWeight ?? 5
-        const providerWeight = clause.providerWeight ?? 5
-
-        // Calculate customer's movement
-        if (originalCustomerPos !== null && currentCustomerPos !== null) {
+        // Check for customer movement
+        if (originalCustomerPos !== null && currentCustomerPos !== null && originalCustomerPos !== currentCustomerPos) {
             const customerDelta = currentCustomerPos - originalCustomerPos
+            const weight = clause.customerWeight ?? 5
+
+            console.log(`Clause: ${clause.clauseName}`)
+            console.log(`  Customer: ${originalCustomerPos} → ${currentCustomerPos} (delta: ${customerDelta})`)
+            console.log(`  Weight: ${weight}`)
 
             // Customer moving DOWN = accommodating = gains leverage credits
             if (customerDelta < 0) {
-                const impact = Math.abs(customerDelta) * (customerWeight / 5) * 0.5
+                const impact = Math.abs(customerDelta) * (weight / 5) * 0.5
                 totalCustomerGain += impact
+                console.log(`  → Customer GAINS ${impact.toFixed(2)} leverage (moved toward provider)`)
+            } else {
+                console.log(`  → No leverage change (moved away from provider)`)
             }
         }
 
-        // Calculate provider's movement (affects customer leverage)
-        if (originalProviderPos !== null && currentProviderPos !== null) {
+        // Check for provider movement
+        if (originalProviderPos !== null && currentProviderPos !== null && originalProviderPos !== currentProviderPos) {
             const providerDelta = currentProviderPos - originalProviderPos
+            const weight = clause.providerWeight ?? 5
+
+            console.log(`Clause: ${clause.clauseName}`)
+            console.log(`  Provider: ${originalProviderPos} → ${currentProviderPos} (delta: ${providerDelta})`)
+            console.log(`  Weight: ${weight}`)
 
             // Provider moving UP = accommodating customer = customer gains leverage
             if (providerDelta > 0) {
-                const impact = providerDelta * (providerWeight / 5) * 0.5
+                const impact = providerDelta * (weight / 5) * 0.5
                 totalCustomerGain += impact
+                console.log(`  → Customer GAINS ${impact.toFixed(2)} leverage (provider accommodated)`)
             }
-            // Provider moving DOWN = provider gaining = provider gains leverage
+            // Provider moving DOWN = provider standing firm
             if (providerDelta < 0) {
-                const impact = Math.abs(providerDelta) * (providerWeight / 5) * 0.5
+                const impact = Math.abs(providerDelta) * (weight / 5) * 0.5
                 totalProviderGain += impact
+                console.log(`  → Provider GAINS ${impact.toFixed(2)} leverage`)
             }
         }
     })
 
-    // Calculate net adjustment
     const netAdjustment = totalCustomerGain - totalProviderGain
 
-    // Apply to base leverage (clamped to 15-85 range to prevent extreme swings)
+    console.log('---')
+    console.log('Total customer gain:', totalCustomerGain.toFixed(2))
+    console.log('Total provider gain:', totalProviderGain.toFixed(2))
+    console.log('Net adjustment:', netAdjustment.toFixed(2))
+
     const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + netAdjustment)))
     const newProviderLeverage = 100 - newCustomerLeverage
+
+    console.log('New leverage:', newCustomerLeverage, ':', newProviderLeverage)
+    console.log('=== END RECALCULATION ===')
 
     return {
         customerLeverage: newCustomerLeverage,
