@@ -740,6 +740,17 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 // SECTION 3: LEVERAGE CALCULATION FUNCTIONS
 // ============================================================================
 
+// ============================================================================
+// SECTION 3: LEVERAGE CALCULATION FUNCTIONS
+// ============================================================================
+
+/**
+ * Calculate leverage impact FROM THE MOVER'S PERSPECTIVE
+ * Returns NEGATIVE if you're conceding (moving toward other party)
+ * Returns POSITIVE if you're gaining (other party moved toward you, or you're standing firm)
+ * 
+ * This is used for the UI preview "This move will cost/gain you X%"
+ */
 function calculateLeverageImpact(
     oldPosition: number,
     newPosition: number,
@@ -750,6 +761,9 @@ function calculateLeverageImpact(
     // Calculate movement
     const positionDelta = newPosition - oldPosition
 
+    // No movement = no impact
+    if (positionDelta === 0) return 0
+
     // Weight multiplier (weight 5 = 1x, weight 10 = 2x, weight 1 = 0.2x)
     const weightMultiplier = clauseWeight / 5
 
@@ -759,21 +773,23 @@ function calculateLeverageImpact(
     let leverageImpact = 0
 
     if (party === 'customer') {
-        // Customer moving DOWN (lower number) = moving toward provider-favorable
-        // This is being ACCOMMODATING = GAINS leverage credits
+        // Customer scale: 1 = provider-friendly, 10 = customer-friendly
+        // Moving DOWN (toward provider) = CONCEDING = costs you leverage (negative)
+        // Moving UP (away from provider) = PUSHING = standing firm (no cost shown)
         if (positionDelta < 0) {
-            // Moving toward provider = gain leverage
-            leverageImpact = Math.abs(positionDelta) * weightMultiplier * scaleFactor
+            // Moving toward provider = COSTS YOU leverage
+            leverageImpact = positionDelta * weightMultiplier * scaleFactor // Already negative
         }
-        // Moving up (away from provider) = no gain (standing firm/pushing harder)
+        // Moving up = not conceding, no "cost" to show
     } else {
-        // Provider moving UP (higher number) = moving toward customer-favorable
-        // This means CUSTOMER gains leverage (provider is accommodating)
+        // Provider scale: 1 = provider-friendly, 10 = customer-friendly
+        // Moving UP (toward customer) = CONCEDING = costs you leverage (negative)
+        // Moving DOWN (away from customer) = PUSHING = standing firm (no cost shown)
         if (positionDelta > 0) {
-            // Provider accommodating = customer gains leverage
-            leverageImpact = positionDelta * weightMultiplier * scaleFactor
+            // Moving toward customer = COSTS YOU leverage
+            leverageImpact = -positionDelta * weightMultiplier * scaleFactor // Make it negative
         }
-        // Provider moving down = no customer gain
+        // Moving down = not conceding, no "cost" to show
     }
 
     return Math.round(leverageImpact * 10) / 10 // Round to 1 decimal
@@ -1798,6 +1814,8 @@ function ContractStudioContent() {
         if (!clauses.length || !session) return
 
         const history: NegotiationHistoryEntry[] = []
+        const viewerRole = userInfo?.role || 'customer'
+        const isViewerCustomer = viewerRole === 'customer'
 
         // Add session start entry
         history.push({
@@ -1817,18 +1835,35 @@ function ContractStudioContent() {
             if (clause.customerPosition !== null &&
                 clause.originalCustomerPosition !== null &&
                 clause.customerPosition !== clause.originalCustomerPosition) {
+
+                const delta = clause.customerPosition - clause.originalCustomerPosition
+                // Customer moving DOWN = conceding to provider
+                const isCustomerConceding = delta < 0
+
+                // Calculate impact FROM VIEWER'S PERSPECTIVE
+                // If viewer is customer: conceding = negative, other conceding = positive
+                // If viewer is provider: customer conceding = positive (good for you)
+                let viewerImpact = Math.abs(delta) * 0.5
+                if (isViewerCustomer && isCustomerConceding) {
+                    viewerImpact = -viewerImpact // You conceded
+                } else if (!isViewerCustomer && !isCustomerConceding) {
+                    viewerImpact = -viewerImpact // Customer pushed, bad for you
+                }
+
                 history.push({
                     id: `cust-${clause.clauseId}`,
                     timestamp: new Date().toISOString(),
                     eventType: 'position_change',
                     party: 'customer',
-                    partyName: session.customerCompany,
+                    partyName: isViewerCustomer ? 'You' : session.customerCompany,
                     clauseId: clause.clauseId,
                     clauseName: clause.clauseName,
-                    description: `Adjusted position on ${clause.clauseName}`,
+                    description: isViewerCustomer
+                        ? `You adjusted position on ${clause.clauseName}`
+                        : `${session.customerCompany} adjusted position on ${clause.clauseName}`,
                     oldValue: clause.originalCustomerPosition,
                     newValue: clause.customerPosition,
-                    leverageImpact: Math.abs(clause.customerPosition - clause.originalCustomerPosition) * 0.5
+                    leverageImpact: viewerImpact
                 })
             }
 
@@ -1836,18 +1871,35 @@ function ContractStudioContent() {
             if (clause.providerPosition !== null &&
                 clause.originalProviderPosition !== null &&
                 clause.providerPosition !== clause.originalProviderPosition) {
+
+                const delta = clause.providerPosition - clause.originalProviderPosition
+                // Provider moving UP = conceding to customer
+                const isProviderConceding = delta > 0
+
+                // Calculate impact FROM VIEWER'S PERSPECTIVE
+                // If viewer is provider: conceding = negative, other conceding = positive
+                // If viewer is customer: provider conceding = positive (good for you)
+                let viewerImpact = Math.abs(delta) * 0.5
+                if (!isViewerCustomer && isProviderConceding) {
+                    viewerImpact = -viewerImpact // You conceded
+                } else if (isViewerCustomer && !isProviderConceding) {
+                    viewerImpact = -viewerImpact // Provider pushed, bad for you
+                }
+
                 history.push({
                     id: `prov-${clause.clauseId}`,
                     timestamp: new Date().toISOString(),
                     eventType: 'position_change',
                     party: 'provider',
-                    partyName: session.providerCompany,
+                    partyName: isViewerCustomer ? session.providerCompany : 'You',
                     clauseId: clause.clauseId,
                     clauseName: clause.clauseName,
-                    description: `Adjusted position on ${clause.clauseName}`,
+                    description: isViewerCustomer
+                        ? `${session.providerCompany} adjusted position on ${clause.clauseName}`
+                        : `You adjusted position on ${clause.clauseName}`,
                     oldValue: clause.originalProviderPosition,
                     newValue: clause.providerPosition,
-                    leverageImpact: Math.abs(clause.providerPosition - clause.originalProviderPosition) * 0.5
+                    leverageImpact: viewerImpact
                 })
             }
 
