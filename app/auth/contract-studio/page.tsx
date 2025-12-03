@@ -1041,6 +1041,140 @@ function ContractStudioLoading() {
         </div>
     )
 }
+// ============================================================================
+// SECTION 5B: WORKING OVERLAY COMPONENT
+// ============================================================================
+
+type WorkingType =
+    | 'initial_load'
+    | 'welcome_message'
+    | 'clause_loading'
+    | 'position_commit'
+    | 'chat_response'
+    | 'provider_switch'
+    | null
+
+interface WorkingState {
+    isWorking: boolean
+    type: WorkingType
+    message: string
+    startedAt: number | null
+    hasError: boolean
+    errorMessage: string | null
+}
+
+const WORKING_MESSAGES: Record<NonNullable<WorkingType>, string> = {
+    initial_load: 'Loading your negotiation session...',
+    welcome_message: 'CLARENCE is preparing your briefing...',
+    clause_loading: 'Analysing clause details...',
+    position_commit: 'Recording your position...',
+    chat_response: 'CLARENCE is thinking...',
+    provider_switch: 'Switching provider view...'
+}
+
+const WORKING_TIMEOUT_MS = 30000 // 30 seconds
+
+interface WorkingOverlayProps {
+    workingState: WorkingState
+    onRetry?: () => void
+    onDismiss?: () => void
+}
+
+function WorkingOverlay({ workingState, onRetry, onDismiss }: WorkingOverlayProps) {
+    const [elapsedTime, setElapsedTime] = useState(0)
+
+    // Update elapsed time every second
+    useEffect(() => {
+        if (!workingState.isWorking || !workingState.startedAt) {
+            setElapsedTime(0)
+            return
+        }
+
+        const interval = setInterval(() => {
+            setElapsedTime(Date.now() - workingState.startedAt!)
+        }, 1000)
+
+        return () => clearInterval(interval)
+    }, [workingState.isWorking, workingState.startedAt])
+
+    if (!workingState.isWorking && !workingState.hasError) return null
+
+    const showSlowWarning = elapsedTime > 10000 && !workingState.hasError
+    const formatElapsed = (ms: number) => Math.floor(ms / 1000)
+
+    return (
+        <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm mx-4 text-center">
+                {/* Error State */}
+                {workingState.hasError ? (
+                    <>
+                        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                            Something went wrong
+                        </h3>
+                        <p className="text-slate-600 mb-6 text-sm">
+                            {workingState.errorMessage || 'The operation took too long to complete. Please try again.'}
+                        </p>
+                        <div className="flex gap-3 justify-center">
+                            {onRetry && (
+                                <button
+                                    onClick={onRetry}
+                                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition"
+                                >
+                                    Try Again
+                                </button>
+                            )}
+                            {onDismiss && (
+                                <button
+                                    onClick={onDismiss}
+                                    className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-lg transition"
+                                >
+                                    Dismiss
+                                </button>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* CLARENCE Avatar with pulse animation */}
+                        <div className="relative mx-auto w-20 h-20 mb-6">
+                            <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-25"></div>
+                            <div className="relative w-20 h-20 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
+                                <span className="text-white font-bold text-2xl">C</span>
+                            </div>
+                        </div>
+
+                        {/* Status message */}
+                        <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                            CLARENCE
+                        </h3>
+                        <p className="text-slate-600 mb-4">
+                            {workingState.message}
+                        </p>
+
+                        {/* Animated dots */}
+                        <div className="flex justify-center gap-1.5 mb-4">
+                            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        </div>
+
+                        {/* Elapsed time indicator (shows after 10s) */}
+                        {showSlowWarning && (
+                            <p className="text-xs text-slate-400">
+                                Still working... ({formatElapsed(elapsedTime)}s)
+                            </p>
+                        )}
+                    </>
+                )}
+            </div>
+        </div>
+    )
+}
 
 // ============================================================================
 // SECTION 6: MAIN CONTRACT STUDIO COMPONENT
@@ -1122,6 +1256,108 @@ function ContractStudioContent() {
     }, [])
 
     const latestMessageRef = useRef<HTMLDivElement>(null)
+
+    // ============================================================================
+    // SECTION 6H: GLOBAL WORKING STATE MANAGEMENT
+    // ============================================================================
+
+    const [workingState, setWorkingState] = useState<WorkingState>({
+        isWorking: true,
+        type: 'initial_load',
+        message: WORKING_MESSAGES.initial_load,
+        startedAt: Date.now(),
+        hasError: false,
+        errorMessage: null
+    })
+
+    const workingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const lastWorkingTypeRef = useRef<WorkingType>(null)
+
+    const startWorking = useCallback((type: NonNullable<WorkingType>) => {
+        // Clear any existing timeout
+        if (workingTimeoutRef.current) {
+            clearTimeout(workingTimeoutRef.current)
+        }
+
+        lastWorkingTypeRef.current = type
+
+        setWorkingState({
+            isWorking: true,
+            type,
+            message: WORKING_MESSAGES[type],
+            startedAt: Date.now(),
+            hasError: false,
+            errorMessage: null
+        })
+
+        // Set timeout for error state
+        workingTimeoutRef.current = setTimeout(() => {
+            setWorkingState(prev => ({
+                ...prev,
+                isWorking: false,
+                hasError: true,
+                errorMessage: `The operation timed out after 30 seconds. Please try again.`
+            }))
+
+            // Log the timeout error
+            eventLogger.failed('contract_negotiation', 'working_timeout',
+                `Operation ${type} timed out after 30 seconds`,
+                'TIMEOUT_ERROR'
+            )
+        }, WORKING_TIMEOUT_MS)
+    }, [])
+
+    const stopWorking = useCallback(() => {
+        // Clear timeout
+        if (workingTimeoutRef.current) {
+            clearTimeout(workingTimeoutRef.current)
+            workingTimeoutRef.current = null
+        }
+
+        setWorkingState({
+            isWorking: false,
+            type: null,
+            message: '',
+            startedAt: null,
+            hasError: false,
+            errorMessage: null
+        })
+    }, [])
+
+    const setWorkingError = useCallback((errorMessage: string) => {
+        // Clear timeout
+        if (workingTimeoutRef.current) {
+            clearTimeout(workingTimeoutRef.current)
+            workingTimeoutRef.current = null
+        }
+
+        setWorkingState(prev => ({
+            ...prev,
+            isWorking: false,
+            hasError: true,
+            errorMessage
+        }))
+    }, [])
+
+    const dismissError = useCallback(() => {
+        setWorkingState({
+            isWorking: false,
+            type: null,
+            message: '',
+            startedAt: null,
+            hasError: false,
+            errorMessage: null
+        })
+    }, [])
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (workingTimeoutRef.current) {
+                clearTimeout(workingTimeoutRef.current)
+            }
+        }
+    }, [])
 
     // ============================================================================
     // SECTION 7: DATA LOADING
@@ -1259,9 +1495,17 @@ function ContractStudioContent() {
         return await fetchClauseChat(sessionId, positionId)
     }, [])
 
-    const loadClarenceWelcome = useCallback(async (sessionId: string) => {
-        if (clarenceWelcomeLoaded) return
+    // ============================================================================
+    // SECTION 7B: CLARENCE AI WELCOME MESSAGE LOADER
+    // ============================================================================
 
+    const loadClarenceWelcome = useCallback(async (sessionId: string) => {
+        if (clarenceWelcomeLoaded) {
+            stopWorking()
+            return
+        }
+
+        startWorking('welcome_message')
         setIsChatLoading(true)
 
         try {
@@ -1283,17 +1527,26 @@ function ContractStudioContent() {
 
                 setChatMessages(prev => [welcomeMessage, ...prev])
                 setClarenceWelcomeLoaded(true)
+                stopWorking()
+            } else {
+                setWorkingError('CLARENCE could not prepare your briefing. Please refresh to try again.')
             }
         } catch (error) {
             console.error('Failed to load CLARENCE welcome:', error)
+            setWorkingError('Failed to connect to CLARENCE. Please check your connection and refresh.')
         } finally {
             setIsChatLoading(false)
         }
-    }, [clarenceWelcomeLoaded])
+    }, [clarenceWelcomeLoaded, startWorking, stopWorking, setWorkingError])
+
+    // ============================================================================
+    // SECTION 7C: CLARENCE AI CLAUSE EXPLAINER
+    // ============================================================================
 
     const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause) => {
         if (lastExplainedClauseId === clause.clauseId) return
 
+        startWorking('clause_loading')
         setIsChatLoading(true)
         setLastExplainedClauseId(clause.clauseId)
 
@@ -1317,17 +1570,23 @@ function ContractStudioContent() {
                 }
 
                 setChatMessages(prev => [...prev, explainMessage])
+                stopWorking()
+            } else {
+                setWorkingError('CLARENCE could not analyse this clause. Please try selecting it again.')
             }
         } catch (error) {
             console.error('Failed to explain clause:', error)
+            setWorkingError('Failed to connect to CLARENCE. Please try again.')
         } finally {
             setIsChatLoading(false)
         }
-    }, [lastExplainedClauseId])
+    }, [lastExplainedClauseId, startWorking, stopWorking, setWorkingError])
 
     // Initial load
     useEffect(() => {
         const init = async () => {
+            // Working state is already set to 'initial_load' in useState default
+
             const user = loadUserInfo()
             if (!user) return
 
@@ -1386,6 +1645,7 @@ function ContractStudioContent() {
                     })
                 }
 
+                // LOG: Contract Studio loaded in pending provider state
                 eventLogger.setSession(sessionId)
                 eventLogger.setUser(user.userId || '')
                 eventLogger.completed('contract_negotiation', 'contract_studio_loaded', {
@@ -1396,6 +1656,7 @@ function ContractStudioContent() {
                 })
 
                 setLoading(false)
+                stopWorking() // Stop working overlay
                 return
             }
 
@@ -1414,6 +1675,7 @@ function ContractStudioContent() {
                 const status = await checkPartyStatus(sessionId, otherRole)
                 setOtherPartyStatus(status)
 
+                // LOG: Contract Studio loaded successfully
                 eventLogger.setSession(sessionId)
                 eventLogger.setUser(user.userId || '')
                 eventLogger.completed('contract_negotiation', 'contract_studio_loaded', {
@@ -1423,13 +1685,17 @@ function ContractStudioContent() {
                     clauseCount: data.clauses.length,
                     alignmentPercentage: data.leverage?.alignmentPercentage
                 })
+            } else {
+                // Data load failed
+                setWorkingError('Failed to load contract data. Please refresh the page.')
             }
 
             setLoading(false)
+            // Don't stopWorking here - let the welcome message take over
         }
 
         init()
-    }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router])
+    }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router, stopWorking, setWorkingError])
 
     useEffect(() => {
         if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading) {
@@ -1587,6 +1853,9 @@ function ContractStudioContent() {
     const handlePositionDrag = (newPosition: number) => {
         if (!selectedClause || !userInfo || !leverage) return
 
+        // Don't allow position changes while working
+        if (workingState.isWorking) return
+
         setProposedPosition(newPosition)
         setIsAdjusting(true)
 
@@ -1626,6 +1895,8 @@ function ContractStudioContent() {
             return
         }
 
+        // Start working overlay
+        startWorking('position_commit')
         setIsCommitting(true)
 
         try {
@@ -1679,9 +1950,13 @@ function ContractStudioContent() {
 
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
+                stopWorking()
+            } else {
+                setWorkingError('Failed to save your position. Please try again.')
             }
         } catch (error) {
             console.error('Error setting position:', error)
+            setWorkingError('An error occurred while saving your position. Please try again.')
         } finally {
             setIsCommitting(false)
         }
@@ -1696,6 +1971,8 @@ function ContractStudioContent() {
 
         if (originalPosition === null) return
 
+        // Start working overlay
+        startWorking('position_commit')
         setShowResetConfirm(false)
         setIsCommitting(true)
 
@@ -1751,15 +2028,22 @@ function ContractStudioContent() {
                 setProposedPosition(originalPosition)
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
+                stopWorking()
+            } else {
+                setWorkingError('Failed to reset your position. Please try again.')
             }
         } catch (error) {
             console.error('Error resetting position:', error)
+            setWorkingError('An error occurred while resetting your position. Please try again.')
         } finally {
             setIsCommitting(false)
         }
     }
 
     const handleClauseSelect = (clause: ContractClause) => {
+        // Don't allow clause selection while working
+        if (workingState.isWorking) return
+
         setSelectedClause(clause)
         setActiveTab('dynamics')
 
@@ -1769,6 +2053,7 @@ function ContractStudioContent() {
     }
 
     const handleClauseToggle = (positionId: string) => {
+        // Allow toggle even while working (just expanding/collapsing tree)
         const toggleExpanded = (items: ContractClause[]): ContractClause[] => {
             return items.map(item => {
                 if (item.positionId === positionId) {
@@ -1787,6 +2072,9 @@ function ContractStudioContent() {
     const handleSendMessage = async () => {
         if (!chatInput.trim() || !session || !userInfo) return
 
+        // Don't allow sending while working
+        if (workingState.isWorking) return
+
         const userMessage = chatInput.trim()
 
         const newMessage: ClauseChatMessage = {
@@ -1804,6 +2092,9 @@ function ContractStudioContent() {
 
         setChatMessages(prev => [...prev, newMessage])
         setChatInput('')
+
+        // Start working overlay
+        startWorking('chat_response')
         setIsChatLoading(true)
 
         try {
@@ -1827,9 +2118,41 @@ function ContractStudioContent() {
                 }
 
                 setChatMessages(prev => [...prev, clarenceResponse])
+                stopWorking()
+            } else {
+                // Add error message to chat but don't show error overlay
+                const errorMessage: ClauseChatMessage = {
+                    messageId: `error-${Date.now()}`,
+                    sessionId: session.sessionId,
+                    positionId: selectedClause?.positionId || null,
+                    sender: 'clarence',
+                    senderUserId: null,
+                    message: 'I apologize, but I encountered an issue processing your request. Please try again.',
+                    messageType: 'auto_response',
+                    relatedPositionChange: false,
+                    triggeredBy: 'error',
+                    createdAt: new Date().toISOString()
+                }
+                setChatMessages(prev => [...prev, errorMessage])
+                stopWorking()
             }
         } catch (error) {
             console.error('CLARENCE chat error:', error)
+            // Add error message to chat
+            const errorMessage: ClauseChatMessage = {
+                messageId: `error-${Date.now()}`,
+                sessionId: session.sessionId,
+                positionId: selectedClause?.positionId || null,
+                sender: 'clarence',
+                senderUserId: null,
+                message: 'I apologize, but I encountered a connection issue. Please try again in a moment.',
+                messageType: 'auto_response',
+                relatedPositionChange: false,
+                triggeredBy: 'error',
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+            stopWorking()
         } finally {
             setIsChatLoading(false)
         }
@@ -1886,13 +2209,19 @@ function ContractStudioContent() {
     const explainTradeOff = useCallback(async (tradeOff: TradeOffOpportunity) => {
         if (!session?.sessionId) return
 
+        // Don't allow while working
+        if (workingState.isWorking) return
+
         setSelectedTradeOff(tradeOff)
         setIsLoadingTradeOff(true)
         setTradeOffExplanation(null)
 
+        // Start working overlay
+        startWorking('chat_response')
+
         try {
             const message = `Analyze this trade-off opportunity between "${tradeOff.clauseA.clauseName}" and "${tradeOff.clauseB.clauseName}". 
-        
+    
 The customer values ${tradeOff.clauseA.clauseName} (weight: ${tradeOff.clauseA.customerWeight}) more than the provider (weight: ${tradeOff.clauseA.providerWeight}).
 The provider values ${tradeOff.clauseB.clauseName} (weight: ${tradeOff.clauseB.providerWeight}) more than the customer (weight: ${tradeOff.clauseB.customerWeight}).
 
@@ -1904,16 +2233,19 @@ Explain why this trade makes sense and what each party gains.`
 
             if (response?.success && response.response) {
                 setTradeOffExplanation(response.response)
+                stopWorking()
             } else {
                 setTradeOffExplanation('Unable to analyze this trade-off at the moment. Please try again.')
+                stopWorking()
             }
         } catch (error) {
             console.error('Trade-off explanation error:', error)
             setTradeOffExplanation('An error occurred while analyzing this trade-off.')
+            stopWorking()
         } finally {
             setIsLoadingTradeOff(false)
         }
-    }, [session?.sessionId])
+    }, [session?.sessionId, workingState.isWorking, startWorking, stopWorking])
 
     // ============================================================================
     // SECTION 8F: DRAFT LANGUAGE HANDLER
@@ -1925,9 +2257,15 @@ Explain why this trade makes sense and what each party gains.`
     ) => {
         if (!session?.sessionId) return
 
+        // Don't allow while working
+        if (workingState.isWorking) return
+
         setIsLoadingDraft(true)
         setDraftStyle(style)
         setLastDraftedClauseId(clause.clauseId)
+
+        // Start working overlay
+        startWorking('chat_response')
 
         try {
             const styleDescription = style === 'balanced'
@@ -1951,16 +2289,19 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
 
             if (response?.success && response.response) {
                 setDraftLanguage(response.response)
+                stopWorking()
             } else {
                 setDraftLanguage('Unable to generate draft language at the moment. Please try again.')
+                stopWorking()
             }
         } catch (error) {
             console.error('Draft generation error:', error)
             setDraftLanguage('An error occurred while generating the draft.')
+            stopWorking()
         } finally {
             setIsLoadingDraft(false)
         }
-    }, [session?.sessionId])
+    }, [session?.sessionId, workingState.isWorking, startWorking, stopWorking])
 
     // ============================================================================
     // SECTION 9: LOADING & CONDITIONAL RENDERING
@@ -2892,10 +3233,10 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                                                                         <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Current</span>
                                                                     )}
                                                                     <span className={`text-xs px-2 py-0.5 rounded-full ${provider.questionnaireComplete
-                                                                            ? 'bg-emerald-100 text-emerald-700'
-                                                                            : provider.intakeComplete
-                                                                                ? 'bg-amber-100 text-amber-700'
-                                                                                : 'bg-slate-100 text-slate-600'
+                                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                                        : provider.intakeComplete
+                                                                            ? 'bg-amber-100 text-amber-700'
+                                                                            : 'bg-slate-100 text-slate-600'
                                                                         }`}>
                                                                         {provider.questionnaireComplete
                                                                             ? 'Ready'
@@ -3007,7 +3348,19 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <PartyStatusBanner />
 
-            <div className="flex h-[calc(100vh-100px)] overflow-hidden">
+            <div className="relative flex h-[calc(100vh-52px)] overflow-hidden">
+                {/* Working Overlay - covers the three-panel workspace */}
+                <WorkingOverlay
+                    workingState={workingState}
+                    onRetry={() => {
+                        dismissError()
+                        // Optionally trigger a refresh based on what failed
+                        if (lastWorkingTypeRef.current === 'initial_load') {
+                            window.location.reload()
+                        }
+                    }}
+                    onDismiss={dismissError}
+                />
                 {/* LEFT PANEL: Clause Navigation */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
                     <div className="flex-shrink-0 p-4 border-b border-slate-200">
