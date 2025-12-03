@@ -18,13 +18,15 @@ interface PartyMessage {
     createdAt: string
 }
 
-interface PartyChatProps {
+interface PartyChatPanelProps {
     sessionId: string
     providerId: string
     providerName: string
     currentUserType: 'customer' | 'provider'
     currentUserName: string
     isProviderOnline?: boolean
+    isOpen: boolean
+    onClose: () => void
     onUnreadCountChange?: (count: number) => void
 }
 
@@ -49,7 +51,7 @@ function ChatToast({ notification, onDismiss, onOpen }: ToastProps) {
     useEffect(() => {
         const timer = setTimeout(() => {
             onDismiss(notification.id)
-        }, 5000) // Auto-dismiss after 5 seconds
+        }, 5000)
 
         return () => clearTimeout(timer)
     }, [notification.id, onDismiss])
@@ -60,14 +62,12 @@ function ChatToast({ notification, onDismiss, onOpen }: ToastProps) {
             onClick={onOpen}
         >
             <div className="flex items-start gap-3">
-                {/* Avatar */}
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0">
                     <span className="text-white font-semibold text-sm">
                         {notification.senderName.charAt(0).toUpperCase()}
                     </span>
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-white text-sm truncate">
@@ -125,80 +125,7 @@ function ToastContainer({ toasts, onDismiss, onOpenChat }: ToastContainerProps) 
 }
 
 // ============================================================================
-// SECTION 4: CHAT TOGGLE BUTTON COMPONENT (For StatusBar)
-// ============================================================================
-
-interface ChatToggleButtonProps {
-    providerName: string
-    isOnline: boolean
-    unreadCount: number
-    onClick: () => void
-    isOpen: boolean
-}
-
-export function ChatToggleButton({
-    providerName,
-    isOnline,
-    unreadCount,
-    onClick,
-    isOpen
-}: ChatToggleButtonProps) {
-    return (
-        <button
-            onClick={onClick}
-            className={`
-        flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200
-        ${isOpen
-                    ? 'bg-emerald-500/20 border border-emerald-500/50'
-                    : 'hover:bg-slate-700 border border-transparent'
-                }
-      `}
-        >
-            {/* Provider Info */}
-            <div className="text-right">
-                <div className="text-xs text-slate-400">Other Party</div>
-                <div className="text-sm">
-                    <span className="font-medium text-white">{providerName}</span>
-                </div>
-            </div>
-
-            {/* Online Status */}
-            <div className="flex flex-col items-center">
-                <div className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                <span className={`text-xs mt-0.5 ${isOnline ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    {isOnline ? 'Online' : 'Offline'}
-                </span>
-            </div>
-
-            {/* Chat Icon with Badge */}
-            <div className="relative ml-2">
-                <svg
-                    className={`w-5 h-5 ${isOpen ? 'text-emerald-400' : 'text-slate-400'}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                    />
-                </svg>
-
-                {/* Unread Badge */}
-                {unreadCount > 0 && (
-                    <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-bounce">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                )}
-            </div>
-        </button>
-    )
-}
-
-// ============================================================================
-// SECTION 5: MESSAGE BUBBLE COMPONENT
+// SECTION 4: MESSAGE BUBBLE COMPONENT
 // ============================================================================
 
 interface MessageBubbleProps {
@@ -218,29 +145,26 @@ function MessageBubble({ message, isOwnMessage }: MessageBubbleProps) {
     return (
         <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-3`}>
             <div className={`
-        max-w-[80%] rounded-2xl px-4 py-2.5
-        ${isOwnMessage
+                max-w-[80%] rounded-2xl px-4 py-2.5
+                ${isOwnMessage
                     ? 'bg-emerald-500 text-white rounded-br-md'
                     : 'bg-slate-700 text-slate-100 rounded-bl-md'
                 }
-      `}>
-                {/* Sender Name (only for other party) */}
+            `}>
                 {!isOwnMessage && (
                     <div className="text-xs font-semibold text-emerald-400 mb-1">
                         {message.senderName}
                     </div>
                 )}
 
-                {/* Message Text */}
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">
                     {message.messageText}
                 </p>
 
-                {/* Timestamp & Read Status */}
                 <div className={`
-          flex items-center gap-1 mt-1 text-xs
-          ${isOwnMessage ? 'text-emerald-100 justify-end' : 'text-slate-400'}
-        `}>
+                    flex items-center gap-1 mt-1 text-xs
+                    ${isOwnMessage ? 'text-emerald-100 justify-end' : 'text-slate-400'}
+                `}>
                     <span>{formatTime(message.createdAt)}</span>
                     {isOwnMessage && (
                         <span>
@@ -262,7 +186,7 @@ function MessageBubble({ message, isOwnMessage }: MessageBubbleProps) {
 }
 
 // ============================================================================
-// SECTION 6: TYPING INDICATOR COMPONENT
+// SECTION 5: TYPING INDICATOR COMPONENT
 // ============================================================================
 
 function TypingIndicator({ name }: { name: string }) {
@@ -279,7 +203,7 @@ function TypingIndicator({ name }: { name: string }) {
 }
 
 // ============================================================================
-// SECTION 7: MAIN PARTY CHAT PANEL COMPONENT
+// SECTION 6: MAIN PARTY CHAT PANEL COMPONENT
 // ============================================================================
 
 export function PartyChatPanel({
@@ -289,10 +213,11 @@ export function PartyChatPanel({
     currentUserType,
     currentUserName,
     isProviderOnline = false,
+    isOpen,
+    onClose,
     onUnreadCountChange
-}: PartyChatProps) {
+}: PartyChatPanelProps) {
     // State
-    const [isOpen, setIsOpen] = useState(false)
     const [messages, setMessages] = useState<PartyMessage[]>([])
     const [inputText, setInputText] = useState('')
     const [isLoading, setIsLoading] = useState(false)
@@ -307,7 +232,7 @@ export function PartyChatPanel({
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
     // ============================================================================
-    // SECTION 7A: MOCK DATA FOR DEMOS
+    // SECTION 6A: MOCK DATA FOR DEMOS
     // ============================================================================
 
     const mockMessages: PartyMessage[] = [
@@ -319,7 +244,7 @@ export function PartyChatPanel({
             senderName: providerName,
             messageText: 'Hi there! I\'ve reviewed your initial requirements and I think we can work together on this contract. Do you have any initial concerns about the liability clauses?',
             isRead: true,
-            createdAt: new Date(Date.now() - 3600000).toISOString() // 1 hour ago
+            createdAt: new Date(Date.now() - 3600000).toISOString()
         },
         {
             messageId: '2',
@@ -329,7 +254,7 @@ export function PartyChatPanel({
             senderName: currentUserName,
             messageText: 'Thanks for reaching out! Yes, we\'re particularly focused on ensuring the liability cap is reasonable given the deal value. What\'s your standard approach?',
             isRead: true,
-            createdAt: new Date(Date.now() - 3000000).toISOString() // 50 mins ago
+            createdAt: new Date(Date.now() - 3000000).toISOString()
         },
         {
             messageId: '3',
@@ -339,7 +264,7 @@ export function PartyChatPanel({
             senderName: providerName,
             messageText: 'We typically cap liability at 100% of annual contract value for general claims, with carve-outs for data breaches where we offer higher coverage. Would that work for your requirements?',
             isRead: true,
-            createdAt: new Date(Date.now() - 2400000).toISOString() // 40 mins ago
+            createdAt: new Date(Date.now() - 2400000).toISOString()
         },
         {
             messageId: '4',
@@ -349,7 +274,7 @@ export function PartyChatPanel({
             senderName: currentUserName,
             messageText: 'That sounds reasonable as a starting point. Let me discuss with my team and get back to you. In the meantime, I\'ve adjusted our position on Payment Terms - can you take a look?',
             isRead: true,
-            createdAt: new Date(Date.now() - 1800000).toISOString() // 30 mins ago
+            createdAt: new Date(Date.now() - 1800000).toISOString()
         },
         {
             messageId: '5',
@@ -359,12 +284,12 @@ export function PartyChatPanel({
             senderName: providerName,
             messageText: 'I see the change to 45-day payment terms. That works for us. I\'ll update our position to match. Looking forward to progressing on the remaining clauses!',
             isRead: false,
-            createdAt: new Date(Date.now() - 300000).toISOString() // 5 mins ago
+            createdAt: new Date(Date.now() - 300000).toISOString()
         }
     ]
 
     // ============================================================================
-    // SECTION 7B: API FUNCTIONS (Placeholders for N8N integration)
+    // SECTION 6B: API FUNCTIONS (Placeholders for N8N integration)
     // ============================================================================
 
     const fetchMessages = useCallback(async () => {
@@ -387,7 +312,7 @@ export function PartyChatPanel({
         } catch (error) {
             console.error('Failed to fetch messages:', error)
         }
-    }, [sessionId, providerId, currentUserType, onUnreadCountChange])
+    }, [sessionId, providerId, currentUserType, onUnreadCountChange, providerName, currentUserName])
 
     const sendMessage = async () => {
         if (!inputText.trim() || isSending) return
@@ -396,17 +321,7 @@ export function PartyChatPanel({
 
         try {
             // TODO: Replace with actual N8N webhook call
-            // await fetch('/api/n8n/party-chat-send', {
-            //   method: 'POST',
-            //   headers: { 'Content-Type': 'application/json' },
-            //   body: JSON.stringify({
-            //     sessionId,
-            //     providerId,
-            //     senderType: currentUserType,
-            //     senderName: currentUserName,
-            //     messageText: inputText.trim()
-            //   })
-            // })
+            // await fetch('/api/n8n/party-chat-send', { ... })
 
             // For demo: Add message locally
             const newMessage: PartyMessage = {
@@ -454,14 +369,9 @@ export function PartyChatPanel({
         }
     }
 
-    const markAsRead = async () => {
+    const markAsRead = useCallback(async () => {
         try {
             // TODO: Replace with actual N8N webhook call
-            // await fetch('/api/n8n/party-chat-mark-read', {
-            //   method: 'POST',
-            //   headers: { 'Content-Type': 'application/json' },
-            //   body: JSON.stringify({ sessionId, providerId, userType: currentUserType })
-            // })
 
             // For demo: Mark all as read locally
             setMessages(prev => prev.map(m => ({
@@ -475,10 +385,10 @@ export function PartyChatPanel({
         } catch (error) {
             console.error('Failed to mark messages as read:', error)
         }
-    }
+    }, [onUnreadCountChange])
 
     // ============================================================================
-    // SECTION 7C: TOAST MANAGEMENT
+    // SECTION 6C: TOAST MANAGEMENT
     // ============================================================================
 
     const addToast = (message: PartyMessage) => {
@@ -502,7 +412,7 @@ export function PartyChatPanel({
     }, [])
 
     // ============================================================================
-    // SECTION 7D: EFFECTS
+    // SECTION 6D: EFFECTS
     // ============================================================================
 
     // Initial load
@@ -513,10 +423,8 @@ export function PartyChatPanel({
     // Polling for new messages
     useEffect(() => {
         if (isOpen) {
-            // Poll every 10 seconds when open
             pollingIntervalRef.current = setInterval(fetchMessages, 10000)
         } else {
-            // Poll every 30 seconds when closed (for notifications)
             pollingIntervalRef.current = setInterval(fetchMessages, 30000)
         }
 
@@ -539,7 +447,7 @@ export function PartyChatPanel({
         if (isOpen && unreadCount > 0) {
             markAsRead()
         }
-    }, [isOpen])
+    }, [isOpen, unreadCount, markAsRead])
 
     // Focus input when opening
     useEffect(() => {
@@ -549,7 +457,7 @@ export function PartyChatPanel({
     }, [isOpen])
 
     // ============================================================================
-    // SECTION 7E: RENDER
+    // SECTION 6E: RENDER
     // ============================================================================
 
     const otherPartyName = currentUserType === 'customer' ? providerName : 'Customer'
@@ -560,32 +468,23 @@ export function PartyChatPanel({
             <ToastContainer
                 toasts={toasts}
                 onDismiss={dismissToast}
-                onOpenChat={() => setIsOpen(true)}
-            />
-
-            {/* Chat Toggle Button - To be placed in StatusBar */}
-            <ChatToggleButton
-                providerName={otherPartyName}
-                isOnline={isProviderOnline}
-                unreadCount={unreadCount}
-                onClick={() => setIsOpen(!isOpen)}
-                isOpen={isOpen}
+                onOpenChat={() => { }} // Toast click handled by parent
             />
 
             {/* Backdrop */}
             {isOpen && (
                 <div
                     className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm"
-                    onClick={() => setIsOpen(false)}
+                    onClick={onClose}
                 />
             )}
 
             {/* Slide-Out Panel */}
             <div className={`
-        fixed top-0 right-0 h-full w-96 bg-slate-800 shadow-2xl z-50
-        transform transition-transform duration-300 ease-out
-        ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-      `}>
+                fixed top-0 right-0 h-full w-96 bg-slate-800 shadow-2xl z-50
+                transform transition-transform duration-300 ease-out
+                ${isOpen ? 'translate-x-0' : 'translate-x-full'}
+            `}>
                 {/* Panel Header */}
                 <div className="bg-slate-900 px-4 py-3 border-b border-slate-700">
                     <div className="flex items-center justify-between">
@@ -611,7 +510,7 @@ export function PartyChatPanel({
 
                         {/* Close Button */}
                         <button
-                            onClick={() => setIsOpen(false)}
+                            onClick={onClose}
                             className="p-2 hover:bg-slate-700 rounded-lg transition"
                         >
                             <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -622,7 +521,7 @@ export function PartyChatPanel({
                 </div>
 
                 {/* Messages Container */}
-                <div className="flex-1 overflow-y-auto p-4 h-[calc(100vh-160px)]">
+                <div className="flex-1 overflow-y-auto p-4 h-[calc(100vh-160px)] chat-scrollbar">
                     {isLoading ? (
                         <div className="flex items-center justify-center h-full">
                             <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full" />
@@ -639,7 +538,7 @@ export function PartyChatPanel({
                         </div>
                     ) : (
                         <>
-                            {/* Date Divider - First message */}
+                            {/* Date Divider */}
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-1 h-px bg-slate-700" />
                                 <span className="text-xs text-slate-500">Today</span>
@@ -680,12 +579,12 @@ export function PartyChatPanel({
                             onClick={sendMessage}
                             disabled={!inputText.trim() || isSending}
                             className={`
-                p-2.5 rounded-lg transition-all
-                ${inputText.trim() && !isSending
+                                p-2.5 rounded-lg transition-all
+                                ${inputText.trim() && !isSending
                                     ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
                                     : 'bg-slate-700 text-slate-500 cursor-not-allowed'
                                 }
-              `}
+                            `}
                         >
                             {isSending ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -701,75 +600,5 @@ export function PartyChatPanel({
         </>
     )
 }
-
-// ============================================================================
-// SECTION 8: CSS ANIMATIONS (Add to your global CSS)
-// ============================================================================
-
-/*
-Add these animations to your global.css or tailwind.config.js:
-
-@keyframes slide-in-right {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.animate-slide-in-right {
-  animation: slide-in-right 0.3s ease-out;
-}
-
-// In tailwind.config.js:
-module.exports = {
-  theme: {
-    extend: {
-      animation: {
-        'slide-in-right': 'slide-in-right 0.3s ease-out',
-      },
-      keyframes: {
-        'slide-in-right': {
-          '0%': { transform: 'translateX(100%)', opacity: '0' },
-          '100%': { transform: 'translateX(0)', opacity: '1' },
-        },
-      },
-    },
-  },
-}
-*/
-
-// ============================================================================
-// SECTION 9: INTEGRATION EXAMPLE
-// ============================================================================
-
-/*
-To integrate into your Contract Studio StatusBar:
-
-1. Import the components:
-   import { PartyChatPanel, ChatToggleButton } from './party-chat-component'
-
-2. Add state in your main component:
-   const [chatUnreadCount, setChatUnreadCount] = useState(0)
-
-3. Replace the provider section in StatusBar Row 2 with:
-   <PartyChatPanel
-     sessionId={session.sessionId}
-     providerId={selectedProvider?.providerId || ''}
-     providerName={selectedProvider?.providerName || 'Provider'}
-     currentUserType={isCustomer ? 'customer' : 'provider'}
-     currentUserName={userInfo.firstName || 'User'}
-     isProviderOnline={otherPartyStatus.isOnline}
-     onUnreadCountChange={setChatUnreadCount}
-   />
-
-4. The component will render:
-   - The toggle button (visible in StatusBar)
-   - Toast notifications (fixed position, top-right)
-   - Slide-out panel (fixed position, right side)
-*/
 
 export default PartyChatPanel

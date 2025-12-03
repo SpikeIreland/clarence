@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
+import { PartyChatPanel } from './components/party-chat-component'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -1074,6 +1075,10 @@ function ContractStudioContent() {
     const [isCommitting, setIsCommitting] = useState(false)
     const [showResetConfirm, setShowResetConfirm] = useState(false)
 
+    // Party Chat state
+    const [isChatOpen, setIsChatOpen] = useState(false)
+    const [chatUnreadCount, setChatUnreadCount] = useState(3)
+
     // CLARENCE AI state
     const [clarenceWelcomeLoaded, setClarenceWelcomeLoaded] = useState(false)
     const [lastExplainedClauseId, setLastExplainedClauseId] = useState<string | null>(null)
@@ -1897,7 +1902,7 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
             setIsLoadingDraft(false)
         }
     }, [session?.sessionId])
-    
+
     // ============================================================================
     // SECTION 9: LOADING & CONDITIONAL RENDERING
     // ============================================================================
@@ -2681,16 +2686,27 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
     }
 
     // ============================================================================
-    // SECTION 13: PARTY STATUS BANNER COMPONENT
+    // COMPLETE UPDATED SECTION 13: PartyStatusBanner
     // ============================================================================
 
     const PartyStatusBanner = () => {
         const isCustomer = userInfo.role === 'customer'
+        const myCompany = isCustomer ? session.customerCompany : session.providerCompany
+        const otherCompany = isCustomer ? session.providerCompany : session.customerCompany
+        const myRole = isCustomer ? 'Customer' : 'Provider'
+        const otherRole = isCustomer ? 'Provider' : 'Customer'
+
+        const customerCompany = session.customerCompany
+        const providerCompany = session.providerCompany
 
         return (
             <div className="bg-slate-800 text-white">
+                {/* ============================================================ */}
+                {/* ROW 1: Navigation Row */}
+                {/* ============================================================ */}
                 <div className="px-6 py-2 border-b border-slate-700">
                     <div className="flex items-center justify-between">
+                        {/* Left: Dashboard Button */}
                         <button
                             onClick={() => router.push('/auth/contracts-dashboard')}
                             className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
@@ -2701,6 +2717,7 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                             <span className="text-sm">Dashboard</span>
                         </button>
 
+                        {/* Center: Title */}
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                                 <span className="text-white font-bold text-sm">C</span>
@@ -2711,25 +2728,30 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                             </div>
                         </div>
 
+                        {/* Right: User Info / Logged in status */}
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
                             <span className="text-sm text-slate-300">
-                                {userInfo.firstName} {userInfo.lastName}
+                                {userInfo.firstName ? `${userInfo.firstName} ${userInfo.lastName}` : myCompany}
                             </span>
                             <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded">
-                                {isCustomer ? 'Customer' : 'Provider'}
+                                {myRole}
                             </span>
                         </div>
                     </div>
                 </div>
 
+                {/* ============================================================ */}
+                {/* ROW 2: Session Context Row */}
+                {/* ============================================================ */}
                 <div className="px-6 py-3">
                     <div className="flex items-center justify-between">
+                        {/* Left: Customer Info (always on left) */}
                         <div className="flex items-center gap-3 min-w-[200px]">
                             <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
                             <div>
                                 <div className="text-xs text-slate-400">Customer</div>
-                                <div className="text-sm font-medium text-emerald-400">{session.customerCompany}</div>
+                                <div className="text-sm font-medium text-emerald-400">{customerCompany}</div>
                             </div>
                             {isCustomer && (
                                 <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">
@@ -2738,6 +2760,7 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                             )}
                         </div>
 
+                        {/* Center: Session Details (truly centered) */}
                         <div className="flex items-center gap-8">
                             <div className="text-center">
                                 <div className="text-xs text-slate-400">Session</div>
@@ -2760,7 +2783,8 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 min-w-[200px] justify-end">
+                        {/* Right: Provider Info (always on right) + Party Chat */}
+                        <div className="flex items-center gap-3 min-w-[280px] justify-end">
                             {!isCustomer && (
                                 <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
                                     You
@@ -2768,12 +2792,57 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                             )}
                             <div className="text-right">
                                 <div className="text-xs text-slate-400">Provider</div>
-                                <div className="text-sm font-medium text-blue-400">{session.providerCompany}</div>
+                                <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
                             </div>
                             <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
+
+                            {/* Party Chat Toggle Button */}
+                            {isCustomer && (
+                                <button
+                                    onClick={() => setIsChatOpen(true)}
+                                    className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
+                                    title={`Chat with ${providerCompany}`}
+                                >
+                                    <svg
+                                        className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                        />
+                                    </svg>
+
+                                    {/* Unread Badge */}
+                                    {chatUnreadCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                            {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
+
+                {/* Party Chat Slide-Out Panel */}
+                {isCustomer && (
+                    <PartyChatPanel
+                        sessionId={session.sessionId}
+                        providerId=""
+                        providerName={providerCompany}
+                        currentUserType="customer"
+                        currentUserName={userInfo.firstName || 'User'}
+                        isProviderOnline={otherPartyStatus.isOnline}
+                        isOpen={isChatOpen}
+                        onClose={() => setIsChatOpen(false)}
+                        onUnreadCountChange={setChatUnreadCount}
+                    />
+                )}
             </div>
         )
     }
