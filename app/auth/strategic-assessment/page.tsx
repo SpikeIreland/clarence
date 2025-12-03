@@ -630,7 +630,7 @@ function IntelligentQuestionnaireContent() {
     await new Promise(resolve => setTimeout(resolve, 1500))
 
     // Transition to strategic questions
-    const transitionMessage = `These questions will help me calculate your true leverage and recommend defensible first-draft positions.
+    const transitionMessage = `These questions will help me objectively calculate your leverage and recommend first-draft positions.
 
 Let's start with your alternatives...`
 
@@ -695,7 +695,7 @@ Here's what I understand:
 **Your Priorities (from highest):**
 ${priorityRanking}
 
-**Your Starting Positions:**
+**Your Key Starting Positions:**
 - Liability cap: ${liabilityCap}% of annual value
 - Payment terms: ${paymentTerms} days
 - SLA target: ${slaTarget}% uptime

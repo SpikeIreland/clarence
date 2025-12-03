@@ -117,7 +117,6 @@ const INDUSTRY_OPTIONS = [
 
 const GEOGRAPHY_OPTIONS = [
     'UK',
-    'Ireland',
     'Europe',
     'North America',
     'Asia Pacific',

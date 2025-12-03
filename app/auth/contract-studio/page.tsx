@@ -589,6 +589,7 @@ const CLARENCE_AI_URL = `${API_BASE}/clarence-ai`
 async function callClarenceAI(
     sessionId: string,
     promptType: 'welcome' | 'clause_explain' | 'chat' | 'position_change',
+    viewerRole: 'customer' | 'provider',
     options: {
         clauseId?: string
         message?: string
@@ -611,6 +612,7 @@ async function callClarenceAI(
             body: JSON.stringify({
                 sessionId,
                 promptType,
+                viewerRole,
                 ...options
             })
         })
@@ -1524,7 +1526,7 @@ function ContractStudioContent() {
     // SECTION 7B: CLARENCE AI WELCOME MESSAGE LOADER
     // ============================================================================
 
-    const loadClarenceWelcome = useCallback(async (sessionId: string) => {
+    const loadClarenceWelcome = useCallback(async (sessionId: string, viewerRole: 'customer' | 'provider') => {
         if (clarenceWelcomeLoaded) {
             stopWorking()
             return
@@ -1534,7 +1536,7 @@ function ContractStudioContent() {
         setIsChatLoading(true)
 
         try {
-            const response = await callClarenceAI(sessionId, 'welcome')
+            const response = await callClarenceAI(sessionId, 'welcome', viewerRole)
 
             if (response?.success && response.response) {
                 const welcomeMessage: ClauseChatMessage = {
@@ -1568,7 +1570,7 @@ function ContractStudioContent() {
     // SECTION 7C: CLARENCE AI CLAUSE EXPLAINER
     // ============================================================================
 
-    const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause) => {
+    const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause, viewerRole: 'customer' | 'provider') => {
         if (lastExplainedClauseId === clause.clauseId) return
 
         startWorking('clause_loading')
@@ -1576,7 +1578,7 @@ function ContractStudioContent() {
         setLastExplainedClauseId(clause.clauseId)
 
         try {
-            const response = await callClarenceAI(sessionId, 'clause_explain', {
+            const response = await callClarenceAI(sessionId, 'clause_explain', viewerRole, {
                 clauseId: clause.clauseId
             })
 
@@ -1723,10 +1725,10 @@ function ContractStudioContent() {
     }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router, stopWorking, setWorkingError])
 
     useEffect(() => {
-        if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading) {
-            loadClarenceWelcome(session.sessionId)
+        if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
+            loadClarenceWelcome(session.sessionId, userInfo.role)
         }
-    }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome])
+    }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome, userInfo?.role])
 
     // ============================================================================
     // SECTION 7D2: LOAD AVAILABLE PROVIDERS FOR MULTI-PROVIDER DROPDOWN
@@ -2072,8 +2074,8 @@ function ContractStudioContent() {
         setSelectedClause(clause)
         setActiveTab('dynamics')
 
-        if (session?.sessionId && sessionStatus === 'ready') {
-            explainClauseWithClarence(session.sessionId, clause)
+        if (session?.sessionId && sessionStatus === 'ready' && userInfo?.role) {
+            explainClauseWithClarence(session.sessionId, clause, userInfo.role)
         }
     }
 
@@ -2123,7 +2125,7 @@ function ContractStudioContent() {
         setIsChatLoading(true)
 
         try {
-            const response = await callClarenceAI(session.sessionId, 'chat', {
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo.role || 'customer', {
                 message: userMessage,
                 clauseId: selectedClause?.clauseId
             })
@@ -2254,7 +2256,7 @@ Current gaps: ${tradeOff.clauseA.clauseName} has ${tradeOff.clauseA.gapSize.toFi
 
 Explain why this trade makes sense and what each party gains.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', { message })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message })
 
             if (response?.success && response.response) {
                 setTradeOffExplanation(response.response)
@@ -2310,7 +2312,7 @@ Clause description: ${clause.description}
 
 Write clear, legally-appropriate contract language that reflects a ${style} approach. Keep it concise but comprehensive.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', { message })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message })
 
             if (response?.success && response.response) {
                 setDraftLanguage(response.response)
