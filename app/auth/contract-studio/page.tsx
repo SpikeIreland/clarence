@@ -2793,13 +2793,38 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
     }
 
     // ============================================================================
-    // SECTION 11: LEVERAGE INDICATOR COMPONENT
+    // SECTION 11: LEVERAGE INDICATOR COMPONENT (ROLE-AWARE)
     // ============================================================================
 
     const LeverageIndicator = () => {
-        // Calculate the shift from baseline
-        const customerShift = displayLeverage.leverageTrackerCustomer - displayLeverage.leverageScoreCustomer
-        const isCustomerGaining = customerShift > 0
+        // Determine viewer's perspective
+        const isCustomer = userInfo?.role === 'customer'
+
+        // Get leverage values from viewer's perspective
+        const yourBaselineLeverage = isCustomer
+            ? displayLeverage.leverageScoreCustomer
+            : displayLeverage.leverageScoreProvider
+        const theirBaselineLeverage = isCustomer
+            ? displayLeverage.leverageScoreProvider
+            : displayLeverage.leverageScoreCustomer
+        const yourTrackerLeverage = isCustomer
+            ? displayLeverage.leverageTrackerCustomer
+            : displayLeverage.leverageTrackerProvider
+        const theirTrackerLeverage = isCustomer
+            ? displayLeverage.leverageTrackerProvider
+            : displayLeverage.leverageTrackerCustomer
+
+        // Calculate shift from YOUR perspective
+        const yourShift = yourTrackerLeverage - yourBaselineLeverage
+        const isYouGaining = yourShift > 0
+
+        // Company names from your perspective
+        const yourCompanyName = isCustomer
+            ? session?.customerCompany?.split(' ')[0] || 'You'
+            : session?.providerCompany?.split(' ')[0] || 'You'
+        const theirCompanyName = isCustomer
+            ? session?.providerCompany?.split(' ')[0] || 'Provider'
+            : session?.customerCompany?.split(' ')[0] || 'Customer'
 
         // Calculate dynamic alignment percentage
         const dynamicAlignmentPercentage = calculateAlignmentPercentage(clauses)
@@ -2844,23 +2869,25 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                     </div>
                 </div>
 
-                {/* Two-Card Layout: Baseline and Tracker */}
+                {/* Two-Card Layout: Baseline and Tracker - FROM YOUR PERSPECTIVE */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                    {/* Card 1: Leverage Baseline (was "Leverage Score") */}
+                    {/* Card 1: Leverage Baseline */}
                     <div className="bg-slate-50 rounded-lg p-3">
                         <div className="flex items-center gap-1 mb-1">
                             <span className="text-sm">◆</span>
                             <span className="text-xs text-slate-500">Leverage Baseline</span>
                         </div>
                         <div className="text-lg font-bold text-slate-800 text-center">
-                            {displayLeverage.leverageScoreCustomer} : {displayLeverage.leverageScoreProvider}
+                            <span className={isCustomer ? 'text-emerald-600' : 'text-blue-600'}>{yourBaselineLeverage}</span>
+                            <span className="text-slate-400 mx-1">:</span>
+                            <span className={isCustomer ? 'text-blue-600' : 'text-emerald-600'}>{theirBaselineLeverage}</span>
                         </div>
-                        <div className="text-xs text-slate-400 text-center">Assessed Score</div>
+                        <div className="text-xs text-slate-400 text-center">You : {theirCompanyName}</div>
                     </div>
 
-                    {/* Card 2: Leverage Tracker (was "Alignment Score" - now shows real-time leverage) */}
-                    <div className={`rounded-lg p-3 ${Math.abs(customerShift) > 0
-                        ? (isCustomerGaining ? 'bg-emerald-50' : 'bg-amber-50')
+                    {/* Card 2: Leverage Tracker */}
+                    <div className={`rounded-lg p-3 ${Math.abs(yourShift) > 0
+                        ? (isYouGaining ? 'bg-emerald-50' : 'bg-amber-50')
                         : 'bg-slate-50'
                         }`}>
                         <div className="flex items-center gap-1 mb-1">
@@ -2868,29 +2895,31 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                             <span className="text-xs text-slate-500">Leverage Tracker</span>
                         </div>
                         <div className="text-lg font-bold text-slate-800 text-center">
-                            {displayLeverage.leverageTrackerCustomer} : {displayLeverage.leverageTrackerProvider}
+                            <span className={isCustomer ? 'text-emerald-600' : 'text-blue-600'}>{yourTrackerLeverage}</span>
+                            <span className="text-slate-400 mx-1">:</span>
+                            <span className={isCustomer ? 'text-blue-600' : 'text-emerald-600'}>{theirTrackerLeverage}</span>
                         </div>
-                        <div className={`text-xs text-center ${Math.abs(customerShift) > 0
-                            ? (isCustomerGaining ? 'text-emerald-600' : 'text-amber-600')
+                        <div className={`text-xs text-center ${Math.abs(yourShift) > 0
+                            ? (isYouGaining ? 'text-emerald-600' : 'text-amber-600')
                             : 'text-slate-400'
                             }`}>
-                            {Math.abs(customerShift) > 0
-                                ? `${isCustomerGaining ? '↑' : '↓'} ${Math.abs(customerShift).toFixed(1)}% from baseline`
+                            {Math.abs(yourShift) > 0
+                                ? `${isYouGaining ? '↑' : '↓'} ${Math.abs(yourShift).toFixed(1)}% from baseline`
                                 : 'Real-time score'
                             }
                         </div>
                     </div>
                 </div>
 
-                {/* Visual Leverage Bar */}
+                {/* Visual Leverage Bar - YOUR leverage on the left */}
                 <div className="relative">
                     <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs text-emerald-600 font-medium w-24">
-                            {session?.customerCompany?.split(' ')[0] || 'Customer'}
+                        <span className={`text-xs font-medium w-24 ${isCustomer ? 'text-emerald-600' : 'text-blue-600'}`}>
+                            You ({yourCompanyName})
                         </span>
                         <div className="flex-1"></div>
-                        <span className="text-xs text-blue-600 font-medium w-24 text-right">
-                            {session?.providerCompany?.split(' ')[0] || 'Provider'}
+                        <span className={`text-xs font-medium w-24 text-right ${isCustomer ? 'text-blue-600' : 'text-emerald-600'}`}>
+                            {theirCompanyName}
                         </span>
                     </div>
 
@@ -2899,37 +2928,37 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                         <div
                             className="absolute top-0 bottom-0 w-1 bg-slate-800 z-10"
                             style={{
-                                left: `${displayLeverage.leverageScoreCustomer}%`,
+                                left: `${yourBaselineLeverage}%`,
                                 transform: 'translateX(-50%)'
                             }}
                         >
                             <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-600 whitespace-nowrap">
-                                ◆ {displayLeverage.leverageScoreCustomer}%
+                                ◆ {yourBaselineLeverage}%
                             </div>
                         </div>
 
-                        {/* Tracker fill */}
+                        {/* Tracker fill - shows YOUR leverage */}
                         <div
-                            className={`h-full transition-all duration-500 ${displayLeverage.leverageTrackerCustomer > displayLeverage.leverageScoreCustomer
+                            className={`h-full transition-all duration-500 ${yourTrackerLeverage > yourBaselineLeverage
                                 ? 'bg-emerald-500'
-                                : displayLeverage.leverageTrackerCustomer < displayLeverage.leverageScoreCustomer
+                                : yourTrackerLeverage < yourBaselineLeverage
                                     ? 'bg-amber-500'
                                     : 'bg-slate-300'
                                 }`}
-                            style={{ width: `${displayLeverage.leverageTrackerCustomer}%` }}
+                            style={{ width: `${yourTrackerLeverage}%` }}
                         />
 
                         {/* Tracker marker (Hexagon) - only show if different from baseline */}
-                        {Math.abs(customerShift) > 0.5 && (
+                        {Math.abs(yourShift) > 0.5 && (
                             <div
                                 className="absolute top-0 bottom-0 w-0.5 bg-slate-600 z-20"
                                 style={{
-                                    left: `${displayLeverage.leverageTrackerCustomer}%`,
+                                    left: `${yourTrackerLeverage}%`,
                                     transform: 'translateX(-50%)'
                                 }}
                             >
                                 <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-500 whitespace-nowrap">
-                                    ⬡ {displayLeverage.leverageTrackerCustomer}%
+                                    ⬡ {yourTrackerLeverage}%
                                 </div>
                             </div>
                         )}
@@ -2943,11 +2972,11 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                         </span>
                         <span className="flex items-center gap-1">
                             <span className="w-3 h-3 bg-emerald-500 rounded-sm"></span>
-                            ⬡ Tracker (gaining)
+                            ⬡ You gaining
                         </span>
                         <span className="flex items-center gap-1">
                             <span className="w-3 h-3 bg-amber-500 rounded-sm"></span>
-                            ⬡ Tracker (conceding)
+                            ⬡ You conceding
                         </span>
                     </div>
                 </div>
@@ -3030,9 +3059,12 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                             </div>
                         </div>
 
-                        {/* Factor explanation */}
+                        {/* Factor explanation - role-aware */}
                         <p className="text-xs text-slate-400 mt-3 text-center">
-                            Scores above 50 favor Customer • Scores below 50 favor Provider
+                            {isCustomer
+                                ? 'Scores above 50 favor you • Scores below 50 favor the provider'
+                                : 'Scores above 50 favor the customer • Scores below 50 favor you'
+                            }
                         </p>
                     </div>
                 )}
