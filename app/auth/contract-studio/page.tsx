@@ -803,74 +803,54 @@ function recalculateLeverageTracker(
     console.log('=== LEVERAGE TRACKER RECALCULATION ===')
     console.log('Base leverage:', baseLeverageCustomer, ':', baseLeverageProvider)
     console.log('User role:', userRole)
-    console.log('Total clauses:', clauses.length)
 
-    let totalCustomerGain = 0
-    let totalProviderGain = 0
+    let customerCredits = 0
+    let providerCredits = 0
 
     clauses.forEach(clause => {
-        // Skip parent categories (no positions)
         if (clause.clauseLevel === 0 || clause.customerPosition === null) return
 
         const originalCustomerPos = clause.originalCustomerPosition
-        const originalProviderPos = clause.originalProviderPosition
         const currentCustomerPos = clause.customerPosition
+        const originalProviderPos = clause.originalProviderPosition
         const currentProviderPos = clause.providerPosition
 
-        // Check for customer movement
+        // Customer movement
         if (originalCustomerPos !== null && currentCustomerPos !== null && originalCustomerPos !== currentCustomerPos) {
             const customerDelta = currentCustomerPos - originalCustomerPos
             const weight = clause.customerWeight ?? 5
 
-            console.log(`Clause: ${clause.clauseName}`)
-            console.log(`  Customer: ${originalCustomerPos} → ${currentCustomerPos} (delta: ${customerDelta})`)
-            console.log(`  Weight: ${weight}`)
-
-            // Customer moving DOWN = accommodating = gains leverage credits
+            // Customer moving DOWN = accommodating = CUSTOMER earns credits
             if (customerDelta < 0) {
                 const impact = Math.abs(customerDelta) * (weight / 5) * 0.5
-                totalCustomerGain += impact
-                console.log(`  → Customer GAINS ${impact.toFixed(2)} leverage (moved toward provider)`)
-            } else {
-                console.log(`  → No leverage change (moved away from provider)`)
+                customerCredits += impact
+                console.log(`${clause.clauseName}: Customer accommodated, +${impact.toFixed(2)} customer credits`)
             }
         }
 
-        // Check for provider movement
+        // Provider movement
         if (originalProviderPos !== null && currentProviderPos !== null && originalProviderPos !== currentProviderPos) {
             const providerDelta = currentProviderPos - originalProviderPos
             const weight = clause.providerWeight ?? 5
 
-            console.log(`Clause: ${clause.clauseName}`)
-            console.log(`  Provider: ${originalProviderPos} → ${currentProviderPos} (delta: ${providerDelta})`)
-            console.log(`  Weight: ${weight}`)
-
-            // Provider moving UP = accommodating customer = customer gains leverage
+            // Provider moving UP = accommodating = PROVIDER earns credits
             if (providerDelta > 0) {
                 const impact = providerDelta * (weight / 5) * 0.5
-                totalCustomerGain += impact
-                console.log(`  → Customer GAINS ${impact.toFixed(2)} leverage (provider accommodated)`)
-            }
-            // Provider moving DOWN = provider standing firm
-            if (providerDelta < 0) {
-                const impact = Math.abs(providerDelta) * (weight / 5) * 0.5
-                totalProviderGain += impact
-                console.log(`  → Provider GAINS ${impact.toFixed(2)} leverage`)
+                providerCredits += impact  // ← FIXED: Provider gets their own credits
+                console.log(`${clause.clauseName}: Provider accommodated, +${impact.toFixed(2)} provider credits`)
             }
         }
     })
 
-    const netAdjustment = totalCustomerGain - totalProviderGain
+    console.log('Customer credits earned:', customerCredits.toFixed(2))
+    console.log('Provider credits earned:', providerCredits.toFixed(2))
 
-    console.log('---')
-    console.log('Total customer gain:', totalCustomerGain.toFixed(2))
-    console.log('Total provider gain:', totalProviderGain.toFixed(2))
-    console.log('Net adjustment:', netAdjustment.toFixed(2))
+    // Each party's tracker increases by THEIR OWN credits earned
+    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + customerCredits)))
+    const newProviderLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageProvider + providerCredits)))
 
-    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + netAdjustment)))
-    const newProviderLeverage = 100 - newCustomerLeverage
-
-    console.log('New leverage:', newCustomerLeverage, ':', newProviderLeverage)
+    console.log('New customer tracker:', newCustomerLeverage)
+    console.log('New provider tracker:', newProviderLeverage)
     console.log('=== END RECALCULATION ===')
 
     return {
