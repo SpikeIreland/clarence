@@ -533,17 +533,11 @@ export function PartyChatPanel({
                 onOpenChat={() => { }}
             />
 
-            {/* Backdrop */}
-            {isOpen && (
-                <div
-                    className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm"
-                    onClick={onClose}
-                />
-            )}
+            {/* No backdrop - studio remains fully accessible while chat is open */}
 
-            {/* Slide-Out Panel */}
+            {/* Slide-Out Panel - No backdrop, studio remains usable */}
             <div className={`
-                fixed top-0 right-0 h-full w-96 bg-slate-800 shadow-2xl z-50
+                fixed top-0 right-0 h-full w-96 bg-slate-800 shadow-[-8px_0_30px_rgba(0,0,0,0.3)] z-50
                 transform transition-transform duration-300 ease-out
                 ${isOpen ? 'translate-x-0' : 'translate-x-full'}
             `}>
