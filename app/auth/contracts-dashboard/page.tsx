@@ -1043,8 +1043,8 @@ export default function ContractsDashboard() {
                         {actionButton.text}
                       </button>
 
-                      {/* Invite More Providers Button - Show for relevant statuses */}
-                      {['providers_invited', 'customer_onboarding_complete', 'negotiation_active', 'in_progress'].includes(session.status) && (
+                      {/* Invite More Providers Button - Always show except for early draft stages and completed */}
+                      {!['created', 'initiated', 'customer_intake_complete', 'completed'].includes(session.status) && (
                         <button
                           onClick={() => router.push(`/auth/invite-providers?session_id=${session.sessionId}&session_number=${session.sessionNumber || ''}`)}
                           className="px-4 py-2.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
