@@ -742,10 +742,6 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 // SECTION 3: LEVERAGE CALCULATION FUNCTIONS
 // ============================================================================
 
-// ============================================================================
-// SECTION 3: LEVERAGE CALCULATION FUNCTIONS
-// ============================================================================
-
 /**
  * Calculate leverage impact FROM THE MOVER'S PERSPECTIVE
  * Returns NEGATIVE if you're conceding (moving toward other party)
@@ -1215,6 +1211,103 @@ function WorkingOverlay({ workingState, onRetry, onDismiss }: WorkingOverlayProp
             </div>
         </div>
     )
+}
+
+// ============================================================================
+// SECTION 5C: ENHANCED POSITION MARKER HELPERS
+// ============================================================================
+
+/**
+ * Determines overlap states between position markers
+ */
+const getPositionOverlaps = (
+    myValue: number | null,
+    otherValue: number | null,
+    clarenceValue: number | null
+) => {
+    const isCustomerProviderAligned = myValue !== null && otherValue !== null && myValue === otherValue
+    const isMeAtClarence = myValue !== null && clarenceValue !== null && myValue === clarenceValue
+    const isOtherAtClarence = otherValue !== null && clarenceValue !== null && otherValue === clarenceValue
+    const isAllThreeAligned = isCustomerProviderAligned && isMeAtClarence
+
+    return {
+        isCustomerProviderAligned,
+        isMeAtClarence,
+        isOtherAtClarence,
+        isAllThreeAligned
+    }
+}
+
+/**
+ * Combined marker component for overlapping positions
+ */
+interface CombinedMarkerProps {
+    position: number
+    optionCount: number
+    parties: Array<'customer' | 'provider' | 'clarence'>
+    isCustomer: boolean
+    label: string
+}
+
+const CombinedPositionMarker = ({
+    position,
+    optionCount,
+    parties,
+    isCustomer,
+    label
+}: CombinedMarkerProps) => {
+    const leftPercent = ((position - 1) / (optionCount - 1)) * 100
+
+    // Determine marker style based on what's combined
+    const hasCustomer = parties.includes('customer')
+    const hasProvider = parties.includes('provider')
+    const hasClarence = parties.includes('clarence')
+    const isBothParties = hasCustomer && hasProvider
+
+    // For aligned parties, show split circle
+    if (isBothParties) {
+        return (
+            <div
+                className="absolute top-1/2 -translate-y-1/2 z-30"
+                style={{
+                    left: `${leftPercent}%`,
+                    transform: 'translate(-50%, -50%)'
+                }}
+            >
+                {/* Aligned indicator badge */}
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap">
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full border border-emerald-300 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        ALIGNED
+                    </span>
+                </div>
+
+                {/* Split circle marker - Customer left, Provider right */}
+                <div
+                    className="w-8 h-8 rounded-full overflow-hidden border-3 border-white shadow-lg flex"
+                    style={{ borderWidth: '3px' }}
+                    title={label}
+                >
+                    <div className="w-1/2 h-full bg-emerald-500"></div>
+                    <div className="w-1/2 h-full bg-blue-500"></div>
+                </div>
+
+                {/* CLARENCE ring if also aligned */}
+                {hasClarence && (
+                    <div className="absolute inset-0 -m-1 rounded-full border-2 border-purple-500 animate-pulse"></div>
+                )}
+
+                {/* Labels below */}
+                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-slate-600 font-medium">
+                    C+P{hasClarence ? '+★' : ''}
+                </div>
+            </div>
+        )
+    }
+
+    return null
 }
 
 // ============================================================================
@@ -2534,62 +2627,106 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     <div className="space-y-3">
                         {/* Visual Position Bar */}
                         <div className="relative h-8 bg-gradient-to-r from-blue-100 via-slate-100 to-emerald-100 rounded-full border border-slate-200 mb-4">
-                            {/* Position markers */}
-                            {otherOptionValue !== null && (
-                                <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10"
-                                    style={{
-                                        left: `${((otherOptionValue - 1) / (optionCount - 1)) * 100}%`,
-                                        transform: 'translate(-50%, -50%)',
-                                        backgroundColor: isCustomer ? '#3b82f6' : '#10b981',
-                                        borderColor: isCustomer ? '#1d4ed8' : '#047857',
-                                        color: 'white'
-                                    }}
-                                    title={`${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}`}
-                                >
-                                    {isCustomer ? 'P' : 'C'}
-                                </div>
-                            )}
-                            {clarenceOptionValue !== null && (
-                                <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-purple-500 border-2 border-purple-700 flex items-center justify-center text-xs font-bold text-white z-10"
-                                    style={{
-                                        left: `${((clarenceOptionValue - 1) / (optionCount - 1)) * 100}%`,
-                                        transform: 'translate(-50%, -50%)'
-                                    }}
-                                    title={`CLARENCE: ${getPositionLabel(clarenceDbPosition)}`}
-                                >
-                                    ★
-                                </div>
-                            )}
-                            {myOptionValue !== null && (
-                                <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-3 flex items-center justify-center text-xs font-bold z-20"
-                                    style={{
-                                        left: `${((myOptionValue - 1) / (optionCount - 1)) * 100}%`,
-                                        transform: 'translate(-50%, -50%)',
-                                        backgroundColor: isCustomer ? '#10b981' : '#3b82f6',
-                                        borderColor: isCustomer ? '#047857' : '#1d4ed8',
-                                        color: 'white',
-                                        borderWidth: '3px'
-                                    }}
-                                    title={`You: ${getPositionLabel(myDbPosition)}`}
-                                >
-                                    {isCustomer ? 'C' : 'P'}
-                                </div>
-                            )}
-                            {proposedOptionValue !== null && proposedOptionValue !== myOptionValue && (
-                                <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-amber-500 border-2 border-amber-600 flex items-center justify-center text-xs font-bold text-white z-15 animate-pulse"
-                                    style={{
-                                        left: `${((proposedOptionValue - 1) / (optionCount - 1)) * 100}%`,
-                                        transform: 'translate(-50%, -50%)'
-                                    }}
-                                    title={`Proposed: ${getPositionLabel(proposedPosition)}`}
-                                >
-                                    ?
-                                </div>
-                            )}
+                            {(() => {
+                                // Calculate overlap states
+                                const overlaps = getPositionOverlaps(myOptionValue, otherOptionValue, clarenceOptionValue)
+
+                                return (
+                                    <>
+                                        {/* CASE 1: Customer and Provider are ALIGNED */}
+                                        {overlaps.isCustomerProviderAligned && myOptionValue !== null ? (
+                                            <CombinedPositionMarker
+                                                position={myOptionValue}
+                                                optionCount={optionCount}
+                                                parties={[
+                                                    'customer',
+                                                    'provider',
+                                                    ...(overlaps.isMeAtClarence ? ['clarence' as const] : [])
+                                                ]}
+                                                isCustomer={isCustomer}
+                                                label={`Aligned at ${getPositionLabel(myDbPosition)}${overlaps.isMeAtClarence ? ' (CLARENCE agrees)' : ''}`}
+                                            />
+                                        ) : (
+                                            <>
+                                                {/* CASE 2: Separate markers - Other Party */}
+                                                {otherOptionValue !== null && (
+                                                    <div
+                                                        className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 transition-all ${overlaps.isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''
+                                                            }`}
+                                                        style={{
+                                                            left: `${((otherOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                            transform: 'translate(-50%, -50%)',
+                                                            backgroundColor: isCustomer ? '#3b82f6' : '#10b981',
+                                                            borderColor: isCustomer ? '#1d4ed8' : '#047857',
+                                                            color: 'white'
+                                                        }}
+                                                        title={`${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}${overlaps.isOtherAtClarence ? ' (matches CLARENCE)' : ''}`}
+                                                    >
+                                                        {isCustomer ? 'P' : 'C'}
+                                                        {overlaps.isOtherAtClarence && (
+                                                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
+                                                                <span className="text-[8px] text-white">★</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* CASE 3: CLARENCE marker (only if not overlapping with other markers) */}
+                                                {clarenceOptionValue !== null && !overlaps.isMeAtClarence && !overlaps.isOtherAtClarence && (
+                                                    <div
+                                                        className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-purple-500 border-2 border-purple-700 flex items-center justify-center text-xs font-bold text-white z-10"
+                                                        style={{
+                                                            left: `${((clarenceOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                            transform: 'translate(-50%, -50%)'
+                                                        }}
+                                                        title={`CLARENCE suggests: ${getPositionLabel(clarenceDbPosition)}`}
+                                                    >
+                                                        ★
+                                                    </div>
+                                                )}
+
+                                                {/* CASE 4: Your position marker */}
+                                                {myOptionValue !== null && (
+                                                    <div
+                                                        className={`absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold z-20 transition-all ${overlaps.isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''
+                                                            }`}
+                                                        style={{
+                                                            left: `${((myOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                            transform: 'translate(-50%, -50%)',
+                                                            backgroundColor: isCustomer ? '#10b981' : '#3b82f6',
+                                                            borderColor: isCustomer ? '#047857' : '#1d4ed8',
+                                                            color: 'white',
+                                                            borderWidth: '3px'
+                                                        }}
+                                                        title={`You: ${getPositionLabel(myDbPosition)}${overlaps.isMeAtClarence ? ' (matches CLARENCE)' : ''}`}
+                                                    >
+                                                        {isCustomer ? 'C' : 'P'}
+                                                        {overlaps.isMeAtClarence && (
+                                                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
+                                                                <span className="text-[8px] text-white">★</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {/* Proposed position marker (always separate) */}
+                                        {proposedOptionValue !== null && proposedOptionValue !== myOptionValue && (
+                                            <div
+                                                className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-amber-500 border-2 border-amber-600 flex items-center justify-center text-xs font-bold text-white z-25 animate-pulse"
+                                                style={{
+                                                    left: `${((proposedOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                    transform: 'translate(-50%, -50%)'
+                                                }}
+                                                title={`Proposed: ${getPositionLabel(proposedPosition)}`}
+                                            >
+                                                ?
+                                            </div>
+                                        )}
+                                    </>
+                                )
+                            })()}
                         </div>
 
                         {/* Option Cards */}
@@ -2687,6 +2824,17 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             <div className="flex items-center gap-1">
                                 <div className="w-4 h-4 rounded-full bg-amber-500"></div>
                                 <span>Proposed</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <div className="w-4 h-4 rounded-full overflow-hidden flex">
+                                    <div className="w-1/2 h-full bg-emerald-500"></div>
+                                    <div className="w-1/2 h-full bg-blue-500"></div>
+                                </div>
+                                <span>Aligned</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <div className="w-4 h-4 rounded-full bg-slate-400 ring-2 ring-purple-400"></div>
+                                <span>+ CLARENCE</span>
                             </div>
                         </div>
                     </div>
