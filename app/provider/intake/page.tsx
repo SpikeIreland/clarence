@@ -617,6 +617,11 @@ function ProviderIntakeContent() {
         return names[step] || ''
     }
 
+    // Scroll to top when step changes
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }, [currentStep])
+
     // ========================================================================
     // SECTION 13: LOADING STATE
     // ========================================================================
