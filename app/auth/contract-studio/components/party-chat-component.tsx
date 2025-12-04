@@ -428,25 +428,30 @@ export function PartyChatPanel({
     // SECTION 8C: EFFECTS
     // ============================================================================
 
-    // Fetch messages when chat opens (not on mount)
+    // Initial load - fetch messages once on mount to get unread count
+    useEffect(() => {
+        fetchMessages()
+    }, []) // Only run once on mount
+
+    // Full load when chat opens
     useEffect(() => {
         if (isOpen) {
             setIsLoading(true)
             fetchMessages().finally(() => setIsLoading(false))
         }
-    }, [isOpen]) // Only fetch when isOpen changes to true
+    }, [isOpen])
 
-    // Polling for new messages - ONLY when chat is open
+    // Polling for new messages
+    // - When open: poll every 10 seconds for real-time feel
+    // - When closed: poll every 30 seconds for badge/toast updates
     useEffect(() => {
         // Clear any existing interval
         if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current)
         }
 
-        // Only poll when chat is open
-        if (isOpen) {
-            pollingIntervalRef.current = setInterval(fetchMessages, 10000) // 10 seconds
-        }
+        const pollInterval = isOpen ? 10000 : 30000 // 10s when open, 30s when closed
+        pollingIntervalRef.current = setInterval(fetchMessages, pollInterval)
 
         return () => {
             if (pollingIntervalRef.current) {
