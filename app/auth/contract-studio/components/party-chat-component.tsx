@@ -261,6 +261,16 @@ export function PartyChatPanel({
     onClose,
     onUnreadCountChange
 }: PartyChatPanelProps) {
+    // Debug: Log props on render
+    console.log('[PartyChat] Component props:', {
+        sessionId,
+        providerId,
+        providerName,
+        currentUserType,
+        currentUserName,
+        isOpen
+    })
+
     // State
     const [messages, setMessages] = useState<PartyMessage[]>([])
     const [inputText, setInputText] = useState('')
@@ -282,21 +292,27 @@ export function PartyChatPanel({
 
     const fetchMessages = useCallback(async () => {
         try {
+            console.log('[PartyChat] Fetching messages for session:', sessionId)
+
             const response = await fetch(
                 `${API_BASE}/party-chat-messages?session_id=${sessionId}&limit=100`
             )
 
             if (!response.ok) {
+                console.error('[PartyChat] Response not OK:', response.status)
                 throw new Error('Failed to fetch messages')
             }
 
             const data = await response.json()
+            console.log('[PartyChat] Raw API response:', data)
 
             // Handle response - could be { success, messages } or direct array
-            const apiMessages: ApiMessageResponse[] = data.messages || data || []
+            const apiMessages: ApiMessageResponse[] = Array.isArray(data) ? data : (data.messages || [])
+            console.log('[PartyChat] Parsed messages count:', apiMessages.length)
 
             // Transform API response to our interface
             const transformedMessages = apiMessages.map(transformApiMessage)
+            console.log('[PartyChat] Transformed messages:', transformedMessages)
 
             // Check for new messages (for toast notifications)
             if (transformedMessages.length > lastMessageCount && lastMessageCount > 0) {
@@ -315,11 +331,12 @@ export function PartyChatPanel({
             const unread = transformedMessages.filter(
                 m => !m.isRead && m.senderType !== currentUserType
             ).length
+            console.log('[PartyChat] Unread count:', unread)
             setUnreadCount(unread)
             onUnreadCountChange?.(unread)
 
         } catch (error) {
-            console.error('Failed to fetch messages:', error)
+            console.error('[PartyChat] Failed to fetch messages:', error)
         }
     }, [sessionId, currentUserType, onUnreadCountChange, isOpen, lastMessageCount])
 
@@ -329,6 +346,13 @@ export function PartyChatPanel({
         setIsSending(true)
         const messageText = inputText.trim()
         setInputText('') // Clear input immediately for better UX
+
+        console.log('[PartyChat] Sending message:', {
+            session_id: sessionId,
+            sender_type: currentUserType,
+            sender_name: currentUserName,
+            message_text: messageText
+        })
 
         try {
             const response = await fetch(`${API_BASE}/party-chat-send`, {
@@ -345,25 +369,18 @@ export function PartyChatPanel({
             })
 
             if (!response.ok) {
+                console.error('[PartyChat] Send response not OK:', response.status)
                 throw new Error('Failed to send message')
             }
 
             const data = await response.json()
+            console.log('[PartyChat] Send response:', data)
 
-            // Add the new message to local state immediately
-            if (data.success && data.message) {
-                const newMessage = transformApiMessage(
-                    Array.isArray(data.message) ? data.message[0] : data.message
-                )
-                setMessages(prev => [...prev, newMessage])
-                setLastMessageCount(prev => prev + 1)
-            } else {
-                // Fallback: refetch all messages
-                await fetchMessages()
-            }
+            // Refetch all messages to ensure consistency
+            await fetchMessages()
 
         } catch (error) {
-            console.error('Failed to send message:', error)
+            console.error('[PartyChat] Failed to send message:', error)
             // Restore the input text if send failed
             setInputText(messageText)
         } finally {
