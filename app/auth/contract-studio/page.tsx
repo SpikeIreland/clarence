@@ -776,25 +776,21 @@ function calculateLeverageImpact(
 
     if (party === 'customer') {
         // Customer scale: 1 = provider-friendly, 10 = customer-friendly
-        // Moving DOWN (toward provider) = CONCEDING = costs you leverage (negative)
-        // Moving UP (away from provider) = PUSHING = standing firm (no cost shown)
+        // Moving DOWN (toward provider) = ACCOMMODATING = GAINS leverage credits
         if (positionDelta < 0) {
-            // Moving toward provider = COSTS YOU leverage
-            leverageImpact = positionDelta * weightMultiplier * scaleFactor // Already negative
+            leverageImpact = Math.abs(positionDelta) * weightMultiplier * scaleFactor // POSITIVE
         }
-        // Moving up = not conceding, no "cost" to show
+        // Moving UP = demanding more = no leverage gained
     } else {
         // Provider scale: 1 = provider-friendly, 10 = customer-friendly
-        // Moving UP (toward customer) = CONCEDING = costs you leverage (negative)
-        // Moving DOWN (away from customer) = PUSHING = standing firm (no cost shown)
+        // Moving UP (toward customer) = ACCOMMODATING = GAINS leverage credits
         if (positionDelta > 0) {
-            // Moving toward customer = COSTS YOU leverage
-            leverageImpact = -positionDelta * weightMultiplier * scaleFactor // Make it negative
+            leverageImpact = positionDelta * weightMultiplier * scaleFactor // POSITIVE
         }
-        // Moving down = not conceding, no "cost" to show
+        // Moving DOWN = demanding more = no leverage gained
     }
 
-    return Math.round(leverageImpact * 10) / 10 // Round to 1 decimal
+    return Math.round(leverageImpact * 10) / 10
 }
 
 /**
@@ -3887,8 +3883,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         </div>
                                         <div className="text-center mt-3 pt-3 border-t border-slate-200">
                                             <span className={`text-sm font-medium ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
-                                                    selectedClause.gapSize <= 3 ? 'text-amber-600' :
-                                                        'text-red-600'
+                                                selectedClause.gapSize <= 3 ? 'text-amber-600' :
+                                                    'text-red-600'
                                                 }`}>
                                                 Gap: {selectedClause.gapSize.toFixed(1)} points
                                             </span>
