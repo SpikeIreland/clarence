@@ -481,18 +481,18 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
 
     // ========== LIABILITY ==========
     'Cap for Supplier': [
-        { value: 1, label: '50% annual', description: 'Aggregate cap at 50% of annual charges' },
-        { value: 2, label: '100% annual', description: 'Aggregate cap at 100% of annual charges' },
+        { value: 1, label: '100% annual', description: 'Aggregate cap at 100% of annual charges' },
+        { value: 2, label: '125% annual', description: 'Aggregate cap at 125% of annual charges' },
         { value: 3, label: '150% annual', description: 'Aggregate cap at 150% of annual charges' },
-        { value: 4, label: '200% annual', description: 'Aggregate cap at 200% of annual charges' },
-        { value: 5, label: 'Per-claim 150%', description: 'Per-claim cap at 150% of annual charges' },
-        { value: 6, label: 'Per-claim 200%', description: 'Per-claim cap at 200% of annual charges' }
+        { value: 4, label: '175% annual', description: 'Aggregate cap at 175% of annual charges' },
+        { value: 5, label: '200% annual', description: 'Aggregate cap at 200% of annual charges' },
+        { value: 6, label: '250% annual', description: 'Aggregate cap at 250% of annual charges' }
     ],
     'Cap for Customer': [
-        { value: 1, label: '50% annual', description: 'Customer liability at 50% of annual charges' },
-        { value: 2, label: '100% annual', description: 'Customer liability at 100% of annual charges' },
-        { value: 3, label: '150% annual', description: 'Customer liability at 150% of annual charges' },
-        { value: 4, label: 'Unlimited', description: 'No cap on customer liability' }
+        { value: 1, label: '100% annual', description: 'Customer liability at 100% of annual charges' },
+        { value: 2, label: '150% annual', description: 'Customer liability at 150% of annual charges' },
+        { value: 3, label: '200% annual', description: 'Customer liability at 200% of annual charges' },
+        { value: 4, label: '250% annual', description: 'Customer liability at 250% of annual charges' }
     ],
     'Exclusions': [
         { value: 1, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' },
@@ -3819,9 +3819,12 @@ Write clear, legally-appropriate contract language that reflects a ${style} appr
                                                                     <span className="text-red-500 line-through">{entry.oldValue}</span>
                                                                     <span className="text-slate-400">→</span>
                                                                     <span className="text-emerald-600 font-medium">{entry.newValue}</span>
-                                                                    {entry.leverageImpact && (
-                                                                        <span className="ml-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
-                                                                            {entry.leverageImpact > 0 ? '+' : ''}{entry.leverageImpact.toFixed(1)}% leverage
+                                                                    {entry.leverageImpact !== undefined && entry.leverageImpact !== 0 && (
+                                                                        <span className={`ml-2 px-1.5 py-0.5 rounded ${entry.leverageImpact > 0
+                                                                            ? 'bg-emerald-100 text-emerald-700'
+                                                                            : 'bg-amber-100 text-amber-700'
+                                                                            }`}>
+                                                                            {entry.leverageImpact > 0 ? '+' : ''}{entry.leverageImpact.toFixed(1)}% for you
                                                                         </span>
                                                                     )}
                                                                 </div>
