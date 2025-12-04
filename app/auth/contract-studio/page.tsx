@@ -392,10 +392,12 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
     'Termination for Convenience': [
         { value: 1, label: 'Mutual - 180 days', description: 'Mutual right with 180 days notice' },
         { value: 2, label: 'Customer - 180 days', description: 'Customer only with 180 days notice' },
-        { value: 3, label: 'Customer - 90 days', description: 'Customer only with 90 days notice' },
-        { value: 4, label: 'Customer - 60 days', description: 'Customer only with 60 days notice' },
-        { value: 5, label: 'Customer - 30 days', description: 'Customer only with 30 days notice' },
-        { value: 6, label: 'Customer - immediate', description: 'Customer can terminate with 0-6 months notice' }
+        { value: 3, label: 'Customer - 150 days', description: 'Customer only with 150 days notice' },
+        { value: 4, label: 'Customer - 120 days', description: 'Customer only with 120 days notice' },
+        { value: 5, label: 'Customer - 90 days', description: 'Customer only with 90 days notice' },
+        { value: 6, label: 'Customer - 60 days', description: 'Customer only with 60 days notice' },
+        { value: 7, label: 'Customer - 30 days', description: 'Customer only with 30 days notice' },
+        { value: 8, label: 'Customer - immediate', description: 'Customer can terminate with 0-6 months notice' }
     ],
     'Exit Assistance': [
         { value: 1, label: '3 months', description: '3 months post-termination assistance' },
