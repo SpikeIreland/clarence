@@ -1613,16 +1613,48 @@ function ContractStudioContent() {
     }, [])
 
     // ============================================================================
-    // SECTION 7B: CLARENCE AI WELCOME MESSAGE LOADER
+    // SECTION 7B: LOAD AVAILABLE PROVIDERS (MULTI-PROVIDER SUPPORT)
     // ============================================================================
 
-    const loadClarenceWelcome = useCallback(async (sessionId: string, viewerRole: 'customer' | 'provider') => {
-        if (clarenceWelcomeLoaded) {
-            stopWorking()
-            return
+    const loadAvailableProviders = useCallback(async (sessionId: string) => {
+        setIsLoadingProviders(true)
+        try {
+            const response = await fetch(`${API_BASE}/provider-bids-api?session_id=${sessionId}`)
+            if (response.ok) {
+                const data = await response.json()
+                const providers: ProviderBid[] = (Array.isArray(data) ? data : []).map((bid: ApiProviderBidResponse) => ({
+                    bidId: bid.bid_id,
+                    providerId: bid.provider_id,
+                    providerCompany: bid.provider_company,
+                    providerContactName: bid.provider_contact_name,
+                    providerContactEmail: bid.provider_contact_email,
+                    status: bid.status,
+                    intakeComplete: bid.intake_complete,
+                    questionnaireComplete: bid.questionnaire_complete,
+                    invitedAt: bid.invited_at,
+                    submittedAt: bid.submitted_at,
+                    isCurrentProvider: false // Will be set based on current selection
+                }))
+                setAvailableProviders(providers)
+                console.log('Loaded providers:', providers)
+            }
+        } catch (error) {
+            console.error('Failed to load providers:', error)
+        } finally {
+            setIsLoadingProviders(false)
         }
+    }, [])
 
-        startWorking('welcome_message')
+    // Load providers when session is available (customers only)
+    useEffect(() => {
+        if (session?.sessionId && userInfo?.role === 'customer') {
+            loadAvailableProviders(session.sessionId)
+        }
+    }, [session?.sessionId, userInfo?.role, loadAvailableProviders])
+
+    const loadClarenceWelcome = useCallback(async (sessionId: string, viewerRole: 'customer' | 'provider') => {
+        if (clarenceWelcomeLoaded) return
+
         setIsChatLoading(true)
 
         try {
@@ -1644,17 +1676,14 @@ function ContractStudioContent() {
 
                 setChatMessages(prev => [welcomeMessage, ...prev])
                 setClarenceWelcomeLoaded(true)
-                stopWorking()
-            } else {
-                setWorkingError('CLARENCE could not prepare your briefing. Please refresh to try again.')
             }
         } catch (error) {
             console.error('Failed to load CLARENCE welcome:', error)
-            setWorkingError('Failed to connect to CLARENCE. Please check your connection and refresh.')
         } finally {
             setIsChatLoading(false)
         }
-    }, [clarenceWelcomeLoaded, startWorking, stopWorking, setWorkingError])
+    }, [clarenceWelcomeLoaded])
+
 
     // ============================================================================
     // SECTION 7C: CLARENCE AI CLAUSE EXPLAINER
@@ -1821,48 +1850,10 @@ function ContractStudioContent() {
 
     useEffect(() => {
         if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
-            loadClarenceWelcome(session.sessionId, userInfo.role)
+            loadClarenceWelcome(session.sessionId, userInfo.role as 'customer' | 'provider')
         }
     }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome, userInfo?.role])
 
-    // ============================================================================
-    // SECTION 7D2: LOAD AVAILABLE PROVIDERS FOR MULTI-PROVIDER DROPDOWN
-    // ============================================================================
-
-    const loadAvailableProviders = useCallback(async (sessionId: string, currentProviderCompany: string) => {
-        setIsLoadingProviders(true)
-        try {
-            const response = await fetch(`${API_BASE}/provider-bids-api?session_id=${sessionId}`)
-            if (response.ok) {
-                const data = await response.json()
-                const providers: ProviderBid[] = (data.bids || []).map((bid: ApiProviderBidResponse) => ({
-                    bidId: bid.bid_id,
-                    providerId: bid.provider_id,
-                    providerCompany: bid.provider_company || 'Unknown Provider',
-                    providerContactName: bid.provider_contact_name,
-                    providerContactEmail: bid.provider_contact_email,
-                    status: bid.status,
-                    intakeComplete: bid.intake_complete || false,
-                    questionnaireComplete: bid.questionnaire_complete || false,
-                    invitedAt: bid.invited_at,
-                    submittedAt: bid.submitted_at,
-                    isCurrentProvider: bid.provider_company === currentProviderCompany
-                }))
-                setAvailableProviders(providers)
-            }
-        } catch (error) {
-            console.error('Failed to load available providers:', error)
-        } finally {
-            setIsLoadingProviders(false)
-        }
-    }, [])
-
-    // Load providers when session is available (for customers only)
-    useEffect(() => {
-        if (session?.sessionId && session?.providerCompany && userInfo?.role === 'customer') {
-            loadAvailableProviders(session.sessionId, session.providerCompany)
-        }
-    }, [session?.sessionId, session?.providerCompany, userInfo?.role, loadAvailableProviders])
 
     useEffect(() => {
         if (latestMessageRef.current) {
@@ -3425,46 +3416,139 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
 
-                        {/* Right: Provider Info (always on right) + Party Chat */}
+                        {/* Right: Provider Info with Dropdown (customers) or Static (providers) + Party Chat */}
                         <div className="flex items-center gap-3 min-w-[280px] justify-end">
                             {!isCustomer && (
                                 <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
                                     You
                                 </span>
                             )}
-                            <div className="text-right">
-                                <div className="text-xs text-slate-400">Provider</div>
-                                <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
-                            </div>
+
+                            {/* Customer sees provider dropdown, Provider sees static display */}
+                            {isCustomer ? (
+                                <div className="relative" ref={providerDropdownRef}>
+                                    <button
+                                        onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                                        className="flex items-center gap-2 text-right hover:bg-slate-700/50 px-2 py-1 rounded transition"
+                                    >
+                                        <div>
+                                            <div className="text-xs text-slate-400">Provider</div>
+                                            <div className="text-sm font-medium text-blue-400 flex items-center gap-1">
+                                                {providerCompany}
+                                                <svg className={`w-3 h-3 transition-transform ${showProviderDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {/* Provider Dropdown */}
+                                    {showProviderDropdown && (
+                                        <div className="absolute right-0 top-full mt-1 w-72 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 overflow-hidden">
+                                            <div className="p-2 border-b border-slate-700">
+                                                <div className="text-xs text-slate-400 px-2">Select Provider</div>
+                                            </div>
+
+                                            {isLoadingProviders ? (
+                                                <div className="p-4 text-center text-slate-400 text-sm">
+                                                    Loading providers...
+                                                </div>
+                                            ) : availableProviders.length === 0 ? (
+                                                <div className="p-4 text-center text-slate-400 text-sm">
+                                                    No providers invited yet
+                                                </div>
+                                            ) : (
+                                                <div className="max-h-64 overflow-y-auto">
+                                                    {availableProviders.map((provider) => (
+                                                        <button
+                                                            key={provider.bidId}
+                                                            onClick={() => {
+                                                                // TODO: Implement provider switching
+                                                                alert(`Provider switching to ${provider.providerCompany} coming soon!`)
+                                                                setShowProviderDropdown(false)
+                                                            }}
+                                                            className={`w-full px-3 py-2 text-left hover:bg-slate-700 transition flex items-center justify-between ${provider.providerCompany === providerCompany ? 'bg-slate-700/50' : ''
+                                                                }`}
+                                                        >
+                                                            <div>
+                                                                <div className="text-sm font-medium text-white">{provider.providerCompany}</div>
+                                                                <div className="text-xs text-slate-400">{provider.providerContactEmail}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                {provider.providerCompany === providerCompany && (
+                                                                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">Active</span>
+                                                                )}
+                                                                <span className={`text-xs px-2 py-0.5 rounded ${provider.questionnaireComplete
+                                                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                                                    : provider.intakeComplete
+                                                                        ? 'bg-amber-500/20 text-amber-400'
+                                                                        : 'bg-slate-500/20 text-slate-400'
+                                                                    }`}>
+                                                                    {provider.questionnaireComplete ? 'Ready' : provider.intakeComplete ? 'Intake Done' : 'Invited'}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Invite New Provider Button */}
+                                            <div className="border-t border-slate-700 p-2">
+                                                <button
+                                                    onClick={() => {
+                                                        const sessionNum = session?.sessionNumber || ''
+                                                        router.push(`/auth/invite-providers?session_id=${session?.sessionId}&session_number=${sessionNum}`)
+                                                    }}
+                                                    className="w-full px-3 py-2 text-sm text-purple-400 hover:bg-purple-500/10 rounded transition flex items-center gap-2 justify-center"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                                    </svg>
+                                                    Invite New Provider
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* Provider sees simple static display */
+                                <div className="text-right">
+                                    <div className="text-xs text-slate-400">Provider</div>
+                                    <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
+                                </div>
+                            )}
+
                             <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
 
-                            {/* Party Chat Toggle Button - Available to BOTH parties */}
-                            <button
-                                onClick={() => setIsChatOpen(true)}
-                                className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
-                                title={isCustomer ? `Chat with ${providerCompany}` : `Chat with ${customerCompany}`}
-                            >
-                                <svg
-                                    className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
+                            {/* Party Chat Toggle Button */}
+                            {isCustomer && (
+                                <button
+                                    onClick={() => setIsChatOpen(true)}
+                                    className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
+                                    title={`Chat with ${providerCompany}`}
                                 >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                    />
-                                </svg>
+                                    <svg
+                                        className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                        />
+                                    </svg>
 
-                                {/* Unread Badge */}
-                                {chatUnreadCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                        {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
-                                    </span>
-                                )}
-                            </button>
+                                    {/* Unread Badge */}
+                                    {chatUnreadCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                            {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
