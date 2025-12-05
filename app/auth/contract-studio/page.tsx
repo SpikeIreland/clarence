@@ -3629,7 +3629,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     </span>
                                 )}
                             </button>
-                            )}
                         </div>
                     </div>
                 </div>
