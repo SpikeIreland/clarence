@@ -2970,38 +2970,26 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     }
 
     // ============================================================================
-    // SECTION 11: LEVERAGE INDICATOR COMPONENT (ROLE-AWARE)
+    // SECTION 11: LEVERAGE INDICATOR COMPONENT (PARTY COLORS)
     // ============================================================================
 
     const LeverageIndicator = () => {
         // Determine viewer's perspective
         const isCustomer = userInfo?.role === 'customer'
 
-        // Get leverage values from viewer's perspective
-        const yourBaselineLeverage = isCustomer
-            ? displayLeverage.leverageScoreCustomer
-            : displayLeverage.leverageScoreProvider
-        const theirBaselineLeverage = isCustomer
-            ? displayLeverage.leverageScoreProvider
-            : displayLeverage.leverageScoreCustomer
-        const yourTrackerLeverage = isCustomer
-            ? displayLeverage.leverageTrackerCustomer
-            : displayLeverage.leverageTrackerProvider
-        const theirTrackerLeverage = isCustomer
-            ? displayLeverage.leverageTrackerProvider
-            : displayLeverage.leverageTrackerCustomer
+        // Get leverage values - ALWAYS Customer vs Provider (not "you" vs "them")
+        const customerBaseline = displayLeverage.leverageScoreCustomer
+        const providerBaseline = displayLeverage.leverageScoreProvider
+        const customerTracker = displayLeverage.leverageTrackerCustomer
+        const providerTracker = displayLeverage.leverageTrackerProvider
 
-        // Calculate shift from YOUR perspective
-        const yourShift = yourTrackerLeverage - yourBaselineLeverage
-        const isYouGaining = yourShift > 0
+        // Calculate shifts for display
+        const customerShift = customerTracker - customerBaseline
+        const providerShift = providerTracker - providerBaseline
 
-        // Company names from your perspective
-        const yourCompanyName = isCustomer
-            ? session?.customerCompany?.split(' ')[0] || 'You'
-            : session?.providerCompany?.split(' ')[0] || 'You'
-        const theirCompanyName = isCustomer
-            ? session?.providerCompany?.split(' ')[0] || 'Provider'
-            : session?.customerCompany?.split(' ')[0] || 'Customer'
+        // Company names
+        const customerCompanyName = session?.customerCompany?.split(' ')[0] || 'Customer'
+        const providerCompanyName = session?.providerCompany?.split(' ')[0] || 'Provider'
 
         // Calculate dynamic alignment percentage
         const dynamicAlignmentPercentage = calculateAlignmentPercentage(clauses)
@@ -3020,7 +3008,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <h3 className="text-sm font-semibold text-slate-700">Leverage Metrics Underpinning Baseline Assessment</h3>
                         <button
                             onClick={() => {
-                                // LOG: Leverage details toggled
                                 if (typeof eventLogger !== 'undefined') {
                                     eventLogger.completed('contract_negotiation', 'leverage_details_toggled', {
                                         sessionId: session?.sessionId,
@@ -3046,7 +3033,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     </div>
                 </div>
 
-                {/* Two-Card Layout: Baseline and Tracker - FROM YOUR PERSPECTIVE */}
+                {/* Two-Card Layout: Baseline and Tracker - PARTY COLORS */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                     {/* Card 1: Leverage Baseline */}
                     <div className="bg-slate-50 rounded-lg p-3">
@@ -3055,105 +3042,127 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             <span className="text-xs text-slate-500">Leverage Baseline</span>
                         </div>
                         <div className="text-lg font-bold text-slate-800 text-center">
-                            <span className={isCustomer ? 'text-emerald-600' : 'text-blue-600'}>{yourBaselineLeverage}</span>
+                            <span className="text-emerald-600">{customerBaseline}</span>
                             <span className="text-slate-400 mx-1">:</span>
-                            <span className={isCustomer ? 'text-blue-600' : 'text-emerald-600'}>{theirBaselineLeverage}</span>
+                            <span className="text-blue-600">{providerBaseline}</span>
                         </div>
-                        <div className="text-xs text-slate-400 text-center">You : {theirCompanyName}</div>
+                        <div className="text-xs text-slate-400 text-center">
+                            <span className="text-emerald-600">{customerCompanyName}</span>
+                            {' : '}
+                            <span className="text-blue-600">{providerCompanyName}</span>
+                        </div>
                     </div>
 
                     {/* Card 2: Leverage Tracker */}
-                    <div className={`rounded-lg p-3 ${Math.abs(yourShift) > 0
-                        ? (isYouGaining ? 'bg-emerald-50' : 'bg-amber-50')
-                        : 'bg-slate-50'
-                        }`}>
+                    <div className="bg-slate-50 rounded-lg p-3">
                         <div className="flex items-center gap-1 mb-1">
                             <span className="text-sm">⬡</span>
                             <span className="text-xs text-slate-500">Leverage Tracker</span>
                         </div>
                         <div className="text-lg font-bold text-slate-800 text-center">
-                            <span className={isCustomer ? 'text-emerald-600' : 'text-blue-600'}>{yourTrackerLeverage}</span>
+                            <span className="text-emerald-600">{customerTracker}</span>
                             <span className="text-slate-400 mx-1">:</span>
-                            <span className={isCustomer ? 'text-blue-600' : 'text-emerald-600'}>{theirTrackerLeverage}</span>
+                            <span className="text-blue-600">{providerTracker}</span>
                         </div>
-                        <div className={`text-xs text-center ${Math.abs(yourShift) > 0
-                            ? (isYouGaining ? 'text-emerald-600' : 'text-amber-600')
-                            : 'text-slate-400'
-                            }`}>
-                            {Math.abs(yourShift) > 0
-                                ? `${isYouGaining ? '↑' : '↓'} ${Math.abs(yourShift).toFixed(1)}% from baseline`
-                                : 'Real-time score'
-                            }
+                        <div className="text-xs text-center">
+                            {Math.abs(customerShift) > 0 || Math.abs(providerShift) > 0 ? (
+                                <span className="text-slate-500">
+                                    {customerShift !== 0 && (
+                                        <span className={customerShift > 0 ? 'text-emerald-600' : 'text-emerald-400'}>
+                                            C: {customerShift > 0 ? '+' : ''}{customerShift.toFixed(1)}%
+                                        </span>
+                                    )}
+                                    {customerShift !== 0 && providerShift !== 0 && ' • '}
+                                    {providerShift !== 0 && (
+                                        <span className={providerShift > 0 ? 'text-blue-600' : 'text-blue-400'}>
+                                            P: {providerShift > 0 ? '+' : ''}{providerShift.toFixed(1)}%
+                                        </span>
+                                    )}
+                                </span>
+                            ) : (
+                                <span className="text-slate-400">Real-time score</span>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* Visual Leverage Bar - YOUR leverage on the left */}
+                {/* Visual Leverage Bar - PARTY COLORS (Customer=Emerald, Provider=Blue) */}
                 <div className="relative">
                     <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-xs font-medium w-24 ${isCustomer ? 'text-emerald-600' : 'text-blue-600'}`}>
-                            You ({yourCompanyName})
+                        <span className="text-xs font-medium w-24 text-emerald-600">
+                            {customerCompanyName}
+                            {isCustomer && ' (You)'}
                         </span>
                         <div className="flex-1"></div>
-                        <span className={`text-xs font-medium w-24 text-right ${isCustomer ? 'text-blue-600' : 'text-emerald-600'}`}>
-                            {theirCompanyName}
+                        <span className="text-xs font-medium w-24 text-right text-blue-600">
+                            {providerCompanyName}
+                            {!isCustomer && ' (You)'}
                         </span>
                     </div>
 
+                    {/* Split Bar - Customer (Emerald) from left, Provider (Blue) from right */}
                     <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative">
-                        {/* Baseline marker (Diamond) */}
+                        {/* Customer portion - Emerald from left */}
                         <div
-                            className="absolute top-0 bottom-0 w-1 bg-slate-800 z-10"
+                            className="absolute left-0 top-0 bottom-0 bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${customerTracker}%` }}
+                        />
+
+                        {/* Provider portion - Blue from right */}
+                        <div
+                            className="absolute right-0 top-0 bottom-0 bg-blue-500 transition-all duration-500"
+                            style={{ width: `${providerTracker}%` }}
+                        />
+
+                        {/* Center line (50% mark) */}
+                        <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-400 z-10" style={{ transform: 'translateX(-50%)' }}></div>
+
+                        {/* Customer Baseline marker */}
+                        <div
+                            className="absolute top-0 bottom-0 w-1 bg-emerald-800 z-20"
                             style={{
-                                left: `${yourBaselineLeverage}%`,
+                                left: `${customerBaseline}%`,
                                 transform: 'translateX(-50%)'
                             }}
                         >
-                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-600 whitespace-nowrap">
-                                ◆ {yourBaselineLeverage}%
+                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-emerald-700 whitespace-nowrap font-medium">
+                                ◆ {customerBaseline}%
                             </div>
                         </div>
 
-                        {/* Tracker fill - shows YOUR leverage */}
+                        {/* Provider Baseline marker */}
                         <div
-                            className={`h-full transition-all duration-500 ${yourTrackerLeverage > yourBaselineLeverage
-                                ? 'bg-emerald-500'
-                                : yourTrackerLeverage < yourBaselineLeverage
-                                    ? 'bg-amber-500'
-                                    : 'bg-slate-300'
-                                }`}
-                            style={{ width: `${yourTrackerLeverage}%` }}
-                        />
-
-                        {/* Tracker marker (Hexagon) - only show if different from baseline */}
-                        {Math.abs(yourShift) > 0.5 && (
-                            <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-slate-600 z-20"
-                                style={{
-                                    left: `${yourTrackerLeverage}%`,
-                                    transform: 'translateX(-50%)'
-                                }}
-                            >
-                                <div className="absolute -bottom-5 left-1/2 transform -translate-x-1/2 text-xs text-slate-500 whitespace-nowrap">
-                                    ⬡ {yourTrackerLeverage}%
-                                </div>
+                            className="absolute top-0 bottom-0 w-1 bg-blue-800 z-20"
+                            style={{
+                                left: `${100 - providerBaseline}%`,
+                                transform: 'translateX(-50%)'
+                            }}
+                        >
+                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-blue-700 whitespace-nowrap font-medium">
+                                ◆ {providerBaseline}%
                             </div>
-                        )}
+                        </div>
+                    </div>
+
+                    {/* Tracker values below the bar */}
+                    <div className="flex justify-between text-sm font-bold mt-2">
+                        <span className="text-emerald-600">{customerTracker}%</span>
+                        <span className="text-blue-600">{providerTracker}%</span>
                     </div>
 
                     {/* Legend */}
-                    <div className="flex items-center justify-center gap-4 mt-6 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 bg-slate-800 rounded-sm"></span>
-                            ◆ Baseline
-                        </span>
+                    <div className="flex items-center justify-center gap-4 mt-4 text-xs text-slate-500">
                         <span className="flex items-center gap-1">
                             <span className="w-3 h-3 bg-emerald-500 rounded-sm"></span>
-                            ⬡ You gaining
+                            Customer Leverage
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 bg-amber-500 rounded-sm"></span>
-                            ⬡ You conceding
+                            <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
+                            Provider Leverage
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <span className="w-1 h-3 bg-slate-800 rounded-sm"></span>
+                            ◆ Baseline
                         </span>
                     </div>
                 </div>
@@ -3168,7 +3177,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-xs text-slate-500 mb-1">Market Dynamics</div>
                                 <div className="flex items-center justify-between">
                                     <span className={`text-sm font-bold ${marketDynamicsScore >= 60 ? 'text-emerald-600' :
-                                        marketDynamicsScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        marketDynamicsScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
                                         {marketDynamicsScore}
                                     </span>
@@ -3186,7 +3195,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-xs text-slate-500 mb-1">Economic Factors</div>
                                 <div className="flex items-center justify-between">
                                     <span className={`text-sm font-bold ${economicFactorsScore >= 60 ? 'text-emerald-600' :
-                                        economicFactorsScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        economicFactorsScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
                                         {economicFactorsScore}
                                     </span>
@@ -3204,7 +3213,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-xs text-slate-500 mb-1">Strategic Position</div>
                                 <div className="flex items-center justify-between">
                                     <span className={`text-sm font-bold ${strategicPositionScore >= 60 ? 'text-emerald-600' :
-                                        strategicPositionScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        strategicPositionScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
                                         {strategicPositionScore}
                                     </span>
@@ -3222,7 +3231,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-xs text-slate-500 mb-1">BATNA Analysis</div>
                                 <div className="flex items-center justify-between">
                                     <span className={`text-sm font-bold ${batnaScore >= 60 ? 'text-emerald-600' :
-                                        batnaScore <= 40 ? 'text-red-600' : 'text-slate-700'
+                                        batnaScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
                                         {batnaScore}
                                     </span>
@@ -3236,12 +3245,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
 
-                        {/* Factor explanation - role-aware */}
+                        {/* Factor explanation - party-based */}
                         <p className="text-xs text-slate-400 mt-3 text-center">
-                            {isCustomer
-                                ? 'Scores above 50 favor you • Scores below 50 favor the provider'
-                                : 'Scores above 50 favor the customer • Scores below 50 favor you'
-                            }
+                            Scores above 50 favor the Customer • Scores below 50 favor the Provider
                         </p>
                     </div>
                 )}
