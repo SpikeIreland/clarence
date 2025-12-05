@@ -1622,7 +1622,15 @@ function ContractStudioContent() {
             const response = await fetch(`${API_BASE}/provider-bids-api?session_id=${sessionId}`)
             if (response.ok) {
                 const data = await response.json()
-                const providers: ProviderBid[] = (Array.isArray(data) ? data : []).map((bid: ApiProviderBidResponse) => ({
+
+                // API returns [{ success: true, bids: [...] }] - extract the bids array
+                const bidsArray = Array.isArray(data) && data[0]?.bids
+                    ? data[0].bids
+                    : Array.isArray(data?.bids)
+                        ? data.bids
+                        : []
+
+                const providers: ProviderBid[] = bidsArray.map((bid: ApiProviderBidResponse) => ({
                     bidId: bid.bid_id,
                     providerId: bid.provider_id,
                     providerCompany: bid.provider_company,
@@ -1633,7 +1641,7 @@ function ContractStudioContent() {
                     questionnaireComplete: bid.questionnaire_complete,
                     invitedAt: bid.invited_at,
                     submittedAt: bid.submitted_at,
-                    isCurrentProvider: false // Will be set based on current selection
+                    isCurrentProvider: false
                 }))
                 setAvailableProviders(providers)
                 console.log('Loaded providers:', providers)
