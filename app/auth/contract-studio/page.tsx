@@ -1710,7 +1710,8 @@ function ContractStudioContent() {
     const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause, viewerRole: 'customer' | 'provider') => {
         if (lastExplainedClauseId === clause.clauseId) return
 
-        startWorking('clause_loading')
+        // TEMPORARILY DISABLED FOR DEMOS - re-enable after demo period
+        // startWorking('clause_loading')
         setIsChatLoading(true)
         setLastExplainedClauseId(clause.clauseId)
 
@@ -1734,7 +1735,8 @@ function ContractStudioContent() {
                 }
 
                 setChatMessages(prev => [...prev, explainMessage])
-                stopWorking()
+                // TEMPORARILY DISABLED FOR DEMOS
+                // stopWorking()
             } else {
                 setWorkingError('CLARENCE could not analyse this clause. Please try selecting it again.')
             }
