@@ -1313,7 +1313,7 @@ function ContractStudioContent() {
     const [chatMessages, setChatMessages] = useState<ClauseChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
     const [isChatLoading, setIsChatLoading] = useState(false)
-    const [activeTab, setActiveTab] = useState<'dynamics' | 'tradeoffs' | 'history' | 'draft'>('dynamics')
+    const [activeTab, setActiveTab] = useState<'positions' | 'tradeoffs' | 'history' | 'draft'>('positions')
     const [showLeverageDetails, setShowLeverageDetails] = useState(false)
     const [negotiationHistory, setNegotiationHistory] = useState<NegotiationHistoryEntry[]>([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
@@ -2255,7 +2255,7 @@ function ContractStudioContent() {
         if (workingState.isWorking) return
 
         setSelectedClause(clause)
-        setActiveTab('dynamics')
+        setActiveTab('positions')
 
         if (session?.sessionId && sessionStatus === 'ready' && userInfo?.role) {
             explainClauseWithClarence(session.sessionId, clause, userInfo.role)
@@ -3718,7 +3718,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </div>
 
                                 <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                                    {(['dynamics', 'tradeoffs', 'history', 'draft'] as const).map(tab => (
+                                    {(['positions', 'tradeoffs', 'history', 'draft'] as const).map(tab => (
                                         <button
                                             key={tab}
                                             onClick={() => setActiveTab(tab)}
@@ -3739,7 +3739,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     <div className="flex-1 overflow-y-auto p-4 pt-0">
 
                         {/* ==================== DYNAMICS TAB ==================== */}
-                        {activeTab === 'dynamics' && selectedClause && (
+                        {activeTab === 'positions' && selectedClause && (
                             <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
                                 <PositionAdjustmentPanel />
 
