@@ -1655,6 +1655,8 @@ function ContractStudioContent() {
     const loadClarenceWelcome = useCallback(async (sessionId: string, viewerRole: 'customer' | 'provider') => {
         if (clarenceWelcomeLoaded) return
 
+        // CRITICAL: Stop the working overlay - data is loaded, now just loading welcome
+        stopWorking()
         setIsChatLoading(true)
 
         try {
@@ -1682,7 +1684,7 @@ function ContractStudioContent() {
         } finally {
             setIsChatLoading(false)
         }
-    }, [clarenceWelcomeLoaded])
+    }, [clarenceWelcomeLoaded, stopWorking])
 
 
     // ============================================================================
