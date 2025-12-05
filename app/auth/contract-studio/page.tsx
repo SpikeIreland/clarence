@@ -640,7 +640,12 @@ async function commitPositionChange(
     positionId: string,
     party: 'customer' | 'provider',
     newPosition: number,
-    leverageImpact: number
+    leverageImpact: number,
+    userContext?: {
+        userId?: string;
+        userName?: string;
+        companyName?: string;
+    }
 ): Promise<{ success: boolean; newLeverage?: LeverageData }> {
     try {
         const response = await fetch(`${API_BASE}/position-update-api`, {
@@ -651,7 +656,10 @@ async function commitPositionChange(
                 positionId,
                 party,
                 newPosition,
-                leverageImpact
+                leverageImpact,
+                userId: userContext?.userId || null,
+                userName: userContext?.userName || null,
+                companyName: userContext?.companyName || null
             })
         })
 
@@ -2115,7 +2123,12 @@ function ContractStudioContent() {
                 selectedClause.positionId,
                 userInfo.role as 'customer' | 'provider',
                 proposedPosition,
-                pendingLeverageImpact
+                pendingLeverageImpact,
+                {
+                    userId: userInfo.userId,
+                    userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || undefined,
+                    companyName: userInfo.company
+                }
             )
 
             if (result.success) {
