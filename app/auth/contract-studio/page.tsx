@@ -1858,6 +1858,57 @@ function ContractStudioContent() {
         window.scrollTo({ top: 0, behavior: 'instant' })
     }, [])
 
+    // ============================================================================
+    // RECALCULATE LEVERAGE TRACKER ON DATA LOAD
+    // Ensures tracker reflects all position changes, not just baseline
+    // ============================================================================
+
+    const [hasRecalculatedOnLoad, setHasRecalculatedOnLoad] = useState(false)
+
+    useEffect(() => {
+        // Only run once after initial data loads
+        if (hasRecalculatedOnLoad) return
+
+        // Wait for all required data
+        if (!leverage || !clauses.length || !userInfo?.role) return
+
+        // Skip if leverage hasn't been calculated yet
+        if (!leverage.leverageScoreCustomer || !leverage.leverageScoreProvider) return
+
+        // Mark as done so this only runs once per page load
+        setHasRecalculatedOnLoad(true)
+
+        // Recalculate tracker based on current clause positions
+        const recalculatedLeverage = recalculateLeverageTracker(
+            leverage.leverageScoreCustomer,
+            leverage.leverageScoreProvider,
+            clauses,
+            userInfo.role as 'customer' | 'provider'
+        )
+
+        // Only update if tracker values differ from API response
+        if (
+            recalculatedLeverage.customerLeverage !== leverage.leverageTrackerCustomer ||
+            recalculatedLeverage.providerLeverage !== leverage.leverageTrackerProvider
+        ) {
+            console.log('=== LEVERAGE TRACKER RECALCULATED ON LOAD ===')
+            console.log('API returned:', leverage.leverageTrackerCustomer, ':', leverage.leverageTrackerProvider)
+            console.log('Recalculated:', recalculatedLeverage.customerLeverage, ':', recalculatedLeverage.providerLeverage)
+
+            setLeverage(prev => prev ? {
+                ...prev,
+                leverageTrackerCustomer: recalculatedLeverage.customerLeverage,
+                leverageTrackerProvider: recalculatedLeverage.providerLeverage
+            } : null)
+        }
+    }, [clauses, leverage, userInfo?.role, hasRecalculatedOnLoad])
+
+    useEffect(() => {
+        if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
+            loadClarenceWelcome(session.sessionId, userInfo.role as 'customer' | 'provider')
+        }
+    }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome, userInfo?.role])
+
     useEffect(() => {
         if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
             loadClarenceWelcome(session.sessionId, userInfo.role as 'customer' | 'provider')
@@ -3115,8 +3166,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             style={{ width: `${providerTracker}%` }}
                         />
 
-                        {/* Center line (50% mark) */}
-                        <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-400 z-10" style={{ transform: 'translateX(-50%)' }}></div>
+                        {/* Center line (50% mark) - static reference point */}
+                        <div
+                            className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white z-30"
+                            style={{ transform: 'translateX(-50%)', boxShadow: '0 0 2px rgba(0,0,0,0.3)' }}
+                            title="50-50 neutral point"
+                        ></div>
 
                         {/* Customer Baseline marker */}
                         <div
@@ -3160,6 +3215,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <span className="flex items-center gap-1">
                             <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
                             Provider Leverage
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <span className="w-0.5 h-3 bg-white border border-slate-400 rounded-sm"></span>
+                            50-50 Center
                         </span>
                         <span className="flex items-center gap-1">
                             <span className="w-1 h-3 bg-slate-800 rounded-sm"></span>
