@@ -3602,34 +3602,33 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                             <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
 
-                            {/* Party Chat Toggle Button */}
-                            {isCustomer && (
-                                <button
-                                    onClick={() => setIsChatOpen(true)}
-                                    className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
-                                    title={`Chat with ${providerCompany}`}
+                            {/* Party Chat Toggle Button - Available to BOTH parties */}
+                            <button
+                                onClick={() => setIsChatOpen(true)}
+                                className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
+                                title={isCustomer ? `Chat with ${providerCompany}` : `Chat with ${customerCompany}`}
+                            >
+                                <svg
+                                    className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
                                 >
-                                    <svg
-                                        className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                        />
-                                    </svg>
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                    />
+                                </svg>
 
-                                    {/* Unread Badge */}
-                                    {chatUnreadCount > 0 && (
-                                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                            {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
-                                        </span>
-                                    )}
-                                </button>
+                                {/* Unread Badge */}
+                                {chatUnreadCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                        {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+                                    </span>
+                                )}
+                            </button>
                             )}
                         </div>
                     </div>
