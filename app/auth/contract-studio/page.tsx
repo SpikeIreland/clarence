@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
 import { PartyChatPanel } from './components/party-chat-component'
 
+
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
 // ============================================================================
@@ -905,10 +906,12 @@ function buildClauseTree(clauses: ContractClause[]): ContractClause[] {
     const clauseMap = new Map<string, ContractClause>()
     const rootClauses: ContractClause[] = []
 
+    // First pass: create map - default all categories to collapsed
     clauses.forEach(clause => {
-        clauseMap.set(clause.positionId, { ...clause, children: [] })
+        clauseMap.set(clause.positionId, { ...clause, children: [], isExpanded: false })
     })
 
+    // Second pass: build tree structure
     clauses.forEach(clause => {
         const current = clauseMap.get(clause.positionId)!
         if (clause.parentPositionId && clauseMap.has(clause.parentPositionId)) {
@@ -1810,6 +1813,11 @@ function ContractStudioContent() {
 
         init()
     }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router, stopWorking, setWorkingError])
+
+    // Scroll to top when page loads
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' })
+    }, [])
 
     useEffect(() => {
         if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
@@ -3009,7 +3017,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Header Row */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
+                        <h3 className="text-sm font-semibold text-slate-700">Leverage Metrics Underpinning Baseline Assessment</h3>
                         <button
                             onClick={() => {
                                 // LOG: Leverage details toggled

@@ -1104,7 +1104,7 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-yellow-800">
                     ⚖️ Your Best Alternative to a Negotiated Agreement (BATNA) significantly impacts your leverage.
-                    Be honest - this information helps CLARENCE negotiate effectively on your behalf.
+                    Be honest - This information helps CLARENCE understand the full picture and more effectively broker compromise positions.
                 </p>
             </div>
 
@@ -1572,7 +1572,7 @@ function AdditionalContextStep({ formData, updateFormData }: StepComponentProps)
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-amber-800">
-                    📝 This information helps CLARENCE understand the full picture and negotiate more effectively on your behalf.
+                    📝 This information helps CLARENCE understand the full picture and more effectively broker compromise positions.
                 </p>
             </div>
 

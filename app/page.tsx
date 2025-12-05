@@ -1,4 +1,7 @@
 import { Metadata } from 'next'
+import Link from 'next/link'
+import MainNavigation from './components/MainNavigation'
+import HeroCTA from './components/HeroCTA'
 
 export const metadata: Metadata = {
   title: 'CLARENCE | AI-Powered Contract Mediation',
@@ -13,61 +16,12 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50">
       {/* ================================================================== */}
-      {/* SECTION 2: NAVIGATION HEADER */}
-      {/* Matches Contract Studio header styling */}
+      {/* SECTION 2: NAVIGATION HEADER (AUTH-AWARE) */}
       {/* ================================================================== */}
-      <header className="bg-slate-800 text-white">
-        <div className="container mx-auto px-6">
-          <nav className="flex justify-between items-center h-16">
-            {/* Logo & Brand */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
-              <div>
-                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
-                <div className="text-xs text-slate-400">The Honest Broker</div>
-              </div>
-            </div>
-
-            {/* Navigation Links */}
-            <div className="flex items-center gap-6">
-              <a
-                href="/how-it-works"
-                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
-              >
-                How It Works
-              </a>
-              <a
-                href="/phases"
-                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
-              >
-                The 6 Phases
-              </a>
-
-              {/* Sign In Buttons */}
-              <div className="flex items-center gap-3 ml-2">
-                <a
-                  href="/auth/login"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Customer Sign In
-                </a>
-                <a
-                  href="https://www.clarencelegal.ai/provider"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Provider Sign In
-                </a>
-              </div>
-            </div>
-          </nav>
-        </div>
-      </header>
+      <MainNavigation />
 
       {/* ================================================================== */}
       {/* SECTION 3: HERO SECTION */}
-      {/* Clean white background with gradient accent */}
       {/* ================================================================== */}
       <section className="relative overflow-hidden">
         {/* Subtle gradient background accent */}
@@ -90,21 +44,8 @@ export default function Home() {
               AI-powered insights with transparent brokering to efficiently agree optimal contracts.
             </p>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a
-                href="/auth/login"
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all shadow-lg shadow-blue-600/25 hover:shadow-xl hover:shadow-blue-600/30 hover:-translate-y-0.5"
-              >
-                Start Your Negotiation
-              </a>
-              <a
-                href="/how-it-works"
-                className="px-8 py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-lg border border-slate-300 transition-all hover:border-slate-400"
-              >
-                See How It Works
-              </a>
-            </div>
+            {/* CTA Buttons (AUTH-AWARE) */}
+            <HeroCTA />
 
             {/* Trust Indicator */}
             <div className="mt-12 flex items-center justify-center gap-2 text-sm text-slate-500">
@@ -119,7 +60,6 @@ export default function Home() {
 
       {/* ================================================================== */}
       {/* SECTION 4: VALUE PROPOSITION CARDS */}
-      {/* Three-column feature highlights */}
       {/* ================================================================== */}
       <section className="py-20 bg-white border-t border-slate-200">
         <div className="container mx-auto px-6">
@@ -177,7 +117,6 @@ export default function Home() {
 
       {/* ================================================================== */}
       {/* SECTION 5: HOW IT WORKS PREVIEW */}
-      {/* Visual representation of the process - UPDATED PER JOHN'S FEEDBACK */}
       {/* ================================================================== */}
       <section className="py-20 bg-slate-50 border-t border-slate-200">
         <div className="container mx-auto px-6">
@@ -190,46 +129,72 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Phase Timeline - UPDATED LABELS PER SCHEDULE A */}
+          {/* Phase Timeline */}
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between relative">
               {/* Connecting Line */}
               <div className="absolute top-6 left-0 right-0 h-0.5 bg-slate-300"></div>
               <div className="absolute top-6 left-0 w-1/2 h-0.5 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
 
-              {/* Phase Indicators - UPDATED TO MATCH SCHEDULE A */}
-              {[
-                { num: 1, label: 'Deal Profile', color: 'emerald', complete: true },
-                { num: 2, label: 'Foundation', color: 'emerald', complete: true },
-                { num: 3, label: 'Gap Narrowing', color: 'blue', complete: true },
-                { num: 4, label: 'Contention', color: 'blue', complete: false },
-                { num: 5, label: 'Deal Drivers', color: 'amber', complete: false },
-                { num: 6, label: 'Closure', color: 'slate', complete: false },
-              ].map((phase) => (
-                <div key={phase.num} className="relative z-10 flex flex-col items-center">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white ${phase.complete
-                    ? phase.color === 'emerald' ? 'bg-emerald-500'
-                      : phase.color === 'blue' ? 'bg-blue-500'
-                        : 'bg-amber-500'
-                    : 'bg-slate-300'
-                    }`}>
-                    {phase.complete ? (
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      phase.num
-                    )}
-                  </div>
-                  <span className="mt-2 text-xs font-medium text-slate-600">{phase.label}</span>
+              {/* Phase 1 */}
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-emerald-500">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
                 </div>
-              ))}
+                <span className="mt-2 text-xs font-medium text-slate-600">Deal Profile</span>
+              </div>
+
+              {/* Phase 2 */}
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-emerald-500">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span className="mt-2 text-xs font-medium text-slate-600">Foundation</span>
+              </div>
+
+              {/* Phase 3 */}
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-blue-500">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span className="mt-2 text-xs font-medium text-slate-600">Gap Narrowing</span>
+              </div>
+
+              {/* Phase 4 */}
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-slate-300">
+                  4
+                </div>
+                <span className="mt-2 text-xs font-medium text-slate-600">Contention</span>
+              </div>
+
+              {/* Phase 5 */}
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-slate-300">
+                  5
+                </div>
+                <span className="mt-2 text-xs font-medium text-slate-600">Deal Drivers</span>
+              </div>
+
+              {/* Phase 6 */}
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-slate-300">
+                  6
+                </div>
+                <span className="mt-2 text-xs font-medium text-slate-600">Closure</span>
+              </div>
             </div>
           </div>
 
           {/* Learn More CTA */}
           <div className="text-center mt-12">
-            <a
+            <Link
               href="/phases"
               className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors"
             >
@@ -237,18 +202,16 @@ export default function Home() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-            </a>
+            </Link>
           </div>
         </div>
       </section>
 
       {/* ================================================================== */}
       {/* SECTION 6: LEVERAGE-TRACKED NEGOTIATION */}
-      {/* NEW SECTION HEADER PER JOHN'S FEEDBACK */}
       {/* ================================================================== */}
       <section className="py-20 bg-white border-t border-slate-200">
         <div className="container mx-auto px-6">
-          {/* NEW: Section Header per John's feedback */}
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
               Leverage-Tracked Negotiation
@@ -268,21 +231,38 @@ export default function Home() {
                   negotiations fact-based, not emotion-driven.
                 </p>
                 <ul className="space-y-3">
-                  {[
-                    'Market dynamics analysis',
-                    'Economic factors assessment',
-                    'Strategic position evaluation',
-                    'BATNA (alternatives) scoring',
-                  ].map((item) => (
-                    <li key={item} className="flex items-center gap-3 text-slate-700">
-                      <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                        <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      {item}
-                    </li>
-                  ))}
+                  <li className="flex items-center gap-3 text-slate-700">
+                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    Market dynamics analysis
+                  </li>
+                  <li className="flex items-center gap-3 text-slate-700">
+                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    Economic factors assessment
+                  </li>
+                  <li className="flex items-center gap-3 text-slate-700">
+                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    Strategic position evaluation
+                  </li>
+                  <li className="flex items-center gap-3 text-slate-700">
+                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    BATNA (alternatives) scoring
+                  </li>
                 </ul>
               </div>
 
@@ -308,19 +288,22 @@ export default function Home() {
 
                 {/* Factor Breakdown */}
                 <div className="space-y-2">
-                  {[
-                    { factor: 'Market Dynamics', score: '+8', positive: true },
-                    { factor: 'Economic Factors', score: '+4', positive: true },
-                    { factor: 'Strategic Position', score: '-2', positive: false },
-                    { factor: 'BATNA Strength', score: '+6', positive: true },
-                  ].map((item) => (
-                    <div key={item.factor} className="flex justify-between items-center p-2 bg-white rounded-lg">
-                      <span className="text-sm text-slate-600">{item.factor}</span>
-                      <span className={`text-sm font-semibold ${item.positive ? 'text-emerald-600' : 'text-amber-600'}`}>
-                        {item.score}
-                      </span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
+                    <span className="text-sm text-slate-600">Market Dynamics</span>
+                    <span className="text-sm font-semibold text-emerald-600">+8</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
+                    <span className="text-sm text-slate-600">Economic Factors</span>
+                    <span className="text-sm font-semibold text-emerald-600">+4</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
+                    <span className="text-sm text-slate-600">Strategic Position</span>
+                    <span className="text-sm font-semibold text-amber-600">-2</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
+                    <span className="text-sm text-slate-600">BATNA Strength</span>
+                    <span className="text-sm font-semibold text-emerald-600">+6</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -330,7 +313,6 @@ export default function Home() {
 
       {/* ================================================================== */}
       {/* SECTION 7: GAMIFIED NEGOTIATION STUDIO */}
-      {/* NEW SECTION PER JOHN'S FEEDBACK */}
       {/* ================================================================== */}
       <section className="py-20 bg-slate-50 border-t border-slate-200">
         <div className="container mx-auto px-6">
@@ -386,7 +368,6 @@ export default function Home() {
 
       {/* ================================================================== */}
       {/* SECTION 8: CTA SECTION */}
-      {/* Final call to action */}
       {/* ================================================================== */}
       <section className="py-20 bg-gradient-to-br from-slate-800 to-slate-900">
         <div className="container mx-auto px-6 text-center">
@@ -397,30 +378,29 @@ export default function Home() {
             Join forward-thinking organizations using CLARENCE to achieve better contract outcomes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a
+            <Link
               href="/auth/signup"
               className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-all shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/30"
             >
               Get Started Free
-            </a>
-            <a
+            </Link>
+            <Link
               href="/chat"
               className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg border border-slate-600 transition-all"
             >
               Try the Demo
-            </a>
+            </Link>
           </div>
         </div>
       </section>
 
       {/* ================================================================== */}
       {/* SECTION 9: FOOTER */}
-      {/* UPDATED: Added "The Honest Broker" tagline per John's feedback */}
       {/* ================================================================== */}
       <footer className="bg-slate-900 text-slate-400 py-12">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            {/* Brand - UPDATED to include tagline */}
+            {/* Brand */}
             <div className="flex items-center gap-3 mb-6 md:mb-0">
               <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">C</span>
@@ -433,10 +413,18 @@ export default function Home() {
 
             {/* Links */}
             <div className="flex gap-8 text-sm">
-              <a href="/how-it-works" className="hover:text-white transition-colors">How It Works</a>
-              <a href="/phases" className="hover:text-white transition-colors">The 6 Phases</a>
-              <a href="/privacy" className="hover:text-white transition-colors">Privacy</a>
-              <a href="/terms" className="hover:text-white transition-colors">Terms</a>
+              <Link href="/how-it-works" className="hover:text-white transition-colors">
+                How It Works
+              </Link>
+              <Link href="/phases" className="hover:text-white transition-colors">
+                The 6 Phases
+              </Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">
+                Privacy
+              </Link>
+              <Link href="/terms" className="hover:text-white transition-colors">
+                Terms
+              </Link>
             </div>
           </div>
 
