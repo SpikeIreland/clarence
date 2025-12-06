@@ -4039,9 +4039,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     {/* Header */}
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <h3 className="text-lg font-semibold text-slate-800">Negotiation History</h3>
+                                            <h3 className="text-lg font-semibold text-slate-800">Position History</h3>
                                             <p className="text-sm text-slate-500">
-                                                Track all position changes and agreements
+                                                Changes for <span className="font-medium text-slate-700">{selectedClause.clauseName}</span>
                                             </p>
                                         </div>
                                         <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
@@ -4065,10 +4065,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         {/* Vertical line */}
                                         <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200"></div>
 
-                                        {/* History entries */}
+                                        {/* History entries - FILTERED BY SELECTED CLAUSE */}
                                         <div className="space-y-4">
                                             {negotiationHistory
                                                 .filter(entry => {
+                                                    // First: filter to selected clause only
+                                                    if (entry.clauseId !== selectedClause.clauseId) return false
+                                                    // Then: apply type filter
                                                     if (historyFilter === 'all') return true
                                                     if (historyFilter === 'positions') return entry.eventType === 'position_change'
                                                     if (historyFilter === 'agreements') return entry.eventType === 'agreement'
@@ -4140,14 +4143,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     </div>
                                                 ))}
 
-                                            {negotiationHistory.length === 0 && (
+                                            {negotiationHistory.filter(e => e.clauseId === selectedClause.clauseId).length === 0 && (
                                                 <div className="text-center py-8 pl-10">
                                                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                                         <span className="text-2xl">📋</span>
                                                     </div>
-                                                    <p className="text-slate-600">No negotiation activity yet</p>
+                                                    <p className="text-slate-600">No changes to this clause yet</p>
                                                     <p className="text-sm text-slate-400 mt-1">
-                                                        History will appear as positions are adjusted
+                                                        History will appear when positions are adjusted on {selectedClause.clauseName}
                                                     </p>
                                                 </div>
                                             )}
