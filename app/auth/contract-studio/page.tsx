@@ -1542,9 +1542,10 @@ function ContractStudioContent() {
         }
     }, [router])
 
-    const loadContractData = useCallback(async (sessionId: string) => {
+    const loadContractData = useCallback(async (sessionId: string, viewerRole?: string) => {
         try {
-            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+            const roleParam = viewerRole ? `&viewer_role=${viewerRole}` : ''
+            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}${roleParam}`)
             if (!response.ok) throw new Error('Failed to fetch')
 
             const data = await response.json()
@@ -1637,6 +1638,16 @@ function ContractStudioContent() {
                 strategicPositionRationale: '',
                 batnaScore: 0,
                 batnaRationale: ''
+            }
+
+            // Parse unseen moves from API response
+            if (data.unseenMoves && Array.isArray(data.unseenMoves)) {
+                const movesMap = new Map<string, number>()
+                data.unseenMoves.forEach((item: { clauseId: string, unseenCount: number }) => {
+                    movesMap.set(item.clauseId, item.unseenCount)
+                })
+                setUnseenMoves(movesMap)
+                setTotalUnseenMoves(data.totalUnseenMoves || 0)
             }
 
             return { session: sessionData, clauses: clauseData, leverage: leverageData }
@@ -1857,7 +1868,7 @@ function ContractStudioContent() {
                 return
             }
 
-            const data = await loadContractData(sessionId)
+            const data = await loadContractData(sessionId, user.role)
 
             if (data) {
                 setSession(data.session)
