@@ -365,7 +365,7 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Executive escalation', description: 'Escalation to executive level with binding remediation' }
     ],
 
-// ========== TERM AND TERMINATION ==========
+    // ========== TERM AND TERMINATION ==========
     'Term': [
         { value: 1, label: 'Initial term only', description: 'Fixed initial term with no automatic renewal rights' },
         { value: 2, label: 'Term with renewal option', description: 'Initial term with optional renewal periods by mutual agreement' },
@@ -3414,7 +3414,15 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         : 'hover:bg-slate-50'
                         }`}
                     style={{ paddingLeft: `${12 + depth * 16}px` }}
-                    onClick={() => handleClauseSelect(clause)}
+                    onClick={() => {
+                        // Parent clauses (level 0) only toggle expand/collapse
+                        // Child clauses trigger selection and position panel
+                        if (clause.clauseLevel === 0) {
+                            handleClauseToggle(clause.positionId)
+                        } else {
+                            handleClauseSelect(clause)
+                        }
+                    }}
                 >
                     {hasChildren ? (
                         <button
