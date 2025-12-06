@@ -854,12 +854,17 @@ function recalculateLeverageTracker(
     console.log('Customer credits earned:', customerCredits.toFixed(2))
     console.log('Provider credits earned:', providerCredits.toFixed(2))
 
-    // Each party's tracker increases by THEIR OWN credits earned
-    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + customerCredits)))
-    const newProviderLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageProvider + providerCredits)))
+    // Each party gains credits when they accommodate (reward for flexibility)
+    const rawCustomerLeverage = baseLeverageCustomer + customerCredits
+    const rawProviderLeverage = baseLeverageProvider + providerCredits
 
-    console.log('New customer tracker:', newCustomerLeverage)
-    console.log('New provider tracker:', newProviderLeverage)
+    // Normalize to always sum to 100 (prevents bar overlap)
+    const total = rawCustomerLeverage + rawProviderLeverage
+    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round((rawCustomerLeverage / total) * 100)))
+    const newProviderLeverage = 100 - newCustomerLeverage
+
+    console.log('Raw values:', rawCustomerLeverage.toFixed(2), ':', rawProviderLeverage.toFixed(2))
+    console.log('Normalized (sum=100):', newCustomerLeverage, ':', newProviderLeverage)
     console.log('=== END RECALCULATION ===')
 
     return {
@@ -1710,7 +1715,8 @@ function ContractStudioContent() {
     const explainClauseWithClarence = useCallback(async (sessionId: string, clause: ContractClause, viewerRole: 'customer' | 'provider') => {
         if (lastExplainedClauseId === clause.clauseId) return
 
-        startWorking('clause_loading')
+        // TEMPORARILY DISABLED FOR DEMOS - re-enable after demo period
+        // startWorking('clause_loading')
         setIsChatLoading(true)
         setLastExplainedClauseId(clause.clauseId)
 
@@ -1734,7 +1740,8 @@ function ContractStudioContent() {
                 }
 
                 setChatMessages(prev => [...prev, explainMessage])
-                stopWorking()
+                // TEMPORARILY DISABLED FOR DEMOS
+                // stopWorking()
             } else {
                 setWorkingError('CLARENCE could not analyse this clause. Please try selecting it again.')
             }
@@ -3443,16 +3450,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
 
-                        {/* Right: User Info / Logged in status */}
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                            <span className="text-sm text-slate-300">
-                                {userInfo.firstName ? `${userInfo.firstName} ${userInfo.lastName}` : myCompany}
-                            </span>
-                            <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded">
-                                {myRole}
-                            </span>
-                        </div>
+                        {/* Right: Spacer for balance */}
+                        <div className="w-24"></div>
                     </div>
                 </div>
 
@@ -3467,6 +3466,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             <div>
                                 <div className="text-xs text-slate-400">Customer</div>
                                 <div className="text-sm font-medium text-emerald-400">{customerCompany}</div>
+                                <div className="text-xs text-slate-500">
+                                    {isCustomer
+                                        ? `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || 'Contact'
+                                        : otherPartyStatus.userName || 'Contact'
+                                    }
+                                </div>
                             </div>
                             {isCustomer && (
                                 <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">
@@ -3520,6 +3525,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 <svg className={`w-3 h-3 transition-transform ${showProviderDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                 </svg>
+                                            </div>
+                                            <div className="text-xs text-slate-500">
+                                                {otherPartyStatus.userName || 'Contact'}
                                             </div>
                                         </div>
                                     </button>
@@ -3597,6 +3605,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-right">
                                     <div className="text-xs text-slate-400">Provider</div>
                                     <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
+                                    <div className="text-xs text-slate-500">
+                                        {`${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || 'Contact'}
+                                    </div>
                                 </div>
                             )}
 
