@@ -299,7 +299,7 @@ const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 // Based on John Hayward's Appendix A negotiation framework
 
 const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
-    // ========== SERVICE DELIVERY ==========
+    // ========== SERVICE ==========
     'Scope of Services': [
         { value: 1, label: 'Listed services only', description: 'Only those services explicitly listed in the contract' },
         { value: 2, label: 'Plus reasonable adjuncts', description: 'Listed services plus those seen as a reasonable adjunct' },
@@ -365,7 +365,13 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Executive escalation', description: 'Escalation to executive level with binding remediation' }
     ],
 
-    // ========== TERMINATION ==========
+// ========== TERM AND TERMINATION ==========
+    'Term': [
+        { value: 1, label: 'Initial term only', description: 'Fixed initial term with no automatic renewal rights' },
+        { value: 2, label: 'Term with renewal option', description: 'Initial term with optional renewal periods by mutual agreement' },
+        { value: 3, label: 'Auto-renewal', description: 'Automatic renewal unless either party provides termination notice' },
+        { value: 4, label: 'Evergreen', description: 'Continuous contract with no fixed end date, terminable on notice' }
+    ],
     'Term Renewal / Extension': [
         { value: 1, label: 'No extension right', description: 'No automatic extension rights' },
         { value: 2, label: 'Single extension', description: 'One extension period with mutual agreement' },
