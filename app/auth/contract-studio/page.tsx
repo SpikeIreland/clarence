@@ -854,18 +854,17 @@ function recalculateLeverageTracker(
     console.log('Customer credits earned:', customerCredits.toFixed(2))
     console.log('Provider credits earned:', providerCredits.toFixed(2))
 
-    // Zero-sum leverage: when one accommodates, they gain credits but lose leverage
-    // Customer accommodating = Customer loses leverage (provider gains)
-    // Provider accommodating = Provider loses leverage (customer gains)
-    const netShift = providerCredits - customerCredits  // Positive = customer gains leverage
+    // Each party gains credits when they accommodate (reward for flexibility)
+    const rawCustomerLeverage = baseLeverageCustomer + customerCredits
+    const rawProviderLeverage = baseLeverageProvider + providerCredits
 
-    console.log('Net shift (positive = customer gains):', netShift.toFixed(2))
+    // Normalize to always sum to 100 (prevents bar overlap)
+    const total = rawCustomerLeverage + rawProviderLeverage
+    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round((rawCustomerLeverage / total) * 100)))
+    const newProviderLeverage = 100 - newCustomerLeverage
 
-    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + netShift)))
-    const newProviderLeverage = 100 - newCustomerLeverage  // Always sums to 100
-
-    console.log('New customer tracker:', newCustomerLeverage)
-    console.log('New provider tracker:', newProviderLeverage)
+    console.log('Raw values:', rawCustomerLeverage.toFixed(2), ':', rawProviderLeverage.toFixed(2))
+    console.log('Normalized (sum=100):', newCustomerLeverage, ':', newProviderLeverage)
     console.log('=== END RECALCULATION ===')
 
     return {
