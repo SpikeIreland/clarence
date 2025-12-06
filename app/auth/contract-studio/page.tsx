@@ -2865,8 +2865,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                         handlePositionDrag(Math.round(midpoint * 10) / 10)
                                                     }}
                                                     className={`p-2 rounded text-center cursor-pointer transition-all ${isCurrentZone
-                                                            ? 'bg-slate-800 text-white'
-                                                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                                        ? 'bg-slate-800 text-white'
+                                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                                                         }`}
                                                     title={option.description}
                                                 >
@@ -2890,8 +2890,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     {/* Current Zone Description */}
                                     {currentZone && (
                                         <div className={`p-3 rounded-lg border-2 ${isAdjusting
-                                                ? 'bg-amber-50 border-amber-300'
-                                                : 'bg-slate-50 border-slate-200'
+                                            ? 'bg-amber-50 border-amber-300'
+                                            : 'bg-slate-50 border-slate-200'
                                             }`}>
                                             <div className="flex items-center justify-between">
                                                 <div>
@@ -2945,7 +2945,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             )
                         })()}
                     </div>
-                    
+
                 ) : (
                     /* Numeric Slider Fallback - for clauses without position options */
                     <div className="space-y-4">
@@ -3125,7 +3125,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Header Row */}
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-slate-700">Leverage Metrics Underpinning Baseline Assessment</h3>
+                        <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
                         <button
                             onClick={() => {
                                 if (typeof eventLogger !== 'undefined') {
@@ -3136,9 +3136,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 }
                                 setShowLeverageDetails(!showLeverageDetails)
                             }}
-                            className="text-xs text-slate-400 hover:text-slate-600"
+                            className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
                         >
-                            {showLeverageDetails ? 'Hide Details' : 'Show Details'}
+                            <svg className={`w-3 h-3 transition-transform ${showLeverageDetails ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                            {showLeverageDetails ? 'Hide' : 'Show'}
                         </button>
                     </div>
 
@@ -3296,6 +3299,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 </div>
 
                 {/* Expandable 4-Factor Breakdown */}
+                {showLeverageDetails && (
+                    <div className="mb-3">
+                        <p className="text-xs text-slate-500 italic">Leverage Metrics Underpinning Baseline Assessment</p>
+                    </div>
+                )}
+
                 {showLeverageDetails && (
                     <div className="mt-4 pt-4 border-t border-slate-200">
                         <h4 className="text-xs font-semibold text-slate-600 mb-3">Leverage Factors (from Assessment)</h4>
