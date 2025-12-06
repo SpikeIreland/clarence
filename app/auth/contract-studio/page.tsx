@@ -2685,230 +2685,267 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Position Options View */}
                 {hasPositionOptions ? (
                     <div className="space-y-3">
-                        {/* Visual Position Bar - Uses RAW DB positions (1-10) for precise placement */}
-                        <div className="relative h-8 bg-gradient-to-r from-blue-100 via-slate-100 to-emerald-100 rounded-full border border-slate-200 mb-4">
-                            {(() => {
-                                // Convert DB positions (1-10) to percentage for bar placement
-                                const toBarPercent = (dbPos: number | null) => dbPos !== null ? ((dbPos - 1) / 9) * 100 : null
 
-                                const myBarPercent = toBarPercent(myDbPosition)
-                                const otherBarPercent = toBarPercent(otherDbPosition)
-                                const clarenceBarPercent = toBarPercent(clarenceDbPosition)
-                                const proposedBarPercent = toBarPercent(proposedPosition)
+                        {/* ============================================================ */}
+                        {/* COMPACT SPECTRUM BAR WITH ZONE LABELS */}
+                        {/* ============================================================ */}
+                        {(() => {
+                            // Convert DB positions (1-10) to percentage for bar placement
+                            const toBarPercent = (dbPos: number | null) => dbPos !== null ? ((dbPos - 1) / 9) * 100 : null
 
-                                // Check for TRUE alignment (within 0.5 points on DB scale)
-                                const isAligned = myDbPosition !== null && otherDbPosition !== null &&
-                                    Math.abs(myDbPosition - otherDbPosition) < 0.5
-                                const isMeAtClarence = myDbPosition !== null && clarenceDbPosition !== null &&
-                                    Math.abs(myDbPosition - clarenceDbPosition) < 0.5
-                                const isOtherAtClarence = otherDbPosition !== null && clarenceDbPosition !== null &&
-                                    Math.abs(otherDbPosition - clarenceDbPosition) < 0.5
+                            const myBarPercent = toBarPercent(myDbPosition)
+                            const otherBarPercent = toBarPercent(otherDbPosition)
+                            const clarenceBarPercent = toBarPercent(clarenceDbPosition)
+                            const proposedBarPercent = toBarPercent(proposedPosition)
 
-                                return (
-                                    <>
-                                        {/* CASE 1: Customer and Provider are TRULY ALIGNED */}
-                                        {isAligned && myBarPercent !== null ? (
-                                            <CombinedPositionMarker
-                                                position={myDbPosition!}
-                                                optionCount={10}
-                                                parties={[
-                                                    'customer',
-                                                    'provider',
-                                                    ...(isMeAtClarence ? ['clarence' as const] : [])
-                                                ]}
-                                                isCustomer={isCustomer}
-                                                label={`Aligned at ${myDbPosition?.toFixed(1)}${isMeAtClarence ? ' (CLARENCE agrees)' : ''}`}
+                            // Check for TRUE alignment (within 0.5 points on DB scale)
+                            const isAligned = myDbPosition !== null && otherDbPosition !== null &&
+                                Math.abs(myDbPosition - otherDbPosition) < 0.5
+                            const isMeAtClarence = myDbPosition !== null && clarenceDbPosition !== null &&
+                                Math.abs(myDbPosition - clarenceDbPosition) < 0.5
+                            const isOtherAtClarence = otherDbPosition !== null && clarenceDbPosition !== null &&
+                                Math.abs(otherDbPosition - clarenceDbPosition) < 0.5
+
+                            // Get zone info for current/proposed position
+                            const getZoneForPosition = (pos: number | null) => {
+                                if (pos === null || !selectedClause.positionOptions) return null
+                                const zoneIndex = Math.min(
+                                    Math.floor((pos - 1) / (9 / selectedClause.positionOptions.length)),
+                                    selectedClause.positionOptions.length - 1
+                                )
+                                return selectedClause.positionOptions[zoneIndex]
+                            }
+
+                            const currentZone = getZoneForPosition(proposedPosition ?? myDbPosition)
+                            const zoneCount = selectedClause.positionOptions?.length || 4
+
+                            // Handle bar click to set position
+                            const handleBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                const clickPercent = ((e.clientX - rect.left) / rect.width) * 100
+                                const newPosition = Math.round(((clickPercent / 100) * 9 + 1) * 10) / 10
+                                const clampedPosition = Math.max(1, Math.min(10, newPosition))
+                                handlePositionDrag(clampedPosition)
+                            }
+
+                            return (
+                                <div className="space-y-3">
+                                    {/* Spectrum Labels */}
+                                    <div className="flex justify-between text-xs text-slate-500">
+                                        <span className="flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                                            Provider-Friendly
+                                        </span>
+                                        <span className="flex items-center gap-1">
+                                            Customer-Friendly
+                                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                        </span>
+                                    </div>
+
+                                    {/* Main Interactive Bar */}
+                                    <div
+                                        className="relative h-12 bg-gradient-to-r from-blue-200 via-slate-100 to-emerald-200 rounded-lg border border-slate-300 cursor-pointer hover:border-slate-400 transition-all"
+                                        onClick={handleBarClick}
+                                        title="Click to set your position"
+                                    >
+                                        {/* Zone dividers */}
+                                        {Array.from({ length: zoneCount - 1 }).map((_, i) => (
+                                            <div
+                                                key={i}
+                                                className="absolute top-0 bottom-0 w-px bg-slate-300"
+                                                style={{ left: `${((i + 1) / zoneCount) * 100}%` }}
                                             />
-                                        ) : (
-                                            <>
-                                                {/* CASE 2: Other Party marker */}
-                                                {otherBarPercent !== null && (
-                                                    <div
-                                                        className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 transition-all ${isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
-                                                        style={{
-                                                            left: `${otherBarPercent}%`,
-                                                            transform: 'translate(-50%, -50%)',
-                                                            backgroundColor: isCustomer ? '#3b82f6' : '#10b981',
-                                                            borderColor: isCustomer ? '#1d4ed8' : '#047857',
-                                                            color: 'white'
-                                                        }}
-                                                        title={`${isCustomer ? 'Provider' : 'Customer'}: ${otherDbPosition?.toFixed(1)}${isOtherAtClarence ? ' (matches CLARENCE)' : ''}`}
-                                                    >
-                                                        {isCustomer ? 'P' : 'C'}
-                                                        {isOtherAtClarence && (
-                                                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
-                                                                <span className="text-[8px] text-white">★</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
+                                        ))}
 
-                                                {/* CASE 3: CLARENCE marker (only if not overlapping) */}
-                                                {clarenceBarPercent !== null && !isMeAtClarence && !isOtherAtClarence && (
-                                                    <div
-                                                        className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-purple-500 border-2 border-purple-700 flex items-center justify-center text-xs font-bold text-white z-10"
-                                                        style={{
-                                                            left: `${clarenceBarPercent}%`,
-                                                            transform: 'translate(-50%, -50%)'
-                                                        }}
-                                                        title={`CLARENCE suggests: ${clarenceDbPosition?.toFixed(1)}`}
-                                                    >
-                                                        ★
+                                        {/* Position Markers */}
+                                        {/* Other Party marker */}
+                                        {otherBarPercent !== null && !isAligned && (
+                                            <div
+                                                className={`absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md ${isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
+                                                style={{
+                                                    left: `${otherBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)',
+                                                    backgroundColor: isCustomer ? '#3b82f6' : '#10b981',
+                                                    borderColor: isCustomer ? '#1d4ed8' : '#047857',
+                                                    color: 'white'
+                                                }}
+                                                title={`${isCustomer ? 'Provider' : 'Customer'}: ${otherDbPosition?.toFixed(1)}`}
+                                            >
+                                                {isCustomer ? 'P' : 'C'}
+                                                {isOtherAtClarence && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
+                                                        <span className="text-[10px] text-white">★</span>
                                                     </div>
                                                 )}
+                                            </div>
+                                        )}
 
-                                                {/* CASE 4: Your position marker */}
-                                                {myBarPercent !== null && (
-                                                    <div
-                                                        className={`absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold z-20 transition-all ${isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
-                                                        style={{
-                                                            left: `${myBarPercent}%`,
-                                                            transform: 'translate(-50%, -50%)',
-                                                            backgroundColor: isCustomer ? '#10b981' : '#3b82f6',
-                                                            borderColor: isCustomer ? '#047857' : '#1d4ed8',
-                                                            color: 'white',
-                                                            borderWidth: '3px'
-                                                        }}
-                                                        title={`You: ${myDbPosition?.toFixed(1)}${isMeAtClarence ? ' (matches CLARENCE)' : ''}`}
-                                                    >
-                                                        {isCustomer ? 'C' : 'P'}
-                                                        {isMeAtClarence && (
-                                                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
-                                                                <span className="text-[8px] text-white">★</span>
-                                                            </div>
-                                                        )}
+                                        {/* CLARENCE marker */}
+                                        {clarenceBarPercent !== null && !isMeAtClarence && !isOtherAtClarence && (
+                                            <div
+                                                className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-purple-500 border-2 border-purple-700 flex items-center justify-center text-sm font-bold text-white z-10 shadow-md"
+                                                style={{
+                                                    left: `${clarenceBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)'
+                                                }}
+                                                title={`CLARENCE suggests: ${clarenceDbPosition?.toFixed(1)}`}
+                                            >
+                                                ★
+                                            </div>
+                                        )}
+
+                                        {/* Your position / Aligned marker */}
+                                        {isAligned && myBarPercent !== null ? (
+                                            <div
+                                                className={`absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg ${isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-2' : ''}`}
+                                                style={{
+                                                    left: `${myBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)',
+                                                    background: 'linear-gradient(135deg, #10b981 50%, #3b82f6 50%)',
+                                                    color: 'white',
+                                                    border: '3px solid white'
+                                                }}
+                                                title={`Aligned at ${myDbPosition?.toFixed(1)}`}
+                                            >
+                                                ✓
+                                            </div>
+                                        ) : myBarPercent !== null && (
+                                            <div
+                                                className={`absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg ${isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-2' : ''}`}
+                                                style={{
+                                                    left: `${myBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)',
+                                                    backgroundColor: isCustomer ? '#10b981' : '#3b82f6',
+                                                    borderColor: 'white',
+                                                    color: 'white',
+                                                    borderWidth: '3px'
+                                                }}
+                                                title={`You: ${myDbPosition?.toFixed(1)}`}
+                                            >
+                                                {isCustomer ? 'C' : 'P'}
+                                                {isMeAtClarence && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
+                                                        <span className="text-[10px] text-white">★</span>
                                                     </div>
                                                 )}
-                                            </>
+                                            </div>
                                         )}
 
                                         {/* Proposed position marker */}
                                         {proposedBarPercent !== null && proposedPosition !== myDbPosition && (
                                             <div
-                                                className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-amber-500 border-2 border-amber-600 flex items-center justify-center text-xs font-bold text-white z-25 animate-pulse"
+                                                className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-amber-500 border-3 border-white flex items-center justify-center text-xs font-bold text-white z-25 shadow-lg animate-pulse"
                                                 style={{
                                                     left: `${proposedBarPercent}%`,
                                                     transform: 'translate(-50%, -50%)'
                                                 }}
                                                 title={`Proposed: ${proposedPosition?.toFixed(1)}`}
                                             >
-                                                ?
+                                                →
                                             </div>
                                         )}
-                                    </>
-                                )
-                            })()}
-                        </div>
+                                    </div>
 
-                        {/* Option Cards */}
-                        <div className="space-y-2">
-                            {selectedClause.positionOptions!.map((option) => {
-                                const isMyPosition = myOptionValue === option.value
-                                const isOtherPosition = otherOptionValue === option.value
-                                const isRecommended = clarenceOptionValue === option.value
-                                const isProposedOption = proposedOptionValue === option.value && proposedOptionValue !== myOptionValue
+                                    {/* Zone Labels */}
+                                    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${zoneCount}, 1fr)` }}>
+                                        {selectedClause.positionOptions?.map((option, idx) => {
+                                            const isCurrentZone = currentZone?.value === option.value
+                                            const zoneStart = 1 + (idx * 9 / zoneCount)
+                                            const zoneEnd = 1 + ((idx + 1) * 9 / zoneCount)
+                                            const hasMyPosition = myDbPosition !== null && myDbPosition >= zoneStart && myDbPosition < zoneEnd
+                                            const hasOtherPosition = otherDbPosition !== null && otherDbPosition >= zoneStart && otherDbPosition < zoneEnd
+                                            const hasClarence = clarenceDbPosition !== null && clarenceDbPosition >= zoneStart && clarenceDbPosition < zoneEnd
 
-                                return (
-                                    <div
-                                        key={option.value}
-                                        onClick={() => {
-                                            if (!isMyPosition) {
-                                                handleOptionSelect(option.value)
-                                            }
-                                        }}
-                                        className={`p-3 rounded-lg border-2 transition-all cursor-pointer ${isProposedOption
-                                            ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200'
-                                            : isMyPosition
-                                                ? `${isCustomer ? 'bg-emerald-50 border-emerald-400' : 'bg-blue-50 border-blue-400'}`
-                                                : isOtherPosition
-                                                    ? `${isCustomer ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`
-                                                    : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                                            }`}
-                                    >
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="text-xs text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">
-                                                        ({option.value})
-                                                    </span>
-                                                    <span className="text-sm font-semibold text-slate-800">{option.label}</span>
-
-                                                    {isMyPosition && (
-                                                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${isCustomer ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
-                                                            }`}>
-                                                            Your Position
-                                                        </span>
-                                                    )}
-                                                    {isOtherPosition && !isMyPosition && (
-                                                        <span className={`px-2 py-0.5 text-xs font-medium rounded ${isCustomer ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
-                                                            }`}>
-                                                            {isCustomer ? 'Provider' : 'Customer'}
-                                                        </span>
-                                                    )}
-                                                    {isRecommended && (
-                                                        <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded flex items-center gap-1">
-                                                            <span>★</span> CLARENCE
-                                                        </span>
-                                                    )}
-                                                    {isProposedOption && (
-                                                        <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded animate-pulse">
-                                                            ⟳ Proposed
-                                                        </span>
-                                                    )}
+                                            return (
+                                                <div
+                                                    key={option.value}
+                                                    onClick={() => {
+                                                        // Click zone to jump to zone midpoint
+                                                        const midpoint = (zoneStart + zoneEnd) / 2
+                                                        handlePositionDrag(Math.round(midpoint * 10) / 10)
+                                                    }}
+                                                    className={`p-2 rounded text-center cursor-pointer transition-all ${isCurrentZone
+                                                            ? 'bg-slate-800 text-white'
+                                                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                                        }`}
+                                                    title={option.description}
+                                                >
+                                                    <div className="text-xs font-medium truncate">{option.label}</div>
+                                                    <div className="flex justify-center gap-1 mt-1">
+                                                        {hasMyPosition && (
+                                                            <span className={`w-2 h-2 rounded-full ${isCustomer ? 'bg-emerald-400' : 'bg-blue-400'}`}></span>
+                                                        )}
+                                                        {hasOtherPosition && (
+                                                            <span className={`w-2 h-2 rounded-full ${isCustomer ? 'bg-blue-400' : 'bg-emerald-400'}`}></span>
+                                                        )}
+                                                        {hasClarence && (
+                                                            <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <p className="text-xs text-slate-500 mt-1">{option.description}</p>
-                                            </div>
+                                            )
+                                        })}
+                                    </div>
 
-                                            {/* Selection indicator */}
-                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isMyPosition
-                                                ? `${isCustomer ? 'border-emerald-500 bg-emerald-500' : 'border-blue-500 bg-blue-500'}`
-                                                : isProposedOption
-                                                    ? 'border-amber-500 bg-amber-500'
-                                                    : 'border-slate-300'
-                                                }`}>
-                                                {(isMyPosition || isProposedOption) && (
-                                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                    </svg>
+                                    {/* Current Zone Description */}
+                                    {currentZone && (
+                                        <div className={`p-3 rounded-lg border-2 ${isAdjusting
+                                                ? 'bg-amber-50 border-amber-300'
+                                                : 'bg-slate-50 border-slate-200'
+                                            }`}>
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-xs text-slate-500">
+                                                        {isAdjusting ? 'Proposed Position' : 'Your Position'}
+                                                    </span>
+                                                    <div className="font-medium text-slate-800">
+                                                        {currentZone.label}
+                                                        <span className="ml-2 text-xs text-slate-400 font-mono">
+                                                            ({(proposedPosition ?? myDbPosition)?.toFixed(1)})
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {isAdjusting && (
+                                                    <span className="px-2 py-1 bg-amber-200 text-amber-800 text-xs font-medium rounded">
+                                                        Unsaved
+                                                    </span>
                                                 )}
                                             </div>
+                                            <p className="text-xs text-slate-500 mt-1">{currentZone.description}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Compact Legend */}
+                                    <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500 pt-2 border-t border-slate-200">
+                                        <div className="flex items-center gap-1">
+                                            <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
+                                            <span>You</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                                            <span>{isCustomer ? 'Provider' : 'Customer'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                            <span>CLARENCE</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                                            <span>Proposed</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 rounded-full overflow-hidden flex">
+                                                <div className="w-1/2 h-full bg-emerald-500"></div>
+                                                <div className="w-1/2 h-full bg-blue-500"></div>
+                                            </div>
+                                            <span>Aligned</span>
                                         </div>
                                     </div>
-                                )
-                            })}
-                        </div>
-
-                        {/* Legend */}
-                        <div className="flex flex-wrap gap-4 text-xs text-slate-500 pt-2 border-t border-slate-200">
-                            <div className="flex items-center gap-1">
-                                <div className={`w-4 h-4 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                                <span>You</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <div className={`w-4 h-4 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                                <span>{isCustomer ? 'Provider' : 'Customer'}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <div className="w-4 h-4 rounded-full bg-purple-500"></div>
-                                <span>CLARENCE</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <div className="w-4 h-4 rounded-full bg-amber-500"></div>
-                                <span>Proposed</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <div className="w-4 h-4 rounded-full overflow-hidden flex">
-                                    <div className="w-1/2 h-full bg-emerald-500"></div>
-                                    <div className="w-1/2 h-full bg-blue-500"></div>
                                 </div>
-                                <span>Aligned</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <div className="w-4 h-4 rounded-full bg-slate-400 ring-2 ring-purple-400"></div>
-                                <span>+ CLARENCE</span>
-                            </div>
-                        </div>
+                            )
+                        })()}
                     </div>
+                    
                 ) : (
                     /* Numeric Slider Fallback - for clauses without position options */
                     <div className="space-y-4">
