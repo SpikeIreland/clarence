@@ -837,7 +837,7 @@ function recalculateLeverageTracker(
 
             // Customer moving DOWN = accommodating = CUSTOMER earns credits
             if (customerDelta < 0) {
-                const impact = Math.abs(customerDelta) * (weight / 5) * 0.5
+                const impact = Math.abs(customerDelta) * (weight / 5) * 1.5
                 customerCredits += impact
                 console.log(`${clause.clauseName}: Customer accommodated, +${impact.toFixed(2)} customer credits`)
             }
@@ -850,8 +850,8 @@ function recalculateLeverageTracker(
 
             // Provider moving UP = accommodating = PROVIDER earns credits
             if (providerDelta > 0) {
-                const impact = providerDelta * (weight / 5) * 0.5
-                providerCredits += impact  // ← FIXED: Provider gets their own credits
+                const impact = providerDelta * (weight / 5) * 1.5
+                providerCredits += impact
                 console.log(`${clause.clauseName}: Provider accommodated, +${impact.toFixed(2)} provider credits`)
             }
         }
