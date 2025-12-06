@@ -921,13 +921,28 @@ function determineClauseStatus(gap: number): 'aligned' | 'negotiating' | 'disput
 // SECTION 4: HELPER FUNCTIONS
 // ============================================================================
 
-function buildClauseTree(clauses: ContractClause[]): ContractClause[] {
+function buildClauseTree(clauses: ContractClause[], preserveExpandedFrom?: ContractClause[]): ContractClause[] {
     const clauseMap = new Map<string, ContractClause>()
     const rootClauses: ContractClause[] = []
 
-    // First pass: create map - default all categories to collapsed
+    // Build a map of current expanded states to preserve
+    const expandedStates = new Map<string, boolean>()
+    if (preserveExpandedFrom) {
+        const collectExpandedStates = (items: ContractClause[]) => {
+            items.forEach(item => {
+                expandedStates.set(item.positionId, item.isExpanded)
+                if (item.children && item.children.length > 0) {
+                    collectExpandedStates(item.children)
+                }
+            })
+        }
+        collectExpandedStates(preserveExpandedFrom)
+    }
+
+    // First pass: create map - preserve expanded state if available, otherwise default to collapsed
     clauses.forEach(clause => {
-        clauseMap.set(clause.positionId, { ...clause, children: [], isExpanded: false })
+        const isExpanded = expandedStates.get(clause.positionId) ?? false
+        clauseMap.set(clause.positionId, { ...clause, children: [], isExpanded })
     })
 
     // Second pass: build tree structure
@@ -2163,7 +2178,7 @@ function ContractStudioContent() {
                 })
 
                 setClauses(updatedClauses)
-                setClauseTree(buildClauseTree(updatedClauses))
+                setClauseTree(buildClauseTree(updatedClauses, clauseTree))
 
                 const updatedSelectedClause = updatedClauses.find(c => c.positionId === selectedClause.positionId)
                 if (updatedSelectedClause) {
