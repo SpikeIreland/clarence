@@ -2685,45 +2685,57 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Position Options View */}
                 {hasPositionOptions ? (
                     <div className="space-y-3">
-                        {/* Visual Position Bar */}
+                        {/* Visual Position Bar - Uses RAW DB positions (1-10) for precise placement */}
                         <div className="relative h-8 bg-gradient-to-r from-blue-100 via-slate-100 to-emerald-100 rounded-full border border-slate-200 mb-4">
                             {(() => {
-                                // Calculate overlap states
-                                const overlaps = getPositionOverlaps(myOptionValue, otherOptionValue, clarenceOptionValue)
+                                // Convert DB positions (1-10) to percentage for bar placement
+                                const toBarPercent = (dbPos: number | null) => dbPos !== null ? ((dbPos - 1) / 9) * 100 : null
+
+                                const myBarPercent = toBarPercent(myDbPosition)
+                                const otherBarPercent = toBarPercent(otherDbPosition)
+                                const clarenceBarPercent = toBarPercent(clarenceDbPosition)
+                                const proposedBarPercent = toBarPercent(proposedPosition)
+
+                                // Check for TRUE alignment (within 0.5 points on DB scale)
+                                const isAligned = myDbPosition !== null && otherDbPosition !== null &&
+                                    Math.abs(myDbPosition - otherDbPosition) < 0.5
+                                const isMeAtClarence = myDbPosition !== null && clarenceDbPosition !== null &&
+                                    Math.abs(myDbPosition - clarenceDbPosition) < 0.5
+                                const isOtherAtClarence = otherDbPosition !== null && clarenceDbPosition !== null &&
+                                    Math.abs(otherDbPosition - clarenceDbPosition) < 0.5
 
                                 return (
                                     <>
-                                        {/* CASE 1: Customer and Provider are ALIGNED */}
-                                        {overlaps.isCustomerProviderAligned && myOptionValue !== null ? (
+                                        {/* CASE 1: Customer and Provider are TRULY ALIGNED */}
+                                        {isAligned && myBarPercent !== null ? (
                                             <CombinedPositionMarker
-                                                position={myOptionValue}
-                                                optionCount={optionCount}
+                                                position={myDbPosition!}
+                                                optionCount={10}
                                                 parties={[
                                                     'customer',
                                                     'provider',
-                                                    ...(overlaps.isMeAtClarence ? ['clarence' as const] : [])
+                                                    ...(isMeAtClarence ? ['clarence' as const] : [])
                                                 ]}
                                                 isCustomer={isCustomer}
-                                                label={`Aligned at ${getPositionLabel(myDbPosition)}${overlaps.isMeAtClarence ? ' (CLARENCE agrees)' : ''}`}
+                                                label={`Aligned at ${myDbPosition?.toFixed(1)}${isMeAtClarence ? ' (CLARENCE agrees)' : ''}`}
                                             />
                                         ) : (
                                             <>
-                                                {/* CASE 2: Separate markers - Other Party */}
-                                                {otherOptionValue !== null && (
+                                                {/* CASE 2: Other Party marker */}
+                                                {otherBarPercent !== null && (
                                                     <div
-                                                        className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 transition-all ${overlaps.isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''
-                                                            }`}
+                                                        className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 transition-all ${isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                                                         style={{
-                                                            left: `${((otherOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                            left: `${otherBarPercent}%`,
                                                             transform: 'translate(-50%, -50%)',
                                                             backgroundColor: isCustomer ? '#3b82f6' : '#10b981',
                                                             borderColor: isCustomer ? '#1d4ed8' : '#047857',
                                                             color: 'white'
                                                         }}
-                                                        title={`${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}${overlaps.isOtherAtClarence ? ' (matches CLARENCE)' : ''}`}
+                                                        title={`${isCustomer ? 'Provider' : 'Customer'}: ${otherDbPosition?.toFixed(1)}${isOtherAtClarence ? ' (matches CLARENCE)' : ''}`}
                                                     >
                                                         {isCustomer ? 'P' : 'C'}
-                                                        {overlaps.isOtherAtClarence && (
+                                                        {isOtherAtClarence && (
                                                             <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
                                                                 <span className="text-[8px] text-white">★</span>
                                                             </div>
@@ -2731,37 +2743,36 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     </div>
                                                 )}
 
-                                                {/* CASE 3: CLARENCE marker (only if not overlapping with other markers) */}
-                                                {clarenceOptionValue !== null && !overlaps.isMeAtClarence && !overlaps.isOtherAtClarence && (
+                                                {/* CASE 3: CLARENCE marker (only if not overlapping) */}
+                                                {clarenceBarPercent !== null && !isMeAtClarence && !isOtherAtClarence && (
                                                     <div
                                                         className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-purple-500 border-2 border-purple-700 flex items-center justify-center text-xs font-bold text-white z-10"
                                                         style={{
-                                                            left: `${((clarenceOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                            left: `${clarenceBarPercent}%`,
                                                             transform: 'translate(-50%, -50%)'
                                                         }}
-                                                        title={`CLARENCE suggests: ${getPositionLabel(clarenceDbPosition)}`}
+                                                        title={`CLARENCE suggests: ${clarenceDbPosition?.toFixed(1)}`}
                                                     >
                                                         ★
                                                     </div>
                                                 )}
 
                                                 {/* CASE 4: Your position marker */}
-                                                {myOptionValue !== null && (
+                                                {myBarPercent !== null && (
                                                     <div
-                                                        className={`absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold z-20 transition-all ${overlaps.isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''
-                                                            }`}
+                                                        className={`absolute top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold z-20 transition-all ${isMeAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                                                         style={{
-                                                            left: `${((myOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                            left: `${myBarPercent}%`,
                                                             transform: 'translate(-50%, -50%)',
                                                             backgroundColor: isCustomer ? '#10b981' : '#3b82f6',
                                                             borderColor: isCustomer ? '#047857' : '#1d4ed8',
                                                             color: 'white',
                                                             borderWidth: '3px'
                                                         }}
-                                                        title={`You: ${getPositionLabel(myDbPosition)}${overlaps.isMeAtClarence ? ' (matches CLARENCE)' : ''}`}
+                                                        title={`You: ${myDbPosition?.toFixed(1)}${isMeAtClarence ? ' (matches CLARENCE)' : ''}`}
                                                     >
                                                         {isCustomer ? 'C' : 'P'}
-                                                        {overlaps.isMeAtClarence && (
+                                                        {isMeAtClarence && (
                                                             <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center">
                                                                 <span className="text-[8px] text-white">★</span>
                                                             </div>
@@ -2771,15 +2782,15 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             </>
                                         )}
 
-                                        {/* Proposed position marker (always separate) */}
-                                        {proposedOptionValue !== null && proposedOptionValue !== myOptionValue && (
+                                        {/* Proposed position marker */}
+                                        {proposedBarPercent !== null && proposedPosition !== myDbPosition && (
                                             <div
                                                 className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-amber-500 border-2 border-amber-600 flex items-center justify-center text-xs font-bold text-white z-25 animate-pulse"
                                                 style={{
-                                                    left: `${((proposedOptionValue - 1) / (optionCount - 1)) * 100}%`,
+                                                    left: `${proposedBarPercent}%`,
                                                     transform: 'translate(-50%, -50%)'
                                                 }}
-                                                title={`Proposed: ${getPositionLabel(proposedPosition)}`}
+                                                title={`Proposed: ${proposedPosition?.toFixed(1)}`}
                                             >
                                                 ?
                                             </div>
