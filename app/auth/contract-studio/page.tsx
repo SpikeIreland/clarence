@@ -854,9 +854,15 @@ function recalculateLeverageTracker(
     console.log('Customer credits earned:', customerCredits.toFixed(2))
     console.log('Provider credits earned:', providerCredits.toFixed(2))
 
-    // Each party's tracker increases by THEIR OWN credits earned
-    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + customerCredits)))
-    const newProviderLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageProvider + providerCredits)))
+    // Zero-sum leverage: when one accommodates, they gain credits but lose leverage
+    // Customer accommodating = Customer loses leverage (provider gains)
+    // Provider accommodating = Provider loses leverage (customer gains)
+    const netShift = providerCredits - customerCredits  // Positive = customer gains leverage
+
+    console.log('Net shift (positive = customer gains):', netShift.toFixed(2))
+
+    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round(baseLeverageCustomer + netShift)))
+    const newProviderLeverage = 100 - newCustomerLeverage  // Always sums to 100
 
     console.log('New customer tracker:', newCustomerLeverage)
     console.log('New provider tracker:', newProviderLeverage)
