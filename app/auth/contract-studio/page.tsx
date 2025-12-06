@@ -3445,16 +3445,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
 
-                        {/* Right: User Info / Logged in status */}
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                            <span className="text-sm text-slate-300">
-                                {userInfo.firstName ? `${userInfo.firstName} ${userInfo.lastName}` : myCompany}
-                            </span>
-                            <span className="text-xs text-slate-500 bg-slate-700 px-2 py-0.5 rounded">
-                                {myRole}
-                            </span>
-                        </div>
+                        {/* Right: Spacer for balance */}
+                        <div className="w-24"></div>
                     </div>
                 </div>
 
@@ -3469,6 +3461,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             <div>
                                 <div className="text-xs text-slate-400">Customer</div>
                                 <div className="text-sm font-medium text-emerald-400">{customerCompany}</div>
+                                <div className="text-xs text-slate-500">
+                                    {isCustomer
+                                        ? `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || 'Contact'
+                                        : otherPartyStatus.userName || 'Contact'
+                                    }
+                                </div>
                             </div>
                             {isCustomer && (
                                 <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">
@@ -3522,6 +3520,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 <svg className={`w-3 h-3 transition-transform ${showProviderDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                 </svg>
+                                            </div>
+                                            <div className="text-xs text-slate-500">
+                                                {otherPartyStatus.userName || 'Contact'}
                                             </div>
                                         </div>
                                     </button>
@@ -3599,6 +3600,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-right">
                                     <div className="text-xs text-slate-400">Provider</div>
                                     <div className="text-sm font-medium text-blue-400">{providerCompany}</div>
+                                    <div className="text-xs text-slate-500">
+                                        {`${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || 'Contact'}
+                                    </div>
                                 </div>
                             )}
 

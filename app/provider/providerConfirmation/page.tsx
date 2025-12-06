@@ -142,12 +142,12 @@ function ProviderConfirmationContent() {
                                 </div>
 
                                 <div className="flex items-start gap-4">
-                                    <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <span className="text-slate-600 text-sm font-medium">3</span>
+                                    <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <span className="text-emerald-600 text-sm font-medium">3</span>
                                     </div>
                                     <div>
-                                        <div className="font-medium text-slate-700">Negotiation Invitation</div>
-                                        <p className="text-sm text-slate-500">You&apos;ll receive an email when the contract negotiation is ready to begin, with access to the Contract Studio.</p>
+                                        <div className="font-medium text-slate-700">Ready to Negotiate</div>
+                                        <p className="text-sm text-slate-500">You can now enter the Contract Studio to review your positions and begin negotiations. Click the button below to get started.</p>
                                     </div>
                                 </div>
                             </div>
@@ -155,13 +155,13 @@ function ProviderConfirmationContent() {
                     </div>
                 </div>
 
-                {/* Timeline Estimate */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+                {/* Ready Now Notice */}
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-8">
                     <div className="flex items-start gap-3">
-                        <span className="text-blue-500 text-xl">⏱️</span>
+                        <span className="text-emerald-500 text-xl">🚀</span>
                         <div>
-                            <h3 className="font-medium text-blue-800">Expected Timeline</h3>
-                            <p className="text-sm text-blue-700">You should receive notification within 2-3 business days once the customer is ready to proceed with negotiations.</p>
+                            <h3 className="font-medium text-emerald-800">Ready to Go!</h3>
+                            <p className="text-sm text-emerald-700">Your positions have been set. You can enter the Contract Studio now to review clause positions and start negotiating with the customer.</p>
                         </div>
                     </div>
                 </div>

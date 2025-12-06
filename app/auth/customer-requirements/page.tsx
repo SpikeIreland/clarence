@@ -1296,16 +1296,16 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
                     <input
                         type="range"
                         min="100"
-                        max="500"
+                        max="250"
                         step="25"
                         className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        value={formData.contractPositions?.liabilityCap || 200}
+                        value={formData.contractPositions?.liabilityCap || 150}
                         onChange={(e) => updateNestedData('contractPositions', 'liabilityCap', parseInt(e.target.value))}
                     />
                     <div className="flex justify-between text-xs text-slate-500 mt-1">
                         <span>100% (Provider-friendly)</span>
-                        <span>300% (Standard)</span>
-                        <span>500% (Customer-friendly)</span>
+                        <span>175%</span>
+                        <span>250% (Customer-friendly)</span>
                     </div>
                 </div>
 
