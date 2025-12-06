@@ -1327,6 +1327,227 @@ const CombinedPositionMarker = ({
     return null
 }
 
+
+// ============================================================================
+// SECTION 5D: MOVES TRACKER OVERLAY COMPONENT
+// ============================================================================
+
+interface MovesTrackerOverlayProps {
+    isOpen: boolean
+    onClose: () => void
+    negotiationHistory: NegotiationHistoryEntry[]
+    userRole: 'customer' | 'provider'
+    sessionId: string
+}
+
+function MovesTrackerOverlay({ isOpen, onClose, negotiationHistory, userRole, sessionId }: MovesTrackerOverlayProps) {
+    const [timeFilter, setTimeFilter] = useState<'all' | 'hour' | 'today' | 'week'>('all')
+    const [partyFilter, setPartyFilter] = useState<'all' | 'customer' | 'provider'>('all')
+
+    if (!isOpen) return null
+
+    // Filter history entries
+    const filteredHistory = negotiationHistory
+        .filter(entry => {
+            // Only show position changes
+            if (entry.eventType !== 'position_change') return false
+
+            // Party filter
+            if (partyFilter !== 'all' && entry.party !== partyFilter) return false
+
+            // Time filter
+            if (timeFilter !== 'all') {
+                const entryTime = new Date(entry.timestamp).getTime()
+                const now = Date.now()
+                const hourAgo = now - (60 * 60 * 1000)
+                const startOfToday = new Date().setHours(0, 0, 0, 0)
+                const weekAgo = now - (7 * 24 * 60 * 60 * 1000)
+
+                if (timeFilter === 'hour' && entryTime < hourAgo) return false
+                if (timeFilter === 'today' && entryTime < startOfToday) return false
+                if (timeFilter === 'week' && entryTime < weekAgo) return false
+            }
+
+            return true
+        })
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+    const formatTimestamp = (timestamp: string) => {
+        const date = new Date(timestamp)
+        const now = new Date()
+        const diffMs = now.getTime() - date.getTime()
+        const diffMins = Math.floor(diffMs / 60000)
+        const diffHours = Math.floor(diffMs / 3600000)
+        const diffDays = Math.floor(diffMs / 86400000)
+
+        if (diffMins < 1) return 'Just now'
+        if (diffMins < 60) return `${diffMins}m ago`
+        if (diffHours < 24) return `${diffHours}h ago`
+        if (diffDays < 7) return `${diffDays}d ago`
+        return date.toLocaleDateString()
+    }
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-slate-200">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-800">Moves Tracker</h2>
+                        <p className="text-sm text-slate-500">All position changes in this negotiation</p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Filters */}
+                <div className="flex items-center gap-4 p-4 border-b border-slate-100">
+                    {/* Time Filter */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">Time:</span>
+                        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                            {(['all', 'hour', 'today', 'week'] as const).map(filter => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setTimeFilter(filter)}
+                                    className={`px-2 py-1 text-xs rounded-md transition ${timeFilter === filter
+                                        ? 'bg-white text-slate-800 shadow-sm'
+                                        : 'text-slate-600 hover:text-slate-800'
+                                        }`}
+                                >
+                                    {filter === 'all' ? 'All' : filter === 'hour' ? 'Last Hour' : filter === 'today' ? 'Today' : 'This Week'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Party Filter */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">Party:</span>
+                        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                            {(['all', 'customer', 'provider'] as const).map(filter => (
+                                <button
+                                    key={filter}
+                                    onClick={() => setPartyFilter(filter)}
+                                    className={`px-2 py-1 text-xs rounded-md transition ${partyFilter === filter
+                                        ? 'bg-white text-slate-800 shadow-sm'
+                                        : 'text-slate-600 hover:text-slate-800'
+                                        }`}
+                                >
+                                    {filter === 'all' ? 'All' : filter === 'customer' ? 'Customer' : 'Provider'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Count */}
+                    <div className="ml-auto text-xs text-slate-400">
+                        {filteredHistory.length} move{filteredHistory.length !== 1 ? 's' : ''}
+                    </div>
+                </div>
+
+                {/* Moves List */}
+                <div className="flex-1 overflow-y-auto p-4">
+                    {filteredHistory.length === 0 ? (
+                        <div className="text-center py-12">
+                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                </svg>
+                            </div>
+                            <p className="text-slate-600">No moves found</p>
+                            <p className="text-sm text-slate-400 mt-1">
+                                {timeFilter !== 'all' || partyFilter !== 'all'
+                                    ? 'Try adjusting your filters'
+                                    : 'Position changes will appear here'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {filteredHistory.map((entry) => (
+                                <div
+                                    key={entry.id}
+                                    className={`border rounded-lg p-3 ${entry.party === 'customer'
+                                        ? 'border-emerald-200 bg-emerald-50/50'
+                                        : 'border-blue-200 bg-blue-50/50'
+                                        }`}
+                                >
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${entry.party === 'customer' ? 'bg-emerald-500' : 'bg-blue-500'
+                                                }`}>
+                                                {entry.party === 'customer' ? 'C' : 'P'}
+                                            </div>
+                                            <div>
+                                                <span className={`text-sm font-medium ${entry.party === 'customer' ? 'text-emerald-700' : 'text-blue-700'
+                                                    }`}>
+                                                    {entry.partyName}
+                                                </span>
+                                                {entry.party !== userRole && (
+                                                    <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-600 text-xs rounded">
+                                                        Other Party
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <span className="text-xs text-slate-400">
+                                            {formatTimestamp(entry.timestamp)}
+                                        </span>
+                                    </div>
+
+                                    <div className="ml-8">
+                                        <p className="text-sm text-slate-700 mb-2">{entry.description}</p>
+
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                                {entry.clauseName}
+                                            </span>
+
+                                            {entry.oldValue !== undefined && entry.newValue !== undefined && (
+                                                <div className="flex items-center gap-1.5 text-xs">
+                                                    <span className="text-slate-400">Position:</span>
+                                                    <span className="text-red-500 line-through">{entry.oldValue}</span>
+                                                    <span className="text-slate-400">→</span>
+                                                    <span className="text-emerald-600 font-medium">{entry.newValue}</span>
+                                                </div>
+                                            )}
+
+                                            {entry.leverageImpact !== undefined && entry.leverageImpact !== 0 && (
+                                                <span className={`text-xs px-1.5 py-0.5 rounded ${entry.leverageImpact > 0
+                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                    : 'bg-amber-100 text-amber-700'
+                                                    }`}>
+                                                    {entry.leverageImpact > 0 ? '+' : ''}{entry.leverageImpact.toFixed(1)}%
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-slate-200 flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ============================================================================
 // SECTION 6: MAIN CONTRACT STUDIO COMPONENT
 // ============================================================================
@@ -3182,14 +3403,32 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </button>
                     </div>
 
-                    {/* Dynamic Alignment Badge */}
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${dynamicAlignmentPercentage >= 90
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : dynamicAlignmentPercentage >= 70
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                        {dynamicAlignmentPercentage}% Aligned
+                    <div className="flex items-center gap-2">
+                        {/* Moves Tracker Button */}
+                        <button
+                            onClick={() => setShowMovesTracker(true)}
+                            className="relative px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex items-center gap-1.5"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Moves
+                            {totalUnseenMoves > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                    {totalUnseenMoves > 9 ? '9+' : totalUnseenMoves}
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Dynamic Alignment Badge */}
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${dynamicAlignmentPercentage >= 90
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : dynamicAlignmentPercentage >= 70
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                            {dynamicAlignmentPercentage}% Aligned
+                        </div>
                     </div>
                 </div>
 
@@ -3806,6 +4045,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     }}
                     onDismiss={dismissError}
                 />
+
+                {/* Moves Tracker Overlay */}
+                <MovesTrackerOverlay
+                    isOpen={showMovesTracker}
+                    onClose={() => setShowMovesTracker(false)}
+                    negotiationHistory={negotiationHistory}
+                    userRole={userInfo?.role || 'customer'}
+                    sessionId={session?.sessionId || ''}
+                />
+
                 {/* LEFT PANEL: Clause Navigation */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
                     <div className="flex-shrink-0 p-4 border-b border-slate-200">
