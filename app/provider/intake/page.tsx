@@ -1358,23 +1358,20 @@ function ContractPositionsStep({ formData, updateFormData }: StepProps) {
                     </label>
                     <input
                         type="range"
-                        min="50"
-                        max="300"
+                        min="100"
+                        max="250"
                         step="25"
                         className="w-full accent-blue-600"
-                        value={formData.liabilityCap || 125}
+                        value={formData.liabilityCap || 150}
                         onChange={(e) => updateFormData('liabilityCap', parseInt(e.target.value))}
                     />
                     <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>50%</span>
                         <span>100%</span>
                         <span>150%</span>
                         <span>200%</span>
                         <span>250%</span>
-                        <span>300%</span>
                     </div>
                 </div>
-
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                         Payment Terms: {formData.paymentTermsDays} days
