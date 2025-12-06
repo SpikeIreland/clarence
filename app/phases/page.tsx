@@ -264,14 +264,23 @@ export default function PhasesPage() {
                 style={{ width: `${Math.max(0, ((selectedPhase - 1) / 5) * (100 - 8))}%` }}
               ></div>
 
-              {/* Phase Indicators - FIXED: Better text display */}
+              {/* Phase Indicators - Full text display with wrapping */}
               {phases.map((phase) => {
                 const colors = getPhaseColors(phase.color, selectedPhase === phase.number)
+                // Short labels for timeline display
+                const shortLabels: Record<number, string> = {
+                  1: 'Deal Profile & Leverage',
+                  2: 'Contract Foundation',
+                  3: 'Gap Narrowing',
+                  4: 'Points of Contention',
+                  5: 'Deal Drivers',
+                  6: 'Final Review'
+                }
                 return (
                   <button
                     key={phase.number}
                     onClick={() => handlePhaseIndicatorClick(phase.number)}
-                    className="relative z-10 group flex flex-col items-center w-24"
+                    className="relative z-10 group flex flex-col items-center w-28"
                   >
                     <div className={`
                       w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg
@@ -281,14 +290,11 @@ export default function PhasesPage() {
                     `}>
                       {phase.number}
                     </div>
-                    {/* FIXED: Phase name with proper wrapping */}
-                    <div className="mt-3 text-center h-10 flex items-start justify-center">
+                    {/* Phase name - short labels that fit */}
+                    <div className="mt-3 text-center min-h-[2.5rem] flex items-start justify-center">
                       <p className={`text-xs font-medium transition-colors leading-tight ${selectedPhase === phase.number ? 'text-slate-800' : 'text-slate-500'
                         }`}>
-                        {phase.subtitle.length > 20
-                          ? phase.subtitle.split(' ').slice(0, 2).join(' ')
-                          : phase.subtitle
-                        }
+                        {shortLabels[phase.number]}
                       </p>
                     </div>
                   </button>
