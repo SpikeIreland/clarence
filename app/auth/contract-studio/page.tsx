@@ -1353,6 +1353,11 @@ function ContractStudioContent() {
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'agreements'>('all')
 
+    // Unseen moves tracking (badges for other party's changes)
+    const [unseenMoves, setUnseenMoves] = useState<Map<string, number>>(new Map())
+    const [totalUnseenMoves, setTotalUnseenMoves] = useState(0)
+    const [showMovesTracker, setShowMovesTracker] = useState(false)
+
     // Position adjustment state
     const [proposedPosition, setProposedPosition] = useState<number | null>(null)
     const [isAdjusting, setIsAdjusting] = useState(false)
@@ -3445,7 +3450,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 e.stopPropagation()
                                 handleClauseToggle(clause.positionId)
                             }}
-                            className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-slate-600"
+                            className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-slate-600 relative"
                         >
                             <svg
                                 className={`w-3 h-3 transition-transform ${clause.isExpanded ? 'rotate-90' : ''}`}
@@ -3459,6 +3464,29 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     ) : (
                         <div className="w-4"></div>
                     )}
+
+                    {/* Unseen moves badge - for parent clauses, sum children; for child clauses, show direct count */}
+                    {(() => {
+                        const getUnseenCount = () => {
+                            if (clause.clauseLevel === 0) {
+                                // Parent: sum unseen from all children
+                                let total = 0
+                                clause.children?.forEach(child => {
+                                    total += unseenMoves.get(child.clauseId) || 0
+                                })
+                                return total
+                            } else {
+                                // Child: direct lookup
+                                return unseenMoves.get(clause.clauseId) || 0
+                            }
+                        }
+                        const count = getUnseenCount()
+                        return count > 0 ? (
+                            <span className="flex-shrink-0 w-5 h-5 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                {count > 9 ? '9+' : count}
+                            </span>
+                        ) : null
+                    })()}
 
                     <div className={`w-2 h-2 rounded-full ${getStatusBgColor(clause.status)}`}></div>
 
@@ -3826,18 +3854,31 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </div>
 
                                 <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                                    {(['positions', 'tradeoffs', 'history', 'draft'] as const).map(tab => (
-                                        <button
-                                            key={tab}
-                                            onClick={() => setActiveTab(tab)}
-                                            className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
-                                                ? 'bg-white text-slate-800 shadow-sm'
-                                                : 'text-slate-500 hover:text-slate-700'
-                                                }`}
-                                        >
-                                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                        </button>
-                                    ))}
+                                    {(['positions', 'tradeoffs', 'history', 'draft'] as const).map(tab => {
+                                        // Calculate unseen count for history tab badge
+                                        const historyBadgeCount = tab === 'history' && selectedClause
+                                            ? (unseenMoves.get(selectedClause.clauseId) || 0)
+                                            : 0
+
+                                        return (
+                                            <button
+                                                key={tab}
+                                                onClick={() => setActiveTab(tab)}
+                                                className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
+                                                    ? 'bg-white text-slate-800 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-700'
+                                                    }`}
+                                            >
+                                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                                {/* Unseen moves badge on History tab */}
+                                                {historyBadgeCount > 0 && (
+                                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                                        {historyBadgeCount > 9 ? '9+' : historyBadgeCount}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        )
+                                    })}
                                 </div>
                             </div>
                         </div>
