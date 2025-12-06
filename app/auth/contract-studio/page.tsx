@@ -930,7 +930,7 @@ function buildClauseTree(clauses: ContractClause[], preserveExpandedFrom?: Contr
     if (preserveExpandedFrom) {
         const collectExpandedStates = (items: ContractClause[]) => {
             items.forEach(item => {
-                expandedStates.set(item.positionId, item.isExpanded)
+                expandedStates.set(item.positionId, item.isExpanded ?? false)
                 if (item.children && item.children.length > 0) {
                     collectExpandedStates(item.children)
                 }
