@@ -1081,6 +1081,7 @@ function detectTradeOffOpportunities(clauses: ContractClause[], selectedClause?:
     return opportunities.sort((a, b) => b.tradeOffValue - a.tradeOffValue).slice(0, 5)
 }
 
+
 // ============================================================================
 // SECTION 5: LOADING COMPONENT
 // ============================================================================
@@ -1338,9 +1339,10 @@ interface MovesTrackerOverlayProps {
     negotiationHistory: NegotiationHistoryEntry[]
     userRole: 'customer' | 'provider'
     sessionId: string
+    onMarkAllSeen?: () => void
 }
 
-function MovesTrackerOverlay({ isOpen, onClose, negotiationHistory, userRole, sessionId }: MovesTrackerOverlayProps) {
+function MovesTrackerOverlay({ isOpen, onClose, negotiationHistory, userRole, sessionId, onMarkAllSeen }: MovesTrackerOverlayProps) {
     const [timeFilter, setTimeFilter] = useState<'all' | 'hour' | 'today' | 'week'>('all')
     const [partyFilter, setPartyFilter] = useState<'all' | 'customer' | 'provider'>('all')
 
@@ -1535,7 +1537,37 @@ function MovesTrackerOverlay({ isOpen, onClose, negotiationHistory, userRole, se
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-slate-200 flex justify-end">
+                <div className="p-4 border-t border-slate-200 flex justify-between">
+                    <button
+                        onClick={async () => {
+                            if (sessionId) {
+                                try {
+                                    const response = await fetch(`${API_BASE}/mark-moves-seen`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            session_id: sessionId,
+                                            viewer_role: userRole,
+                                            clause_id: null
+                                        })
+                                    })
+                                    if (response.ok) {
+                                        // Trigger parent to clear badges - we need to pass a callback
+                                        if (onMarkAllSeen) onMarkAllSeen()
+                                        onClose()
+                                    }
+                                } catch (error) {
+                                    console.error('Error marking all as seen:', error)
+                                }
+                            }
+                        }}
+                        className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium rounded-lg transition flex items-center gap-2"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Mark all as read
+                    </button>
                     <button
                         onClick={onClose}
                         className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
@@ -1638,6 +1670,7 @@ function ContractStudioContent() {
     // SECTION 6H: GLOBAL WORKING STATE MANAGEMENT
     // ============================================================================
 
+
     const [workingState, setWorkingState] = useState<WorkingState>({
         isWorking: true,
         type: 'initial_load',
@@ -1735,6 +1768,45 @@ function ContractStudioContent() {
             }
         }
     }, [])
+
+    // ============================================================================
+    // MARK MOVES AS SEEN
+    // ============================================================================
+
+    const markMovesAsSeen = async (clauseId?: string) => {
+        if (!session?.sessionId || !userInfo?.role) return
+
+        try {
+            const response = await fetch(`${API_BASE}/mark-moves-seen`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    viewer_role: userInfo.role,
+                    clause_id: clauseId || null
+                })
+            })
+
+            if (response.ok) {
+                // Update local state to clear badges
+                if (clauseId) {
+                    // Clear specific clause
+                    setUnseenMoves(prev => {
+                        const newMap = new Map(prev)
+                        newMap.delete(clauseId)
+                        return newMap
+                    })
+                    setTotalUnseenMoves(prev => Math.max(0, prev - (unseenMoves.get(clauseId) || 0)))
+                } else {
+                    // Clear all
+                    setUnseenMoves(new Map())
+                    setTotalUnseenMoves(0)
+                }
+            }
+        } catch (error) {
+            console.error('Error marking moves as seen:', error)
+        }
+    }
 
     // ============================================================================
     // SECTION 7: DATA LOADING
@@ -4053,6 +4125,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     negotiationHistory={negotiationHistory}
                     userRole={userInfo?.role || 'customer'}
                     sessionId={session?.sessionId || ''}
+                    onMarkAllSeen={() => {
+                        setUnseenMoves(new Map())
+                        setTotalUnseenMoves(0)
+                    }}
                 />
 
                 {/* LEFT PANEL: Clause Navigation */}
@@ -4123,7 +4199,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         return (
                                             <button
                                                 key={tab}
-                                                onClick={() => setActiveTab(tab)}
+                                                onClick={() => {
+                                                    setActiveTab(tab)
+                                                    // Mark moves as seen when viewing History tab
+                                                    if (tab === 'history' && selectedClause) {
+                                                        markMovesAsSeen(selectedClause.clauseId)
+                                                    }
+                                                }}
                                                 className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
                                                     ? 'bg-white text-slate-800 shadow-sm'
                                                     : 'text-slate-500 hover:text-slate-700'
