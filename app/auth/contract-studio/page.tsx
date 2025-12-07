@@ -1873,7 +1873,7 @@ function ContractStudioContent() {
             supabase.removeChannel(channel)
         }
     }, [session?.sessionId, userInfo?.role])
-    
+
     // ============================================================================
     // SECTION 7: DATA LOADING
     // ============================================================================
@@ -2274,45 +2274,17 @@ function ContractStudioContent() {
     // Ensures tracker reflects all position changes, not just baseline
     // ============================================================================
 
-    const [hasRecalculatedOnLoad, setHasRecalculatedOnLoad] = useState(false)
-
-    useEffect(() => {
-        // Only run once after initial data loads
-        if (hasRecalculatedOnLoad) return
-
-        // Wait for all required data
-        if (!leverage || !clauses.length || !userInfo?.role) return
-
-        // Skip if leverage hasn't been calculated yet
-        if (!leverage.leverageScoreCustomer || !leverage.leverageScoreProvider) return
-
-        // Mark as done so this only runs once per page load
-        setHasRecalculatedOnLoad(true)
-
-        // Recalculate tracker based on current clause positions
-        const recalculatedLeverage = recalculateLeverageTracker(
-            leverage.leverageScoreCustomer,
-            leverage.leverageScoreProvider,
-            clauses,
-            userInfo.role as 'customer' | 'provider'
-        )
-
-        // Only update if tracker values differ from API response
-        if (
-            recalculatedLeverage.customerLeverage !== leverage.leverageTrackerCustomer ||
-            recalculatedLeverage.providerLeverage !== leverage.leverageTrackerProvider
-        ) {
-            console.log('=== LEVERAGE TRACKER RECALCULATED ON LOAD ===')
-            console.log('API returned:', leverage.leverageTrackerCustomer, ':', leverage.leverageTrackerProvider)
-            console.log('Recalculated:', recalculatedLeverage.customerLeverage, ':', recalculatedLeverage.providerLeverage)
-
-            setLeverage(prev => prev ? {
-                ...prev,
-                leverageTrackerCustomer: recalculatedLeverage.customerLeverage,
-                leverageTrackerProvider: recalculatedLeverage.providerLeverage
-            } : null)
-        }
-    }, [clauses, leverage, userInfo?.role, hasRecalculatedOnLoad])
+    // ============================================================================
+    // LEVERAGE TRACKER - TRUST PERSISTED VALUES FROM API
+    // ============================================================================
+    // Leverage tracker values are now persisted to the database on each position
+    // change (via position-update-api) and loaded from the Contract Studio API.
+    // We no longer recalculate on page load to avoid overwriting persisted values.
+    // 
+    // The recalculateLeverageTracker function is still used for real-time UI 
+    // updates DURING the session when positions change, but the database values
+    // are the source of truth on page refresh.
+    // ============================================================================
 
     useEffect(() => {
         if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
