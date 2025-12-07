@@ -2351,17 +2351,14 @@ function ContractStudioContent() {
                 clause.customerPosition !== clause.originalCustomerPosition) {
 
                 const delta = clause.customerPosition - clause.originalCustomerPosition
-                // Customer moving DOWN = conceding to provider
-                const isCustomerConceding = delta < 0
+                const weight = clause.customerWeight ?? 5
 
-                // Calculate impact FROM VIEWER'S PERSPECTIVE
-                // If viewer is customer: conceding = negative, other conceding = positive
-                // If viewer is provider: customer conceding = positive (good for you)
-                let viewerImpact = Math.abs(delta) * 0.5
-                if (isViewerCustomer && isCustomerConceding) {
-                    viewerImpact = -viewerImpact // You conceded
-                } else if (!isViewerCustomer && !isCustomerConceding) {
-                    viewerImpact = -viewerImpact // Customer pushed, bad for you
+                // Customer moving DOWN = accommodating = POSITIVE credits for customer
+                // Customer moving UP = demanding more = no credits
+                let leverageImpact = 0
+                if (delta < 0) {
+                    // Customer accommodated - they earned credits
+                    leverageImpact = Math.abs(delta) * (weight / 5) * 1.5
                 }
 
                 history.push({
@@ -2377,7 +2374,7 @@ function ContractStudioContent() {
                         : `${session.customerCompany} adjusted position on ${clause.clauseName}`,
                     oldValue: clause.originalCustomerPosition,
                     newValue: clause.customerPosition,
-                    leverageImpact: viewerImpact
+                    leverageImpact: leverageImpact
                 })
             }
 
@@ -2387,17 +2384,14 @@ function ContractStudioContent() {
                 clause.providerPosition !== clause.originalProviderPosition) {
 
                 const delta = clause.providerPosition - clause.originalProviderPosition
-                // Provider moving UP = conceding to customer
-                const isProviderConceding = delta > 0
+                const weight = clause.providerWeight ?? 5
 
-                // Calculate impact FROM VIEWER'S PERSPECTIVE
-                // If viewer is provider: conceding = negative, other conceding = positive
-                // If viewer is customer: provider conceding = positive (good for you)
-                let viewerImpact = Math.abs(delta) * 0.5
-                if (!isViewerCustomer && isProviderConceding) {
-                    viewerImpact = -viewerImpact // You conceded
-                } else if (isViewerCustomer && !isProviderConceding) {
-                    viewerImpact = -viewerImpact // Provider pushed, bad for you
+                // Provider moving UP = accommodating = POSITIVE credits for provider
+                // Provider moving DOWN = demanding more = no credits
+                let leverageImpact = 0
+                if (delta > 0) {
+                    // Provider accommodated - they earned credits
+                    leverageImpact = delta * (weight / 5) * 1.5
                 }
 
                 history.push({
@@ -2413,7 +2407,7 @@ function ContractStudioContent() {
                         : `You adjusted position on ${clause.clauseName}`,
                     oldValue: clause.originalProviderPosition,
                     newValue: clause.providerPosition,
-                    leverageImpact: viewerImpact
+                    leverageImpact: leverageImpact
                 })
             }
 
@@ -2436,7 +2430,7 @@ function ContractStudioContent() {
         history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
         setNegotiationHistory(history)
-    }, [clauses, session])
+    }, [clauses, session, userInfo?.role])
 
 
     // ============================================================================
