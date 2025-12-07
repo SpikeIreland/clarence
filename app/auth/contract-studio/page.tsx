@@ -2538,12 +2538,54 @@ function ContractStudioContent() {
                     userInfo.role as 'customer' | 'provider'
                 )
 
+                // Use the values we already calculated
                 setLeverage({
                     ...leverage,
                     leverageTrackerCustomer: newLeverage.customerLeverage,
                     leverageTrackerProvider: newLeverage.providerLeverage,
                     leverageTrackerCalculatedAt: new Date().toISOString()
                 })
+
+                // ============================================================
+                // CLARENCE RESPONSE TO POSITION CHANGE
+                // ============================================================
+                const newGap = calculateGap(
+                    userInfo.role === 'customer' ? proposedPosition : selectedClause.customerPosition,
+                    userInfo.role === 'provider' ? proposedPosition : selectedClause.providerPosition
+                )
+                const isNowAligned = newGap < 0.5
+                const clarenceRec = selectedClause.clarenceRecommendation
+                const alignedWithClarence = clarenceRec !== null && Math.abs(proposedPosition - clarenceRec) < 0.5
+
+                let clarenceMessage: string | null = null
+
+                if (isNowAligned) {
+                    // Both parties are now aligned on this clause
+                    clarenceMessage = `🎉 Excellent news! Both parties have reached agreement on **${selectedClause.clauseName}**. This clause is now fully aligned. Well done to both sides for finding common ground.`
+                } else if (alignedWithClarence) {
+                    // User adopted CLARENCE's recommendation
+                    clarenceMessage = `Thank you for adopting my suggested position on **${selectedClause.clauseName}**. This positions you well for constructive dialogue with the other party. I'd encourage you to discuss this clause directly to help them understand your reasoning.`
+                } else {
+                    // Standard position change
+                    clarenceMessage = `New position noted on **${selectedClause.clauseName}**. The current gap to the other party is ${newGap.toFixed(1)} points.`
+                }
+
+                if (clarenceMessage) {
+                    const clarenceResponse: ClauseChatMessage = {
+                        messageId: `clarence-position-${Date.now()}`,
+                        sessionId: session.sessionId,
+                        positionId: selectedClause.positionId,
+                        sender: 'clarence',
+                        senderUserId: null,
+                        message: clarenceMessage,
+                        messageType: 'auto_response',
+                        relatedPositionChange: true,
+                        triggeredBy: 'position_change',
+                        createdAt: new Date().toISOString()
+                    }
+                    setChatMessages(prev => [...prev, clarenceResponse])
+                }
+                // ============================================================
 
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
