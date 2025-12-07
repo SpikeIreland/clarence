@@ -200,7 +200,6 @@ interface PartyStatus {
     userName: string | null
 }
 
-// API Response Types
 interface ApiClauseResponse {
     positionId: string
     clauseId: string
@@ -213,6 +212,8 @@ interface ApiClauseResponse {
     displayOrder: number
     customerPosition: string | null
     providerPosition: string | null
+    originalCustomerPosition: string | null
+    originalProviderPosition: string | null
     currentCompromise: string | null
     aiSuggestedCompromise: string | null
     gapSize: string
@@ -1961,8 +1962,12 @@ function ContractStudioContent() {
                     displayOrder: c.displayOrder,
                     customerPosition: customerPos,
                     providerPosition: providerPos,
-                    originalCustomerPosition: customerPos,
-                    originalProviderPosition: providerPos,
+                    originalCustomerPosition: c.originalCustomerPosition != null
+                        ? parseFloat(c.originalCustomerPosition)
+                        : customerPos,
+                    originalProviderPosition: c.originalProviderPosition != null
+                        ? parseFloat(c.originalProviderPosition)
+                        : providerPos,
                     currentCompromise: c.currentCompromise ? parseFloat(c.currentCompromise) : null,
                     clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(c.aiSuggestedCompromise) : null,
                     industryStandard: null,
