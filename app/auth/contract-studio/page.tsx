@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
+import { createClient } from '@/lib/supabase'
 import { PartyChatPanel } from './components/party-chat-component'
 
 
@@ -1808,6 +1809,71 @@ function ContractStudioContent() {
         }
     }
 
+    // ============================================================================
+    // REALTIME SUBSCRIPTION FOR POSITION CHANGES
+    // ============================================================================
+
+    useEffect(() => {
+        // Only subscribe when we have session and user info
+        if (!session?.sessionId || !userInfo?.role) return
+
+        const supabase = createClient()
+        const viewerRole = userInfo.role
+
+        // Subscribe to new position changes for this session
+        const channel = supabase
+            .channel(`position-changes-${session.sessionId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'position_change_history',
+                    filter: `session_id=eq.${session.sessionId}`
+                },
+                (payload) => {
+                    console.log('Realtime position change received:', payload)
+
+                    const newRecord = payload.new as {
+                        clause_id: string
+                        party: 'customer' | 'provider'
+                        seen_by_customer: boolean
+                        seen_by_provider: boolean
+                    }
+
+                    // Only count if it's from the OTHER party and not yet seen by viewer
+                    const isFromOtherParty = newRecord.party !== viewerRole
+                    const isUnseen = viewerRole === 'customer'
+                        ? !newRecord.seen_by_customer
+                        : !newRecord.seen_by_provider
+
+                    if (isFromOtherParty && isUnseen) {
+                        // Update unseen moves count for this clause
+                        setUnseenMoves(prev => {
+                            const newMap = new Map(prev)
+                            const currentCount = newMap.get(newRecord.clause_id) || 0
+                            newMap.set(newRecord.clause_id, currentCount + 1)
+                            return newMap
+                        })
+
+                        // Update total count
+                        setTotalUnseenMoves(prev => prev + 1)
+
+                        console.log(`New unseen move on clause ${newRecord.clause_id} from ${newRecord.party}`)
+                    }
+                }
+            )
+            .subscribe((status) => {
+                console.log('Realtime subscription status:', status)
+            })
+
+        // Cleanup on unmount or when session/user changes
+        return () => {
+            console.log('Unsubscribing from position changes')
+            supabase.removeChannel(channel)
+        }
+    }, [session?.sessionId, userInfo?.role])
+    
     // ============================================================================
     // SECTION 7: DATA LOADING
     // ============================================================================
