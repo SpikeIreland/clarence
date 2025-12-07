@@ -838,7 +838,7 @@ function recalculateLeverageTracker(
 
             // Customer moving DOWN = accommodating = CUSTOMER earns credits
             if (customerDelta < 0) {
-                const impact = Math.abs(customerDelta) * (weight / 5) * 1.5
+                const impact = Math.abs(customerDelta) * (weight / 5) * 0.5
                 customerCredits += impact
                 console.log(`${clause.clauseName}: Customer accommodated, +${impact.toFixed(2)} customer credits`)
             }
@@ -851,7 +851,7 @@ function recalculateLeverageTracker(
 
             // Provider moving UP = accommodating = PROVIDER earns credits
             if (providerDelta > 0) {
-                const impact = providerDelta * (weight / 5) * 1.5
+                const impact = providerDelta * (weight / 5) * 0.5
                 providerCredits += impact
                 console.log(`${clause.clauseName}: Provider accommodated, +${impact.toFixed(2)} provider credits`)
             }
@@ -2358,7 +2358,7 @@ function ContractStudioContent() {
                 let leverageImpact = 0
                 if (delta < 0) {
                     // Customer accommodated - they earned credits
-                    leverageImpact = Math.abs(delta) * (weight / 5) * 1.5
+                    leverageImpact = Math.abs(delta) * (weight / 5) * 0.5
                 }
 
                 history.push({
@@ -2391,7 +2391,7 @@ function ContractStudioContent() {
                 let leverageImpact = 0
                 if (delta > 0) {
                     // Provider accommodated - they earned credits
-                    leverageImpact = delta * (weight / 5) * 1.5
+                    leverageImpact = delta * (weight / 5) * 0.5
                 }
 
                 history.push({
