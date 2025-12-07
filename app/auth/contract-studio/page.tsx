@@ -3437,18 +3437,27 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <div className="mt-4 pt-4 border-t border-slate-200">
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-600">Gap to other party:</span>
-                        <span className={`font-semibold ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
-                            selectedClause.gapSize <= 3 ? 'text-amber-600' :
-                                'text-red-600'
+                        <span className={`font-semibold ${selectedClause.gapSize < 0.5 ? 'text-emerald-600' :
+                            selectedClause.gapSize <= 1 ? 'text-emerald-600' :
+                                selectedClause.gapSize <= 3 ? 'text-amber-600' :
+                                    'text-red-600'
                             }`}>
-                            {selectedClause.gapSize.toFixed(1)} points apart
-                            {selectedClause.gapSize <= 1 && ' ✓ Nearly Aligned'}
-                            {selectedClause.gapSize > 4 && ' ⚠ Significant Gap'}
+                            {selectedClause.gapSize < 0.5
+                                ? '0 points apart ✓ Fully Aligned'
+                                : selectedClause.gapSize <= 1
+                                    ? `${selectedClause.gapSize.toFixed(1)} points apart ✓ Nearly Aligned`
+                                    : selectedClause.gapSize <= 3
+                                        ? `${selectedClause.gapSize.toFixed(1)} points apart`
+                                        : `${selectedClause.gapSize.toFixed(1)} points apart ⚠ Significant Gap`
+                            }
                         </span>
                     </div>
                     {hasPositionOptions && (
                         <div className="text-xs text-slate-400 mt-1">
-                            You: {getPositionLabel(myDbPosition)} → {isCustomer ? 'Provider' : 'Customer'}: {getPositionLabel(otherDbPosition)}
+                            {selectedClause.gapSize < 0.5
+                                ? `Both parties at: ${getPositionLabel(myDbPosition)}`
+                                : `You: ${getPositionLabel(myDbPosition)} → ${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}`
+                            }
                         </div>
                     )}
                 </div>
