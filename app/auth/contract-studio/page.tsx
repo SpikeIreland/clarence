@@ -3679,28 +3679,30 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             title="50-50 neutral point"
                         ></div>
 
-                        {/* Customer Baseline marker */}
+                        {/* Customer Baseline marker - THICKER & MORE PROMINENT */}
                         <div
-                            className="absolute top-0 bottom-0 w-1 bg-emerald-800 z-20"
+                            className="absolute top-0 bottom-0 w-1.5 bg-emerald-950 z-20 rounded-sm"
                             style={{
                                 left: `${customerBaseline}%`,
-                                transform: 'translateX(-50%)'
+                                transform: 'translateX(-50%)',
+                                boxShadow: '0 0 3px rgba(0,0,0,0.5)'
                             }}
                         >
-                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-emerald-700 whitespace-nowrap font-medium">
+                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-emerald-800 whitespace-nowrap font-semibold">
                                 ◆ {customerBaseline}%
                             </div>
                         </div>
 
-                        {/* Provider Baseline marker */}
+                        {/* Provider Baseline marker - THICKER & MORE PROMINENT */}
                         <div
-                            className="absolute top-0 bottom-0 w-1 bg-blue-800 z-20"
+                            className="absolute top-0 bottom-0 w-1.5 bg-blue-950 z-20 rounded-sm"
                             style={{
                                 left: `${100 - providerBaseline}%`,
-                                transform: 'translateX(-50%)'
+                                transform: 'translateX(-50%)',
+                                boxShadow: '0 0 3px rgba(0,0,0,0.5)'
                             }}
                         >
-                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-blue-700 whitespace-nowrap font-medium">
+                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-blue-800 whitespace-nowrap font-semibold">
                                 ◆ {providerBaseline}%
                             </div>
                         </div>
@@ -3727,7 +3729,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             50-50 Center
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="w-1 h-3 bg-slate-800 rounded-sm"></span>
+                            <span className="w-1.5 h-3 bg-slate-900 rounded-sm"></span>
                             ◆ Baseline
                         </span>
                     </div>
