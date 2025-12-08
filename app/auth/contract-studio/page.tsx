@@ -4273,7 +4273,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                 {/* CENTER PANEL: Main Workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-shrink-0 p-4 pb-0">
+                    {/* Leverage Panel - constrained to max 30% height, scrollable if needed */}
+                    <div className="flex-shrink-0 p-4 pb-0 max-h-[30vh] overflow-y-auto">
                         <LeverageIndicator />
                     </div>
 
