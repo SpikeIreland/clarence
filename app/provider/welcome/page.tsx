@@ -106,6 +106,7 @@ function ProviderWelcomeContent() {
 
     const [currentStep, setCurrentStep] = useState(0)
     const [showAllSteps, setShowAllSteps] = useState(false)
+    const [showTrustDetails, setShowTrustDetails] = useState(false)
     const [sessionId, setSessionId] = useState<string | null>(null)
     const [providerId, setProviderId] = useState<string | null>(null)
     const [token, setToken] = useState<string | null>(null)
@@ -277,7 +278,9 @@ function ProviderWelcomeContent() {
                             </div>
                         )}
 
-                        {/* CLARENCE Introduction */}
+                        {/* ============================================================ */}
+                        {/* SECTION 10A: CLARENCE INTRODUCTION - ENHANCED TRUST MESSAGE */}
+                        {/* ============================================================ */}
                         <div className="mb-8">
                             <div className="flex items-start gap-4 mb-6">
                                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
@@ -287,8 +290,9 @@ function ProviderWelcomeContent() {
                                     <p className="text-slate-700 leading-relaxed">
                                         Welcome! I&apos;m <span className="text-blue-600 font-medium">CLARENCE</span>, your neutral mediator for this contract negotiation.
                                     </p>
-                                    <p className="text-slate-500 text-sm mt-2">
-                                        I&apos;ll guide you through a quick onboarding process before we begin. Everything you share is confidential and used only to facilitate fair negotiations.
+                                    <p className="text-slate-600 text-sm mt-3 leading-relaxed">
+                                        I work equally with both you and the customer. While I&apos;ll use the information you share to calculate leverage and find fair positions,
+                                        <span className="text-blue-600 font-medium"> I will never share your sensitive details directly with the other party</span>—things like your minimum acceptable terms, walk-away points, or strategic priorities remain confidential.
                                     </p>
                                 </div>
                             </div>
@@ -321,30 +325,104 @@ function ProviderWelcomeContent() {
                             ))}
                         </div>
 
-                        {/* CLARENCE Promise */}
-                        <div className={`border-t border-slate-200 pt-6 mb-6 transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'
-                            }`}>
-                            <h4 className="text-blue-600 text-sm font-medium mb-3">CLARENCE&apos;s Promise</h4>
-                            <ul className="space-y-2 text-sm text-slate-600">
+                        {/* ============================================================ */}
+                        {/* SECTION 10B: THE HONEST BROKER - EXPANDED TRUST SECTION */}
+                        {/* ============================================================ */}
+                        <div className={`border-t border-slate-200 pt-6 mb-6 transition-all duration-500 ${showAllSteps ? 'opacity-100' : 'opacity-0'}`}>
+                            {/* Header with expand toggle */}
+                            <button
+                                onClick={() => setShowTrustDetails(!showTrustDetails)}
+                                className="w-full flex items-center justify-between mb-4 group cursor-pointer"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                    </div>
+                                    <h4 className="text-emerald-700 font-medium">The Honest Broker Promise</h4>
+                                </div>
+                                <svg
+                                    className={`w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-transform ${showTrustDetails ? 'rotate-180' : ''}`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            {/* Core promises - always visible */}
+                            <ul className="space-y-2 text-sm text-slate-600 mb-4">
                                 <li className="flex items-center gap-2">
-                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                     </svg>
                                     Neutral mediation based on market data and factual analysis
                                 </li>
                                 <li className="flex items-center gap-2">
-                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                     </svg>
                                     Equal visibility into negotiation dynamics for both parties
                                 </li>
                                 <li className="flex items-center gap-2">
-                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                     </svg>
-                                    Confidential handling of your strategic information
+                                    Your strategic information is used to find fair positions—never disclosed directly
                                 </li>
                             </ul>
+
+                            {/* Expanded details */}
+                            {showTrustDetails && (
+                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mt-4 space-y-4">
+                                    {/* What CLARENCE Does */}
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-6 h-6 bg-blue-100 rounded-md flex items-center justify-center">
+                                                <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                </svg>
+                                            </div>
+                                            <h5 className="font-medium text-slate-700 text-sm">How CLARENCE Uses Your Information</h5>
+                                        </div>
+                                        <ul className="space-y-1.5 text-sm text-slate-600 ml-8">
+                                            <li>• Calculates your negotiation leverage</li>
+                                            <li>• Identifies realistic compromise zones</li>
+                                            <li>• Suggests strategic trade-offs that benefit you</li>
+                                            <li>• Recommends positions based on market benchmarks</li>
+                                        </ul>
+                                    </div>
+
+                                    {/* What CLARENCE Never Shares */}
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-6 h-6 bg-red-100 rounded-md flex items-center justify-center">
+                                                <svg className="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                                </svg>
+                                            </div>
+                                            <h5 className="font-medium text-slate-700 text-sm">Never Shared with the Customer</h5>
+                                        </div>
+                                        <ul className="space-y-1.5 text-sm text-slate-600 ml-8">
+                                            <li>• Your minimum acceptable terms or pricing floors</li>
+                                            <li>• Walk-away points or deal-breakers</li>
+                                            <li>• Internal constraints (capacity, costs, margins)</li>
+                                            <li>• Priority weightings or where you&apos;re flexible</li>
+                                            <li>• Pipeline pressures or urgency factors</li>
+                                        </ul>
+                                    </div>
+
+                                    {/* The Honest Broker Principle */}
+                                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mt-3">
+                                        <p className="text-sm text-blue-800 leading-relaxed">
+                                            <span className="font-medium">Think of CLARENCE as a skilled mediator</span> who understands both parties&apos; positions deeply but maintains strict confidentiality.
+                                            I use information to find genuine common ground—not to advantage one party over the other.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Continue Button */}
