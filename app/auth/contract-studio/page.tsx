@@ -24,6 +24,8 @@ interface Session {
     sessionNumber: string
     customerCompany: string
     providerCompany: string
+    customerContactName: string | null
+    providerContactName: string | null
     serviceType: string
     dealValue: string
     phase: number
@@ -1921,6 +1923,8 @@ function ContractStudioContent() {
                     sessionNumber: data.session.sessionNumber || '',
                     customerCompany: data.session.customerCompany || '',
                     providerCompany: 'Awaiting Provider Response',
+                    customerContactName: data.session.customerContactName || null,
+                    providerContactName: null,
                     serviceType: data.session.contractType || 'Service Agreement',
                     dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
                     phase: 1,
@@ -1940,6 +1944,8 @@ function ContractStudioContent() {
                 sessionNumber: data.session.sessionNumber,
                 customerCompany: data.session.customerCompany,
                 providerCompany: data.session.providerCompany || 'Provider (Pending)',
+                customerContactName: data.session.customerContactName || null,
+                providerContactName: data.session.providerContactName || null,
                 serviceType: data.session.contractType || 'IT Services',
                 dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
                 phase: parsePhaseFromState(data.session.phase),
@@ -2186,6 +2192,8 @@ function ContractStudioContent() {
                             sessionNumber: data.sessionNumber || sessionNumber || '',
                             customerCompany: data.companyName || data.company_name || user.company || '',
                             providerCompany: 'Awaiting Provider',
+                            customerContactName: data.contactName || data.contact_name || null,
+                            providerContactName: null,
                             serviceType: data.serviceRequired || data.service_required || 'Service Agreement',
                             dealValue: formatCurrency(data.dealValue || data.deal_value || '0', 'GBP'),
                             phase: 1,
@@ -2197,6 +2205,8 @@ function ContractStudioContent() {
                             sessionNumber: sessionNumber || '',
                             customerCompany: user.company || 'Your Company',
                             providerCompany: 'Awaiting Provider',
+                            customerContactName: null,
+                            providerContactName: null,
                             serviceType: 'Service Agreement',
                             dealValue: '£0',
                             phase: 1,
@@ -2210,6 +2220,8 @@ function ContractStudioContent() {
                         sessionNumber: sessionNumber || '',
                         customerCompany: user.company || 'Your Company',
                         providerCompany: 'Awaiting Provider',
+                        customerContactName: null,
+                        providerContactName: null,
                         serviceType: 'Service Agreement',
                         dealValue: '£0',
                         phase: 1,
@@ -3894,9 +3906,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                     {/* Status indicator */}
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'aligned' ? 'bg-emerald-500' :
-                            clause.status === 'negotiating' ? 'bg-amber-500' :
-                                clause.status === 'disputed' ? 'bg-red-500' :
-                                    'bg-slate-300'
+                        clause.status === 'negotiating' ? 'bg-amber-500' :
+                            clause.status === 'disputed' ? 'bg-red-500' :
+                                'bg-slate-300'
                         }`}></span>
 
                     {/* Clause number & name */}
@@ -3909,12 +3921,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {clause.clauseLevel > 0 && weightDisplay && (
                         <span
                             className={`flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${clauseWeight >= 4 ? 'bg-red-100 text-red-700' :
-                                    clauseWeight >= 3 ? 'bg-amber-100 text-amber-700' :
-                                        'bg-slate-100 text-slate-600'
+                                clauseWeight >= 3 ? 'bg-amber-100 text-amber-700' :
+                                    'bg-slate-100 text-slate-600'
                                 }`}
                             title={`Weight: ${weightDisplay}/5 - ${clauseWeight >= 4 ? 'High Impact' :
-                                    clauseWeight >= 3 ? 'Medium Impact' :
-                                        'Standard'
+                                clauseWeight >= 3 ? 'Medium Impact' :
+                                    'Standard'
                                 }`}
                         >
                             W{weightDisplay}
@@ -3995,8 +4007,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-sm font-medium text-emerald-400">{customerCompany}</div>
                                 <div className="text-xs text-slate-500">
                                     {isCustomer
-                                        ? `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || 'Contact'
-                                        : otherPartyStatus.userName || 'Contact'
+                                        ? `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || session.customerContactName || 'Contact'
+                                        : session.customerContactName || 'Contact'
                                     }
                                 </div>
                             </div>
@@ -4054,7 +4066,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 </svg>
                                             </div>
                                             <div className="text-xs text-slate-500">
-                                                {otherPartyStatus.userName || 'Contact'}
+                                                {isCustomer
+                                                    ? session.providerContactName || 'Contact'
+                                                    : `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || session.providerContactName || 'Contact'
+                                                }
                                             </div>
                                         </div>
                                     </button>
