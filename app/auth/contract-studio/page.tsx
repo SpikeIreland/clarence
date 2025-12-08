@@ -1666,6 +1666,7 @@ function ContractStudioContent() {
     }, [])
 
     const latestMessageRef = useRef<HTMLDivElement>(null)
+    const positionPanelRef = useRef<HTMLDivElement>(null)
 
     // ============================================================================
     // SECTION 6H: GLOBAL WORKING STATE MANAGEMENT
@@ -2436,6 +2437,15 @@ function ContractStudioContent() {
         setNegotiationHistory(history)
     }, [clauses, session, userInfo?.role])
 
+    // ============================================================================
+    // SECTION 7I: SCROLL POSITION PANEL TO TOP WHEN CLAUSE CHANGES
+    // ============================================================================
+
+    useEffect(() => {
+        if (selectedClause && positionPanelRef.current) {
+            positionPanelRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+    }, [selectedClause?.positionId])
 
     // ============================================================================
     // SECTION 8: EVENT HANDLERS
@@ -4320,8 +4330,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         {/* ==================== DYNAMICS TAB ==================== */}
                         {activeTab === 'positions' && selectedClause && (
-                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
-                                <PositionAdjustmentPanel />
+
+                            <div
+                                ref={positionPanelRef}
+                                className="flex-1 overflow-y-auto p-4 bg-white mx-4 mb-4 rounded-b-xl border border-t-0 border-slate-200"
+                            >
+                                {selectedClause && (
+                                    <PositionAdjustmentPanel />
+                                )}
 
                                 {/* Position Comparison */}
                                 <div className="mb-6">
