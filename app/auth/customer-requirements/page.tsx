@@ -106,6 +106,193 @@ interface PrioritiesStepProps extends NestedStepComponentProps {
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 // ============================================================================
+// SECTION 2A: TRUST BANNER COMPONENT
+// ============================================================================
+function TrustBanner({ onLearnMore }: { onLearnMore: () => void }) {
+    const [isExpanded, setIsExpanded] = useState(false)
+
+    return (
+        <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-lg mb-8 overflow-hidden">
+            {/* Main Banner */}
+            <div className="p-6">
+                <div className="flex items-start gap-4">
+                    {/* Shield Icon */}
+                    <div className="w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1">
+                        <h3 className="text-lg font-semibold mb-2">
+                            Your Information is Protected
+                        </h3>
+                        <p className="text-slate-300 text-sm leading-relaxed">
+                            CLARENCE uses the information you provide to calculate leverage, identify fair positions, and broker effective compromises.
+                            <span className="text-emerald-400 font-medium"> Your sensitive details—like budget limits, walk-away points, and BATNA—are never shared directly with the other party.</span>
+                        </p>
+
+                        {/* Expand/Collapse */}
+                        <button
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className="mt-3 text-sm text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+                        >
+                            {isExpanded ? 'Hide details' : 'How does CLARENCE use my information?'}
+                            <svg
+                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Expanded Details */}
+            {isExpanded && (
+                <div className="bg-slate-900/50 border-t border-slate-700 p-6">
+                    <div className="grid md:grid-cols-3 gap-6">
+                        {/* What CLARENCE Does */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                                <h4 className="font-medium text-emerald-400">What CLARENCE Does</h4>
+                            </div>
+                            <ul className="space-y-2 text-sm text-slate-300">
+                                <li className="flex items-start gap-2">
+                                    <span className="text-emerald-400 mt-1">•</span>
+                                    Calculates your leverage position
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-emerald-400 mt-1">•</span>
+                                    Identifies fair compromise zones
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-emerald-400 mt-1">•</span>
+                                    Suggests strategic trade-offs
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-emerald-400 mt-1">•</span>
+                                    Recommends optimal positions
+                                </li>
+                            </ul>
+                        </div>
+
+                        {/* What CLARENCE Never Shares */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                    </svg>
+                                </div>
+                                <h4 className="font-medium text-red-400">Never Shared with Other Party</h4>
+                            </div>
+                            <ul className="space-y-2 text-sm text-slate-300">
+                                <li className="flex items-start gap-2">
+                                    <span className="text-red-400 mt-1">•</span>
+                                    Your budget limits or ranges
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-red-400 mt-1">•</span>
+                                    Walk-away points or BATNA
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-red-400 mt-1">•</span>
+                                    Internal constraints or pressures
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <span className="text-red-400 mt-1">•</span>
+                                    Priority weightings or flexibility
+                                </li>
+                            </ul>
+                        </div>
+
+                        {/* The Honest Broker Principle */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                    </svg>
+                                </div>
+                                <h4 className="font-medium text-blue-400">The Honest Broker</h4>
+                            </div>
+                            <p className="text-sm text-slate-300 leading-relaxed">
+                                CLARENCE works equally with both parties, using each side&apos;s information to find genuine common ground—not to advantage one party over the other.
+                            </p>
+                            <p className="text-sm text-slate-400 mt-2 italic">
+                                Think of CLARENCE as a skilled mediator who understands both positions but maintains strict confidentiality.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 2B: CONFIDENTIALITY NOTICE COMPONENT (for sensitive sections)
+// ============================================================================
+function ConfidentialityNotice({ type }: { type: 'batna' | 'budget' | 'priority' | 'context' }) {
+    const notices = {
+        batna: {
+            icon: '🔐',
+            title: 'Confidential Information',
+            message: 'Your alternatives and walk-away points are never revealed to the other party. CLARENCE uses this to understand your true negotiating flexibility and recommend positions accordingly.',
+            color: 'amber'
+        },
+        budget: {
+            icon: '💰',
+            title: 'Budget Confidentiality',
+            message: 'Your budget range remains strictly confidential. CLARENCE uses this to ensure recommendations fall within your means, not to inform the other party of your limits.',
+            color: 'green'
+        },
+        priority: {
+            icon: '⚖️',
+            title: 'Strategic Priorities Protected',
+            message: 'Your priority allocation reveals what you value most. CLARENCE uses this internally to identify trade-off opportunities—your weightings are never disclosed.',
+            color: 'purple'
+        },
+        context: {
+            icon: '📋',
+            title: 'Context for Better Mediation',
+            message: 'This additional context helps CLARENCE understand the full picture. Sensitive details about your situation, constraints, or alternatives remain confidential.',
+            color: 'blue'
+        }
+    }
+
+    const notice = notices[type]
+    const colorClasses = {
+        amber: 'bg-amber-50 border-amber-200 text-amber-800',
+        green: 'bg-green-50 border-green-200 text-green-800',
+        purple: 'bg-purple-50 border-purple-200 text-purple-800',
+        blue: 'bg-blue-50 border-blue-200 text-blue-800'
+    }
+
+    return (
+        <div className={`border rounded-lg p-4 mb-6 ${colorClasses[notice.color as keyof typeof colorClasses]}`}>
+            <div className="flex items-start gap-3">
+                <span className="text-xl">{notice.icon}</span>
+                <div>
+                    <p className="font-medium text-sm">{notice.title}</p>
+                    <p className="text-sm mt-1 opacity-90">{notice.message}</p>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
 // SECTION 3: MAIN COMPONENT WRAPPER (for Suspense)
 // ============================================================================
 export default function CustomerRequirementsPage() {
@@ -137,7 +324,7 @@ function CustomerRequirementsForm() {
     const [loading, setLoading] = useState(false)
     const [initialLoading, setInitialLoading] = useState(true)
     const [currentStep, setCurrentStep] = useState(1)
-    const [totalSteps] = useState(9) // UPDATED: Now 9 steps
+    const [totalSteps] = useState(9)
     const [priorityPoints, setPriorityPoints] = useState(25)
 
     // Session state
@@ -221,11 +408,22 @@ function CustomerRequirementsForm() {
             }
         }
 
-        // Add welcome message to chat
+        // UPDATED: Welcome message with trust/confidentiality emphasis
         setChatMessages([{
             id: '1',
             type: 'clarence',
-            content: `Welcome! I'm CLARENCE, your contract negotiation assistant. I'm here to help you complete your requirements form.\n\nFeel free to ask me about:\n• What information to provide\n• How your answers affect leverage\n• Best practices for contract terms\n\nHow can I help you today?`,
+            content: `Welcome! I'm CLARENCE, your contract negotiation mediator.
+
+**Important:** I work as a neutral broker between you and your provider. While I'll use the information you share to calculate leverage and find fair positions, I will never share your sensitive details—like budget limits, walk-away points, or priorities—directly with the other party.
+
+Think of me as a trusted advisor who understands both sides but keeps confidences.
+
+I'm here to help you complete your requirements. Feel free to ask about:
+• What information to provide
+• How your answers affect leverage
+• How I protect your confidentiality
+
+How can I help you today?`,
             timestamp: new Date()
         }])
 
@@ -587,6 +785,11 @@ function CustomerRequirementsForm() {
                 )}
 
                 <div className="max-w-3xl mx-auto px-4 py-8">
+                    {/* TRUST BANNER - Shows on Step 1 */}
+                    {currentStep === 1 && (
+                        <TrustBanner onLearnMore={() => setChatOpen(true)} />
+                    )}
+
                     {/* Progress Bar */}
                     <div className="mb-8">
                         <div className="flex justify-between mb-2">
@@ -651,7 +854,7 @@ function CustomerRequirementsForm() {
                             <button
                                 onClick={handleSubmit}
                                 disabled={loading || priorityPoints < 0}
-                                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 ... hover:from-blue-700 hover:to-blue-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                             >
                                 {loading ? (
                                     <>
@@ -690,7 +893,7 @@ function CustomerRequirementsForm() {
                         </div>
                         <div>
                             <div className="font-medium">CLARENCE</div>
-                            <div className="text-xs text-slate-300">Your Contract Assistant</div>
+                            <div className="text-xs text-slate-300">Your Confidential Advisor</div>
                         </div>
                     </div>
                     <button
@@ -778,10 +981,10 @@ function CustomerRequirementsForm() {
                             Leverage impact?
                         </button>
                         <button
-                            onClick={() => setChatInput('What are best practices here?')}
+                            onClick={() => setChatInput('How do you protect my confidentiality?')}
                             className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
                         >
-                            Best practices?
+                            Confidentiality?
                         </button>
                     </div>
                 </div>
@@ -1095,18 +1298,14 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
     )
 }
 
-// STEP 4: BATNA Assessment
+// STEP 4: BATNA Assessment - UPDATED with confidentiality notice
 function BATNAStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Alternative Options (BATNA)</h2>
 
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-yellow-800">
-                    ⚖️ Your Best Alternative to a Negotiated Agreement (BATNA) significantly impacts your leverage.
-                    Be honest - This information helps CLARENCE understand the full picture and more effectively broker compromise positions.
-                </p>
-            </div>
+            {/* UPDATED: Use new ConfidentialityNotice component */}
+            <ConfidentialityNotice type="batna" />
 
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1161,7 +1360,6 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
                     <option value="status-quo">Can continue with current situation</option>
                     <option value="no-alternative">No viable alternative - must reach agreement</option>
                 </select>
-                <p className="text-xs text-slate-500 mt-1">This remains confidential and helps CLARENCE understand your negotiating flexibility</p>
             </div>
 
             <div>
@@ -1186,18 +1384,15 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
 }
 
 // ============================================================================
-// SECTION 19: NEW STEP - COMMERCIAL TERMS
+// SECTION 19: COMMERCIAL TERMS STEP - UPDATED with confidentiality notice
 // ============================================================================
 function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Commercial Terms</h2>
 
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-green-800">
-                    💰 Define your budget range and commercial preferences. This helps CLARENCE understand your financial boundaries.
-                </p>
-            </div>
+            {/* UPDATED: Use new ConfidentialityNotice component */}
+            <ConfidentialityNotice type="budget" />
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1231,6 +1426,7 @@ function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                     <p className="text-sm text-slate-700">
                         <span className="font-medium">Budget Range:</span> £{formData.budgetMin.toLocaleString()} - £{formData.budgetMax.toLocaleString()}
+                        <span className="text-slate-500 ml-2">(kept confidential)</span>
                     </p>
                 </div>
             )}
@@ -1276,7 +1472,74 @@ function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
     )
 }
 
-// STEP 6: Contract Positions (was Step 5)
+// STEP 6: Priorities with Point System - UPDATED with confidentiality notice
+function PrioritiesStep({ formData, updateNestedData, priorityPoints }: PrioritiesStepProps) {
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-medium text-slate-800 mb-4">Priority Allocation</h2>
+
+            {/* UPDATED: Use new ConfidentialityNotice component */}
+            <ConfidentialityNotice type="priority" />
+
+            <div className={`border rounded-lg p-4 mb-6 ${priorityPoints >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'
+                }`}>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm font-medium">
+                            Priority Points Remaining: <span className={`text-lg ${priorityPoints >= 0 ? 'text-green-700' : 'text-red-700'}`}>{priorityPoints}</span> / 25
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                            Allocate 25 points total across priorities. This forces realistic trade-offs and informs CLARENCE&apos;s negotiation strategy.
+                        </p>
+                    </div>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${priorityPoints >= 0 ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
+                        }`}>
+                        {priorityPoints}
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-6">
+                {Object.entries({
+                    cost: 'Cost Optimization',
+                    quality: 'Quality Standards',
+                    speed: 'Speed of Delivery',
+                    innovation: 'Innovation & Technology',
+                    riskMitigation: 'Risk Mitigation'
+                }).map(([key, label]) => (
+                    <div key={key}>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            {label}: <span className="font-bold text-slate-800">{(formData.priorities as Record<string, number>)?.[key]} points</span>
+                        </label>
+                        <input
+                            type="range"
+                            min="0"
+                            max="10"
+                            step="1"
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                            value={(formData.priorities as Record<string, number>)?.[key] || 5}
+                            onChange={(e) => updateNestedData('priorities', key, parseInt(e.target.value))}
+                        />
+                        <div className="flex justify-between text-xs text-slate-500 mt-1">
+                            <span>0 (Not important)</span>
+                            <span>5 (Moderate)</span>
+                            <span>10 (Critical)</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {priorityPoints < 0 && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+                    <p className="font-medium">Points exceeded!</p>
+                    <p className="text-sm">Please reduce point allocations to stay within 25 total points.</p>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// STEP 7: Contract Positions
 function ContractPositionsStep({ formData, updateNestedData }: NestedStepComponentProps) {
     return (
         <div className="space-y-6">
@@ -1284,7 +1547,7 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
 
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-purple-800">
-                    📋 Set your starting positions on key contract terms. CLARENCE will use these as the basis for negotiation.
+                    📋 Set your starting positions on key contract terms. These positions <span className="font-medium">will be visible</span> to the provider during negotiation, as they form the basis for finding common ground.
                 </p>
             </div>
 
@@ -1393,72 +1656,8 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
     )
 }
 
-// STEP 7: Priorities with Point System (was Step 6)
-function PrioritiesStep({ formData, updateNestedData, priorityPoints }: PrioritiesStepProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Priority Allocation</h2>
-
-            <div className={`border rounded-lg p-4 mb-6 ${priorityPoints >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'
-                }`}>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-medium">
-                            Priority Points Remaining: <span className={`text-lg ${priorityPoints >= 0 ? 'text-green-700' : 'text-red-700'}`}>{priorityPoints}</span> / 25
-                        </p>
-                        <p className="text-xs text-slate-600 mt-1">
-                            Allocate 25 points total across priorities. This forces realistic trade-offs and informs CLARENCE&apos;s negotiation strategy.
-                        </p>
-                    </div>
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${priorityPoints >= 0 ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
-                        }`}>
-                        {priorityPoints}
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-6">
-                {Object.entries({
-                    cost: 'Cost Optimization',
-                    quality: 'Quality Standards',
-                    speed: 'Speed of Delivery',
-                    innovation: 'Innovation & Technology',
-                    riskMitigation: 'Risk Mitigation'
-                }).map(([key, label]) => (
-                    <div key={key}>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            {label}: <span className="font-bold text-slate-800">{(formData.priorities as Record<string, number>)?.[key]} points</span>
-                        </label>
-                        <input
-                            type="range"
-                            min="0"
-                            max="10"
-                            step="1"
-                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                            value={(formData.priorities as Record<string, number>)?.[key] || 5}
-                            onChange={(e) => updateNestedData('priorities', key, parseInt(e.target.value))}
-                        />
-                        <div className="flex justify-between text-xs text-slate-500 mt-1">
-                            <span>0 (Not important)</span>
-                            <span>5 (Moderate)</span>
-                            <span>10 (Critical)</span>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {priorityPoints < 0 && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
-                    <p className="font-medium">Points exceeded!</p>
-                    <p className="text-sm">Please reduce point allocations to stay within 25 total points.</p>
-                </div>
-            )}
-        </div>
-    )
-}
-
 // ============================================================================
-// SECTION 20: NEW STEP - TECHNICAL & COMPLIANCE REQUIREMENTS
+// SECTION 20: TECHNICAL & COMPLIANCE REQUIREMENTS
 // ============================================================================
 function TechnicalRequirementsStep({ formData, updateFormData }: StepComponentProps) {
     const securityOptions = [
@@ -1563,18 +1762,15 @@ function TechnicalRequirementsStep({ formData, updateFormData }: StepComponentPr
 }
 
 // ============================================================================
-// SECTION 21: NEW STEP - ADDITIONAL CONTEXT
+// SECTION 21: ADDITIONAL CONTEXT - UPDATED with confidentiality notice
 // ============================================================================
 function AdditionalContextStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Additional Context</h2>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-amber-800">
-                    📝 This information helps CLARENCE understand the full picture and more effectively broker compromise positions.
-                </p>
-            </div>
+            {/* UPDATED: Use new ConfidentialityNotice component */}
+            <ConfidentialityNotice type="context" />
 
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1628,18 +1824,32 @@ function AdditionalContextStep({ formData, updateFormData }: StepComponentProps)
                 />
             </div>
 
-            {/* Summary Card */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 mt-8">
+            {/* Summary Card - UPDATED messaging */}
+            <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-6 mt-8">
                 <h3 className="text-lg font-medium text-slate-800 mb-4">📋 Ready to Submit</h3>
                 <p className="text-sm text-slate-600 mb-4">
                     After submitting, you&apos;ll proceed to the Strategic Assessment where CLARENCE will ask probing questions
                     to calculate your leverage position and prepare for negotiation.
                 </p>
-                <div className="flex items-center gap-2 text-sm text-blue-700">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>All information is confidential and only used to improve your negotiation position</span>
+
+                <div className="space-y-3">
+                    <div className="flex items-start gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg p-3">
+                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <span>
+                            <span className="font-medium">Confidential information protected:</span> Your budget limits, BATNA, walk-away points, and priority weightings will never be shared with the provider.
+                        </span>
+                    </div>
+
+                    <div className="flex items-start gap-2 text-sm text-blue-700 bg-blue-50 rounded-lg p-3">
+                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                        </svg>
+                        <span>
+                            <span className="font-medium">CLARENCE as honest broker:</span> I use information from both parties to find fair compromises—not to advantage one side over the other.
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
