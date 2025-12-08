@@ -3847,6 +3847,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const hasChildren = clause.children && clause.children.length > 0
         const isSelected = selectedClause?.positionId === clause.positionId
 
+        // Get the weight based on current user's role (or default to customerWeight)
+        const clauseWeight = userInfo?.role === 'provider'
+            ? clause.providerWeight
+            : clause.customerWeight
+        const weightDisplay = clauseWeight ? clauseWeight.toFixed(0) : null
+
         return (
             <div>
                 <div
@@ -3883,54 +3889,40 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </button>
                     ) : (
-                        <div className="w-4"></div>
+                        <span className="w-4"></span>
                     )}
 
-                    {/* Unseen moves badge - for parent clauses, sum children; for child clauses, show direct count */}
-                    {(() => {
-                        const getUnseenCount = () => {
-                            if (clause.clauseLevel === 0) {
-                                // Parent: sum unseen from all children
-                                let total = 0
-                                clause.children?.forEach(child => {
-                                    total += unseenMoves.get(child.clauseId) || 0
-                                })
-                                return total
-                            } else {
-                                // Child: direct lookup
-                                return unseenMoves.get(clause.clauseId) || 0
-                            }
-                        }
-                        const count = getUnseenCount()
-                        return count > 0 ? (
-                            <span className="flex-shrink-0 w-5 h-5 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                {count > 9 ? '9+' : count}
-                            </span>
-                        ) : null
-                    })()}
+                    {/* Status indicator */}
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'aligned' ? 'bg-emerald-500' :
+                            clause.status === 'negotiating' ? 'bg-amber-500' :
+                                clause.status === 'disputed' ? 'bg-red-500' :
+                                    'bg-slate-300'
+                        }`}></span>
 
-                    <div className={`w-2 h-2 rounded-full ${getStatusBgColor(clause.status)}`}></div>
+                    {/* Clause number & name */}
+                    <span className="text-xs text-slate-400 font-mono flex-shrink-0">{clause.clauseNumber}</span>
+                    <span className={`text-sm truncate flex-1 ${isSelected ? 'text-emerald-700 font-medium' : 'text-slate-700'}`}>
+                        {clause.clauseName}
+                    </span>
 
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-400 font-mono">{clause.clauseNumber}</span>
-                            <span className={`text-sm truncate ${isSelected ? 'text-emerald-700 font-medium' : 'text-slate-700'}`}>
-                                {clause.clauseName}
-                            </span>
-                        </div>
-                    </div>
-
-                    {(clause.customerWeight >= 8 || clause.providerWeight >= 8) && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                            W{Math.max(clause.customerWeight, clause.providerWeight)}
+                    {/* Weight indicator - only show for child clauses (level > 0) */}
+                    {clause.clauseLevel > 0 && weightDisplay && (
+                        <span
+                            className={`flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${clauseWeight >= 4 ? 'bg-red-100 text-red-700' :
+                                    clauseWeight >= 3 ? 'bg-amber-100 text-amber-700' :
+                                        'bg-slate-100 text-slate-600'
+                                }`}
+                            title={`Weight: ${weightDisplay}/5 - ${clauseWeight >= 4 ? 'High Impact' :
+                                    clauseWeight >= 3 ? 'Medium Impact' :
+                                        'Standard'
+                                }`}
+                        >
+                            W{weightDisplay}
                         </span>
-                    )}
-
-                    {(clause.isDealBreakerCustomer || clause.isDealBreakerProvider) && (
-                        <span className="text-red-500 text-xs">⚑</span>
                     )}
                 </div>
 
+                {/* Children */}
                 {hasChildren && clause.isExpanded && (
                     <div>
                         {clause.children!.map(child => (
