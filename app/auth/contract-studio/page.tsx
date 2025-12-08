@@ -3529,7 +3529,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     }
 
     // ============================================================================
-    // SECTION 11: LEVERAGE INDICATOR COMPONENT (PARTY COLORS)
+    // SECTION 11: LEVERAGE INDICATOR COMPONENT (COMPACT VERSION)
     // ============================================================================
 
     const LeverageIndicator = () => {
@@ -3560,9 +3560,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const batnaScore = displayLeverage.batnaScore ?? 50
 
         return (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
-                {/* Header Row */}
-                <div className="flex items-center justify-between mb-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-3 mb-2">
+                {/* Header Row - More Compact */}
+                <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                         <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
                         <button
@@ -3580,7 +3580,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             <svg className={`w-3 h-3 transition-transform ${showLeverageDetails ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                            {showLeverageDetails ? 'Hide' : 'Show'}
+                            {showLeverageDetails ? 'Hide Details' : 'Show Details'}
                         </button>
                     </div>
 
@@ -3588,21 +3588,21 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         {/* Moves Tracker Button */}
                         <button
                             onClick={() => setShowMovesTracker(true)}
-                            className="relative px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex items-center gap-1.5"
+                            className="relative px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition flex items-center gap-1"
                         >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                             </svg>
                             Moves
                             {totalUnseenMoves > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
                                     {totalUnseenMoves > 9 ? '9+' : totalUnseenMoves}
                                 </span>
                             )}
                         </button>
 
                         {/* Dynamic Alignment Badge */}
-                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${dynamicAlignmentPercentage >= 90
+                        <div className={`px-2 py-0.5 rounded-full text-xs font-medium ${dynamicAlignmentPercentage >= 90
                             ? 'bg-emerald-100 text-emerald-700'
                             : dynamicAlignmentPercentage >= 70
                                 ? 'bg-amber-100 text-amber-700'
@@ -3613,75 +3613,45 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     </div>
                 </div>
 
-                {/* Two-Card Layout: Baseline and Tracker - PARTY COLORS */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                    {/* Card 1: Leverage Baseline */}
-                    <div className="bg-slate-50 rounded-lg p-3">
-                        <div className="flex items-center gap-1 mb-1">
-                            <span className="text-sm">◆</span>
-                            <span className="text-xs text-slate-500">Leverage Baseline</span>
-                        </div>
-                        <div className="text-lg font-bold text-slate-800 text-center">
+                {/* Compact Inline Layout: Baseline + Tracker + Bar */}
+                <div className="flex items-center gap-3 mb-2">
+                    {/* Baseline */}
+                    <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
+                        <span className="text-xs text-slate-500">◆ Baseline:</span>
+                        <span className="text-sm font-bold">
                             <span className="text-emerald-600">{customerBaseline}</span>
-                            <span className="text-slate-400 mx-1">:</span>
+                            <span className="text-slate-400">:</span>
                             <span className="text-blue-600">{providerBaseline}</span>
-                        </div>
-                        <div className="text-xs text-slate-400 text-center">
-                            <span className="text-emerald-600">{customerCompanyName}</span>
-                            {' : '}
-                            <span className="text-blue-600">{providerCompanyName}</span>
-                        </div>
+                        </span>
                     </div>
 
-                    {/* Card 2: Leverage Tracker */}
-                    <div className="bg-slate-50 rounded-lg p-3">
-                        <div className="flex items-center gap-1 mb-1">
-                            <span className="text-sm">⬡</span>
-                            <span className="text-xs text-slate-500">Leverage Tracker</span>
-                        </div>
-                        <div className="text-lg font-bold text-slate-800 text-center">
+                    {/* Tracker */}
+                    <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
+                        <span className="text-xs text-slate-500">⬡ Tracker:</span>
+                        <span className="text-sm font-bold">
                             <span className="text-emerald-600">{customerTracker}</span>
-                            <span className="text-slate-400 mx-1">:</span>
+                            <span className="text-slate-400">:</span>
                             <span className="text-blue-600">{providerTracker}</span>
-                        </div>
-                        <div className="text-xs text-center">
-                            {Math.abs(customerShift) > 0 || Math.abs(providerShift) > 0 ? (
-                                <span className="text-slate-500">
-                                    {customerShift !== 0 && (
-                                        <span className={customerShift > 0 ? 'text-emerald-600' : 'text-emerald-400'}>
-                                            C: {customerShift > 0 ? '+' : ''}{customerShift.toFixed(1)}%
-                                        </span>
-                                    )}
-                                    {customerShift !== 0 && providerShift !== 0 && ' • '}
-                                    {providerShift !== 0 && (
-                                        <span className={providerShift > 0 ? 'text-blue-600' : 'text-blue-400'}>
-                                            P: {providerShift > 0 ? '+' : ''}{providerShift.toFixed(1)}%
-                                        </span>
-                                    )}
-                                </span>
-                            ) : (
-                                <span className="text-slate-400">Real-time score</span>
-                            )}
-                        </div>
+                        </span>
+                        {(Math.abs(customerShift) > 0 || Math.abs(providerShift) > 0) && (
+                            <span className="text-xs text-slate-400">
+                                ({customerShift > 0 ? '+' : ''}{customerShift.toFixed(0)})
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Company Labels */}
+                    <div className="text-xs text-slate-400 ml-auto">
+                        <span className="text-emerald-600">{customerCompanyName}</span>
+                        {' vs '}
+                        <span className="text-blue-600">{providerCompanyName}</span>
                     </div>
                 </div>
 
-                {/* Visual Leverage Bar - PARTY COLORS (Customer=Emerald, Provider=Blue) */}
+                {/* Visual Leverage Bar - Compact */}
                 <div className="relative">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium w-24 text-emerald-600">
-                            {customerCompanyName}
-                            {isCustomer && ' (You)'}
-                        </span>
-                        <div className="flex-1"></div>
-                        <span className="text-xs font-medium w-24 text-right text-blue-600">
-                            {providerCompanyName}
-                            {!isCustomer && ' (You)'}
-                        </span>
-                    </div>
-
-                    {/* Split Bar - Customer (Emerald) from left, Provider (Blue) from right */}
-                    <div className="h-4 bg-slate-100 rounded-full overflow-hidden relative">
+                    {/* Split Bar */}
+                    <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
                         {/* Customer portion - Emerald from left */}
                         <div
                             className="absolute left-0 top-0 bottom-0 bg-emerald-500 transition-all duration-500"
@@ -3694,14 +3664,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             style={{ width: `${providerTracker}%` }}
                         />
 
-                        {/* Center line (50% mark) - static reference point */}
+                        {/* Center line (50% mark) */}
                         <div
                             className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white z-30"
                             style={{ transform: 'translateX(-50%)', boxShadow: '0 0 2px rgba(0,0,0,0.3)' }}
                             title="50-50 neutral point"
                         ></div>
 
-                        {/* Customer Baseline marker - THICKER & MORE PROMINENT */}
+                        {/* Customer Baseline marker */}
                         <div
                             className="absolute top-0 bottom-0 w-1.5 bg-emerald-950 z-20 rounded-sm"
                             style={{
@@ -3709,13 +3679,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 transform: 'translateX(-50%)',
                                 boxShadow: '0 0 3px rgba(0,0,0,0.5)'
                             }}
-                        >
-                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-emerald-800 whitespace-nowrap font-semibold">
-                                ◆ {customerBaseline}%
-                            </div>
-                        </div>
+                            title={`Customer Baseline: ${customerBaseline}%`}
+                        />
 
-                        {/* Provider Baseline marker - THICKER & MORE PROMINENT */}
+                        {/* Provider Baseline marker */}
                         <div
                             className="absolute top-0 bottom-0 w-1.5 bg-blue-950 z-20 rounded-sm"
                             style={{
@@ -3723,55 +3690,29 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 transform: 'translateX(-50%)',
                                 boxShadow: '0 0 3px rgba(0,0,0,0.5)'
                             }}
-                        >
-                            <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-xs text-blue-800 whitespace-nowrap font-semibold">
-                                ◆ {providerBaseline}%
-                            </div>
-                        </div>
+                            title={`Provider Baseline: ${providerBaseline}%`}
+                        />
                     </div>
 
-                    {/* Tracker values below the bar */}
-                    <div className="flex justify-between text-sm font-bold mt-2">
+                    {/* Tracker values below the bar - inline */}
+                    <div className="flex justify-between text-xs font-bold mt-1">
                         <span className="text-emerald-600">{customerTracker}%</span>
                         <span className="text-blue-600">{providerTracker}%</span>
-                    </div>
-
-                    {/* Legend */}
-                    <div className="flex items-center justify-center gap-4 mt-4 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 bg-emerald-500 rounded-sm"></span>
-                            Customer Leverage
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
-                            Provider Leverage
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <span className="w-0.5 h-3 bg-white border border-slate-400 rounded-sm"></span>
-                            50-50 Center
-                        </span>
-                        <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-3 bg-slate-900 rounded-sm"></span>
-                            ◆ Baseline
-                        </span>
                     </div>
                 </div>
 
                 {/* Expandable 4-Factor Breakdown */}
                 {showLeverageDetails && (
-                    <div className="mb-3">
-                        <p className="text-xs text-slate-500 italic">Leverage Metrics Underpinning Baseline Assessment</p>
-                    </div>
-                )}
-
-                {showLeverageDetails && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                        <h4 className="text-xs font-semibold text-slate-600 mb-3">Leverage Factors (from Assessment)</h4>
-                        <div className="grid grid-cols-2 gap-3">
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-xs font-semibold text-slate-600">Leverage Factors (from Assessment)</h4>
+                            <p className="text-xs text-slate-400">Scores &gt;50 favor Customer • &lt;50 favor Provider</p>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
                             {/* Market Dynamics */}
-                            <div className="bg-slate-50 rounded-lg p-2">
-                                <div className="text-xs text-slate-500 mb-1">Market Dynamics</div>
-                                <div className="flex items-center justify-between">
+                            <div className="bg-slate-50 rounded p-2">
+                                <div className="text-xs text-slate-500 mb-0.5">Market Dynamics</div>
+                                <div className="flex items-center gap-1">
                                     <span className={`text-sm font-bold ${marketDynamicsScore >= 60 ? 'text-emerald-600' :
                                         marketDynamicsScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
@@ -3780,16 +3721,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <span className="text-xs text-slate-400">/ 100</span>
                                 </div>
                                 {displayLeverage.marketDynamicsRationale && (
-                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
                                         {displayLeverage.marketDynamicsRationale}
                                     </p>
                                 )}
                             </div>
 
                             {/* Economic Factors */}
-                            <div className="bg-slate-50 rounded-lg p-2">
-                                <div className="text-xs text-slate-500 mb-1">Economic Factors</div>
-                                <div className="flex items-center justify-between">
+                            <div className="bg-slate-50 rounded p-2">
+                                <div className="text-xs text-slate-500 mb-0.5">Economic Factors</div>
+                                <div className="flex items-center gap-1">
                                     <span className={`text-sm font-bold ${economicFactorsScore >= 60 ? 'text-emerald-600' :
                                         economicFactorsScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
@@ -3798,16 +3739,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <span className="text-xs text-slate-400">/ 100</span>
                                 </div>
                                 {displayLeverage.economicFactorsRationale && (
-                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
                                         {displayLeverage.economicFactorsRationale}
                                     </p>
                                 )}
                             </div>
 
                             {/* Strategic Position */}
-                            <div className="bg-slate-50 rounded-lg p-2">
-                                <div className="text-xs text-slate-500 mb-1">Strategic Position</div>
-                                <div className="flex items-center justify-between">
+                            <div className="bg-slate-50 rounded p-2">
+                                <div className="text-xs text-slate-500 mb-0.5">Strategic Position</div>
+                                <div className="flex items-center gap-1">
                                     <span className={`text-sm font-bold ${strategicPositionScore >= 60 ? 'text-emerald-600' :
                                         strategicPositionScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
@@ -3816,16 +3757,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <span className="text-xs text-slate-400">/ 100</span>
                                 </div>
                                 {displayLeverage.strategicPositionRationale && (
-                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
                                         {displayLeverage.strategicPositionRationale}
                                     </p>
                                 )}
                             </div>
 
                             {/* BATNA */}
-                            <div className="bg-slate-50 rounded-lg p-2">
-                                <div className="text-xs text-slate-500 mb-1">BATNA Analysis</div>
-                                <div className="flex items-center justify-between">
+                            <div className="bg-slate-50 rounded p-2">
+                                <div className="text-xs text-slate-500 mb-0.5">BATNA Analysis</div>
+                                <div className="flex items-center gap-1">
                                     <span className={`text-sm font-bold ${batnaScore >= 60 ? 'text-emerald-600' :
                                         batnaScore <= 40 ? 'text-blue-600' : 'text-slate-700'
                                         }`}>
@@ -3834,17 +3775,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <span className="text-xs text-slate-400">/ 100</span>
                                 </div>
                                 {displayLeverage.batnaRationale && (
-                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
                                         {displayLeverage.batnaRationale}
                                     </p>
                                 )}
                             </div>
                         </div>
-
-                        {/* Factor explanation - party-based */}
-                        <p className="text-xs text-slate-400 mt-3 text-center">
-                            Scores above 50 favor the Customer • Scores below 50 favor the Provider
-                        </p>
                     </div>
                 )}
             </div>
@@ -4273,8 +4209,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                 {/* CENTER PANEL: Main Workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                    {/* Leverage Panel - constrained to max 30% height, scrollable if needed */}
-                    <div className="flex-shrink-0 p-4 pb-0 max-h-[30vh] overflow-y-auto">
+                    <div className="flex-shrink-0 p-4 pb-0">
                         <LeverageIndicator />
                     </div>
 
