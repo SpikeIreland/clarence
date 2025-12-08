@@ -483,11 +483,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Upper quartile', description: 'Upper quartile; automatic adjustment in 3 months' }
     ],
     'Time for Payment': [
-        { value: 1, label: '14 days', description: '14 days from invoice' },
-        { value: 2, label: '30 days', description: '30 days from invoice' },
-        { value: 3, label: '45 days', description: '45 days from invoice' },
-        { value: 4, label: '60 days', description: '60 days from invoice' },
-        { value: 5, label: '90 days', description: '90 days from invoice' }
+        { value: 1, label: '30 days', description: '30 days from invoice' },
+        { value: 2, label: '45 days', description: '45 days from invoice' },
+        { value: 3, label: '60 days', description: '60 days from invoice' },
+        { value: 4, label: '90 days', description: '90 days from invoice' }
     ],
 
     // ========== LIABILITY ==========
@@ -506,10 +505,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: '250% annual', description: 'Customer liability at 250% of annual charges' }
     ],
     'Exclusions': [
-        { value: 1, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' },
-        { value: 2, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
-        { value: 3, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
-        { value: 4, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' }
+        { value: 1, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' },
+        { value: 2, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
+        { value: 3, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
+        { value: 4, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' }
     ],
     'Unlimited Losses': [
         { value: 1, label: 'Statutory only', description: 'Death/PI and employee claims only' },

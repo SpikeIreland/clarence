@@ -281,13 +281,99 @@ export function PartyChatPanel({
     const [toasts, setToasts] = useState<ToastNotification[]>([])
     const [lastMessageCount, setLastMessageCount] = useState(0)
 
+    // ========================================================================
+    // SECTION 8A-NEW: DETACHABLE/DRAGGABLE STATE
+    // ========================================================================
+    const [isDetached, setIsDetached] = useState(false)
+    const [position, setPosition] = useState({ x: 100, y: 100 })
+    const [isDragging, setIsDragging] = useState(false)
+    const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+    const panelRef = useRef<HTMLDivElement>(null)
+
+    // ========================================================================
+    // SECTION 8A-NEW: DRAG HANDLERS
+    // ========================================================================
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        if (!isDetached) return
+
+        // Only start drag from the header area
+        const target = e.target as HTMLElement
+        if (!target.closest('[data-drag-handle]')) return
+
+        e.preventDefault()
+        setIsDragging(true)
+
+        const rect = panelRef.current?.getBoundingClientRect()
+        if (rect) {
+            setDragOffset({
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            })
+        }
+    }, [isDetached])
+
+    const handleMouseMove = useCallback((e: MouseEvent) => {
+        if (!isDragging) return
+
+        const newX = e.clientX - dragOffset.x
+        const newY = e.clientY - dragOffset.y
+
+        // Keep window within viewport bounds
+        const maxX = window.innerWidth - 360 // panel width
+        const maxY = window.innerHeight - 500 // panel height
+
+        setPosition({
+            x: Math.max(0, Math.min(newX, maxX)),
+            y: Math.max(0, Math.min(newY, maxY))
+        })
+    }, [isDragging, dragOffset])
+
+    const handleMouseUp = useCallback(() => {
+        setIsDragging(false)
+    }, [])
+
+    // Add/remove global mouse listeners for dragging
+    useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove)
+            document.addEventListener('mouseup', handleMouseUp)
+            document.body.style.cursor = 'grabbing'
+            document.body.style.userSelect = 'none'
+        } else {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
+    }, [isDragging, handleMouseMove, handleMouseUp])
+
+    // Reset position when switching to detached mode
+    const handleDetach = () => {
+        if (!isDetached) {
+            // Calculate a good starting position (center-left of screen)
+            setPosition({
+                x: Math.max(20, (window.innerWidth - 360) / 3),
+                y: Math.max(80, (window.innerHeight - 500) / 4)
+            })
+        }
+        setIsDetached(!isDetached)
+    }
 
     // ============================================================================
-    // SECTION 8A: API FUNCTIONS
+    // SECTION 8B: API FUNCTIONS
     // ============================================================================
 
     const fetchMessages = useCallback(async () => {
@@ -422,7 +508,7 @@ export function PartyChatPanel({
     }, [sessionId, currentUserType, onUnreadCountChange, unreadCount])
 
     // ============================================================================
-    // SECTION 8B: TOAST MANAGEMENT
+    // SECTION 8C: TOAST MANAGEMENT
     // ============================================================================
 
     const addToast = (message: PartyMessage) => {
@@ -442,7 +528,7 @@ export function PartyChatPanel({
     }, [])
 
     // ============================================================================
-    // SECTION 8C: EFFECTS
+    // SECTION 8D: EFFECTS
     // ============================================================================
 
     // Initial load - fetch messages once on mount to get unread count
@@ -499,7 +585,7 @@ export function PartyChatPanel({
     }, [isOpen])
 
     // ============================================================================
-    // SECTION 8D: RENDER
+    // SECTION 8E: RENDER
     // ============================================================================
 
     const otherPartyName = currentUserType === 'customer' ? providerName : 'Customer'
@@ -524,6 +610,37 @@ export function PartyChatPanel({
         }
     }
 
+    // ========================================================================
+    // DETACHED (FLOATING) MODE STYLES
+    // ========================================================================
+    const detachedStyles = isDetached ? {
+        position: 'fixed' as const,
+        top: position.y,
+        left: position.x,
+        right: 'auto',
+        width: '360px',
+        height: '500px',
+        borderRadius: '12px',
+        transform: 'none',
+        transition: isDragging ? 'none' : 'box-shadow 0.2s ease',
+        boxShadow: isDragging
+            ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+            : '0 20px 40px -12px rgba(0, 0, 0, 0.4)'
+    } : {}
+
+    // ========================================================================
+    // DOCKED (SLIDE-OUT) MODE STYLES  
+    // ========================================================================
+    const dockedStyles = !isDetached ? {
+        position: 'fixed' as const,
+        top: 0,
+        right: 0,
+        height: '100%',
+        width: '384px', // w-96
+        transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 300ms ease-out'
+    } : {}
+
     return (
         <>
             {/* Toast Notifications */}
@@ -533,18 +650,41 @@ export function PartyChatPanel({
                 onOpenChat={() => { }}
             />
 
-            {/* No backdrop - studio remains fully accessible while chat is open */}
-
-            {/* Slide-Out Panel - No backdrop, studio remains usable */}
-            <div className={`
-                fixed top-0 right-0 h-full w-96 bg-slate-800 shadow-[-8px_0_30px_rgba(0,0,0,0.3)] z-50
-                transform transition-transform duration-300 ease-out
-                ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-            `}>
-                {/* Panel Header */}
-                <div className="bg-slate-900 px-4 py-3 border-b border-slate-700">
+            {/* Chat Panel - Docked or Detached */}
+            <div
+                ref={panelRef}
+                className={`
+                    bg-slate-800 z-50 flex flex-col overflow-hidden
+                    ${isDetached ? 'rounded-xl border border-slate-600' : 'shadow-[-8px_0_30px_rgba(0,0,0,0.3)]'}
+                    ${!isOpen && !isDetached ? 'pointer-events-none' : ''}
+                `}
+                style={{
+                    ...dockedStyles,
+                    ...detachedStyles,
+                    display: isOpen || isDetached ? 'flex' : undefined,
+                    visibility: isOpen ? 'visible' : (isDetached ? 'visible' : 'hidden')
+                }}
+                onMouseDown={handleMouseDown}
+            >
+                {/* Panel Header - Drag Handle when detached */}
+                <div
+                    className={`
+                        bg-slate-900 px-4 py-3 border-b border-slate-700 flex-shrink-0
+                        ${isDetached ? 'cursor-grab active:cursor-grabbing rounded-t-xl' : ''}
+                    `}
+                    data-drag-handle
+                >
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
+                            {/* Drag indicator when detached */}
+                            {isDetached && (
+                                <div className="flex flex-col gap-0.5 mr-1" data-drag-handle>
+                                    <div className="w-4 h-0.5 bg-slate-600 rounded" />
+                                    <div className="w-4 h-0.5 bg-slate-600 rounded" />
+                                    <div className="w-4 h-0.5 bg-slate-600 rounded" />
+                                </div>
+                            )}
+
                             {/* Avatar */}
                             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
                                 <span className="text-white font-semibold">
@@ -564,20 +704,47 @@ export function PartyChatPanel({
                             </div>
                         </div>
 
-                        {/* Close Button */}
-                        <button
-                            onClick={onClose}
-                            className="p-2 hover:bg-slate-700 rounded-lg transition"
-                        >
-                            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-1">
+                            {/* Detach/Dock Button */}
+                            <button
+                                onClick={handleDetach}
+                                className="p-2 hover:bg-slate-700 rounded-lg transition group"
+                                title={isDetached ? 'Dock to side' : 'Detach window'}
+                            >
+                                {isDetached ? (
+                                    // Dock icon (arrow pointing right to edge)
+                                    <svg className="w-5 h-5 text-slate-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                    </svg>
+                                ) : (
+                                    // Detach icon (window with arrow)
+                                    <svg className="w-5 h-5 text-slate-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                )}
+                            </button>
+
+                            {/* Close Button */}
+                            <button
+                                onClick={onClose}
+                                className="p-2 hover:bg-slate-700 rounded-lg transition"
+                            >
+                                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 {/* Messages Container */}
-                <div className="flex-1 overflow-y-auto p-4 h-[calc(100vh-160px)] chat-scrollbar">
+                <div
+                    className="flex-1 overflow-y-auto p-4 chat-scrollbar"
+                    style={{
+                        height: isDetached ? 'calc(100% - 130px)' : 'calc(100vh-160px)'
+                    }}
+                >
                     {isLoading ? (
                         <div className="flex items-center justify-center h-full">
                             <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full" />
@@ -640,7 +807,10 @@ export function PartyChatPanel({
                 </div>
 
                 {/* Input Area */}
-                <div className="absolute bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 p-4">
+                <div className={`
+                    bg-slate-900 border-t border-slate-700 p-4 flex-shrink-0
+                    ${isDetached ? 'rounded-b-xl' : ''}
+                `}>
                     <div className="flex items-center gap-2">
                         <input
                             ref={inputRef}
