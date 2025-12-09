@@ -3927,7 +3927,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         {/* Right: Documents Centre Button */}
                         <button
-                            onClick={() => router.push(`/auth/documents-centre?session_id=${session.sessionId}`)}
+                            onClick={() => router.push(`/auth/document-centre?session_id=${session.sessionId}`)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
