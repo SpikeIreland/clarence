@@ -818,6 +818,7 @@ function calculateLeverageImpact(
 
 /**
  * Recalculate the Leverage Tracker based on ALL position changes
+ * COOPERATIVE MODEL: Moving toward agreement GAINS leverage
  */
 function recalculateLeverageTracker(
     baseLeverageCustomer: number,
@@ -844,11 +845,17 @@ function recalculateLeverageTracker(
             const custDelta = currCustPos - origCustPos
             const weight = clause.customerWeight ?? 3
 
-            // Customer moving DOWN = accommodating = PROVIDER GAINS (customer loses)
+            // Customer moving DOWN = accommodating toward agreement = CUSTOMER GAINS
             if (custDelta < 0) {
                 const impact = Math.abs(custDelta) * (weight / 5) * 1.0
+                customerLeverageShift += impact  // Customer GAINS
+                console.log(`${clause.clauseName}: Customer moved toward agreement (${origCustPos.toFixed(1)}→${currCustPos.toFixed(1)}), Customer gains +${impact.toFixed(2)} (weight ${weight})`)
+            }
+            // Customer moving UP = moving away from agreement = CUSTOMER LOSES
+            if (custDelta > 0) {
+                const impact = Math.abs(custDelta) * (weight / 5) * 1.0
                 customerLeverageShift -= impact  // Customer LOSES
-                console.log(`${clause.clauseName}: Customer accommodated (${origCustPos.toFixed(1)}→${currCustPos.toFixed(1)}), Provider gains +${impact.toFixed(2)} (weight ${weight})`)
+                console.log(`${clause.clauseName}: Customer moved away from agreement (${origCustPos.toFixed(1)}→${currCustPos.toFixed(1)}), Customer loses -${impact.toFixed(2)} (weight ${weight})`)
             }
         }
 
@@ -860,11 +867,17 @@ function recalculateLeverageTracker(
             const provDelta = currProvPos - origProvPos
             const weight = clause.providerWeight ?? 3
 
-            // Provider moving UP = accommodating = CUSTOMER GAINS (provider loses)
+            // Provider moving UP = accommodating toward agreement = PROVIDER GAINS (customer loses)
             if (provDelta > 0) {
                 const impact = provDelta * (weight / 5) * 1.0
-                customerLeverageShift += impact  // Customer GAINS
-                console.log(`${clause.clauseName}: Provider accommodated (${origProvPos.toFixed(1)}→${currProvPos.toFixed(1)}), Customer gains +${impact.toFixed(2)} (weight ${weight})`)
+                customerLeverageShift -= impact  // Customer LOSES (provider gained)
+                console.log(`${clause.clauseName}: Provider moved toward agreement (${origProvPos.toFixed(1)}→${currProvPos.toFixed(1)}), Provider gains +${impact.toFixed(2)} (weight ${weight})`)
+            }
+            // Provider moving DOWN = moving away from agreement = PROVIDER LOSES (customer gains)
+            if (provDelta < 0) {
+                const impact = Math.abs(provDelta) * (weight / 5) * 1.0
+                customerLeverageShift += impact  // Customer GAINS (provider lost)
+                console.log(`${clause.clauseName}: Provider moved away from agreement (${origProvPos.toFixed(1)}→${currProvPos.toFixed(1)}), Provider loses -${impact.toFixed(2)} (weight ${weight})`)
             }
         }
     })
