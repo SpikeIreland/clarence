@@ -30,6 +30,7 @@ interface Session {
     dealValue: string
     phase: number
     status: string
+    createdAt?: string  // ADD THIS IF MISSING
 }
 
 interface NegotiationHistoryEntry {
@@ -40,10 +41,12 @@ interface NegotiationHistoryEntry {
     partyName: string
     clauseId?: string
     clauseName?: string
+    clauseNumber?: string      // ADD THIS
     description: string
     oldValue?: number | string
     newValue?: number | string
     leverageImpact?: number
+    seen?: boolean             // ADD THIS
 }
 
 // ============================================================================
@@ -757,14 +760,11 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 }
 
 // ============================================================================
-// SECTION 3: LEVERAGE CALCULATION FUNCTIONS (CORRECTED)
+// SECTION 3: LEVERAGE CALCULATION FUNCTIONS
 // ============================================================================
 
 /**
  * Calculate leverage impact for a position move
- * Scale: Each position point on a weight-5 clause = ~1% leverage shift
- * 
- * IMPORTANT: Accommodating = moving toward other party = YOU LOSE leverage
  */
 function calculateLeverageImpact(
     oldPosition: number,
@@ -810,9 +810,6 @@ function calculateLeverageImpact(
 
 /**
  * Recalculate the Leverage Tracker based on ALL position changes
- * 
- * Logic: When you accommodate, you LOSE leverage. The other party GAINS.
- * Net result is a zero-sum shift in the tracker.
  */
 function recalculateLeverageTracker(
     baseLeverageCustomer: number,
@@ -888,12 +885,28 @@ function calculateGapSize(customerPosition: number | null, providerPosition: num
 }
 
 /**
- * Helper to determine clause status based on gap
+ * Determine clause status based on gap size
  */
 function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
     if (gapSize <= 1) return 'aligned'
-    if (gapSize <= 4) return 'negotiating'  // Changed from 3 to 4
-    return 'disputed'                        // Anything > 4
+    if (gapSize <= 4) return 'negotiating'
+    return 'disputed'
+}
+
+/**
+ * Calculate alignment percentage across all clauses
+ */
+function calculateAlignmentPercentage(clauses: ContractClause[]): number {
+    const childClauses = clauses.filter(c => c.clauseLevel === 1 && c.customerPosition !== null && c.providerPosition !== null)
+
+    if (childClauses.length === 0) return 0
+
+    const alignedCount = childClauses.filter(c => {
+        const gap = Math.abs((c.customerPosition || 0) - (c.providerPosition || 0))
+        return gap <= 1
+    }).length
+
+    return Math.round((alignedCount / childClauses.length) * 100)
 }
 
 // ============================================================================
@@ -2316,114 +2329,104 @@ function ContractStudioContent() {
         }
     }, [selectedClause?.positionId, userInfo])
 
-    // Generate negotiation history from clauses
+    // ============================================================================
+    // SECTION 7H: FETCH NEGOTIATION HISTORY FROM DATABASE
+    // ============================================================================
+
+    const fetchNegotiationHistory = useCallback(async () => {
+        if (!session?.sessionId) return
+
+        try {
+            setIsLoadingHistory(true)
+            const supabase = createClient()
+
+            // Fetch position changes from database with real timestamps
+            const { data: positionChanges, error } = await supabase
+                .from('position_change_history')
+                .select(`
+                    id,
+                    clause_id,
+                    clause_name,
+                    clause_number,
+                    party,
+                    changed_by_name,
+                    changed_by_company,
+                    old_position,
+                    new_position,
+                    position_delta,
+                    leverage_impact,
+                    changed_at,
+                    seen_by_customer,
+                    seen_by_provider
+                `)
+                .eq('session_id', session.sessionId)
+                .order('changed_at', { ascending: false })
+                .limit(100)
+
+            if (error) {
+                console.error('Error fetching position history:', error)
+                return
+            }
+
+            console.log('Fetched position history:', positionChanges?.length, 'records')
+
+            // Map database records to NegotiationHistoryEntry format
+            const history: NegotiationHistoryEntry[] = (positionChanges || []).map(change => {
+                const isViewerCustomer = userInfo?.role === 'customer'
+                const isOwnMove = change.party === userInfo?.role
+
+                // Determine party name for display
+                let displayName: string
+                if (isOwnMove) {
+                    displayName = 'You'
+                } else if (change.changed_by_name) {
+                    displayName = change.changed_by_name
+                } else if (change.changed_by_company) {
+                    displayName = change.changed_by_company
+                } else {
+                    displayName = change.party === 'customer' ? session.customerCompany : session.providerCompany
+                }
+
+                return {
+                    id: change.id,
+                    timestamp: change.changed_at,  // REAL TIMESTAMP FROM DB
+                    eventType: 'position_change' as const,
+                    party: change.party as 'customer' | 'provider',
+                    partyName: displayName,
+                    clauseId: change.clause_id,
+                    clauseName: change.clause_name || 'Unknown Clause',
+                    clauseNumber: change.clause_number,
+                    description: `${displayName} moved position on ${change.clause_name}`,
+                    oldValue: parseFloat(change.old_position),
+                    newValue: parseFloat(change.new_position),
+                    leverageImpact: parseFloat(change.leverage_impact) || 0,
+                    seen: isViewerCustomer ? change.seen_by_customer : change.seen_by_provider
+                }
+            })
+
+            // Add session start entry at the end
+            history.push({
+                id: 'session-start',
+                timestamp: session.createdAt || new Date(Date.now() - 86400000).toISOString(),
+                eventType: 'session_started',
+                party: 'system',
+                partyName: 'CLARENCE',
+                description: `Negotiation session opened between ${session.customerCompany} and ${session.providerCompany}`
+            })
+
+            setNegotiationHistory(history)
+
+        } catch (error) {
+            console.error('Error fetching negotiation history:', error)
+        } finally {
+            setIsLoadingHistory(false)
+        }
+    }, [session?.sessionId, session?.customerCompany, session?.providerCompany, session?.createdAt, userInfo?.role])
+
+    // Fetch history on mount and when session changes
     useEffect(() => {
-        if (!clauses.length || !session) return
-
-        const history: NegotiationHistoryEntry[] = []
-        const viewerRole = userInfo?.role || 'customer'
-        const isViewerCustomer = viewerRole === 'customer'
-
-        // Add session start entry
-        history.push({
-            id: 'session-start',
-            timestamp: new Date().toISOString(),
-            eventType: 'session_started',
-            party: 'system',
-            partyName: 'CLARENCE',
-            description: `Negotiation session opened between ${session.customerCompany} and ${session.providerCompany}`
-        })
-
-        // Check each clause for position changes
-        clauses.forEach(clause => {
-            if (clause.clauseLevel === 0) return // Skip category headers
-
-            // Customer position change
-            if (clause.customerPosition !== null &&
-                clause.originalCustomerPosition !== null &&
-                clause.customerPosition !== clause.originalCustomerPosition) {
-
-                const delta = clause.customerPosition - clause.originalCustomerPosition
-                const weight = clause.customerWeight ?? 5
-
-                // Customer moving DOWN = accommodating = POSITIVE credits for customer
-                // Customer moving UP = demanding more = no credits
-                let leverageImpact = 0
-                if (delta < 0) {
-                    // Customer accommodated - they earned credits
-                    leverageImpact = Math.abs(delta) * (weight / 5) * 0.5
-                }
-
-                history.push({
-                    id: `cust-${clause.clauseId}`,
-                    timestamp: new Date().toISOString(),
-                    eventType: 'position_change',
-                    party: 'customer',
-                    partyName: isViewerCustomer ? 'You' : session.customerCompany,
-                    clauseId: clause.clauseId,
-                    clauseName: clause.clauseName,
-                    description: isViewerCustomer
-                        ? `You adjusted position on ${clause.clauseName}`
-                        : `${session.customerCompany} adjusted position on ${clause.clauseName}`,
-                    oldValue: clause.originalCustomerPosition,
-                    newValue: clause.customerPosition,
-                    leverageImpact: leverageImpact
-                })
-            }
-
-            // Provider position change
-            if (clause.providerPosition !== null &&
-                clause.originalProviderPosition !== null &&
-                clause.providerPosition !== clause.originalProviderPosition) {
-
-                const delta = clause.providerPosition - clause.originalProviderPosition
-                const weight = clause.providerWeight ?? 5
-
-                // Provider moving UP = accommodating = POSITIVE credits for provider
-                // Provider moving DOWN = demanding more = no credits
-                let leverageImpact = 0
-                if (delta > 0) {
-                    // Provider accommodated - they earned credits
-                    leverageImpact = delta * (weight / 5) * 0.5
-                }
-
-                history.push({
-                    id: `prov-${clause.clauseId}`,
-                    timestamp: new Date().toISOString(),
-                    eventType: 'position_change',
-                    party: 'provider',
-                    partyName: isViewerCustomer ? session.providerCompany : 'You',
-                    clauseId: clause.clauseId,
-                    clauseName: clause.clauseName,
-                    description: isViewerCustomer
-                        ? `${session.providerCompany} adjusted position on ${clause.clauseName}`
-                        : `You adjusted position on ${clause.clauseName}`,
-                    oldValue: clause.originalProviderPosition,
-                    newValue: clause.providerPosition,
-                    leverageImpact: leverageImpact
-                })
-            }
-
-            // Agreement reached
-            if (clause.status === 'aligned' && clause.gapSize <= 1) {
-                history.push({
-                    id: `agree-${clause.clauseId}`,
-                    timestamp: new Date().toISOString(),
-                    eventType: 'agreement',
-                    party: 'system',
-                    partyName: 'CLARENCE',
-                    clauseId: clause.clauseId,
-                    clauseName: clause.clauseName,
-                    description: `Agreement reached on ${clause.clauseName}`
-                })
-            }
-        })
-
-        // Sort by timestamp, newest first
-        history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-
-        setNegotiationHistory(history)
-    }, [clauses, session, userInfo?.role])
+        fetchNegotiationHistory()
+    }, [fetchNegotiationHistory])
 
     // ============================================================================
     // SECTION 7I: SCROLL POSITION PANEL TO TOP WHEN CLAUSE CHANGES
@@ -2457,16 +2460,11 @@ function ContractStudioContent() {
                 ? selectedClause.customerWeight
                 : selectedClause.providerWeight
 
-            const otherPosition = userInfo.role === 'customer'
-                ? selectedClause.providerPosition ?? 5
-                : selectedClause.customerPosition ?? 5
-
             const impact = calculateLeverageImpact(
                 originalPosition,
                 newPosition,
                 weight,
-                userInfo.role as 'customer' | 'provider',
-                otherPosition
+                userInfo.role as 'customer' | 'provider'
             )
             setPendingLeverageImpact(impact)
         }
@@ -2505,7 +2503,7 @@ function ContractStudioContent() {
             if (result.success) {
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
-                        const newGap = calculateGap(
+                        const newGap = calculateGapSize(
                             userInfo.role === 'customer' ? proposedPosition : c.customerPosition,
                             userInfo.role === 'provider' ? proposedPosition : c.providerPosition
                         )
@@ -2546,7 +2544,7 @@ function ContractStudioContent() {
                 // ============================================================
                 // CLARENCE RESPONSE TO POSITION CHANGE
                 // ============================================================
-                const newGap = calculateGap(
+                const newGap = calculateGapSize(
                     userInfo.role === 'customer' ? proposedPosition : selectedClause.customerPosition,
                     userInfo.role === 'provider' ? proposedPosition : selectedClause.providerPosition
                 )
@@ -2586,6 +2584,8 @@ function ContractStudioContent() {
 
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
+                // Refresh negotiation history to include the new move
+                await fetchNegotiationHistory()
                 stopWorking()
             } else {
                 setWorkingError('Failed to save your position. Please try again.')
@@ -2624,7 +2624,7 @@ function ContractStudioContent() {
             if (result.success) {
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
-                        const newGap = calculateGap(
+                        const newGap = calculateGapSize(
                             userInfo.role === 'customer' ? originalPosition : c.customerPosition,
                             userInfo.role === 'provider' ? originalPosition : c.providerPosition
                         )
