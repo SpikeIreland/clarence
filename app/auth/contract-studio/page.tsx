@@ -757,59 +757,62 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 }
 
 // ============================================================================
-// SECTION 3: LEVERAGE CALCULATION FUNCTIONS
+// SECTION 3: LEVERAGE CALCULATION FUNCTIONS (CORRECTED)
 // ============================================================================
 
 /**
- * Calculate leverage impact FROM THE MOVER'S PERSPECTIVE
- * Returns NEGATIVE if you're conceding (moving toward other party)
- * Returns POSITIVE if you're gaining (other party moved toward you, or you're standing firm)
+ * Calculate leverage impact for a position move
+ * Scale: Each position point on a weight-5 clause = ~1% leverage shift
  * 
- * This is used for the UI preview "This move will cost/gain you X%"
+ * IMPORTANT: Accommodating = moving toward other party = YOU LOSE leverage
  */
 function calculateLeverageImpact(
     oldPosition: number,
     newPosition: number,
     clauseWeight: number,
-    party: 'customer' | 'provider',
-    otherPartyPosition: number
+    party: 'customer' | 'provider'
 ): number {
-    // Calculate movement
     const positionDelta = newPosition - oldPosition
 
-    // No movement = no impact
     if (positionDelta === 0) return 0
 
-    // Weight multiplier (weight 5 = 1x, weight 10 = 2x, weight 1 = 0.2x)
+    // Weight multiplier: weight 5 = 1x, weight 3 = 0.6x, weight 2 = 0.4x
     const weightMultiplier = clauseWeight / 5
 
-    // Scale factor for impact (each point on weight-5 clause = ~0.5% leverage)
-    const scaleFactor = 0.5
+    // Scale factor: 1 position point on weight-5 clause = 1% leverage
+    const scaleFactor = 1.0
 
-    let leverageImpact = 0
+    // Calculate raw impact magnitude
+    const impactMagnitude = Math.abs(positionDelta) * weightMultiplier * scaleFactor
+
+    // Determine direction based on who moved and which way
+    // Customer scale: 1 = provider-friendly, 10 = customer-friendly
+    // Provider scale: 1 = provider-friendly, 10 = customer-friendly
 
     if (party === 'customer') {
-        // Customer scale: 1 = provider-friendly, 10 = customer-friendly
-        // Moving DOWN (toward provider) = ACCOMMODATING = GAINS leverage credits
+        // Customer moving DOWN (negative delta) = accommodating provider = CUSTOMER LOSES
+        // Return negative value to show loss
         if (positionDelta < 0) {
-            leverageImpact = Math.abs(positionDelta) * weightMultiplier * scaleFactor // POSITIVE
+            return -Math.round(impactMagnitude * 10) / 10
         }
-        // Moving UP = demanding more = no leverage gained
+        // Customer moving UP = demanding more = no leverage change (can't gain by demanding)
+        return 0
     } else {
-        // Provider scale: 1 = provider-friendly, 10 = customer-friendly
-        // Moving UP (toward customer) = ACCOMMODATING = GAINS leverage credits
+        // Provider moving UP (positive delta) = accommodating customer = PROVIDER LOSES
+        // Return negative value to show loss
         if (positionDelta > 0) {
-            leverageImpact = positionDelta * weightMultiplier * scaleFactor // POSITIVE
+            return -Math.round(impactMagnitude * 10) / 10
         }
-        // Moving DOWN = demanding more = no leverage gained
+        // Provider moving DOWN = demanding more = no leverage change
+        return 0
     }
-
-    return Math.round(leverageImpact * 10) / 10
 }
 
 /**
- * Recalculate the Leverage Tracker based on ALL position changes across ALL clauses
- * DEBUG VERSION - includes console logging
+ * Recalculate the Leverage Tracker based on ALL position changes
+ * 
+ * Logic: When you accommodate, you LOSE leverage. The other party GAINS.
+ * Net result is a zero-sum shift in the tracker.
  */
 function recalculateLeverageTracker(
     baseLeverageCustomer: number,
@@ -820,104 +823,77 @@ function recalculateLeverageTracker(
 
     console.log('=== LEVERAGE TRACKER RECALCULATION ===')
     console.log('Base leverage:', baseLeverageCustomer, ':', baseLeverageProvider)
-    console.log('User role:', userRole)
 
-    let customerCredits = 0
-    let providerCredits = 0
+    let customerLeverageShift = 0  // Positive = customer gaining, Negative = customer losing
 
     clauses.forEach(clause => {
-        if (clause.clauseLevel === 0 || clause.customerPosition === null) return
+        // Skip parent categories
+        if (clause.clauseLevel === 0) return
+        if (clause.customerPosition === null || clause.providerPosition === null) return
 
-        const originalCustomerPos = clause.originalCustomerPosition
-        const currentCustomerPos = clause.customerPosition
-        const originalProviderPos = clause.originalProviderPosition
-        const currentProviderPos = clause.providerPosition
+        // Check customer movement
+        const origCustPos = clause.originalCustomerPosition
+        const currCustPos = clause.customerPosition
 
-        // Customer movement
-        if (originalCustomerPos !== null && currentCustomerPos !== null && originalCustomerPos !== currentCustomerPos) {
-            const customerDelta = currentCustomerPos - originalCustomerPos
-            const weight = clause.customerWeight ?? 5
+        if (origCustPos !== null && currCustPos !== null && origCustPos !== currCustPos) {
+            const custDelta = currCustPos - origCustPos
+            const weight = clause.customerWeight ?? 3
 
-            // Customer moving DOWN = accommodating = CUSTOMER earns credits
-            if (customerDelta < 0) {
-                const impact = Math.abs(customerDelta) * (weight / 5) * 0.5
-                customerCredits += impact
-                console.log(`${clause.clauseName}: Customer accommodated, +${impact.toFixed(2)} customer credits`)
+            // Customer moving DOWN = accommodating = PROVIDER GAINS (customer loses)
+            if (custDelta < 0) {
+                const impact = Math.abs(custDelta) * (weight / 5) * 1.0
+                customerLeverageShift -= impact  // Customer LOSES
+                console.log(`${clause.clauseName}: Customer accommodated (${origCustPos.toFixed(1)}→${currCustPos.toFixed(1)}), Provider gains +${impact.toFixed(2)} (weight ${weight})`)
             }
         }
 
-        // Provider movement
-        if (originalProviderPos !== null && currentProviderPos !== null && originalProviderPos !== currentProviderPos) {
-            const providerDelta = currentProviderPos - originalProviderPos
-            const weight = clause.providerWeight ?? 5
+        // Check provider movement
+        const origProvPos = clause.originalProviderPosition
+        const currProvPos = clause.providerPosition
 
-            // Provider moving UP = accommodating = PROVIDER earns credits
-            if (providerDelta > 0) {
-                const impact = providerDelta * (weight / 5) * 0.5
-                providerCredits += impact
-                console.log(`${clause.clauseName}: Provider accommodated, +${impact.toFixed(2)} provider credits`)
+        if (origProvPos !== null && currProvPos !== null && origProvPos !== currProvPos) {
+            const provDelta = currProvPos - origProvPos
+            const weight = clause.providerWeight ?? 3
+
+            // Provider moving UP = accommodating = CUSTOMER GAINS (provider loses)
+            if (provDelta > 0) {
+                const impact = provDelta * (weight / 5) * 1.0
+                customerLeverageShift += impact  // Customer GAINS
+                console.log(`${clause.clauseName}: Provider accommodated (${origProvPos.toFixed(1)}→${currProvPos.toFixed(1)}), Customer gains +${impact.toFixed(2)} (weight ${weight})`)
             }
         }
     })
 
-    console.log('Customer credits earned:', customerCredits.toFixed(2))
-    console.log('Provider credits earned:', providerCredits.toFixed(2))
+    console.log('Net customer leverage shift:', customerLeverageShift.toFixed(2))
 
-    // Each party gains credits when they accommodate (reward for flexibility)
-    const rawCustomerLeverage = baseLeverageCustomer + customerCredits
-    const rawProviderLeverage = baseLeverageProvider + providerCredits
-
-    // Normalize to always sum to 100 (prevents bar overlap)
-    const total = rawCustomerLeverage + rawProviderLeverage
-    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round((rawCustomerLeverage / total) * 100)))
+    // Apply shift to base (bounded 20-80 to prevent runaway)
+    const newCustomerLeverage = Math.max(20, Math.min(80, baseLeverageCustomer + customerLeverageShift))
     const newProviderLeverage = 100 - newCustomerLeverage
 
-    console.log('Raw values:', rawCustomerLeverage.toFixed(2), ':', rawProviderLeverage.toFixed(2))
-    console.log('Normalized (sum=100):', newCustomerLeverage, ':', newProviderLeverage)
+    console.log('Final leverage:', Math.round(newCustomerLeverage), ':', Math.round(newProviderLeverage))
     console.log('=== END RECALCULATION ===')
 
     return {
-        customerLeverage: newCustomerLeverage,
-        providerLeverage: newProviderLeverage
+        customerLeverage: Math.round(newCustomerLeverage),
+        providerLeverage: Math.round(newProviderLeverage)
     }
 }
 
-function calculateAlignmentPercentage(clauses: ContractClause[]): number {
-    // Filter to only negotiable clauses (level 1, with positions)
-    const negotiableClauses = clauses.filter(c =>
-        c.clauseLevel === 1 &&
-        c.customerPosition !== null &&
-        c.providerPosition !== null
-    )
-
-    if (negotiableClauses.length === 0) return 0
-
-    // Count aligned clauses (gap <= 1 point)
-    const alignedCount = negotiableClauses.filter(c => {
-        const gap = Math.abs((c.customerPosition ?? 0) - (c.providerPosition ?? 0))
-        return gap <= 1
-    }).length
-
-    // Calculate percentage
-    return Math.round((alignedCount / negotiableClauses.length) * 100)
-}
-
 /**
- * Helper to determine gap between positions
+ * Calculate gap size
  */
-function calculateGap(customerPos: number | null, providerPos: number | null): number {
-    if (customerPos === null || providerPos === null) return 0
-    return Math.abs(customerPos - providerPos)
+function calculateGapSize(customerPosition: number | null, providerPosition: number | null): number {
+    if (customerPosition === null || providerPosition === null) return 0
+    return Math.abs(customerPosition - providerPosition)
 }
 
 /**
  * Helper to determine clause status based on gap
  */
-function determineClauseStatus(gap: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
-    if (gap <= 1) return 'aligned'
-    if (gap <= 3) return 'negotiating'
-    if (gap > 4) return 'disputed'
-    return 'pending'
+function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
+    if (gapSize <= 1) return 'aligned'
+    if (gapSize <= 4) return 'negotiating'  // Changed from 3 to 4
+    return 'disputed'                        // Anything > 4
 }
 
 // ============================================================================
