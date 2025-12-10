@@ -30,7 +30,6 @@ interface Session {
     dealValue: string
     phase: number
     status: string
-    createdAt?: string  // ADD THIS IF MISSING
 }
 
 interface NegotiationHistoryEntry {
@@ -41,12 +40,10 @@ interface NegotiationHistoryEntry {
     partyName: string
     clauseId?: string
     clauseName?: string
-    clauseNumber?: string      // ADD THIS
     description: string
     oldValue?: number | string
     newValue?: number | string
     leverageImpact?: number
-    seen?: boolean             // ADD THIS
 }
 
 // ============================================================================
@@ -764,52 +761,55 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 // ============================================================================
 
 /**
- * Calculate leverage impact for a position move
+ * Calculate leverage impact FROM THE MOVER'S PERSPECTIVE
+ * Returns NEGATIVE if you're conceding (moving toward other party)
+ * Returns POSITIVE if you're gaining (other party moved toward you, or you're standing firm)
+ * 
+ * This is used for the UI preview "This move will cost/gain you X%"
  */
 function calculateLeverageImpact(
     oldPosition: number,
     newPosition: number,
     clauseWeight: number,
-    party: 'customer' | 'provider'
+    party: 'customer' | 'provider',
+    otherPartyPosition: number
 ): number {
+    // Calculate movement
     const positionDelta = newPosition - oldPosition
 
+    // No movement = no impact
     if (positionDelta === 0) return 0
 
-    // Weight multiplier: weight 5 = 1x, weight 3 = 0.6x, weight 2 = 0.4x
+    // Weight multiplier (weight 5 = 1x, weight 10 = 2x, weight 1 = 0.2x)
     const weightMultiplier = clauseWeight / 5
 
-    // Scale factor: 1 position point on weight-5 clause = 1% leverage
-    const scaleFactor = 1.0
+    // Scale factor for impact (each point on weight-5 clause = ~0.5% leverage)
+    const scaleFactor = 0.5
 
-    // Calculate raw impact magnitude
-    const impactMagnitude = Math.abs(positionDelta) * weightMultiplier * scaleFactor
-
-    // Determine direction based on who moved and which way
-    // Customer scale: 1 = provider-friendly, 10 = customer-friendly
-    // Provider scale: 1 = provider-friendly, 10 = customer-friendly
+    let leverageImpact = 0
 
     if (party === 'customer') {
-        // Customer moving DOWN (negative delta) = accommodating provider = CUSTOMER LOSES
-        // Return negative value to show loss
+        // Customer scale: 1 = provider-friendly, 10 = customer-friendly
+        // Moving DOWN (toward provider) = ACCOMMODATING = GAINS leverage credits
         if (positionDelta < 0) {
-            return -Math.round(impactMagnitude * 10) / 10
+            leverageImpact = Math.abs(positionDelta) * weightMultiplier * scaleFactor // POSITIVE
         }
-        // Customer moving UP = demanding more = no leverage change (can't gain by demanding)
-        return 0
+        // Moving UP = demanding more = no leverage gained
     } else {
-        // Provider moving UP (positive delta) = accommodating customer = PROVIDER LOSES
-        // Return negative value to show loss
+        // Provider scale: 1 = provider-friendly, 10 = customer-friendly
+        // Moving UP (toward customer) = ACCOMMODATING = GAINS leverage credits
         if (positionDelta > 0) {
-            return -Math.round(impactMagnitude * 10) / 10
+            leverageImpact = positionDelta * weightMultiplier * scaleFactor // POSITIVE
         }
-        // Provider moving DOWN = demanding more = no leverage change
-        return 0
+        // Moving DOWN = demanding more = no leverage gained
     }
+
+    return Math.round(leverageImpact * 10) / 10
 }
 
 /**
- * Recalculate the Leverage Tracker based on ALL position changes
+ * Recalculate the Leverage Tracker based on ALL position changes across ALL clauses
+ * DEBUG VERSION - includes console logging
  */
 function recalculateLeverageTracker(
     baseLeverageCustomer: number,
@@ -820,93 +820,104 @@ function recalculateLeverageTracker(
 
     console.log('=== LEVERAGE TRACKER RECALCULATION ===')
     console.log('Base leverage:', baseLeverageCustomer, ':', baseLeverageProvider)
+    console.log('User role:', userRole)
 
-    let customerLeverageShift = 0  // Positive = customer gaining, Negative = customer losing
+    let customerCredits = 0
+    let providerCredits = 0
 
     clauses.forEach(clause => {
-        // Skip parent categories
-        if (clause.clauseLevel === 0) return
-        if (clause.customerPosition === null || clause.providerPosition === null) return
+        if (clause.clauseLevel === 0 || clause.customerPosition === null) return
 
-        // Check customer movement
-        const origCustPos = clause.originalCustomerPosition
-        const currCustPos = clause.customerPosition
+        const originalCustomerPos = clause.originalCustomerPosition
+        const currentCustomerPos = clause.customerPosition
+        const originalProviderPos = clause.originalProviderPosition
+        const currentProviderPos = clause.providerPosition
 
-        if (origCustPos !== null && currCustPos !== null && origCustPos !== currCustPos) {
-            const custDelta = currCustPos - origCustPos
-            const weight = clause.customerWeight ?? 3
+        // Customer movement
+        if (originalCustomerPos !== null && currentCustomerPos !== null && originalCustomerPos !== currentCustomerPos) {
+            const customerDelta = currentCustomerPos - originalCustomerPos
+            const weight = clause.customerWeight ?? 5
 
-            // Customer moving DOWN = accommodating = PROVIDER GAINS (customer loses)
-            if (custDelta < 0) {
-                const impact = Math.abs(custDelta) * (weight / 5) * 1.0
-                customerLeverageShift -= impact  // Customer LOSES
-                console.log(`${clause.clauseName}: Customer accommodated (${origCustPos.toFixed(1)}→${currCustPos.toFixed(1)}), Provider gains +${impact.toFixed(2)} (weight ${weight})`)
+            // Customer moving DOWN = accommodating = CUSTOMER earns credits
+            if (customerDelta < 0) {
+                const impact = Math.abs(customerDelta) * (weight / 5) * 0.5
+                customerCredits += impact
+                console.log(`${clause.clauseName}: Customer accommodated, +${impact.toFixed(2)} customer credits`)
             }
         }
 
-        // Check provider movement
-        const origProvPos = clause.originalProviderPosition
-        const currProvPos = clause.providerPosition
+        // Provider movement
+        if (originalProviderPos !== null && currentProviderPos !== null && originalProviderPos !== currentProviderPos) {
+            const providerDelta = currentProviderPos - originalProviderPos
+            const weight = clause.providerWeight ?? 5
 
-        if (origProvPos !== null && currProvPos !== null && origProvPos !== currProvPos) {
-            const provDelta = currProvPos - origProvPos
-            const weight = clause.providerWeight ?? 3
-
-            // Provider moving UP = accommodating = CUSTOMER GAINS (provider loses)
-            if (provDelta > 0) {
-                const impact = provDelta * (weight / 5) * 1.0
-                customerLeverageShift += impact  // Customer GAINS
-                console.log(`${clause.clauseName}: Provider accommodated (${origProvPos.toFixed(1)}→${currProvPos.toFixed(1)}), Customer gains +${impact.toFixed(2)} (weight ${weight})`)
+            // Provider moving UP = accommodating = PROVIDER earns credits
+            if (providerDelta > 0) {
+                const impact = providerDelta * (weight / 5) * 0.5
+                providerCredits += impact
+                console.log(`${clause.clauseName}: Provider accommodated, +${impact.toFixed(2)} provider credits`)
             }
         }
     })
 
-    console.log('Net customer leverage shift:', customerLeverageShift.toFixed(2))
+    console.log('Customer credits earned:', customerCredits.toFixed(2))
+    console.log('Provider credits earned:', providerCredits.toFixed(2))
 
-    // Apply shift to base (bounded 20-80 to prevent runaway)
-    const newCustomerLeverage = Math.max(20, Math.min(80, baseLeverageCustomer + customerLeverageShift))
+    // Each party gains credits when they accommodate (reward for flexibility)
+    const rawCustomerLeverage = baseLeverageCustomer + customerCredits
+    const rawProviderLeverage = baseLeverageProvider + providerCredits
+
+    // Normalize to always sum to 100 (prevents bar overlap)
+    const total = rawCustomerLeverage + rawProviderLeverage
+    const newCustomerLeverage = Math.max(15, Math.min(85, Math.round((rawCustomerLeverage / total) * 100)))
     const newProviderLeverage = 100 - newCustomerLeverage
 
-    console.log('Final leverage:', Math.round(newCustomerLeverage), ':', Math.round(newProviderLeverage))
+    console.log('Raw values:', rawCustomerLeverage.toFixed(2), ':', rawProviderLeverage.toFixed(2))
+    console.log('Normalized (sum=100):', newCustomerLeverage, ':', newProviderLeverage)
     console.log('=== END RECALCULATION ===')
 
     return {
-        customerLeverage: Math.round(newCustomerLeverage),
-        providerLeverage: Math.round(newProviderLeverage)
+        customerLeverage: newCustomerLeverage,
+        providerLeverage: newProviderLeverage
     }
 }
 
-/**
- * Calculate gap size
- */
-function calculateGapSize(customerPosition: number | null, providerPosition: number | null): number {
-    if (customerPosition === null || providerPosition === null) return 0
-    return Math.abs(customerPosition - providerPosition)
-}
-
-/**
- * Determine clause status based on gap size
- */
-function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
-    if (gapSize <= 1) return 'aligned'
-    if (gapSize <= 4) return 'negotiating'
-    return 'disputed'
-}
-
-/**
- * Calculate alignment percentage across all clauses
- */
 function calculateAlignmentPercentage(clauses: ContractClause[]): number {
-    const childClauses = clauses.filter(c => c.clauseLevel === 1 && c.customerPosition !== null && c.providerPosition !== null)
+    // Filter to only negotiable clauses (level 1, with positions)
+    const negotiableClauses = clauses.filter(c =>
+        c.clauseLevel === 1 &&
+        c.customerPosition !== null &&
+        c.providerPosition !== null
+    )
 
-    if (childClauses.length === 0) return 0
+    if (negotiableClauses.length === 0) return 0
 
-    const alignedCount = childClauses.filter(c => {
-        const gap = Math.abs((c.customerPosition || 0) - (c.providerPosition || 0))
+    // Count aligned clauses (gap <= 1 point)
+    const alignedCount = negotiableClauses.filter(c => {
+        const gap = Math.abs((c.customerPosition ?? 0) - (c.providerPosition ?? 0))
         return gap <= 1
     }).length
 
-    return Math.round((alignedCount / childClauses.length) * 100)
+    // Calculate percentage
+    return Math.round((alignedCount / negotiableClauses.length) * 100)
+}
+
+/**
+ * Helper to determine gap between positions
+ */
+function calculateGap(customerPos: number | null, providerPos: number | null): number {
+    if (customerPos === null || providerPos === null) return 0
+    return Math.abs(customerPos - providerPos)
+}
+
+/**
+ * Helper to determine clause status based on gap
+ */
+function determineClauseStatus(gap: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
+    if (gap <= 1) return 'aligned'
+    if (gap <= 3) return 'negotiating'
+    if (gap > 4) return 'disputed'
+    return 'pending'
 }
 
 // ============================================================================
@@ -2329,104 +2340,114 @@ function ContractStudioContent() {
         }
     }, [selectedClause?.positionId, userInfo])
 
-    // ============================================================================
-    // SECTION 7H: FETCH NEGOTIATION HISTORY FROM DATABASE
-    // ============================================================================
+    // Generate negotiation history from clauses
+    useEffect(() => {
+        if (!clauses.length || !session) return
 
-    const fetchNegotiationHistory = useCallback(async () => {
-        if (!session?.sessionId) return
+        const history: NegotiationHistoryEntry[] = []
+        const viewerRole = userInfo?.role || 'customer'
+        const isViewerCustomer = viewerRole === 'customer'
 
-        try {
-            setIsLoadingHistory(true)
-            const supabase = createClient()
+        // Add session start entry
+        history.push({
+            id: 'session-start',
+            timestamp: new Date().toISOString(),
+            eventType: 'session_started',
+            party: 'system',
+            partyName: 'CLARENCE',
+            description: `Negotiation session opened between ${session.customerCompany} and ${session.providerCompany}`
+        })
 
-            // Fetch position changes from database with real timestamps
-            const { data: positionChanges, error } = await supabase
-                .from('position_change_history')
-                .select(`
-                    id,
-                    clause_id,
-                    clause_name,
-                    clause_number,
-                    party,
-                    changed_by_name,
-                    changed_by_company,
-                    old_position,
-                    new_position,
-                    position_delta,
-                    leverage_impact,
-                    changed_at,
-                    seen_by_customer,
-                    seen_by_provider
-                `)
-                .eq('session_id', session.sessionId)
-                .order('changed_at', { ascending: false })
-                .limit(100)
+        // Check each clause for position changes
+        clauses.forEach(clause => {
+            if (clause.clauseLevel === 0) return // Skip category headers
 
-            if (error) {
-                console.error('Error fetching position history:', error)
-                return
+            // Customer position change
+            if (clause.customerPosition !== null &&
+                clause.originalCustomerPosition !== null &&
+                clause.customerPosition !== clause.originalCustomerPosition) {
+
+                const delta = clause.customerPosition - clause.originalCustomerPosition
+                const weight = clause.customerWeight ?? 5
+
+                // Customer moving DOWN = accommodating = POSITIVE credits for customer
+                // Customer moving UP = demanding more = no credits
+                let leverageImpact = 0
+                if (delta < 0) {
+                    // Customer accommodated - they earned credits
+                    leverageImpact = Math.abs(delta) * (weight / 5) * 0.5
+                }
+
+                history.push({
+                    id: `cust-${clause.clauseId}`,
+                    timestamp: new Date().toISOString(),
+                    eventType: 'position_change',
+                    party: 'customer',
+                    partyName: isViewerCustomer ? 'You' : session.customerCompany,
+                    clauseId: clause.clauseId,
+                    clauseName: clause.clauseName,
+                    description: isViewerCustomer
+                        ? `You adjusted position on ${clause.clauseName}`
+                        : `${session.customerCompany} adjusted position on ${clause.clauseName}`,
+                    oldValue: clause.originalCustomerPosition,
+                    newValue: clause.customerPosition,
+                    leverageImpact: leverageImpact
+                })
             }
 
-            console.log('Fetched position history:', positionChanges?.length, 'records')
+            // Provider position change
+            if (clause.providerPosition !== null &&
+                clause.originalProviderPosition !== null &&
+                clause.providerPosition !== clause.originalProviderPosition) {
 
-            // Map database records to NegotiationHistoryEntry format
-            const history: NegotiationHistoryEntry[] = (positionChanges || []).map(change => {
-                const isViewerCustomer = userInfo?.role === 'customer'
-                const isOwnMove = change.party === userInfo?.role
+                const delta = clause.providerPosition - clause.originalProviderPosition
+                const weight = clause.providerWeight ?? 5
 
-                // Determine party name for display
-                let displayName: string
-                if (isOwnMove) {
-                    displayName = 'You'
-                } else if (change.changed_by_name) {
-                    displayName = change.changed_by_name
-                } else if (change.changed_by_company) {
-                    displayName = change.changed_by_company
-                } else {
-                    displayName = change.party === 'customer' ? session.customerCompany : session.providerCompany
+                // Provider moving UP = accommodating = POSITIVE credits for provider
+                // Provider moving DOWN = demanding more = no credits
+                let leverageImpact = 0
+                if (delta > 0) {
+                    // Provider accommodated - they earned credits
+                    leverageImpact = delta * (weight / 5) * 0.5
                 }
 
-                return {
-                    id: change.id,
-                    timestamp: change.changed_at,  // REAL TIMESTAMP FROM DB
-                    eventType: 'position_change' as const,
-                    party: change.party as 'customer' | 'provider',
-                    partyName: displayName,
-                    clauseId: change.clause_id,
-                    clauseName: change.clause_name || 'Unknown Clause',
-                    clauseNumber: change.clause_number,
-                    description: `${displayName} moved position on ${change.clause_name}`,
-                    oldValue: parseFloat(change.old_position),
-                    newValue: parseFloat(change.new_position),
-                    leverageImpact: parseFloat(change.leverage_impact) || 0,
-                    seen: isViewerCustomer ? change.seen_by_customer : change.seen_by_provider
-                }
-            })
+                history.push({
+                    id: `prov-${clause.clauseId}`,
+                    timestamp: new Date().toISOString(),
+                    eventType: 'position_change',
+                    party: 'provider',
+                    partyName: isViewerCustomer ? session.providerCompany : 'You',
+                    clauseId: clause.clauseId,
+                    clauseName: clause.clauseName,
+                    description: isViewerCustomer
+                        ? `${session.providerCompany} adjusted position on ${clause.clauseName}`
+                        : `You adjusted position on ${clause.clauseName}`,
+                    oldValue: clause.originalProviderPosition,
+                    newValue: clause.providerPosition,
+                    leverageImpact: leverageImpact
+                })
+            }
 
-            // Add session start entry at the end
-            history.push({
-                id: 'session-start',
-                timestamp: session.createdAt || new Date(Date.now() - 86400000).toISOString(),
-                eventType: 'session_started',
-                party: 'system',
-                partyName: 'CLARENCE',
-                description: `Negotiation session opened between ${session.customerCompany} and ${session.providerCompany}`
-            })
+            // Agreement reached
+            if (clause.status === 'aligned' && clause.gapSize <= 1) {
+                history.push({
+                    id: `agree-${clause.clauseId}`,
+                    timestamp: new Date().toISOString(),
+                    eventType: 'agreement',
+                    party: 'system',
+                    partyName: 'CLARENCE',
+                    clauseId: clause.clauseId,
+                    clauseName: clause.clauseName,
+                    description: `Agreement reached on ${clause.clauseName}`
+                })
+            }
+        })
 
-            setNegotiationHistory(history)
+        // Sort by timestamp, newest first
+        history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
-        } catch (error) {
-            console.error('Error fetching negotiation history:', error)
-        } finally {
-            setIsLoadingHistory(false)
-        }
-    }, [session?.sessionId, session?.customerCompany, session?.providerCompany, session?.createdAt, userInfo?.role])
-
-    // Fetch history on mount and when session changes
-    useEffect(() => {
-        fetchNegotiationHistory()
-    }, [fetchNegotiationHistory])
+        setNegotiationHistory(history)
+    }, [clauses, session, userInfo?.role])
 
     // ============================================================================
     // SECTION 7I: SCROLL POSITION PANEL TO TOP WHEN CLAUSE CHANGES
@@ -2460,11 +2481,16 @@ function ContractStudioContent() {
                 ? selectedClause.customerWeight
                 : selectedClause.providerWeight
 
+            const otherPosition = userInfo.role === 'customer'
+                ? selectedClause.providerPosition ?? 5
+                : selectedClause.customerPosition ?? 5
+
             const impact = calculateLeverageImpact(
                 originalPosition,
                 newPosition,
                 weight,
-                userInfo.role as 'customer' | 'provider'
+                userInfo.role as 'customer' | 'provider',
+                otherPosition
             )
             setPendingLeverageImpact(impact)
         }
@@ -2503,7 +2529,7 @@ function ContractStudioContent() {
             if (result.success) {
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
-                        const newGap = calculateGapSize(
+                        const newGap = calculateGap(
                             userInfo.role === 'customer' ? proposedPosition : c.customerPosition,
                             userInfo.role === 'provider' ? proposedPosition : c.providerPosition
                         )
@@ -2544,7 +2570,7 @@ function ContractStudioContent() {
                 // ============================================================
                 // CLARENCE RESPONSE TO POSITION CHANGE
                 // ============================================================
-                const newGap = calculateGapSize(
+                const newGap = calculateGap(
                     userInfo.role === 'customer' ? proposedPosition : selectedClause.customerPosition,
                     userInfo.role === 'provider' ? proposedPosition : selectedClause.providerPosition
                 )
@@ -2584,8 +2610,6 @@ function ContractStudioContent() {
 
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
-                // Refresh negotiation history to include the new move
-                await fetchNegotiationHistory()
                 stopWorking()
             } else {
                 setWorkingError('Failed to save your position. Please try again.')
@@ -2624,7 +2648,7 @@ function ContractStudioContent() {
             if (result.success) {
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
-                        const newGap = calculateGapSize(
+                        const newGap = calculateGap(
                             userInfo.role === 'customer' ? originalPosition : c.customerPosition,
                             userInfo.role === 'provider' ? originalPosition : c.providerPosition
                         )
@@ -2903,9 +2927,9 @@ Explain why this trade makes sense and what each party gains.`
             const message = `Generate professional contract clause language for "${clause.clauseName}" that is balanced and fair to both parties.
 
 Current positions:
-- Customer position: ${clause.customerPosition}/5
-- Provider position: ${clause.providerPosition}/5
-- CLARENCE recommended position: ${clause.clarenceRecommendation ?? 'Not set'}/5
+- Customer position: ${clause.customerPosition}/10
+- Provider position: ${clause.providerPosition}/10
+- CLARENCE recommended position: ${clause.clarenceRecommendation ?? 'Not set'}/10
 - Gap: ${clause.gapSize.toFixed(1)} points
 
 Clause description: ${clause.description}
@@ -3070,26 +3094,27 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         }
 
         return (
-            <div className="mb-3">  {/* Was mb-6 */}
-                {/* Header - CONDENSED */}
-                <div className="flex items-center justify-between mb-2">  {/* Was mb-3 */}
+            <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl border border-slate-200 p-5 mb-4">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                         <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                        <h4 className="font-semibold text-slate-800 text-sm">Your Position</h4>  {/* Added text-sm */}
+                        <h4 className="font-semibold text-slate-800">Your Position</h4>
                         {hasChanged && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
-                                Changed
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                Changed from {getPositionLabel(originalDbPosition)}
                             </span>
                         )}
                     </div>
-                    <div className="text-xs text-slate-500">
-                        Weight: <span className="font-semibold text-slate-700">{myWeight}/5</span>
+                    <div className="text-sm text-slate-500">
+                        Weight: <span className="font-semibold text-slate-700">{myWeight}/10</span>
+                        {myWeight >= 8 && <span className="ml-1 text-amber-600">★ High Priority</span>}
                     </div>
                 </div>
 
                 {/* Position Options View */}
                 {hasPositionOptions ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
 
                         {/* ============================================================ */}
                         {/* COMPACT SPECTRUM BAR WITH ZONE LABELS */}
@@ -3392,29 +3417,29 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     </div>
                 )}
 
-                {/* Leverage Impact Preview - CONDENSED */}
+                {/* Leverage Impact Preview */}
                 {isProposing && pendingLeverageImpact !== 0 && (
-                    <div className={`p-2 rounded-lg mt-2 ${pendingLeverageImpact < 0 ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-                        <span className={`text-xs ${pendingLeverageImpact < 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    <div className={`p-3 rounded-lg mt-4 ${pendingLeverageImpact < 0 ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+                        <span className={`text-sm ${pendingLeverageImpact < 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
                             <strong>Leverage Impact:</strong> This move will {pendingLeverageImpact < 0 ? 'cost you' : 'gain you'}{' '}
                             <span className="font-bold">{Math.abs(pendingLeverageImpact).toFixed(1)}%</span> leverage
                         </span>
                     </div>
                 )}
 
-                {/* Action Buttons - CONDENSED */}
-                <div className="flex gap-2 mt-2">
+                {/* Action Buttons */}
+                <div className="flex gap-3 mt-4">
                     <button
                         onClick={handleSetPosition}
                         disabled={!isProposing || isCommitting}
-                        className={`flex-1 py-2 px-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 text-sm ${isProposing && !isCommitting
+                        className={`flex-1 py-3 px-4 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${isProposing && !isCommitting
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             }`}
                     >
                         {isCommitting ? (
                             <>
-                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
@@ -3422,7 +3447,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </>
                         ) : (
                             <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                                 Set Position
@@ -3434,9 +3459,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <button
                             onClick={() => setShowResetConfirm(true)}
                             disabled={isCommitting}
-                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition flex items-center gap-1.5 text-sm"
+                            className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition flex items-center gap-2"
                         >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                             Reset
@@ -3447,22 +3472,22 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Reset Confirmation Modal */}
                 {showResetConfirm && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-xl p-4 max-w-md mx-4 shadow-xl">
-                            <h3 className="text-base font-semibold text-slate-800 mb-2">Reset Position?</h3>
-                            <p className="text-sm text-slate-600 mb-3">
+                        <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-xl">
+                            <h3 className="text-lg font-semibold text-slate-800 mb-2">Reset Position?</h3>
+                            <p className="text-slate-600 mb-4">
                                 This will restore your position on <strong>{selectedClause.clauseName}</strong> back to{' '}
                                 <strong>{getPositionLabel(originalDbPosition)}</strong>.
                             </p>
-                            <div className="flex gap-2">
+                            <div className="flex gap-3">
                                 <button
                                     onClick={handleResetPosition}
-                                    className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition text-sm"
+                                    className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition"
                                 >
                                     Yes, Reset
                                 </button>
                                 <button
                                     onClick={() => setShowResetConfirm(false)}
-                                    className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition text-sm"
+                                    className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition"
                                 >
                                     Cancel
                                 </button>
@@ -4254,71 +4279,50 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {/* Workspace Content */}
                     <div className="flex-1 overflow-y-auto p-4 pt-0">
 
-                        {/* ==================== POSITIONS TAB ==================== */}
+                        {/* ==================== DYNAMICS TAB ==================== */}
                         {activeTab === 'positions' && selectedClause && (
+
                             <div
                                 ref={positionPanelRef}
-                                className="flex-1 overflow-y-auto p-3 bg-white mx-4 mb-2 rounded-b-xl border border-t-0 border-slate-200"
+                                className="flex-1 overflow-y-auto p-4 bg-white mx-4 mb-4 rounded-b-xl border border-t-0 border-slate-200"
                             >
                                 {selectedClause && (
                                     <PositionAdjustmentPanel />
                                 )}
 
-                                {/* Position Comparison - CONDENSED */}
-                                <div className="mb-3">
-                                    <h3 className="text-xs font-semibold text-slate-700 mb-2">Position Overview</h3>
+                                {/* Position Comparison */}
+                                <div className="mb-6">
+                                    <h3 className="text-sm font-semibold text-slate-700 mb-4">Position Overview</h3>
 
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className={`p-2 rounded-lg ${userInfo.role === 'customer' ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50'}`}>
-                                            <div className="flex items-center gap-1.5 mb-1">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                                <span className="text-xs font-medium text-slate-700">{session.customerCompany}</span>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className={`p-4 rounded-lg ${userInfo.role === 'customer' ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50'}`}>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                                <span className="text-sm font-medium text-slate-700">{session.customerCompany}</span>
                                                 {userInfo.role === 'customer' && <span className="text-xs text-emerald-600">(You)</span>}
                                             </div>
-                                            <div className="text-lg font-bold text-slate-800">
-                                                {selectedClause.customerPosition?.toFixed(1) ?? 'Not set'}
+                                            <div className="text-2xl font-bold text-slate-800">
+                                                {selectedClause.customerPosition ?? 'Not set'}
                                             </div>
-                                            <div className="text-xs text-slate-500">
-                                                Weight: {selectedClause.customerWeight}/5
+                                            <div className="text-xs text-slate-500 mt-1">
+                                                Weight: {selectedClause.customerWeight}/10
                                             </div>
                                         </div>
 
-                                        <div className={`p-2 rounded-lg ${userInfo.role === 'provider' ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
-                                            <div className="flex items-center gap-1.5 mb-1">
-                                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                                <span className="text-xs font-medium text-slate-700">{session.providerCompany}</span>
+                                        <div className={`p-4 rounded-lg ${userInfo.role === 'provider' ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                                <span className="text-sm font-medium text-slate-700">{session.providerCompany}</span>
                                                 {userInfo.role === 'provider' && <span className="text-xs text-blue-600">(You)</span>}
                                             </div>
-                                            <div className="text-lg font-bold text-slate-800">
-                                                {selectedClause.providerPosition?.toFixed(1) ?? 'Not set'}
+                                            <div className="text-2xl font-bold text-slate-800">
+                                                {selectedClause.providerPosition ?? 'Not set'}
                                             </div>
-                                            <div className="text-xs text-slate-500">
-                                                Weight: {selectedClause.providerWeight}/5
+                                            <div className="text-xs text-slate-500 mt-1">
+                                                Weight: {selectedClause.providerWeight}/10
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-
-                                {/* Gap Analysis - CONDENSED */}
-                                <div className="bg-slate-50 rounded-lg p-2 mb-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-600">Current Gap:</span>
-                                        <span className={`text-sm font-bold ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
-                                            selectedClause.gapSize <= 3 ? 'text-amber-600' :
-                                                'text-red-600'
-                                            }`}>
-                                            {selectedClause.gapSize?.toFixed(1)} points
-                                            {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
-                                        </span>
-                                    </div>
-                                    {selectedClause.clarenceRecommendation && (
-                                        <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-200">
-                                            <span className="text-xs text-slate-600">CLARENCE Suggests:</span>
-                                            <span className="text-sm font-semibold text-purple-600">
-                                                {selectedClause.clarenceRecommendation.toFixed(1)}
-                                            </span>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         )}
