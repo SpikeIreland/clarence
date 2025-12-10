@@ -773,6 +773,7 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 
 /**
  * Calculate leverage impact for a position move
+ * COOPERATIVE MODEL: Moving toward agreement GAINS leverage
  */
 function calculateLeverageImpact(
     oldPosition: number,
@@ -794,25 +795,22 @@ function calculateLeverageImpact(
     const impactMagnitude = Math.abs(positionDelta) * weightMultiplier * scaleFactor
 
     // Determine direction based on who moved and which way
-    // Customer scale: 1 = provider-friendly, 10 = customer-friendly
-    // Provider scale: 1 = provider-friendly, 10 = customer-friendly
+    // COOPERATIVE MODEL: Moving toward agreement = GAIN, Moving away = LOSS
 
     if (party === 'customer') {
-        // Customer moving DOWN (negative delta) = accommodating provider = CUSTOMER LOSES
-        // Return negative value to show loss
+        // Customer moving DOWN (toward provider) = toward agreement = GAINS
         if (positionDelta < 0) {
-            return -Math.round(impactMagnitude * 10) / 10
+            return Math.round(impactMagnitude * 10) / 10  // Positive = gain
         }
-        // Customer moving UP = demanding more = no leverage change (can't gain by demanding)
-        return 0
+        // Customer moving UP (away from provider) = away from agreement = LOSES
+        return -Math.round(impactMagnitude * 10) / 10  // Negative = loss
     } else {
-        // Provider moving UP (positive delta) = accommodating customer = PROVIDER LOSES
-        // Return negative value to show loss
+        // Provider moving UP (toward customer) = toward agreement = GAINS
         if (positionDelta > 0) {
-            return -Math.round(impactMagnitude * 10) / 10
+            return Math.round(impactMagnitude * 10) / 10  // Positive = gain
         }
-        // Provider moving DOWN = demanding more = no leverage change
-        return 0
+        // Provider moving DOWN (away from customer) = away from agreement = LOSES
+        return -Math.round(impactMagnitude * 10) / 10  // Negative = loss
     }
 }
 
