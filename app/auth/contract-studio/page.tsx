@@ -3070,27 +3070,26 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         }
 
         return (
-            <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl border border-slate-200 p-5 mb-4">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-4">
+            <div className="mb-3">  {/* Was mb-6 */}
+                {/* Header - CONDENSED */}
+                <div className="flex items-center justify-between mb-2">  {/* Was mb-3 */}
                     <div className="flex items-center gap-2">
                         <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                        <h4 className="font-semibold text-slate-800">Your Position</h4>
+                        <h4 className="font-semibold text-slate-800 text-sm">Your Position</h4>  {/* Added text-sm */}
                         {hasChanged && (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                                Changed from {getPositionLabel(originalDbPosition)}
+                            <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                                Changed
                             </span>
                         )}
                     </div>
-                    <div className="text-sm text-slate-500">
-                        Weight: <span className="font-semibold text-slate-700">{myWeight}/10</span>
-                        {myWeight >= 8 && <span className="ml-1 text-amber-600">★ High Priority</span>}
+                    <div className="text-xs text-slate-500">
+                        Weight: <span className="font-semibold text-slate-700">{myWeight}/5</span>
                     </div>
                 </div>
 
                 {/* Position Options View */}
                 {hasPositionOptions ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
 
                         {/* ============================================================ */}
                         {/* COMPACT SPECTRUM BAR WITH ZONE LABELS */}
@@ -3393,29 +3392,29 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     </div>
                 )}
 
-                {/* Leverage Impact Preview */}
+                {/* Leverage Impact Preview - CONDENSED */}
                 {isProposing && pendingLeverageImpact !== 0 && (
-                    <div className={`p-3 rounded-lg mt-4 ${pendingLeverageImpact < 0 ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-                        <span className={`text-sm ${pendingLeverageImpact < 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
+                    <div className={`p-2 rounded-lg mt-2 ${pendingLeverageImpact < 0 ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+                        <span className={`text-xs ${pendingLeverageImpact < 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
                             <strong>Leverage Impact:</strong> This move will {pendingLeverageImpact < 0 ? 'cost you' : 'gain you'}{' '}
                             <span className="font-bold">{Math.abs(pendingLeverageImpact).toFixed(1)}%</span> leverage
                         </span>
                     </div>
                 )}
 
-                {/* Action Buttons */}
-                <div className="flex gap-3 mt-4">
+                {/* Action Buttons - CONDENSED */}
+                <div className="flex gap-2 mt-2">
                     <button
                         onClick={handleSetPosition}
                         disabled={!isProposing || isCommitting}
-                        className={`flex-1 py-3 px-4 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${isProposing && !isCommitting
+                        className={`flex-1 py-2 px-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 text-sm ${isProposing && !isCommitting
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                             : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             }`}
                     >
                         {isCommitting ? (
                             <>
-                                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
@@ -3423,7 +3422,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </>
                         ) : (
                             <>
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                                 Set Position
@@ -3435,9 +3434,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <button
                             onClick={() => setShowResetConfirm(true)}
                             disabled={isCommitting}
-                            className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition flex items-center gap-2"
+                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition flex items-center gap-1.5 text-sm"
                         >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
                             Reset
@@ -3448,22 +3447,22 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Reset Confirmation Modal */}
                 {showResetConfirm && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-xl p-6 max-w-md mx-4 shadow-xl">
-                            <h3 className="text-lg font-semibold text-slate-800 mb-2">Reset Position?</h3>
-                            <p className="text-slate-600 mb-4">
+                        <div className="bg-white rounded-xl p-4 max-w-md mx-4 shadow-xl">
+                            <h3 className="text-base font-semibold text-slate-800 mb-2">Reset Position?</h3>
+                            <p className="text-sm text-slate-600 mb-3">
                                 This will restore your position on <strong>{selectedClause.clauseName}</strong> back to{' '}
                                 <strong>{getPositionLabel(originalDbPosition)}</strong>.
                             </p>
-                            <div className="flex gap-3">
+                            <div className="flex gap-2">
                                 <button
                                     onClick={handleResetPosition}
-                                    className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition"
+                                    className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition text-sm"
                                 >
                                     Yes, Reset
                                 </button>
                                 <button
                                     onClick={() => setShowResetConfirm(false)}
-                                    className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition"
+                                    className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition text-sm"
                                 >
                                     Cancel
                                 </button>
@@ -4255,50 +4254,71 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {/* Workspace Content */}
                     <div className="flex-1 overflow-y-auto p-4 pt-0">
 
-                        {/* ==================== DYNAMICS TAB ==================== */}
+                        {/* ==================== POSITIONS TAB ==================== */}
                         {activeTab === 'positions' && selectedClause && (
-
                             <div
                                 ref={positionPanelRef}
-                                className="flex-1 overflow-y-auto p-4 bg-white mx-4 mb-4 rounded-b-xl border border-t-0 border-slate-200"
+                                className="flex-1 overflow-y-auto p-3 bg-white mx-4 mb-2 rounded-b-xl border border-t-0 border-slate-200"
                             >
                                 {selectedClause && (
                                     <PositionAdjustmentPanel />
                                 )}
 
-                                {/* Position Comparison */}
-                                <div className="mb-6">
-                                    <h3 className="text-sm font-semibold text-slate-700 mb-4">Position Overview</h3>
+                                {/* Position Comparison - CONDENSED */}
+                                <div className="mb-3">
+                                    <h3 className="text-xs font-semibold text-slate-700 mb-2">Position Overview</h3>
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className={`p-4 rounded-lg ${userInfo.role === 'customer' ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                                                <span className="text-sm font-medium text-slate-700">{session.customerCompany}</span>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className={`p-2 rounded-lg ${userInfo.role === 'customer' ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50'}`}>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                                <span className="text-xs font-medium text-slate-700">{session.customerCompany}</span>
                                                 {userInfo.role === 'customer' && <span className="text-xs text-emerald-600">(You)</span>}
                                             </div>
-                                            <div className="text-2xl font-bold text-slate-800">
-                                                {selectedClause.customerPosition ?? 'Not set'}
+                                            <div className="text-lg font-bold text-slate-800">
+                                                {selectedClause.customerPosition?.toFixed(1) ?? 'Not set'}
                                             </div>
-                                            <div className="text-xs text-slate-500 mt-1">
-                                                Weight: {selectedClause.customerWeight}/10
+                                            <div className="text-xs text-slate-500">
+                                                Weight: {selectedClause.customerWeight}/5
                                             </div>
                                         </div>
 
-                                        <div className={`p-4 rounded-lg ${userInfo.role === 'provider' ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                                                <span className="text-sm font-medium text-slate-700">{session.providerCompany}</span>
+                                        <div className={`p-2 rounded-lg ${userInfo.role === 'provider' ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                                <span className="text-xs font-medium text-slate-700">{session.providerCompany}</span>
                                                 {userInfo.role === 'provider' && <span className="text-xs text-blue-600">(You)</span>}
                                             </div>
-                                            <div className="text-2xl font-bold text-slate-800">
-                                                {selectedClause.providerPosition ?? 'Not set'}
+                                            <div className="text-lg font-bold text-slate-800">
+                                                {selectedClause.providerPosition?.toFixed(1) ?? 'Not set'}
                                             </div>
-                                            <div className="text-xs text-slate-500 mt-1">
-                                                Weight: {selectedClause.providerWeight}/10
+                                            <div className="text-xs text-slate-500">
+                                                Weight: {selectedClause.providerWeight}/5
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* Gap Analysis - CONDENSED */}
+                                <div className="bg-slate-50 rounded-lg p-2 mb-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-600">Current Gap:</span>
+                                        <span className={`text-sm font-bold ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
+                                            selectedClause.gapSize <= 3 ? 'text-amber-600' :
+                                                'text-red-600'
+                                            }`}>
+                                            {selectedClause.gapSize?.toFixed(1)} points
+                                            {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
+                                        </span>
+                                    </div>
+                                    {selectedClause.clarenceRecommendation && (
+                                        <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-200">
+                                            <span className="text-xs text-slate-600">CLARENCE Suggests:</span>
+                                            <span className="text-sm font-semibold text-purple-600">
+                                                {selectedClause.clarenceRecommendation.toFixed(1)}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
