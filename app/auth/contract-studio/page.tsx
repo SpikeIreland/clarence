@@ -354,10 +354,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Plus full damages', description: 'Service credits plus right to claim all direct damages' }
     ],
     'Earn-back / Bonus': [
-        { value: 1, label: 'General earn-back', description: 'Earn-back across all service levels each month' },
-        { value: 2, label: 'Within category', description: 'Earn-back within same service level category' },
-        { value: 3, label: 'Same SL only', description: 'Earn-back against same service level only' },
-        { value: 4, label: 'No earn-back', description: 'No earn-back or bonus provisions' }
+        { value: 1, label: 'No earn-back', description: 'No earn-back or bonus provisions' },
+        { value: 2, label: 'Same SL only', description: 'Earn-back against same service level only' },
+        { value: 3, label: 'Within category', description: 'Earn-back within same service level category' },
+        { value: 4, label: 'General earn-back', description: 'Earn-back across all service levels each month' }
     ],
     'Termination & Step In': [
         { value: 1, label: 'Material breach only', description: 'Termination only for material breach of SLAs' },
@@ -510,10 +510,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: '250% annual', description: 'Customer liability at 250% of annual charges' }
     ],
     'Exclusions': [
-        { value: 1, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' },
-        { value: 2, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
-        { value: 3, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
-        { value: 4, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' }
+        { value: 1, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' },
+        { value: 2, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
+        { value: 3, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
+        { value: 4, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' }
     ],
     'Unlimited Losses': [
         { value: 1, label: 'Statutory only', description: 'Death/PI and employee claims only' },
@@ -1676,8 +1676,6 @@ function ContractStudioContent() {
     const workingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const lastWorkingTypeRef = useRef<WorkingType>(null)
 
-    const [tradeOffScope, setTradeOffScope] = useState<'thisClause' | 'allClauses'>('thisClause')
-
     const startWorking = useCallback((type: NonNullable<WorkingType>) => {
         // Clear any existing timeout
         if (workingTimeoutRef.current) {
@@ -2330,17 +2328,6 @@ function ContractStudioContent() {
             setPendingLeverageImpact(0)
         }
     }, [selectedClause?.positionId, userInfo])
-
-    // Reset trade-off scope when clause changes
-    useEffect(() => {
-        if (selectedClause) {
-            setTradeOffScope('thisClause')
-            const opportunities = detectTradeOffOpportunities(clauses, selectedClause)
-            setTradeOffOpportunities(opportunities)
-            setSelectedTradeOff(null)
-            setTradeOffExplanation(null)
-        }
-    }, [selectedClause?.clauseId])
 
     // ============================================================================
     // SECTION 7H: FETCH NEGOTIATION HISTORY FROM DATABASE
@@ -4338,157 +4325,97 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         {/* ==================== TRADEOFFS TAB ==================== */}
                         {activeTab === 'tradeoffs' && selectedClause && (
-                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-4">
-                                <div className="space-y-3">
+                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
+                                <div className="space-y-4">
                                     {/* Header */}
-                                    <div>
-                                        <h3 className="text-base font-semibold text-slate-800">Trade-Off Opportunities</h3>
-                                        <p className="text-xs text-slate-500">
-                                            Exchange concessions on low-priority clauses for gains on high-priority ones
-                                        </p>
-                                    </div>
-
-                                    {/* Scope Toggle + Refresh */}
                                     <div className="flex items-center justify-between">
-                                        <div className="flex bg-slate-100 rounded-lg p-0.5">
-                                            <button
-                                                onClick={() => {
-                                                    setTradeOffScope('thisClause')
-                                                    const opportunities = detectTradeOffOpportunities(clauses, selectedClause)
-                                                    setTradeOffOpportunities(opportunities)
-                                                    setSelectedTradeOff(null)
-                                                    setTradeOffExplanation(null)
-                                                }}
-                                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${tradeOffScope === 'thisClause'
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
-                                                    }`}
-                                            >
-                                                This Clause
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setTradeOffScope('allClauses')
-                                                    const opportunities = detectTradeOffOpportunities(clauses, null)
-                                                    setTradeOffOpportunities(opportunities)
-                                                    setSelectedTradeOff(null)
-                                                    setTradeOffExplanation(null)
-                                                }}
-                                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${tradeOffScope === 'allClauses'
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
-                                                    }`}
-                                            >
-                                                All Clauses
-                                            </button>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-slate-800">Trade-Off Opportunities</h3>
+                                            <p className="text-sm text-slate-500">
+                                                Exchange concessions on low-priority clauses for gains on high-priority ones
+                                            </p>
                                         </div>
                                         <button
                                             onClick={() => {
-                                                const opportunities = detectTradeOffOpportunities(
-                                                    clauses,
-                                                    tradeOffScope === 'thisClause' ? selectedClause : null
-                                                )
+                                                const opportunities = detectTradeOffOpportunities(clauses, selectedClause)
                                                 setTradeOffOpportunities(opportunities)
-                                                setSelectedTradeOff(null)
-                                                setTradeOffExplanation(null)
                                             }}
-                                            className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition flex items-center gap-1"
+                                            className="px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition"
                                         >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
                                             Refresh
                                         </button>
                                     </div>
 
-                                    {/* Results Summary */}
-                                    <div className="text-xs text-slate-500 border-b border-slate-100 pb-2">
-                                        {tradeOffOpportunities.length > 0 ? (
-                                            <>
-                                                Showing <span className="font-medium text-slate-700">{tradeOffOpportunities.length}</span> trade-off{tradeOffOpportunities.length !== 1 ? 's' : ''}{' '}
-                                                {tradeOffScope === 'thisClause' ? (
-                                                    <>involving <span className="font-medium text-emerald-600">{selectedClause.clauseName}</span></>
-                                                ) : (
-                                                    <>across <span className="font-medium text-slate-700">all clauses</span></>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <>No trade-offs found {tradeOffScope === 'thisClause' ? `for ${selectedClause.clauseName}` : 'across all clauses'}</>
-                                        )}
-                                    </div>
-
                                     {/* Trade-off List */}
                                     {tradeOffOpportunities.length === 0 ? (
-                                        <div className="text-center py-6">
-                                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                                <span className="text-xl">⇄</span>
+                                        <div className="text-center py-8">
+                                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <span className="text-2xl">⇄</span>
                                             </div>
-                                            <p className="text-slate-600 text-sm mb-1">No trade-off opportunities detected</p>
-                                            <p className="text-xs text-slate-400">
+                                            <p className="text-slate-600 mb-2">No trade-off opportunities detected</p>
+                                            <p className="text-sm text-slate-400">
                                                 Trade-offs appear when parties have complementary priorities on different clauses
                                             </p>
-                                            {tradeOffScope === 'thisClause' && (
-                                                <button
-                                                    onClick={() => {
-                                                        setTradeOffScope('allClauses')
-                                                        const opportunities = detectTradeOffOpportunities(clauses, null)
-                                                        setTradeOffOpportunities(opportunities)
-                                                    }}
-                                                    className="mt-3 px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition"
-                                                >
-                                                    Try Scanning All Clauses
-                                                </button>
-                                            )}
+                                            <button
+                                                onClick={() => {
+                                                    const opportunities = detectTradeOffOpportunities(clauses, null)
+                                                    setTradeOffOpportunities(opportunities)
+                                                }}
+                                                className="mt-4 px-4 py-2 text-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition"
+                                            >
+                                                Scan All Clauses
+                                            </button>
                                         </div>
                                     ) : (
-                                        <div className="space-y-2">
-                                            {tradeOffOpportunities.map((tradeOff) => (
+                                        <div className="space-y-3">
+                                            {tradeOffOpportunities.map((tradeOff, index) => (
                                                 <div
                                                     key={tradeOff.id}
-                                                    className={`border rounded-lg p-3 cursor-pointer transition ${selectedTradeOff?.id === tradeOff.id
-                                                        ? 'border-emerald-300 bg-emerald-50'
-                                                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                                    className={`border rounded-lg p-4 cursor-pointer transition ${selectedTradeOff?.id === tradeOff.id
+                                                        ? 'border-emerald-400 bg-emerald-50'
+                                                        : 'border-slate-200 hover:border-slate-300 bg-white'
                                                         }`}
-                                                    onClick={() => {
-                                                        if (selectedTradeOff?.id === tradeOff.id) {
-                                                            setSelectedTradeOff(null)
-                                                            setTradeOffExplanation(null)
-                                                        } else {
-                                                            explainTradeOff(tradeOff)
-                                                        }
-                                                    }}
+                                                    onClick={() => explainTradeOff(tradeOff)}
                                                 >
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex-1">
-                                                            {/* Trade pair */}
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
-                                                                    {tradeOff.clauseA.clauseNumber}
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <span className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-700 rounded">
+                                                                    Trade #{index + 1}
                                                                 </span>
-                                                                <span className="text-slate-400">⇄</span>
-                                                                <span className="text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
-                                                                    {tradeOff.clauseB.clauseNumber}
+                                                                <span className="text-xs text-slate-500">
+                                                                    Value: {tradeOff.tradeOffValue.toFixed(1)}
                                                                 </span>
                                                             </div>
 
-                                                            {/* Clause names */}
-                                                            <div className="text-sm text-slate-700">
-                                                                <span className="font-medium">{tradeOff.clauseA.clauseName}</span>
-                                                                <span className="text-slate-400 mx-1">↔</span>
-                                                                <span className="font-medium">{tradeOff.clauseB.clauseName}</span>
-                                                            </div>
+                                                            <div className="grid grid-cols-2 gap-4 mt-3">
+                                                                {/* Give Side */}
+                                                                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                                                                    <div className="text-xs text-red-600 font-medium mb-1">You Concede</div>
+                                                                    <div className="text-sm font-medium text-slate-800">
+                                                                        {tradeOff.clauseA.clauseName}
+                                                                    </div>
+                                                                    <div className="text-xs text-slate-500 mt-1">
+                                                                        Gap: {tradeOff.clauseA.gapSize.toFixed(1)} points
+                                                                    </div>
+                                                                </div>
 
-                                                            {/* Gap info */}
-                                                            <div className="flex gap-3 mt-1 text-xs text-slate-500">
-                                                                <span>Gap A: {tradeOff.clauseA.gapSize.toFixed(1)}</span>
-                                                                <span>Gap B: {tradeOff.clauseB.gapSize.toFixed(1)}</span>
-                                                                <span>Value: {tradeOff.tradeOffValue.toFixed(1)}</span>
+                                                                {/* Get Side */}
+                                                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                                                                    <div className="text-xs text-emerald-600 font-medium mb-1">You Gain</div>
+                                                                    <div className="text-sm font-medium text-slate-800">
+                                                                        {tradeOff.clauseB.clauseName}
+                                                                    </div>
+                                                                    <div className="text-xs text-slate-500 mt-1">
+                                                                        Gap: {tradeOff.clauseB.gapSize.toFixed(1)} points
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </div>
 
-                                                        <div className="text-right ml-2">
-                                                            <div className="text-xs text-slate-500">Impact</div>
-                                                            <div className="text-sm font-bold text-emerald-600">
+                                                        <div className="ml-3 text-right">
+                                                            <div className="text-xs text-slate-500">Alignment Impact</div>
+                                                            <div className="text-lg font-bold text-emerald-600">
                                                                 +{tradeOff.alignmentImpact}%
                                                             </div>
                                                         </div>
@@ -4500,18 +4427,38 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                                     {/* Trade-off Explanation Panel */}
                                     {selectedTradeOff && (
-                                        <div className="mt-3 border-t border-slate-200 pt-3">
-                                            <h4 className="text-xs font-semibold text-slate-700 mb-2">
+                                        <div className="mt-4 border-t border-slate-200 pt-4">
+                                            <h4 className="text-sm font-semibold text-slate-700 mb-2">
                                                 CLARENCE Analysis
                                             </h4>
                                             {isLoadingTradeOff ? (
                                                 <div className="flex items-center gap-2 text-slate-500">
-                                                    <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                                                    <span className="text-xs">Analyzing trade-off...</span>
+                                                    <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    <span className="text-sm">Analyzing trade-off...</span>
                                                 </div>
                                             ) : tradeOffExplanation ? (
-                                                <div className="bg-slate-50 rounded-lg p-3">
-                                                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{tradeOffExplanation}</p>
+                                                <div className="bg-slate-50 rounded-lg p-4">
+                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{tradeOffExplanation}</p>
+                                                    <div className="flex gap-2 mt-4">
+                                                        <button
+                                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg transition"
+                                                            onClick={() => {
+                                                                // TODO: Implement accept trade-off
+                                                                alert('Accept trade-off functionality coming soon')
+                                                            }}
+                                                        >
+                                                            Accept Trade-Off
+                                                        </button>
+                                                        <button
+                                                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm rounded-lg transition"
+                                                            onClick={() => {
+                                                                setSelectedTradeOff(null)
+                                                                setTradeOffExplanation(null)
+                                                            }}
+                                                        >
+                                                            Dismiss
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ) : null}
                                         </div>
