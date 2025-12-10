@@ -2903,9 +2903,9 @@ Explain why this trade makes sense and what each party gains.`
             const message = `Generate professional contract clause language for "${clause.clauseName}" that is balanced and fair to both parties.
 
 Current positions:
-- Customer position: ${clause.customerPosition}/10
-- Provider position: ${clause.providerPosition}/10
-- CLARENCE recommended position: ${clause.clarenceRecommendation ?? 'Not set'}/10
+- Customer position: ${clause.customerPosition}/5
+- Provider position: ${clause.providerPosition}/5
+- CLARENCE recommended position: ${clause.clarenceRecommendation ?? 'Not set'}/5
 - Gap: ${clause.gapSize.toFixed(1)} points
 
 Clause description: ${clause.description}
