@@ -510,10 +510,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: '250% annual', description: 'Customer liability at 250% of annual charges' }
     ],
     'Exclusions': [
-        { value: 1, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' },
-        { value: 2, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
-        { value: 3, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
-        { value: 4, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' }
+        { value: 1, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' },
+        { value: 2, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
+        { value: 3, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
+        { value: 4, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' }
     ],
     'Unlimited Losses': [
         { value: 1, label: 'Statutory only', description: 'Death/PI and employee claims only' },
