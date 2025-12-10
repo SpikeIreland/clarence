@@ -665,6 +665,8 @@ async function commitPositionChange(
         userId?: string;
         userName?: string;
         companyName?: string;
+        newLeverageCustomer?: number;
+        newLeverageProvider?: number;
     }
 ): Promise<{ success: boolean; newLeverage?: LeverageData }> {
     try {
@@ -679,7 +681,9 @@ async function commitPositionChange(
                 leverageImpact,
                 userId: userContext?.userId || null,
                 userName: userContext?.userName || null,
-                companyName: userContext?.companyName || null
+                companyName: userContext?.companyName || null,
+                newLeverageCustomer: userContext?.newLeverageCustomer || null,
+                newLeverageProvider: userContext?.newLeverageProvider || null
             })
         })
 
@@ -2691,57 +2695,67 @@ function ContractStudioContent() {
         setIsCommitting(true)
 
         try {
+            // Pre-calculate leverage BEFORE the API call
+            const preCalcClauses = clauses.map(c => {
+                if (c.positionId === selectedClause.positionId) {
+                    const newGap = calculateGapSize(
+                        userInfo.role === 'customer' ? originalPosition : c.customerPosition,
+                        userInfo.role === 'provider' ? originalPosition : c.providerPosition
+                    )
+                    return {
+                        ...c,
+                        customerPosition: userInfo.role === 'customer' ? originalPosition : c.customerPosition,
+                        providerPosition: userInfo.role === 'provider' ? originalPosition : c.providerPosition,
+                        gapSize: newGap
+                    }
+                }
+                return c
+            })
+
+            const preCalcLeverage = recalculateLeverageTracker(
+                leverage.leverageScoreCustomer,
+                leverage.leverageScoreProvider,
+                preCalcClauses,
+                userInfo.role as 'customer' | 'provider'
+            )
+
             const result = await commitPositionChange(
                 session.sessionId,
                 selectedClause.positionId,
                 userInfo.role as 'customer' | 'provider',
                 originalPosition,
-                0
+                0,
+                {
+                    userId: userInfo.userId,
+                    userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || undefined,
+                    companyName: userInfo.company,
+                    newLeverageCustomer: preCalcLeverage.customerLeverage,
+                    newLeverageProvider: preCalcLeverage.providerLeverage
+                }
             )
 
             if (result.success) {
-                const updatedClauses = clauses.map(c => {
-                    if (c.positionId === selectedClause.positionId) {
-                        const newGap = calculateGapSize(
-                            userInfo.role === 'customer' ? originalPosition : c.customerPosition,
-                            userInfo.role === 'provider' ? originalPosition : c.providerPosition
-                        )
-                        return {
-                            ...c,
-                            customerPosition: userInfo.role === 'customer' ? originalPosition : c.customerPosition,
-                            providerPosition: userInfo.role === 'provider' ? originalPosition : c.providerPosition,
-                            gapSize: newGap,
-                            status: determineClauseStatus(newGap)
-                        }
-                    }
-                    return c
-                })
+                setClauses(preCalcClauses)
+                setClauseTree(buildClauseTree(preCalcClauses))
 
-                setClauses(updatedClauses)
-                setClauseTree(buildClauseTree(updatedClauses))
-
-                const updatedSelectedClause = updatedClauses.find(c => c.positionId === selectedClause.positionId)
+                const updatedSelectedClause = preCalcClauses.find(c => c.positionId === selectedClause.positionId)
                 if (updatedSelectedClause) {
                     setSelectedClause(updatedSelectedClause)
                 }
 
-                const newLeverage = recalculateLeverageTracker(
-                    leverage.leverageScoreCustomer,
-                    leverage.leverageScoreProvider,
-                    updatedClauses,
-                    userInfo.role as 'customer' | 'provider'
-                )
-
                 setLeverage({
                     ...leverage,
-                    leverageTrackerCustomer: newLeverage.customerLeverage,
-                    leverageTrackerProvider: newLeverage.providerLeverage,
+                    leverageTrackerCustomer: preCalcLeverage.customerLeverage,
+                    leverageTrackerProvider: preCalcLeverage.providerLeverage,
                     leverageTrackerCalculatedAt: new Date().toISOString()
                 })
 
                 setProposedPosition(originalPosition)
                 setIsAdjusting(false)
                 setPendingLeverageImpact(0)
+
+                // Refresh negotiation history to include the reset
+                await fetchNegotiationHistory()
                 stopWorking()
             } else {
                 setWorkingError('Failed to reset your position. Please try again.')
