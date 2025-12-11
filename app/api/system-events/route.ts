@@ -1,8 +1,8 @@
 // ============================================================================
-// CLARENCE System Observability - Event Logging API
-// File: app/api/system-events/route.ts
-// Version: 1.0
-// Description: POST endpoint for logging events from frontend and N8N
+// CLARENCE System Observability - User Lookup API
+// File: app/api/system-events/user/route.ts
+// Version: 1.1 (Fixed)
+// Description: Lookup user activity by user_id or email
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,220 +12,254 @@ import { createClient } from '@supabase/supabase-js';
 // SECTION 1: TYPE DEFINITIONS
 // ============================================================================
 
-interface EventLogRequest {
-    // Required fields
-    journeyType: string;
-    stepName: string;
-    status: 'started' | 'completed' | 'failed' | 'skipped';
-
-    // Optional context
-    sessionId?: string;
-    userId?: string;
-    traceId?: string;
-    stepNumber?: number;
-    stepCategory?: string;
-    sourceSystem?: string;
-    sourceIdentifier?: string;
-    context?: Record<string, unknown>;
-    errorMessage?: string;
-    errorCode?: string;
-    startedAt?: string;
-    completedAt?: string;
-    timestamp?: string;
+interface UserSession {
+    session_id: string;
+    session_number: string | null;
+    status: string;
+    event_count: number;
+    last_activity: string;
+    journeys: string[];
 }
 
-interface EventLogResponse {
-    success: boolean;
-    eventId?: string;
-    error?: string;
+interface UserActivity {
+    user_id: string;
+    email: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    company: string | null;
+    total_sessions: number;
+    total_events: number;
+    first_seen: string | null;
+    last_seen: string | null;
+    sessions: UserSession[];
 }
 
 // ============================================================================
-// SECTION 2: SUPABASE CLIENT
+// SECTION 2: HELPER FUNCTIONS
 // ============================================================================
 
-function getSupabaseClient() {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-        throw new Error('Missing Supabase environment variables');
-    }
-
-    return createClient(supabaseUrl, supabaseKey);
+function formatTimeAgo(dateString: string): string {
+    const diff = Date.now() - new Date(dateString).getTime();
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} mins ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+    return `${Math.floor(diff / 86400000)} days ago`;
 }
 
 // ============================================================================
-// SECTION 3: VALIDATION
+// SECTION 3: GET HANDLER
 // ============================================================================
 
-function validateRequest(body: EventLogRequest): { valid: boolean; error?: string } {
-    // Required fields
-    if (!body.journeyType) {
-        return { valid: false, error: 'journeyType is required' };
-    }
-    if (!body.stepName) {
-        return { valid: false, error: 'stepName is required' };
-    }
-    if (!body.status) {
-        return { valid: false, error: 'status is required' };
-    }
-
-    // Status validation
-    const validStatuses = ['started', 'completed', 'failed', 'skipped'];
-    if (!validStatuses.includes(body.status)) {
-        return { valid: false, error: `status must be one of: ${validStatuses.join(', ')}` };
-    }
-
-    // Length validations
-    if (body.journeyType.length > 50) {
-        return { valid: false, error: 'journeyType must be 50 characters or less' };
-    }
-    if (body.stepName.length > 100) {
-        return { valid: false, error: 'stepName must be 100 characters or less' };
-    }
-
-    return { valid: true };
-}
-
-// ============================================================================
-// SECTION 4: POST HANDLER - LOG EVENT
-// ============================================================================
-
-export async function POST(request: NextRequest): Promise<NextResponse<EventLogResponse>> {
+export async function GET(request: NextRequest) {
     try {
-        // Parse request body
-        const body: EventLogRequest = await request.json();
+        // Create Supabase client inside handler
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-        // Validate request
-        const validation = validateRequest(body);
-        if (!validation.valid) {
+        if (!supabaseUrl || !supabaseKey) {
             return NextResponse.json(
-                { success: false, error: validation.error },
+                { success: false, error: 'Database configuration missing' },
+                { status: 500 }
+            );
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // ========================================================================
+        // SECTION 3.1: Parse Query Parameter
+        // Frontend sends: query=email:user@example.com or query=user_id:abc123
+        // ========================================================================
+
+        const searchParams = request.nextUrl.searchParams;
+        const query = searchParams.get('query');
+
+        if (!query) {
+            return NextResponse.json(
+                { success: false, error: 'Query parameter is required (format: email:user@example.com or user_id:abc123)' },
                 { status: 400 }
             );
         }
 
-        // Initialize Supabase
-        const supabase = getSupabaseClient();
+        // Parse the query format
+        const colonIndex = query.indexOf(':');
+        if (colonIndex === -1) {
+            return NextResponse.json(
+                { success: false, error: 'Invalid query format. Use email:user@example.com or user_id:abc123' },
+                { status: 400 }
+            );
+        }
 
-        // Build event record
-        const now = new Date().toISOString();
-        const eventRecord = {
-            // Linking
-            trace_id: body.traceId || body.sessionId || null,
-            user_id: body.userId || null,
-            session_id: body.sessionId || null,
+        const searchType = query.substring(0, colonIndex).trim();
+        const searchValue = query.substring(colonIndex + 1).trim();
 
-            // Classification
-            journey_type: body.journeyType,
-            step_category: body.stepCategory || 'frontend',
-            step_name: body.stepName,
-            step_number: body.stepNumber || null,
+        if (!searchType || !searchValue) {
+            return NextResponse.json(
+                { success: false, error: 'Invalid query format. Use email:user@example.com or user_id:abc123' },
+                { status: 400 }
+            );
+        }
 
-            // Status
-            status: body.status,
-            error_message: body.errorMessage || null,
-            error_code: body.errorCode || null,
+        // ========================================================================
+        // SECTION 3.2: Find User
+        // ========================================================================
 
-            // Source
-            source_system: body.sourceSystem || 'frontend',
-            source_identifier: body.sourceIdentifier || null,
+        let userId: string | null = null;
+        let userDetails: { email?: string; first_name?: string; last_name?: string; company?: string } = {};
 
-            // Context
-            context: body.context || {},
+        if (searchType === 'user_id') {
+            userId = searchValue;
 
-            // Timing
-            started_at: body.status === 'started' ? now : (body.startedAt || null),
-            completed_at: body.status === 'completed' || body.status === 'failed' ? now : (body.completedAt || null),
-            created_at: now
+            // Try to get user details from users table
+            const { data: userData } = await supabase
+                .from('users')
+                .select('email, first_name, last_name, company')
+                .eq('user_id', userId)
+                .single();
+
+            if (userData) {
+                userDetails = userData;
+            }
+
+        } else if (searchType === 'email') {
+            // Look up user by email in users table
+            const { data: userData } = await supabase
+                .from('users')
+                .select('user_id, email, first_name, last_name, company')
+                .ilike('email', searchValue)
+                .single();
+
+            if (userData) {
+                userId = userData.user_id;
+                userDetails = {
+                    email: userData.email,
+                    first_name: userData.first_name,
+                    last_name: userData.last_name,
+                    company: userData.company
+                };
+            } else {
+                // Try to find user_id from system_events context
+                const { data: events } = await supabase
+                    .from('system_events')
+                    .select('user_id, context')
+                    .not('user_id', 'is', null)
+                    .limit(500);
+
+                const matchingEvent = (events || []).find(event => {
+                    if (event.context && typeof event.context === 'object') {
+                        const ctx = event.context as Record<string, unknown>;
+                        const ctxEmail = (ctx.email || ctx.userEmail || ctx.providerEmail || ctx.contactEmail || '') as string;
+                        return ctxEmail.toLowerCase() === searchValue.toLowerCase();
+                    }
+                    return false;
+                });
+
+                if (matchingEvent) {
+                    userId = matchingEvent.user_id;
+                    userDetails.email = searchValue;
+                }
+            }
+
+        } else {
+            return NextResponse.json(
+                { success: false, error: 'Invalid search type. Use email or user_id' },
+                { status: 400 }
+            );
+        }
+
+        // ========================================================================
+        // SECTION 3.3: Handle No User Found
+        // ========================================================================
+
+        if (!userId) {
+            return NextResponse.json({
+                success: true,
+                user: null,
+                message: 'No user found with the provided criteria'
+            });
+        }
+
+        // ========================================================================
+        // SECTION 3.4: Get User's Events
+        // ========================================================================
+
+        const { data: userEvents, error: eventsError } = await supabase
+            .from('system_events')
+            .select('event_id, session_id, journey_type, step_name, status, created_at')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(500);
+
+        if (eventsError) {
+            console.error('Events query error:', eventsError);
+        }
+
+        // ========================================================================
+        // SECTION 3.5: Get Unique Sessions
+        // ========================================================================
+
+        const sessionIds = [...new Set((userEvents || []).map(e => e.session_id).filter(Boolean))];
+
+        // Get session details from contract_sessions
+        const sessionsWithDetails: UserSession[] = [];
+
+        for (const sessionId of sessionIds.slice(0, 20)) {
+            if (!sessionId) continue;
+
+            // Get session info
+            const { data: sessionData } = await supabase
+                .from('contract_sessions')
+                .select('session_id, session_number, status')
+                .eq('session_id', sessionId)
+                .single();
+
+            // Get events for this session
+            const sessionEvents = (userEvents || []).filter(e => e.session_id === sessionId);
+            const journeyTypes = [...new Set(sessionEvents.map(e => e.journey_type))];
+            const lastEvent = sessionEvents[0]; // Already sorted desc
+
+            sessionsWithDetails.push({
+                session_id: sessionId,
+                session_number: sessionData?.session_number || null,
+                status: sessionData?.status || 'unknown',
+                event_count: sessionEvents.length,
+                last_activity: lastEvent?.created_at || '',
+                journeys: journeyTypes
+            });
+        }
+
+        // Sort by last activity
+        sessionsWithDetails.sort((a, b) =>
+            new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime()
+        );
+
+        // ========================================================================
+        // SECTION 3.6: Build Response
+        // ========================================================================
+
+        const totalEvents = userEvents?.length || 0;
+        const firstEvent = userEvents?.[userEvents.length - 1];
+        const lastEvent = userEvents?.[0];
+
+        const userActivity: UserActivity = {
+            user_id: userId,
+            email: userDetails.email || null,
+            first_name: userDetails.first_name || null,
+            last_name: userDetails.last_name || null,
+            company: userDetails.company || null,
+            total_sessions: sessionIds.length,
+            total_events: totalEvents,
+            first_seen: firstEvent?.created_at || null,
+            last_seen: lastEvent?.created_at || null,
+            sessions: sessionsWithDetails
         };
 
-        // Insert event into database
-        const { data, error } = await supabase
-            .from('system_events')
-            .insert(eventRecord)
-            .select('event_id')
-            .single();
-
-        if (error) {
-            console.error('EventLogger API: Database error:', error);
-            return NextResponse.json(
-                { success: false, error: 'Failed to log event' },
-                { status: 500 }
-            );
-        }
-
-        // Return success
         return NextResponse.json({
             success: true,
-            eventId: data.event_id
+            user: userActivity
         });
 
     } catch (error) {
-        console.error('EventLogger API: Unexpected error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Internal server error' },
-            { status: 500 }
-        );
-    }
-}
-
-// ============================================================================
-// SECTION 5: GET HANDLER - RETRIEVE RECENT EVENTS
-// ============================================================================
-
-export async function GET(request: NextRequest): Promise<NextResponse> {
-    try {
-        const { searchParams } = new URL(request.url);
-        const limit = parseInt(searchParams.get('limit') || '50');
-        const sessionId = searchParams.get('sessionId');
-        const journeyType = searchParams.get('journeyType');
-        const status = searchParams.get('status');
-        const sourceSystem = searchParams.get('sourceSystem');
-
-        // Initialize Supabase
-        const supabase = getSupabaseClient();
-
-        // Build query
-        let query = supabase
-            .from('system_events')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(Math.min(limit, 500)); // Cap at 500
-
-        // Apply filters
-        if (sessionId) {
-            query = query.eq('session_id', sessionId);
-        }
-        if (journeyType) {
-            query = query.eq('journey_type', journeyType);
-        }
-        if (status) {
-            query = query.eq('status', status);
-        }
-        if (sourceSystem) {
-            query = query.eq('source_system', sourceSystem);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('EventLogger API: Query error:', error);
-            return NextResponse.json(
-                { success: false, error: 'Failed to retrieve events' },
-                { status: 500 }
-            );
-        }
-
-        return NextResponse.json({
-            success: true,
-            events: data,
-            count: data.length
-        });
-
-    } catch (error) {
-        console.error('EventLogger API: Unexpected error:', error);
+        console.error('User lookup error:', error);
         return NextResponse.json(
             { success: false, error: 'Internal server error' },
             { status: 500 }
