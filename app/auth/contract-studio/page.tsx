@@ -4202,19 +4202,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </div>
                     </div>
                 </div>
-
-                {/* Party Chat Slide-Out Panel - Available to BOTH parties */}
-                <PartyChatPanel
-                    sessionId={session.sessionId}
-                    providerId=""
-                    providerName={isCustomer ? providerCompany : customerCompany}
-                    currentUserType={isCustomer ? 'customer' : 'provider'}
-                    currentUserName={userInfo.firstName || 'User'}
-                    isProviderOnline={otherPartyStatus.isOnline}
-                    isOpen={isChatOpen}
-                    onClose={() => setIsChatOpen(false)}
-                    onUnreadCountChange={setChatUnreadCount}
-                />
             </div>
         )
     }
@@ -4226,6 +4213,21 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <PartyStatusBanner />
+
+            {/* Party Chat Slide-Out Panel - Rendered at main component level to prevent remounting */}
+            {session && userInfo && (
+                <PartyChatPanel
+                    sessionId={session.sessionId}
+                    providerId=""
+                    providerName={userInfo.role === 'customer' ? session.providerCompany : session.customerCompany}
+                    currentUserType={userInfo.role === 'customer' ? 'customer' : 'provider'}
+                    currentUserName={userInfo.firstName || 'User'}
+                    isProviderOnline={otherPartyStatus.isOnline}
+                    isOpen={isChatOpen}
+                    onClose={() => setIsChatOpen(false)}
+                    onUnreadCountChange={setChatUnreadCount}
+                />
+            )}
 
             <div className="relative flex h-[calc(100vh-52px)] overflow-hidden">
                 {/* Working Overlay - covers the three-panel workspace */}
