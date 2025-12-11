@@ -320,10 +320,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Full DD conducted', description: 'All due diligence conducted, provider accepts full responsibility' }
     ],
     'Customer Dependencies': [
-        { value: 1, label: 'Minimal dependencies', description: 'Very limited customer obligations' },
-        { value: 2, label: 'Standard dependencies', description: 'Reasonable customer inputs required' },
-        { value: 3, label: 'Extensive list', description: 'Comprehensive list of customer obligations' },
-        { value: 4, label: 'Maximum dependencies', description: 'Extensive obligations including "reasonably required" inputs' }
+        { value: 1, label: 'Maximum dependencies', description: 'Extensive obligations including "reasonably required" inputs' },
+        { value: 2, label: 'Extensive list', description: 'Comprehensive list of customer obligations' },
+        { value: 3, label: 'Standard dependencies', description: 'Reasonable customer inputs required' },
+        { value: 4, label: 'Minimal dependencies', description: 'Very limited customer obligations' }
     ],
     'Transition & Transformation': [
         { value: 1, label: 'Best efforts', description: 'Supplier uses best efforts to complete on time' },
@@ -332,10 +332,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Strict obligation', description: 'Binding obligation with penalties and long stop termination right' }
     ],
     'Relief Events': [
-        { value: 1, label: 'No relief provision', description: 'Contract silent on relief; prevention principle applies' },
-        { value: 2, label: 'Limited relief', description: 'Relief for major force majeure events only' },
-        { value: 3, label: 'Standard relief', description: 'Standard force majeure and customer-caused delays' },
-        { value: 4, label: 'Broad relief', description: 'Comprehensive relief provisions favoring supplier' }
+        { value: 1, label: 'Broad relief', description: 'Comprehensive relief provisions favoring supplier - maximum provider protection' },
+        { value: 2, label: 'Standard relief', description: 'Standard force majeure and customer-caused delays' },
+        { value: 3, label: 'Limited relief', description: 'Relief for major force majeure events only' },
+        { value: 4, label: 'No relief provision', description: 'Contract silent on relief; prevention principle applies - provider must perform' }
     ],
 
     // ========== SERVICE LEVELS ==========
@@ -399,10 +399,10 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Extensive rights', description: 'Extensive list including non-material persistent defaults' }
     ],
     'Supplier Termination Right': [
-        { value: 1, label: 'Any material breach', description: 'Termination for any material customer breach' },
-        { value: 2, label: 'Payment default', description: 'Termination for payment default after notice' },
-        { value: 3, label: 'Material non-payment', description: 'Material non-payment after extended notice' },
-        { value: 4, label: 'Very limited', description: 'Limited to material non-payment after lengthy notice' }
+        { value: 1, label: 'Very limited', description: 'Limited to material non-payment after lengthy notice - maximum customer stability' },
+        { value: 2, label: 'Material non-payment', description: 'Material non-payment after extended notice' },
+        { value: 3, label: 'Payment default', description: 'Termination for payment default after notice' },
+        { value: 4, label: 'Any material breach', description: 'Termination for any material customer breach - maximum provider flexibility' }
     ],
     'Termination for Convenience': [
         { value: 1, label: 'Mutual - 180 days', description: 'Mutual right with 180 days notice' },
@@ -505,16 +505,16 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 6, label: '250% annual', description: 'Aggregate cap at 250% of annual charges' }
     ],
     'Cap for Customer': [
-        { value: 1, label: '100% annual', description: 'Customer liability at 100% of annual charges' },
-        { value: 2, label: '150% annual', description: 'Customer liability at 150% of annual charges' },
-        { value: 3, label: '200% annual', description: 'Customer liability at 200% of annual charges' },
-        { value: 4, label: '250% annual', description: 'Customer liability at 250% of annual charges' }
+        { value: 1, label: '250% annual', description: 'Customer liability at 250% of annual charges - maximum provider recovery' },
+        { value: 2, label: '200% annual', description: 'Customer liability at 200% of annual charges' },
+        { value: 3, label: '150% annual', description: 'Customer liability at 150% of annual charges' },
+        { value: 4, label: '100% annual', description: 'Customer liability at 100% of annual charges - minimum customer exposure' }
     ],
     'Exclusions': [
-        { value: 1, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses' },
-        { value: 2, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
-        { value: 3, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
-        { value: 4, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill' }
+        { value: 1, label: 'Broad exclusions', description: 'Exclude indirect, profits, savings, data, goodwill - maximum provider protection' },
+        { value: 2, label: 'Standard exclusions', description: 'Exclude indirect plus lost profits' },
+        { value: 3, label: 'Indirect only', description: 'Exclude indirect/consequential only' },
+        { value: 4, label: 'No exclusions', description: 'No exclusion for indirect or consequential losses - full customer recovery' }
     ],
     'Unlimited Losses': [
         { value: 1, label: 'Statutory only', description: 'Death/PI and employee claims only' },
