@@ -8,6 +8,12 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { eventLogger } from '@/lib/eventLogger';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ============================================================
 // SECTION 2: TYPE DEFINITIONS
@@ -36,6 +42,9 @@ interface RegistrationData {
     contactPhone: string;
     companySize: string;
     industry: string;
+    // User account fields
+    password: string;
+    confirmPassword: string;
 }
 
 // ============================================================
@@ -148,7 +157,9 @@ function ProviderPortalContent() {
         contactEmail: '',
         contactPhone: '',
         companySize: '',
-        industry: ''
+        industry: '',
+        password: '',
+        confirmPassword: ''
     });
 
     // ============================================================
@@ -281,12 +292,65 @@ function ProviderPortalContent() {
         eventLogger.started('provider_onboarding', 'provider_intake_form_submitted');
 
         try {
+            // Validation
             if (!formData.companyName || !formData.contactName || !formData.contactEmail) {
-                // LOG: Validation failed
                 eventLogger.failed('provider_onboarding', 'provider_intake_form_submitted', 'Missing required fields', 'VALIDATION_ERROR');
                 throw new Error('Please fill in all required fields.');
             }
 
+            // Password validation
+            if (!formData.password || formData.password.length < 8) {
+                throw new Error('Password must be at least 8 characters long.');
+            }
+
+            if (formData.password !== formData.confirmPassword) {
+                throw new Error('Passwords do not match.');
+            }
+
+            // Split contact name into first and last name
+            const nameParts = formData.contactName.trim().split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+
+            // ================================================================
+            // STEP 1: Create Supabase Auth Account
+            // ================================================================
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: formData.contactEmail,
+                password: formData.password,
+                options: {
+                    data: {
+                        first_name: firstName,
+                        last_name: lastName,
+                        company: formData.companyName,
+                        role: 'provider'
+                    }
+                }
+            });
+
+            if (authError) {
+                console.error('Supabase auth error:', authError);
+                if (authError.message.includes('already registered')) {
+                    throw new Error('An account with this email already exists. Please log in instead.');
+                }
+                throw new Error(authError.message || 'Failed to create account');
+            }
+
+            if (!authData.user) {
+                throw new Error('Failed to create user account');
+            }
+
+            const userId = authData.user.id;
+
+            // LOG: User account created
+            eventLogger.completed('provider_onboarding', 'user_account_created', {
+                userId: userId,
+                email: formData.contactEmail
+            });
+
+            // ================================================================
+            // STEP 2: Register provider via N8N workflow
+            // ================================================================
             const response = await fetch(
                 'https://spikeislandstudios.app.n8n.cloud/webhook/provider-register',
                 {
@@ -294,6 +358,7 @@ function ProviderPortalContent() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         ...formData,
+                        userId: userId,
                         registeredAt: new Date().toISOString()
                     })
                 }
@@ -301,7 +366,7 @@ function ProviderPortalContent() {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || 'Registration failed');
+                throw new Error(errorData.message || 'Provider registration failed');
             }
 
             const result = await response.json();
@@ -314,7 +379,26 @@ function ProviderPortalContent() {
                     companyName: formData.companyName
                 });
 
-                // Store ALL registration data for intake page pre-population
+                // ================================================================
+                // STEP 3: Set clarence_auth in localStorage
+                // ================================================================
+                const clarenceAuth = {
+                    authenticated: true,
+                    userInfo: {
+                        userId: userId,
+                        email: formData.contactEmail,
+                        firstName: firstName,
+                        lastName: lastName,
+                        company: formData.companyName,
+                        role: 'provider'
+                    },
+                    loginTime: new Date().toISOString()
+                };
+                localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
+
+                // ================================================================
+                // STEP 4: Store provider session data
+                // ================================================================
                 const sessionData = {
                     providerId: result.providerId,
                     sessionId: formData.sessionId,
@@ -335,25 +419,20 @@ function ProviderPortalContent() {
                 localStorage.setItem('providerSession', JSON.stringify(sessionData));
                 localStorage.setItem('clarence_provider_session', JSON.stringify(sessionData));
 
-                // LOG: Registration completed, redirecting
+                // LOG: Registration completed
                 eventLogger.completed('provider_onboarding', 'provider_intake_form_submitted', {
                     providerId: result.providerId,
+                    userId: userId,
                     sessionId: formData.sessionId
                 });
 
-                // LOG: Redirect to welcome
-                eventLogger.completed('provider_onboarding', 'redirect_to_provider_welcome', {
-                    providerId: result.providerId,
-                    alreadyRegistered: false
-                });
-
+                // Redirect to welcome
                 router.push(`/provider/welcome?session_id=${formData.sessionId}&provider_id=${result.providerId}`);
             } else {
                 throw new Error(result.message || 'Registration failed');
             }
         } catch (error) {
             console.error('Registration error:', error);
-            // LOG: Registration failed
             eventLogger.failed('provider_onboarding', 'provider_intake_form_submitted', error instanceof Error ? error.message : 'Registration failed', 'REGISTRATION_ERROR');
             setErrorMessage(error instanceof Error ? error.message : 'Registration failed. Please try again.');
         } finally {
@@ -769,6 +848,64 @@ function ProviderPortalContent() {
                                 </select>
                             </div>
 
+                            {/* Account Security Section */}
+                            <div className="border-t border-slate-200 pt-6 mt-6">
+                                <h3 className="text-base font-medium text-slate-800 mb-4 flex items-center gap-2">
+                                    <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    Create Your Account
+                                </h3>
+                                <p className="text-sm text-slate-500 mb-4">
+                                    Set up your login credentials to access CLARENCE.
+                                </p>
+
+                                {/* Password */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Password <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="password"
+                                        name="password"
+                                        value={formData.password}
+                                        onChange={handleInputChange}
+                                        required
+                                        minLength={8}
+                                        placeholder="Create a password (min 8 characters)"
+                                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                                    />
+                                </div>
+
+                                {/* Confirm Password */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Confirm Password <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="password"
+                                        name="confirmPassword"
+                                        value={formData.confirmPassword}
+                                        onChange={handleInputChange}
+                                        required
+                                        placeholder="Confirm your password"
+                                        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm
+                                            ${formData.confirmPassword && formData.password !== formData.confirmPassword
+                                                ? 'border-red-300 bg-red-50'
+                                                : 'border-slate-300'
+                                            }`}
+                                    />
+                                    {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                                        <p className="text-red-600 text-xs mt-1.5 flex items-center gap-1">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Passwords do not match
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            
                             {/* Submit Button */}
                             <button
                                 type="submit"
