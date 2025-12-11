@@ -2324,13 +2324,6 @@ function ContractStudioContent() {
     }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome, userInfo?.role])
 
     useEffect(() => {
-        if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
-            loadClarenceWelcome(session.sessionId, userInfo.role as 'customer' | 'provider')
-        }
-    }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome, userInfo?.role])
-
-
-    useEffect(() => {
         if (latestMessageRef.current) {
             latestMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }

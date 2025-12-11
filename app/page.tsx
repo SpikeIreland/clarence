@@ -268,7 +268,7 @@ export default function Home() {
 
               {/* Right: Leverage Visualization Mock */}
               <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                <div className="text-sm font-semibold text-slate-700 mb-4">Leverage Balance</div>
+                <div className="text-sm font-semibold text-slate-700 mb-4">Leverage Baseline</div>
 
                 {/* Leverage Bar */}
                 <div className="mb-6">
