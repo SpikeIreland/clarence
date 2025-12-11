@@ -374,10 +374,11 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
 
     // ========== TERM AND TERMINATION ==========
     'Term': [
-        { value: 1, label: 'Initial term only', description: 'Fixed initial term with no automatic renewal rights' },
-        { value: 2, label: 'Term with renewal option', description: 'Initial term with optional renewal periods by mutual agreement' },
-        { value: 3, label: 'Auto-renewal', description: 'Automatic renewal unless either party provides termination notice' },
-        { value: 4, label: 'Evergreen', description: 'Continuous contract with no fixed end date, terminable on notice' }
+        { value: 1, label: '60 months', description: 'Five year initial term - maximum provider commitment and revenue stability' },
+        { value: 2, label: '48 months', description: 'Four year initial term - strong provider commitment with moderate flexibility' },
+        { value: 3, label: '36 months', description: 'Three year initial term - balanced commitment for both parties' },
+        { value: 4, label: '24 months', description: 'Two year initial term - moderate customer flexibility' },
+        { value: 5, label: '12 months', description: 'One year initial term - maximum customer flexibility to exit or renegotiate' }
     ],
     'Term Renewal / Extension': [
         { value: 1, label: 'No extension right', description: 'No automatic extension rights' },
@@ -3155,12 +3156,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         }
 
         return (
-            <div className="mb-3">  {/* Was mb-6 */}
+            <div className="mb-3">
                 {/* Header - CONDENSED */}
-                <div className="flex items-center justify-between mb-2">  {/* Was mb-3 */}
+                <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                         <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                        <h4 className="font-semibold text-slate-800 text-sm">Your Position</h4>  {/* Added text-sm */}
+                        <h4 className="font-semibold text-slate-800 text-sm">Your Position</h4>
                         {hasChanged && (
                             <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
                                 Changed
@@ -3178,10 +3179,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         {/* ============================================================ */}
                         {/* COMPACT SPECTRUM BAR WITH ZONE LABELS */}
+                        {/* FLIPPED: Customer (Green) on LEFT, Provider (Blue) on RIGHT */}
                         {/* ============================================================ */}
                         {(() => {
                             // Convert DB positions (1-10) to percentage for bar placement
-                            const toBarPercent = (dbPos: number | null) => dbPos !== null ? ((dbPos - 1) / 9) * 100 : null
+                            // FLIPPED: Value 10 (customer-friendly) = LEFT (0%), Value 1 (provider-friendly) = RIGHT (100%)
+                            const toBarPercent = (dbPos: number | null) => dbPos !== null ? ((10 - dbPos) / 9) * 100 : null
 
                             const myBarPercent = toBarPercent(myDbPosition)
                             const otherBarPercent = toBarPercent(otherDbPosition)
@@ -3209,32 +3212,36 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             const currentZone = getZoneForPosition(proposedPosition ?? myDbPosition)
                             const zoneCount = selectedClause.positionOptions?.length || 4
 
-                            // Handle bar click to set position
+                            // Handle bar click to set position - FLIPPED
                             const handleBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
                                 const rect = e.currentTarget.getBoundingClientRect()
                                 const clickPercent = ((e.clientX - rect.left) / rect.width) * 100
-                                const newPosition = Math.round(((clickPercent / 100) * 9 + 1) * 10) / 10
+                                // FLIPPED: 0% = value 10, 100% = value 1
+                                const newPosition = Math.round((10 - (clickPercent / 100) * 9) * 10) / 10
                                 const clampedPosition = Math.max(1, Math.min(10, newPosition))
                                 handlePositionDrag(clampedPosition)
                             }
 
+                            // Reverse the options for display (customer-friendly first on left)
+                            const reversedOptions = [...(selectedClause.positionOptions || [])].reverse()
+
                             return (
                                 <div className="space-y-3">
-                                    {/* Spectrum Labels */}
+                                    {/* Spectrum Labels - FLIPPED */}
                                     <div className="flex justify-between text-xs text-slate-500">
                                         <span className="flex items-center gap-1">
-                                            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                                            Provider-Friendly
+                                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                            Customer-Friendly
                                         </span>
                                         <span className="flex items-center gap-1">
-                                            Customer-Friendly
-                                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                            Provider-Friendly
+                                            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
                                         </span>
                                     </div>
 
-                                    {/* Main Interactive Bar */}
+                                    {/* Main Interactive Bar - FLIPPED gradient */}
                                     <div
-                                        className="relative h-12 bg-gradient-to-r from-blue-200 via-slate-100 to-emerald-200 rounded-lg border border-slate-300 cursor-pointer hover:border-slate-400 transition-all"
+                                        className="relative h-12 bg-gradient-to-r from-emerald-200 via-slate-100 to-blue-200 rounded-lg border border-slate-300 cursor-pointer hover:border-slate-400 transition-all"
                                         onClick={handleBarClick}
                                         title="Click to set your position"
                                     >
@@ -3336,12 +3343,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         )}
                                     </div>
 
-                                    {/* Zone Labels */}
+                                    {/* Zone Labels - REVERSED ORDER (customer-friendly on left) */}
                                     <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${zoneCount}, 1fr)` }}>
-                                        {selectedClause.positionOptions?.map((option, idx) => {
+                                        {reversedOptions.map((option, idx) => {
                                             const isCurrentZone = currentZone?.value === option.value
-                                            const zoneStart = 1 + (idx * 9 / zoneCount)
-                                            const zoneEnd = 1 + ((idx + 1) * 9 / zoneCount)
+                                            // Calculate zone boundaries for reversed display
+                                            const originalIdx = zoneCount - 1 - idx
+                                            const zoneStart = 1 + (originalIdx * 9 / zoneCount)
+                                            const zoneEnd = 1 + ((originalIdx + 1) * 9 / zoneCount)
                                             const hasMyPosition = myDbPosition !== null && myDbPosition >= zoneStart && myDbPosition < zoneEnd
                                             const hasOtherPosition = otherDbPosition !== null && otherDbPosition >= zoneStart && otherDbPosition < zoneEnd
                                             const hasClarence = clarenceDbPosition !== null && clarenceDbPosition >= zoneStart && clarenceDbPosition < zoneEnd
@@ -3437,7 +3446,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     </div>
 
                 ) : (
-                    /* Numeric Slider Fallback - for clauses without position options */
+                    /* Numeric Slider Fallback - for clauses without position options - FLIPPED */
                     <div className="space-y-4">
                         <div className="flex items-center gap-4">
                             <div className="flex-1">
@@ -3446,14 +3455,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     min="1"
                                     max="10"
                                     step="0.5"
-                                    value={proposedPosition ?? myDbPosition ?? 5}
-                                    onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
-                                    className="w-full h-3 bg-gradient-to-r from-blue-200 via-slate-200 to-emerald-200 rounded-full appearance-none cursor-pointer"
+                                    value={11 - (proposedPosition ?? myDbPosition ?? 5)}
+                                    onChange={(e) => handlePositionDrag(11 - parseFloat(e.target.value))}
+                                    className="w-full h-3 bg-gradient-to-r from-emerald-200 via-slate-200 to-blue-200 rounded-full appearance-none cursor-pointer"
                                 />
                                 <div className="flex justify-between mt-1 px-1">
-                                    <span className="text-xs text-blue-600">Provider</span>
-                                    <span className="text-xs text-slate-400">Neutral</span>
                                     <span className="text-xs text-emerald-600">Customer</span>
+                                    <span className="text-xs text-slate-400">Neutral</span>
+                                    <span className="text-xs text-blue-600">Provider</span>
                                 </div>
                             </div>
                             <div className="w-20">
