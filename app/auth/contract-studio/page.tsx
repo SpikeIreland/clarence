@@ -2178,10 +2178,14 @@ function ContractStudioContent() {
     // Initial load
     useEffect(() => {
         const init = async () => {
-            // Working state is already set to 'initial_load' in useState default
-
             const user = loadUserInfo()
             if (!user) return
+
+            // Check for provider_id in URL - if present, user is a provider
+            const providerId = searchParams.get('provider_id')
+            if (providerId) {
+                user.role = 'provider'
+            }
 
             setUserInfo(user)
 
