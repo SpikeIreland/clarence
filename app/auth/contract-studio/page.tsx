@@ -2175,8 +2175,15 @@ function ContractStudioContent() {
         }
     }, [lastExplainedClauseId, startWorking, stopWorking, setWorkingError])
 
+    // Track if we've already started loading to prevent double calls
+    const hasInitialized = useRef(false)
+
     // Initial load
     useEffect(() => {
+        // Prevent double initialization (React Strict Mode / dependency changes)
+        if (hasInitialized.current) return
+        hasInitialized.current = true
+
         const init = async () => {
             const user = loadUserInfo()
             if (!user) return

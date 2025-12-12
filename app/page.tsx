@@ -153,7 +153,7 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Foundation</span>
+                <span className="mt-2 text-xs font-medium text-slate-600">Leverage Assessment</span>
               </div>
 
               {/* Phase 3 */}
@@ -171,7 +171,7 @@ export default function Home() {
                 <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-slate-300">
                   4
                 </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Contention</span>
+                <span className="mt-2 text-xs font-medium text-slate-600">Points of Contention</span>
               </div>
 
               {/* Phase 5 */}
