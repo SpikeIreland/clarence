@@ -2273,8 +2273,14 @@ function ContractStudioContent() {
             const data = await loadContractData(sessionId, user.role)
 
             if (data) {
+                console.log('=== CLAUSE DATA DEBUG ===')
+                console.log('Clauses from API:', data.clauses.length)
+                console.log('Clause IDs:', data.clauses.map(c => c.clauseId))
                 setSession(data.session)
                 setClauses(data.clauses)
+                const tree = buildClauseTree(data.clauses)
+                console.log('Clause tree length:', tree.length)
+                console.log('Tree clause IDs:', tree.map(c => c.clauseId))
                 setClauseTree(buildClauseTree(data.clauses))
                 setLeverage(data.leverage)
 
