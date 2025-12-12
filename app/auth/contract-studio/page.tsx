@@ -1668,6 +1668,7 @@ function ContractStudioContent() {
     const [showProviderDropdown, setShowProviderDropdown] = useState(false)
     const [isLoadingProviders, setIsLoadingProviders] = useState(false)
     const providerDropdownRef = useRef<HTMLDivElement>(null)
+    const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
 
     // Close provider dropdown when clicking outside
     useEffect(() => {
@@ -2094,6 +2095,95 @@ function ContractStudioContent() {
             loadAvailableProviders(session.sessionId)
         }
     }, [session?.sessionId, userInfo?.role, loadAvailableProviders])
+
+    const switchProvider = useCallback(async (providerId: string, providerCompany: string) => {
+        if (!session?.sessionId) return
+
+        console.log('Switching to provider:', providerCompany, providerId)
+        setSelectedProviderId(providerId)
+        setShowProviderDropdown(false)
+
+        // Show loading state
+        startWorking('provider_switch')
+
+        try {
+            // Reload all data for the selected provider
+            const response = await fetch(
+                `${API_BASE}/contract-studio-api?session_id=${session.sessionId}&provider_id=${providerId}`
+            )
+
+            if (!response.ok) throw new Error('Failed to fetch provider data')
+
+            const data = await response.json()
+
+            // Update session with new provider info
+            setSession(prev => prev ? {
+                ...prev,
+                providerCompany: data.session.providerCompany
+            } : null)
+
+            // Update clauses with this provider's positions
+            const clauseData: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
+                const customerPos = c.customerPosition ? parseFloat(c.customerPosition) : null
+                const providerPos = c.providerPosition ? parseFloat(c.providerPosition) : null
+
+                return {
+                    positionId: c.positionId,
+                    clauseId: c.clauseId,
+                    clauseNumber: c.clauseNumber,
+                    clauseName: c.clauseName,
+                    category: c.category,
+                    description: c.description,
+                    parentPositionId: c.parentPositionId,
+                    clauseLevel: c.clauseLevel,
+                    displayOrder: c.displayOrder,
+                    customerPosition: customerPos,
+                    providerPosition: providerPos,
+                    originalCustomerPosition: customerPos,
+                    originalProviderPosition: providerPos,
+                    currentCompromise: c.currentCompromise ? parseFloat(c.currentCompromise) : null,
+                    clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(c.aiSuggestedCompromise) : null,
+                    industryStandard: null,
+                    gapSize: c.gapSize ? parseFloat(c.gapSize) : 0,
+                    customerWeight: c.customerWeight,
+                    providerWeight: c.providerWeight,
+                    isDealBreakerCustomer: c.isDealBreakerCustomer,
+                    isDealBreakerProvider: c.isDealBreakerProvider,
+                    clauseContent: c.clauseContent,
+                    customerNotes: c.customerNotes,
+                    providerNotes: c.providerNotes,
+                    status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                    isExpanded: c.isExpanded,
+                    positionOptions: c.positionOptions || getPositionOptionsForClause(c.clauseId, c.clauseName)
+                }
+            })
+
+            setClauses(clauseData)
+            setClauseTree(buildClauseTree(clauseData))
+
+            // Update leverage if available
+            if (data.leverage) {
+                setLeverage(data.leverage)
+            }
+
+            // Clear selected clause
+            setSelectedClause(null)
+
+            // Log the switch
+            eventLogger.completed('contract_negotiation', 'provider_switched', {
+                sessionId: session.sessionId,
+                providerId: providerId,
+                providerCompany: providerCompany
+            })
+
+            stopWorking()
+
+        } catch (error) {
+            console.error('Error switching provider:', error)
+            setWorkingError('Failed to load provider data. Please try again.')
+        }
+    }, [session?.sessionId, startWorking, stopWorking, setWorkingError])
+
 
     const loadClarenceWelcome = useCallback(async (sessionId: string, viewerRole: 'customer' | 'provider') => {
         if (clarenceWelcomeLoaded) return
@@ -4125,12 +4215,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                         <button
                                                             key={provider.bidId}
                                                             onClick={() => {
-                                                                // TODO: Implement provider switching
-                                                                alert(`Provider switching to ${provider.providerCompany} coming soon!`)
-                                                                setShowProviderDropdown(false)
+                                                                if (provider.questionnaireComplete && provider.providerId) {
+                                                                    switchProvider(provider.providerId, provider.providerCompany)
+                                                                } else {
+                                                                    alert(`${provider.providerCompany} has not completed their intake yet.`)
+                                                                }
                                                             }}
-                                                            className={`w-full px-3 py-2 text-left hover:bg-slate-700 transition flex items-center justify-between ${provider.providerCompany === providerCompany ? 'bg-slate-700/50' : ''
-                                                                }`}
+                                                            className={`w-full px-3 py-2 text-left hover:bg-slate-700 transition...`}
                                                         >
                                                             <div>
                                                                 <div className="text-sm font-medium text-white">{provider.providerCompany}</div>
