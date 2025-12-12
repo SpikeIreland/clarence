@@ -1920,10 +1920,11 @@ function ContractStudioContent() {
         }
     }, [router])
 
-    const loadContractData = useCallback(async (sessionId: string, viewerRole?: string) => {
+    const loadContractData = useCallback(async (sessionId: string, viewerRole?: string, providerId?: string) => {
         try {
             const roleParam = viewerRole ? `&viewer_role=${viewerRole}` : ''
-            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}${roleParam}`)
+            const providerParam = providerId ? `&provider_id=${providerId}` : ''
+            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}${roleParam}${providerParam}`)
             if (!response.ok) throw new Error('Failed to fetch')
 
             const data = await response.json()
@@ -2095,6 +2096,10 @@ function ContractStudioContent() {
             loadAvailableProviders(session.sessionId)
         }
     }, [session?.sessionId, userInfo?.role, loadAvailableProviders])
+
+    // ============================================================================
+    // SECTION 7C: SWITCH PROVIDER (MULTI-PROVIDER SUPPORT)
+    // ============================================================================
 
     const switchProvider = useCallback(async (providerId: string, providerCompany: string) => {
         if (!session?.sessionId) return
@@ -2360,7 +2365,22 @@ function ContractStudioContent() {
                 return
             }
 
-            const data = await loadContractData(sessionId, user.role)
+            // For providers, get their own provider_id from localStorage
+            let providerIdToLoad: string | undefined = undefined
+            if (user.role === 'provider') {
+                try {
+                    const providerSession = localStorage.getItem('clarence_provider_session') || localStorage.getItem('providerSession')
+                    if (providerSession) {
+                        const parsed = JSON.parse(providerSession)
+                        providerIdToLoad = parsed.providerId
+                        console.log('Provider loading their own data, provider_id:', providerIdToLoad)
+                    }
+                } catch (e) {
+                    console.error('Error getting provider_id from localStorage:', e)
+                }
+            }
+
+            const data = await loadContractData(sessionId, user.role, providerIdToLoad)
 
             if (data) {
                 console.log('=== CLAUSE DATA DEBUG ===')
