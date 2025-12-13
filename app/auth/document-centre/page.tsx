@@ -1205,10 +1205,39 @@ function DocumentCentreContent() {
         }
     };
 
-    const handleDownloadDocument = async (docId: DocumentId, format: 'pdf' | 'docx') => {
-        // TODO: Implement actual download
-        console.log(`Downloading ${docId} as ${format}`)
-        alert(`Download ${format.toUpperCase()} for ${docId} - Coming soon!`)
+    const handleDownloadDocument = async (docId: string, format: 'pdf' | 'docx') => {
+        // Find the document
+        const doc = documents.find(d => d.id === docId)
+
+        if (!doc?.downloadUrl) {
+            console.error('No download URL available for document:', docId)
+
+            // Add error message from CLARENCE
+            const errorMessage: ClarenceChatMessage = {
+                messageId: `msg-${Date.now()}`,
+                sessionId: session?.sessionId || '',
+                sender: 'clarence',
+                message: `❌ Sorry, the download URL for this document isn't available. Try regenerating the document.`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+            return
+        }
+
+        // For PDF, open in new tab (most browsers will display or download)
+        if (format === 'pdf') {
+            window.open(doc.downloadUrl, '_blank')
+        } else if (format === 'docx') {
+            // DOCX not yet implemented
+            const infoMessage: ClarenceChatMessage = {
+                messageId: `msg-${Date.now()}`,
+                sessionId: session?.sessionId || '',
+                sender: 'clarence',
+                message: `📘 DOCX format is coming soon. For now, please download the PDF version.`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, infoMessage])
+        }
     }
 
     const handleDownloadPackage = async () => {
