@@ -40,6 +40,7 @@ interface Session {
     sessionNumber: string
     customerCompany: string
     providerCompany: string
+    providerId: string | null      // ADD THIS
     customerContactName: string | null
     providerContactName: string | null
     serviceType: string
@@ -954,6 +955,7 @@ function DocumentCentreContent() {
                 sessionNumber: data.session?.sessionNumber || '',
                 customerCompany: data.session?.customerCompany || '',
                 providerCompany: data.session?.providerCompany || '',
+                providerId: data.session?.providerId || null,  // ADD THIS
                 customerContactName: data.session?.customerContactName || null,
                 providerContactName: data.session?.providerContactName || null,
                 serviceType: data.session?.contractType || 'Service Agreement',
@@ -1119,9 +1121,9 @@ function DocumentCentreContent() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    session_id: session.sessionId,      // Map camelCase to snake_case for API
-                    user_id: userInfo.userId,           // Map camelCase to snake_case for API
-                    provider_id: null,                  // Add if you have this in session
+                    session_id: session.sessionId,
+                    user_id: userInfo.userId,
+                    provider_id: session.providerId,  // NOW USING THE ACTUAL VALUE
                     format: 'pdf',
                     regenerate: false
                 })
