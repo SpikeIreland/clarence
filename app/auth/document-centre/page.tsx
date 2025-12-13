@@ -950,6 +950,10 @@ function DocumentCentreContent() {
 
             const data = await response.json()
 
+            // DEBUG: Log the full response to see what fields are available
+            console.log('=== API RESPONSE ===', JSON.stringify(data, null, 2))
+            console.log('=== SESSION OBJECT ===', JSON.stringify(data.session, null, 2))
+
             return {
                 sessionId: data.session?.sessionId || sessionId,
                 sessionNumber: data.session?.sessionNumber || '',
