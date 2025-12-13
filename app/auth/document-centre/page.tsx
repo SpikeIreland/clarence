@@ -19,17 +19,20 @@ type DocumentId =
     | 'contract-draft'
     | 'contract-handbook'
 
+
 interface DocumentItem {
-    id: DocumentId
-    title: string
-    description: string
-    icon: string
-    status: DocumentStatus
-    generatedAt: string | null
-    downloadUrl: string | null
-    progress: number // 0-100
-    canGenerate: boolean
-    prerequisites: DocumentId[]
+    id: DocumentId;
+    name: string;
+    description: string;
+    category: string;
+    icon: string;
+    status: DocumentStatus;
+    progress?: number;
+    prerequisites: string[];
+    downloadUrl?: string;
+    generatedAt?: string;
+    documentDbId?: string;
+    canGenerate?: boolean;
 }
 
 interface Session {
@@ -67,71 +70,85 @@ interface UserInfo {
 // SECTION 2: CONSTANTS & CONFIGURATION
 // ============================================================================
 
-const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+const N8N_BASE_URL = 'https://spikeislandstudios.app.n8n.cloud/webhook';
 
-const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downloadUrl' | 'progress'>[] = [
+// Document generation endpoints
+const DOCUMENT_ENDPOINTS: Record<string, string> = {
+    'executive-summary': `${N8N_BASE_URL}/document-executive-summary`,
+    'leverage-report': `${N8N_BASE_URL}/document-leverage-report`,
+    'position-history': `${N8N_BASE_URL}/document-position-history`,
+    'chat-transcript': `${N8N_BASE_URL}/document-chat-transcript`,
+    'trade-off-register': `${N8N_BASE_URL}/document-trade-off-register`,
+    'timeline-audit': `${N8N_BASE_URL}/document-timeline-audit`,
+    'contract-draft': `${N8N_BASE_URL}/document-contract-draft`,
+    'contract-handbook': `${N8N_BASE_URL}/document-contract-handbook`,
+};
+
+const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook';
+
+const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downloadUrl' | 'progress' | 'documentDbId'>[] = [
     {
         id: 'executive-summary',
-        title: 'Executive Summary',
+        name: 'Executive Summary',  // Changed from 'title'
         description: 'One-page overview of the negotiation outcome for leadership sign-off',
+        category: 'assessment',
         icon: '📋',
-        canGenerate: true,
         prerequisites: []
     },
     {
         id: 'leverage-report',
-        title: 'Leverage Assessment Report',
+        name: 'Leverage Assessment Report',
         description: 'Detailed breakdown of how leverage was calculated and applied',
+        category: 'assessment',
         icon: '⚖️',
-        canGenerate: true,
         prerequisites: []
     },
     {
         id: 'position-history',
-        title: 'Position Movement History',
+        name: 'Position Movement History',
         description: 'Complete record of how each clause evolved during negotiation',
+        category: 'negotiation',
         icon: '📊',
-        canGenerate: true,
         prerequisites: []
     },
     {
         id: 'chat-transcript',
-        title: 'Chat Transcript',
+        name: 'Chat Transcript',
         description: 'All party communications and CLARENCE conversations',
+        category: 'negotiation',
         icon: '💬',
-        canGenerate: true,
         prerequisites: []
     },
     {
         id: 'trade-off-register',
-        title: 'Trade-Off Register',
+        name: 'Trade-Off Register',
         description: 'Formal record of all linked concessions and exchanges',
+        category: 'negotiation',
         icon: '🔄',
-        canGenerate: true,
         prerequisites: []
     },
     {
         id: 'timeline-audit',
-        title: 'Timeline & Audit Log',
+        name: 'Timeline & Audit Log',
         description: 'Chronological record of every event in the negotiation',
+        category: 'negotiation',
         icon: '📅',
-        canGenerate: true,
         prerequisites: []
     },
     {
         id: 'contract-draft',
-        title: 'Contract Draft',
+        name: 'Contract Draft',
         description: 'Complete clause-by-clause agreement ready for signature',
+        category: 'agreement',
         icon: '📄',
-        canGenerate: true,
         prerequisites: ['executive-summary']
     },
     {
         id: 'contract-handbook',
-        title: 'Contract Handbook',
+        name: 'Contract Handbook',
         description: 'Governance guide for managing the contract relationship',
+        category: 'governance',
         icon: '📘',
-        canGenerate: true,
         prerequisites: ['contract-draft']
     }
 ]
@@ -218,10 +235,10 @@ function DocumentListItem({ document, isSelected, onClick }: DocumentItemProps) 
             onClick={onClick}
             disabled={isLocked}
             className={`w-full px-4 py-3 flex items-center gap-3 transition-all text-left ${isSelected
-                    ? 'bg-emerald-50 border-l-4 border-emerald-600'
-                    : isLocked
-                        ? 'opacity-50 cursor-not-allowed hover:bg-slate-50 border-l-4 border-transparent'
-                        : 'hover:bg-slate-50 border-l-4 border-transparent'
+                ? 'bg-emerald-50 border-l-4 border-emerald-600'
+                : isLocked
+                    ? 'opacity-50 cursor-not-allowed hover:bg-slate-50 border-l-4 border-transparent'
+                    : 'hover:bg-slate-50 border-l-4 border-transparent'
                 }`}
         >
             {/* Icon */}
@@ -235,7 +252,7 @@ function DocumentListItem({ document, isSelected, onClick }: DocumentItemProps) 
                 <div className="flex items-center gap-2">
                     <span className={`font-medium truncate ${isSelected ? 'text-emerald-800' : 'text-slate-800'
                         }`}>
-                        {document.title}
+                        {document.name}
                     </span>
                 </div>
                 <div className="text-xs text-slate-500 truncate mt-0.5">
@@ -268,8 +285,8 @@ function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePa
 
     return (
         <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${isUnlocked
-                ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300'
-                : 'bg-slate-50 border-slate-200'
+            ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300'
+            : 'bg-slate-50 border-slate-200'
             }`}>
             <div className="flex items-center gap-3 mb-3">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isUnlocked ? 'bg-emerald-100' : 'bg-slate-200'
@@ -303,8 +320,8 @@ function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePa
                 onClick={onDownload}
                 disabled={!isUnlocked || isGenerating}
                 className={`w-full py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 ${isUnlocked && !isGenerating
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     }`}
             >
                 {isGenerating ? (
@@ -357,7 +374,7 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
         )
     }
 
-    const canGenerate = document.canGenerate && document.status !== 'generating'
+    const canGenerate = document.status === 'in_progress' || document.status === 'locked'
 
     return (
         <div className="h-full flex flex-col">
@@ -369,7 +386,7 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
                             {document.icon}
                         </div>
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-800">{document.title}</h2>
+                            <h2 className="text-2xl font-bold text-slate-800">{document.name}</h2>
                             <p className="text-slate-500 mt-1">{document.description}</p>
                             <div className="flex items-center gap-3 mt-2">
                                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(document.status)}`}>
@@ -406,8 +423,8 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
                                 onClick={() => onGenerate(document.id)}
                                 disabled={isGenerating}
                                 className={`px-6 py-2 rounded-lg font-medium transition flex items-center gap-2 ${isGenerating
-                                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                     }`}
                             >
                                 {isGenerating ? (
@@ -464,7 +481,7 @@ function LockedDocumentView({ document }: { document: DocumentItem }) {
                             {document.prerequisites.map(prereq => (
                                 <li key={prereq} className="flex items-center gap-2">
                                     <span className="text-amber-500">○</span>
-                                    {DOCUMENT_DEFINITIONS.find(d => d.id === prereq)?.title || prereq}
+                                    {DOCUMENT_DEFINITIONS.find(d => d.id === prereq)?.name || prereq}
                                 </li>
                             ))}
                         </ul>
@@ -485,9 +502,9 @@ function GeneratingDocumentView({ document }: { document: DocumentItem }) {
                 </div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-2">Generating Document...</h3>
                 <p className="text-slate-500 mb-4">
-                    CLARENCE is preparing your {document.title.toLowerCase()}.
+                    CLARENCE is preparing your {document.name.toLowerCase()}.
                 </p>
-                {document.progress > 0 && (
+                {(document.progress ?? 0) > 0 && (
                     <div className="w-full max-w-xs mx-auto">
                         <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                             <div
@@ -512,13 +529,13 @@ function EmptyDocumentView({ document, onGenerate }: { document: DocumentItem; o
                 </div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-2">Ready to Generate</h3>
                 <p className="text-slate-500 mb-6">
-                    Click the button below to generate your {document.title.toLowerCase()}.
+                    Click the button below to generate your {document.name.toLowerCase()}.
                 </p>
                 <button
                     onClick={onGenerate}
                     className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition flex items-center gap-2 mx-auto"
                 >
-                    <span>✨</span> Generate {document.title}
+                    <span>✨</span> Generate {document.name}
                 </button>
             </div>
         </div>
@@ -536,7 +553,7 @@ function DocumentContentPreview({ document, session }: { document: DocumentItem;
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <span className="text-lg">{document.icon}</span>
-                        <span className="font-semibold text-slate-700">{document.title}</span>
+                        <span className="font-semibold text-slate-700">{document.name}</span>
                     </div>
                     <span className="text-xs text-slate-400">Preview</span>
                 </div>
@@ -642,7 +659,7 @@ function renderDocumentPreviewContent(document: DocumentItem, session: Session |
                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <span className="text-2xl">{document.icon}</span>
                     </div>
-                    <h3 className="font-semibold text-slate-700 mb-2">{document.title}</h3>
+                    <h3 className="font-semibold text-slate-700 mb-2">{document.name}</h3>
                     <p className="text-sm text-slate-500">{document.description}</p>
                     <p className="text-xs text-slate-400 mt-4">
                         Full document content will appear here after generation.
@@ -698,7 +715,7 @@ function ClarenceChatPanel({ sessionId, selectedDocument, messages, onSendMessag
                         <div className="font-semibold text-slate-800">CLARENCE</div>
                         <div className="text-xs text-slate-500">
                             {selectedDocument
-                                ? `Helping with: ${selectedDocument.title}`
+                                ? `Helping with: ${selectedDocument.name}`
                                 : 'Document Centre Assistant'
                             }
                         </div>
@@ -726,8 +743,8 @@ function ClarenceChatPanel({ sessionId, selectedDocument, messages, onSendMessag
                         className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                         <div className={`max-w-[85%] rounded-lg p-3 ${msg.sender === 'clarence'
-                                ? 'bg-white text-slate-700 border border-slate-200'
-                                : 'bg-emerald-500 text-white'
+                            ? 'bg-white text-slate-700 border border-slate-200'
+                            : 'bg-emerald-500 text-white'
                             }`}>
                             <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
                             <div className={`text-xs mt-2 ${msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'
@@ -857,8 +874,8 @@ function DocumentCentreHeader({ session, userInfo, onBackToStudio }: DocumentCen
                         <div className="text-center">
                             <div className="text-xs text-slate-400">Alignment</div>
                             <div className={`text-sm font-semibold ${(session?.alignmentPercentage || 0) >= 80 ? 'text-emerald-400' :
-                                    (session?.alignmentPercentage || 0) >= 50 ? 'text-amber-400' :
-                                        'text-red-400'
+                                (session?.alignmentPercentage || 0) >= 50 ? 'text-amber-400' :
+                                    'text-red-400'
                                 }`}>
                                 {session?.alignmentPercentage || 0}%
                             </div>
@@ -986,8 +1003,8 @@ function DocumentCentreContent() {
                 ...def,
                 status,
                 progress,
-                generatedAt: status === 'ready' ? new Date().toISOString() : null,
-                downloadUrl: null
+                generatedAt: status === 'ready' ? new Date().toISOString() : undefined,  // Changed from null
+                downloadUrl: undefined  // Changed from null
             }
         })
     }, [])
@@ -1052,87 +1069,135 @@ function DocumentCentreContent() {
         }
     }
 
-    const handleGenerateDocument = async (docId: DocumentId) => {
-        if (!session) return
+    // ============================================================================
+    // SECTION 13E: GENERATE DOCUMENT HANDLER
+    // ============================================================================
 
-        setIsGeneratingDocument(true)
+    const handleGenerateDocument = async (documentId: string) => {
+        if (!session || !userInfo) {
+            console.error('Missing session or user info');
+            return;
+        }
 
-        // Update document to generating state
-        setDocuments(prev => prev.map(d =>
-            d.id === docId ? { ...d, status: 'generating' as DocumentStatus, progress: 0 } : d
-        ))
+        const endpoint = DOCUMENT_ENDPOINTS[documentId];
+        if (!endpoint) {
+            console.error(`No endpoint configured for document: ${documentId}`);
+            return;
+        }
 
-        // Simulate generation progress
+        // Update document status to generating
+        setDocuments(prev => prev.map(doc =>
+            doc.id === documentId
+                ? { ...doc, status: 'generating' as DocumentStatus, progress: 0 }
+                : doc
+        ));
+        setIsGeneratingDocument(true);
+
+        // Add CLARENCE message - using correct field names from interface
+        const generatingMessage: ClarenceChatMessage = {
+            messageId: `msg-${Date.now()}`,
+            sessionId: session.sessionId,
+            sender: 'clarence',
+            message: `I'm generating the ${documentId.replace(/-/g, ' ')} now. This typically takes 15-30 seconds...`,
+            createdAt: new Date().toISOString()
+        };
+        setChatMessages(prev => [...prev, generatingMessage]);
+
+        // Simulate progress while waiting for API
         const progressInterval = setInterval(() => {
-            setDocuments(prev => prev.map(d => {
-                if (d.id === docId && d.status === 'generating') {
-                    const newProgress = Math.min(d.progress + 10, 90)
-                    return { ...d, progress: newProgress }
-                }
-                return d
-            }))
-        }, 500)
+            setDocuments(prev => prev.map(doc =>
+                doc.id === documentId && doc.status === 'generating'
+                    ? { ...doc, progress: Math.min((doc.progress || 0) + 10, 90) }
+                    : doc
+            ));
+        }, 2000);
 
         try {
-            // TODO: Call actual API to generate document
-            await new Promise(resolve => setTimeout(resolve, 3000))
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: session.sessionId,      // Map camelCase to snake_case for API
+                    user_id: userInfo.userId,           // Map camelCase to snake_case for API
+                    provider_id: null,                  // Add if you have this in session
+                    format: 'pdf',
+                    regenerate: false
+                })
+            });
 
-            clearInterval(progressInterval)
+            clearInterval(progressInterval);
 
-            // Update to ready state
-            setDocuments(prev => prev.map(d =>
-                d.id === docId ? {
-                    ...d,
-                    status: 'ready' as DocumentStatus,
-                    progress: 100,
-                    generatedAt: new Date().toISOString()
-                } : d
-            ))
-
-            // Update selected document if it's the one we just generated
-            if (selectedDocument?.id === docId) {
-                setSelectedDocument(prev => prev ? {
-                    ...prev,
-                    status: 'ready',
-                    progress: 100,
-                    generatedAt: new Date().toISOString()
-                } : null)
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            // Unlock dependent documents
-            setDocuments(prev => prev.map(d => {
-                if (d.prerequisites.includes(docId) && d.status === 'locked') {
-                    const allPrereqsMet = d.prerequisites.every(prereqId => {
-                        const prereq = prev.find(p => p.id === prereqId)
-                        return prereq?.status === 'ready' || prereq?.status === 'final'
-                    })
-                    if (allPrereqsMet) {
-                        return { ...d, status: 'in_progress' as DocumentStatus }
-                    }
-                }
-                return d
-            }))
+            const result = await response.json();
 
-            // Add CLARENCE message
-            setChatMessages(prev => [...prev, {
-                messageId: `gen-${Date.now()}`,
-                sessionId: session.sessionId,
-                sender: 'clarence',
-                message: `Your ${DOCUMENT_DEFINITIONS.find(d => d.id === docId)?.title} has been generated successfully. You can now preview or download it.`,
-                createdAt: new Date().toISOString()
-            }])
+            if (result.success) {
+                // Update document with result
+                setDocuments(prev => prev.map(doc =>
+                    doc.id === documentId
+                        ? {
+                            ...doc,
+                            status: 'ready' as DocumentStatus,
+                            progress: 100,
+                            downloadUrl: result.downloads?.pdf || result.pdf_public_url,
+                            generatedAt: result.generated_at,
+                            documentDbId: result.document_id
+                        }
+                        : doc
+                ));
+
+                // Success message from CLARENCE
+                const successMessage: ClarenceChatMessage = {
+                    messageId: `msg-${Date.now()}`,
+                    sessionId: session.sessionId,
+                    sender: 'clarence',
+                    message: `✅ Your ${documentId.replace(/-/g, ' ')} is ready! Click the download button to get your PDF.`,
+                    createdAt: new Date().toISOString()
+                };
+                setChatMessages(prev => [...prev, successMessage]);
+
+                // Update selected document if it's the one we just generated
+                if (selectedDocument?.id === documentId) {
+                    setSelectedDocument(prev => prev ? {
+                        ...prev,
+                        status: 'ready' as DocumentStatus,
+                        downloadUrl: result.downloads?.pdf || result.pdf_public_url
+                    } : null);
+                }
+
+            } else {
+                throw new Error(result.error || 'Generation failed');
+            }
 
         } catch (error) {
-            console.error('Error generating document:', error)
-            clearInterval(progressInterval)
+            clearInterval(progressInterval);
+            console.error('Document generation error:', error);
 
-            setDocuments(prev => prev.map(d =>
-                d.id === docId ? { ...d, status: 'in_progress' as DocumentStatus, progress: 0 } : d
-            ))
+            // Update document status to show error - set to in_progress so they can retry
+            setDocuments(prev => prev.map(doc =>
+                doc.id === documentId
+                    ? { ...doc, status: 'in_progress' as DocumentStatus, progress: 0 }
+                    : doc
+            ));
+
+            // Error message from CLARENCE
+            const errorMessage: ClarenceChatMessage = {
+                messageId: `msg-${Date.now()}`,
+                sessionId: session.sessionId,
+                sender: 'clarence',
+                message: `❌ Sorry, I encountered an error generating the document: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+                createdAt: new Date().toISOString()
+            };
+            setChatMessages(prev => [...prev, errorMessage]);
+
         } finally {
-            setIsGeneratingDocument(false)
+            setIsGeneratingDocument(false);
         }
-    }
+    };
 
     const handleDownloadDocument = async (docId: DocumentId, format: 'pdf' | 'docx') => {
         // TODO: Implement actual download
@@ -1312,3 +1377,4 @@ export default function DocumentCentrePage() {
         </Suspense>
     )
 }
+
