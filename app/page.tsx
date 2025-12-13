@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 import MainNavigation from './components/MainNavigation'
 import HeroCTA from './components/HeroCTA'
+import ContractStudioPreview from './components/ContractStudioPreview'
 
 export const metadata: Metadata = {
   title: 'CLARENCE | AI-Powered Contract Mediation',
@@ -208,104 +209,60 @@ export default function Home() {
       </section>
 
       {/* ================================================================== */}
-      {/* SECTION 6: LEVERAGE-TRACKED NEGOTIATION */}
+      {/* SECTION: CONTRACT STUDIO PREVIEW */}
       {/* ================================================================== */}
+
       <section className="py-20 bg-white border-t border-slate-200">
         <div className="container mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Leverage-Tracked Negotiation
+              The Contract Studio
             </h2>
+            <p className="text-slate-600 max-w-2xl mx-auto">
+              A powerful three-panel workspace where parties negotiate clause-by-clause,
+              guided by CLARENCE's real-time leverage tracking and AI-powered insights.
+            </p>
           </div>
 
-          <div className="max-w-5xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              {/* Left: Description */}
-              <div>
-                <h3 className="text-2xl font-bold text-slate-800 mb-4">
-                  See the Real Balance of Power
-                </h3>
-                <p className="text-slate-600 mb-6 leading-relaxed">
-                  CLARENCE calculates leverage based on market dynamics, economic factors,
-                  strategic position, and alternatives. Both parties see the same analysis—making
-                  negotiations fact-based, not emotion-driven.
-                </p>
-                <ul className="space-y-3">
-                  <li className="flex items-center gap-3 text-slate-700">
-                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    Market dynamics analysis
-                  </li>
-                  <li className="flex items-center gap-3 text-slate-700">
-                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    Economic factors assessment
-                  </li>
-                  <li className="flex items-center gap-3 text-slate-700">
-                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    Strategic position evaluation
-                  </li>
-                  <li className="flex items-center gap-3 text-slate-700">
-                    <div className="w-5 h-5 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    BATNA (alternatives) scoring
-                  </li>
-                </ul>
+          {/* Preview Component */}
+          <ContractStudioPreview />
+
+          {/* Feature Callouts */}
+          <div className="grid md:grid-cols-3 gap-6 mt-12 max-w-4xl mx-auto">
+            <div className="text-center">
+              <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
               </div>
+              <h3 className="font-semibold text-slate-800 mb-1">55+ Clauses</h3>
+              <p className="text-sm text-slate-600">
+                Comprehensive clause library covering all major contract areas
+              </p>
+            </div>
 
-              {/* Right: Leverage Visualization Mock */}
-              <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                <div className="text-sm font-semibold text-slate-700 mb-4">Leverage Baseline</div>
-
-                {/* Leverage Bar */}
-                <div className="mb-6">
-                  <div className="flex justify-between text-xs mb-2">
-                    <span className="text-emerald-600 font-medium">Customer</span>
-                    <span className="text-blue-600 font-medium">Provider</span>
-                  </div>
-                  <div className="h-4 bg-slate-200 rounded-full overflow-hidden relative">
-                    <div className="absolute left-0 top-0 bottom-0 w-[62%] bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-l-full"></div>
-                    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-400"></div>
-                  </div>
-                  <div className="flex justify-between text-lg font-bold mt-2">
-                    <span className="text-emerald-600">62%</span>
-                    <span className="text-blue-600">38%</span>
-                  </div>
-                </div>
-
-                {/* Factor Breakdown */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
-                    <span className="text-sm text-slate-600">Market Dynamics</span>
-                    <span className="text-sm font-semibold text-emerald-600">+8</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
-                    <span className="text-sm text-slate-600">Economic Factors</span>
-                    <span className="text-sm font-semibold text-emerald-600">+4</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
-                    <span className="text-sm text-slate-600">Strategic Position</span>
-                    <span className="text-sm font-semibold text-amber-600">-2</span>
-                  </div>
-                  <div className="flex justify-between items-center p-2 bg-white rounded-lg">
-                    <span className="text-sm text-slate-600">BATNA Strength</span>
-                    <span className="text-sm font-semibold text-emerald-600">+6</span>
-                  </div>
-                </div>
+            <div className="text-center">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
               </div>
+              <h3 className="font-semibold text-slate-800 mb-1">AI Chat</h3>
+              <p className="text-sm text-slate-600">
+                Get expert guidance on any clause, any time
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-slate-800 mb-1">Live Tracking</h3>
+              <p className="text-sm text-slate-600">
+                Watch leverage shift as positions move toward agreement
+              </p>
             </div>
           </div>
         </div>
