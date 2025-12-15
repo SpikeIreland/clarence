@@ -132,7 +132,7 @@ interface ContractClause {
     providerNotes: string | null
 
     // Status
-    status: 'aligned' | 'negotiating' | 'disputed' | 'pending'
+    status: 'aligned' | 'negotiating' | 'disputed' | 'pending' | 'agreed' | 'customer_confirmed' | 'provider_confirmed'
 
     // UI State
     isExpanded?: boolean
@@ -1187,6 +1187,9 @@ function getHistoryEventColor(eventType: string, party: string): string {
 function getStatusColor(status: string): string {
     switch (status) {
         case 'aligned': return 'text-emerald-600'
+        case 'agreed': return 'text-emerald-600'  // Add this
+        case 'customer_confirmed': return 'text-amber-600'  // Add this
+        case 'provider_confirmed': return 'text-amber-600'  // Add this
         case 'negotiating': return 'text-amber-600'
         case 'disputed': return 'text-red-600'
         default: return 'text-slate-400'
@@ -1196,6 +1199,9 @@ function getStatusColor(status: string): string {
 function getStatusBgColor(status: string): string {
     switch (status) {
         case 'aligned': return 'bg-emerald-500'
+        case 'agreed': return 'bg-emerald-500'  // Add this
+        case 'customer_confirmed': return 'bg-amber-500'  // Add this
+        case 'provider_confirmed': return 'bg-amber-500'  // Add this
         case 'negotiating': return 'bg-amber-500'
         case 'disputed': return 'bg-red-500'
         default: return 'bg-slate-300'
@@ -4608,10 +4614,22 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <span className="w-4" />
                     )}
 
-                    <div
-                        className={`w-2 h-2 rounded-full ${getStatusBgColor(clause.status)}`}
-                        title={clause.status}
-                    />
+                    {/* Status indicator */}
+                    {clause.status === 'agreed' ? (
+                        <div
+                            className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center"
+                            title="Agreement Locked"
+                        >
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                    ) : (
+                        <div
+                            className={`w-2 h-2 rounded-full ${getStatusBgColor(clause.status)}`}
+                            title={clause.status}
+                        />
+                    )}
 
                     <div className="flex-1 min-w-0 flex items-center gap-2">
                         <span className="text-xs text-slate-400 font-mono">{clause.clauseNumber}</span>
