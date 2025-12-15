@@ -4796,6 +4796,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 </div>
 
                 {/* CENTER PANEL: Main Workspace */}
+                {console.log('selectedClause:', selectedClause?.clauseName, 'activeTab:', activeTab)}
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <div className="flex-shrink-0 p-4 pb-0">
                         <LeverageIndicator />
@@ -4803,783 +4804,791 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                     {selectedClause && (
                         <div className="flex-shrink-0 px-6 py-3 border-b border-slate-200 bg-white mx-4 rounded-t-xl mt-2">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm font-mono text-slate-400">{selectedClause.clauseNumber}</span>
-                                        <h2 className="text-lg font-semibold text-slate-800">{selectedClause.clauseName}</h2>
-                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${selectedClause.status === 'aligned' ? 'bg-emerald-100 text-emerald-700' :
-                                            selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
-                                                selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
-                                                    'bg-slate-100 text-slate-700'
-                                            }`}>
-                                            {selectedClause.status}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-slate-500 mt-1">{selectedClause.description}</p>
-                                </div>
-
-                                <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                                    {(['positions', 'tradeoffs', 'history', 'draft'] as const).map(tab => {
-                                        // Calculate unseen count for history tab badge
-                                        const historyBadgeCount = tab === 'history' && selectedClause
-                                            ? (unseenMoves.get(selectedClause.clauseId) || 0)
-                                            : 0
-
-                                        return (
-                                            <button
-                                                key={tab}
-                                                onClick={() => {
-                                                    setActiveTab(tab)
-                                                    // Mark moves as seen when viewing History tab
-                                                    if (tab === 'history' && selectedClause) {
-                                                        markMovesAsSeen(selectedClause.clauseId)
-                                                    }
-                                                }}
-                                                className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
-                                                    }`}
-                                            >
-                                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                                {/* Unseen moves badge on History tab */}
-                                                {historyBadgeCount > 0 && (
-                                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                                        {historyBadgeCount > 9 ? '9+' : historyBadgeCount}
-                                                    </span>
-                                                )}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Workspace Content */}
-                    <div className="flex-1 overflow-y-auto p-4 pt-0">
-
-                        {/* ==================== POSITIONS TAB ==================== */}
-                        {activeTab === 'positions' && selectedClause && (
-                            <div
-                                ref={positionPanelRef}
-                                className="flex-1 overflow-y-auto p-3 bg-white mx-4 mb-2 rounded-b-xl border border-t-0 border-slate-200"
-                            >
-                                {selectedClause && (
-                                    <PositionAdjustmentPanel />
-                                )}
-
-                                {/* Position Comparison - CONDENSED */}
-                                <div className="mb-3">
-                                    <h3 className="text-xs font-semibold text-slate-700 mb-2">Position Overview</h3>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className={`p-2 rounded-lg ${userInfo.role === 'customer' ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50'}`}>
-                                            <div className="flex items-center gap-1.5 mb-1">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                                <span className="text-xs font-medium text-slate-700">{session.customerCompany}</span>
-                                                {userInfo.role === 'customer' && <span className="text-xs text-emerald-600">(You)</span>}
-                                            </div>
-                                            <div className="text-lg font-bold text-slate-800">
-                                                {selectedClause.customerPosition?.toFixed(1) ?? 'Not set'}
-                                            </div>
-                                            <div className="text-xs text-slate-500">
-                                                Weight: {selectedClause.customerWeight}/5
-                                            </div>
-                                        </div>
-
-                                        <div className={`p-2 rounded-lg ${userInfo.role === 'provider' ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
-                                            <div className="flex items-center gap-1.5 mb-1">
-                                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                                <span className="text-xs font-medium text-slate-700">{session.providerCompany}</span>
-                                                {userInfo.role === 'provider' && <span className="text-xs text-blue-600">(You)</span>}
-                                            </div>
-                                            <div className="text-lg font-bold text-slate-800">
-                                                {selectedClause.providerPosition?.toFixed(1) ?? 'Not set'}
-                                            </div>
-                                            <div className="text-xs text-slate-500">
-                                                Weight: {selectedClause.providerWeight}/5
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Gap Analysis - CONDENSED */}
-                                <div className="bg-slate-50 rounded-lg p-2 mb-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-600">Current Gap:</span>
-                                        <span className={`text-sm font-bold ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
-                                            selectedClause.gapSize <= 3 ? 'text-amber-600' :
-                                                'text-red-600'
-                                            }`}>
-                                            {selectedClause.gapSize?.toFixed(1)} points
-                                            {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
-                                        </span>
-                                    </div>
-                                    {selectedClause.clarenceRecommendation && (
-                                        <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-200">
-                                            <span className="text-xs text-slate-600">CLARENCE Suggests:</span>
-                                            <span className="text-sm font-semibold text-purple-600">
-                                                {selectedClause.clarenceRecommendation.toFixed(1)}
+                            {(() => {
+                                console.log('=== SELECTED CLAUSE DEBUG ===')
+                                console.log('clauseLevel:', selectedClause.clauseLevel)
+                                console.log('clauseName:', selectedClause.clauseName)
+                                console.log('activeTab:', activeTab)
+                                return null
+                            })()}
+                            <div className="flex-shrink-0 px-6 py-3 border-b border-slate-200 bg-white mx-4 rounded-t-xl mt-2">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-mono text-slate-400">{selectedClause.clauseNumber}</span>
+                                            <h2 className="text-lg font-semibold text-slate-800">{selectedClause.clauseName}</h2>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${selectedClause.status === 'aligned' ? 'bg-emerald-100 text-emerald-700' :
+                                                selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
+                                                    selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
+                                                        'bg-slate-100 text-slate-700'
+                                                }`}>
+                                                {selectedClause.status}
                                             </span>
                                         </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* ==================== TRADEOFFS TAB ==================== */}
-                        {activeTab === 'tradeoffs' && selectedClause && (
-                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-4">
-                                <div className="space-y-3">
-                                    {/* Header */}
-                                    <div>
-                                        <h3 className="text-base font-semibold text-slate-800">Trade-Off Opportunities</h3>
-                                        <p className="text-xs text-slate-500">
-                                            Exchange concessions on low-priority clauses for gains on high-priority ones
-                                        </p>
+                                        <p className="text-sm text-slate-500 mt-1">{selectedClause.description}</p>
                                     </div>
 
-                                    {/* Scope Toggle + Refresh */}
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex bg-slate-100 rounded-lg p-0.5">
-                                            <button
-                                                onClick={() => {
-                                                    setTradeOffScope('thisClause')
-                                                    const opportunities = detectTradeOffOpportunities(clauses, selectedClause)
-                                                    setTradeOffOpportunities(opportunities)
-                                                    setSelectedTradeOff(null)
-                                                    setTradeOffExplanation(null)
-                                                }}
-                                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${tradeOffScope === 'thisClause'
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
-                                                    }`}
-                                            >
-                                                This Clause
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setTradeOffScope('allClauses')
-                                                    const opportunities = detectTradeOffOpportunities(clauses, null)
-                                                    setTradeOffOpportunities(opportunities)
-                                                    setSelectedTradeOff(null)
-                                                    setTradeOffExplanation(null)
-                                                }}
-                                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${tradeOffScope === 'allClauses'
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
-                                                    }`}
-                                            >
-                                                All Clauses
-                                            </button>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                const opportunities = detectTradeOffOpportunities(
-                                                    clauses,
-                                                    tradeOffScope === 'thisClause' ? selectedClause : null
-                                                )
-                                                setTradeOffOpportunities(opportunities)
-                                                setSelectedTradeOff(null)
-                                                setTradeOffExplanation(null)
-                                            }}
-                                            className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition flex items-center gap-1"
-                                        >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                            </svg>
-                                            Refresh
-                                        </button>
-                                    </div>
+                                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                                        {(['positions', 'tradeoffs', 'history', 'draft'] as const).map(tab => {
+                                            // Calculate unseen count for history tab badge
+                                            const historyBadgeCount = tab === 'history' && selectedClause
+                                                ? (unseenMoves.get(selectedClause.clauseId) || 0)
+                                                : 0
 
-                                    {/* Results Summary */}
-                                    <div className="text-xs text-slate-500 border-b border-slate-100 pb-2">
-                                        {tradeOffOpportunities.length > 0 ? (
-                                            <>
-                                                Showing <span className="font-medium text-slate-700">{tradeOffOpportunities.length}</span> trade-off{tradeOffOpportunities.length !== 1 ? 's' : ''}{' '}
-                                                {tradeOffScope === 'thisClause' ? (
-                                                    <>involving <span className="font-medium text-emerald-600">{selectedClause.clauseName}</span></>
-                                                ) : (
-                                                    <>across <span className="font-medium text-slate-700">all clauses</span></>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <>No trade-offs found {tradeOffScope === 'thisClause' ? `for ${selectedClause.clauseName}` : 'across all clauses'}</>
-                                        )}
-                                    </div>
-
-                                    {/* Trade-off List */}
-                                    {tradeOffOpportunities.length === 0 ? (
-                                        <div className="text-center py-6">
-                                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                                <span className="text-xl">⇄</span>
-                                            </div>
-                                            <p className="text-slate-600 text-sm mb-1">No trade-off opportunities detected</p>
-                                            <p className="text-xs text-slate-400">
-                                                Trade-offs appear when parties have complementary priorities on different clauses
-                                            </p>
-                                            {tradeOffScope === 'thisClause' && (
+                                            return (
                                                 <button
+                                                    key={tab}
                                                     onClick={() => {
-                                                        setTradeOffScope('allClauses')
-                                                        const opportunities = detectTradeOffOpportunities(clauses, null)
-                                                        setTradeOffOpportunities(opportunities)
-                                                    }}
-                                                    className="mt-3 px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition"
-                                                >
-                                                    Try Scanning All Clauses
-                                                </button>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {tradeOffOpportunities.map((tradeOff) => (
-                                                <div
-                                                    key={tradeOff.id}
-                                                    className={`border rounded-lg p-3 cursor-pointer transition ${selectedTradeOff?.id === tradeOff.id
-                                                        ? 'border-emerald-300 bg-emerald-50'
-                                                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                                                        }`}
-                                                    onClick={() => {
-                                                        if (selectedTradeOff?.id === tradeOff.id) {
-                                                            setSelectedTradeOff(null)
-                                                            setTradeOffExplanation(null)
-                                                        } else {
-                                                            explainTradeOff(tradeOff)
+                                                        setActiveTab(tab)
+                                                        // Mark moves as seen when viewing History tab
+                                                        if (tab === 'history' && selectedClause) {
+                                                            markMovesAsSeen(selectedClause.clauseId)
                                                         }
                                                     }}
-                                                >
-                                                    <div className="flex items-start justify-between">
-                                                        <div className="flex-1">
-                                                            {/* Trade pair */}
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
-                                                                    {tradeOff.clauseA.clauseNumber}
-                                                                </span>
-                                                                <span className="text-slate-400">⇄</span>
-                                                                <span className="text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
-                                                                    {tradeOff.clauseB.clauseNumber}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Clause names */}
-                                                            <div className="text-sm text-slate-700">
-                                                                <span className="font-medium">{tradeOff.clauseA.clauseName}</span>
-                                                                <span className="text-slate-400 mx-1">↔</span>
-                                                                <span className="font-medium">{tradeOff.clauseB.clauseName}</span>
-                                                            </div>
-
-                                                            {/* Gap info */}
-                                                            <div className="flex gap-3 mt-1 text-xs text-slate-500">
-                                                                <span>Gap A: {tradeOff.clauseA.gapSize.toFixed(1)}</span>
-                                                                <span>Gap B: {tradeOff.clauseB.gapSize.toFixed(1)}</span>
-                                                                <span>Value: {tradeOff.tradeOffValue.toFixed(1)}</span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="text-right ml-2">
-                                                            <div className="text-xs text-slate-500">Impact</div>
-                                                            <div className="text-sm font-bold text-emerald-600">
-                                                                +{tradeOff.alignmentImpact}%
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Trade-off Explanation Panel */}
-                                    {selectedTradeOff && (
-                                        <div className="mt-3 border-t border-slate-200 pt-3">
-                                            <h4 className="text-xs font-semibold text-slate-700 mb-2">
-                                                CLARENCE Analysis
-                                            </h4>
-                                            {isLoadingTradeOff ? (
-                                                <div className="flex items-center gap-2 text-slate-500">
-                                                    <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                                                    <span className="text-xs">Analyzing trade-off...</span>
-                                                </div>
-                                            ) : tradeOffExplanation ? (
-                                                <div className="bg-slate-50 rounded-lg p-3">
-                                                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{tradeOffExplanation}</p>
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* ==================== HISTORY TAB ==================== */}
-                        {activeTab === 'history' && selectedClause && (
-                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
-                                <div className="space-y-4">
-                                    {/* Header */}
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-slate-800">Position History</h3>
-                                            <p className="text-sm text-slate-500">
-                                                Changes for <span className="font-medium text-slate-700">{selectedClause.clauseName}</span>
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                                            {(['all', 'positions', 'agreements'] as const).map(filter => (
-                                                <button
-                                                    key={filter}
-                                                    onClick={() => setHistoryFilter(filter)}
-                                                    className={`px-3 py-1 text-xs rounded-md transition capitalize ${historyFilter === filter
+                                                    className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
                                                         ? 'bg-white text-slate-800 shadow-sm'
-                                                        : 'text-slate-600 hover:text-slate-800'
+                                                        : 'text-slate-500 hover:text-slate-700'
                                                         }`}
                                                 >
-                                                    {filter}
+                                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                                    {/* Unseen moves badge on History tab */}
+                                                    {historyBadgeCount > 0 && (
+                                                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                                            {historyBadgeCount > 9 ? '9+' : historyBadgeCount}
+                                                        </span>
+                                                    )}
                                                 </button>
-                                            ))}
-                                        </div>
+                                            )
+                                        })}
                                     </div>
+                                </div>
+                            </div>
+                    )}
 
-                                    {/* Timeline */}
-                                    <div className="relative">
-                                        {/* Vertical line */}
-                                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200"></div>
+                            {/* Workspace Content */}
+                            <div className="flex-1 overflow-y-auto p-4 pt-0">
 
-                                        {/* History entries - FILTERED BY SELECTED CLAUSE */}
-                                        <div className="space-y-4">
-                                            {negotiationHistory
-                                                .filter(entry => {
-                                                    // First: filter to selected clause only
-                                                    if (entry.clauseId !== selectedClause.clauseId) return false
-                                                    // Then: apply type filter
-                                                    if (historyFilter === 'all') return true
-                                                    if (historyFilter === 'positions') return entry.eventType === 'position_change'
-                                                    if (historyFilter === 'agreements') return entry.eventType === 'agreement'
-                                                    return true
-                                                })
-                                                .slice(0, 20)
-                                                .map((entry) => (
-                                                    <div key={entry.id} className="relative pl-10">
-                                                        {/* Timeline dot */}
-                                                        <div className={`absolute left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs ${entry.eventType === 'agreement'
-                                                            ? 'border-emerald-400 bg-emerald-100 text-emerald-600'
-                                                            : entry.party === 'customer'
-                                                                ? 'border-emerald-400 bg-white text-emerald-600'
-                                                                : entry.party === 'provider'
-                                                                    ? 'border-blue-400 bg-white text-blue-600'
-                                                                    : 'border-slate-400 bg-slate-100 text-slate-600'
-                                                            }`}>
-                                                            {entry.eventType === 'position_change' ? '↔' :
-                                                                entry.eventType === 'agreement' ? '✓' :
-                                                                    entry.eventType === 'session_started' ? '🚀' : '•'}
-                                                        </div>
+                                {/* ==================== POSITIONS TAB ==================== */}
+                                {activeTab === 'positions' && selectedClause && (
+                                    <div
+                                        ref={positionPanelRef}
+                                        className="flex-1 overflow-y-auto p-3 bg-white mx-4 mb-2 rounded-b-xl border border-t-0 border-slate-200"
+                                    >
+                                        {selectedClause && (
+                                            <PositionAdjustmentPanel />
+                                        )}
 
-                                                        {/* Entry content */}
-                                                        <div className={`border rounded-lg p-3 ${entry.eventType === 'agreement' ? 'border-emerald-400 bg-emerald-50' :
-                                                            entry.eventType === 'session_started' ? 'border-slate-400 bg-slate-50' :
-                                                                entry.party === 'customer' ? 'border-emerald-300 bg-white' :
-                                                                    entry.party === 'provider' ? 'border-blue-300 bg-white' :
-                                                                        'border-slate-300 bg-white'
-                                                            }`}>
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <span className={`text-xs font-medium ${entry.party === 'customer' ? 'text-emerald-600' :
-                                                                    entry.party === 'provider' ? 'text-blue-600' :
-                                                                        'text-slate-600'
-                                                                    }`}>
-                                                                    {entry.partyName}
-                                                                </span>
-                                                                <span className="text-xs text-slate-400">
-                                                                    {formatHistoryTimestamp(entry.timestamp)}
-                                                                </span>
-                                                            </div>
+                                        {/* Position Comparison - CONDENSED */}
+                                        <div className="mb-3">
+                                            <h3 className="text-xs font-semibold text-slate-700 mb-2">Position Overview</h3>
 
-                                                            <p className="text-sm text-slate-700">{entry.description}</p>
-
-                                                            {entry.oldValue !== undefined && entry.newValue !== undefined && (
-                                                                <div className="flex items-center gap-2 mt-2 text-xs">
-                                                                    <span className="text-slate-500">Position:</span>
-                                                                    <span className="text-red-500 line-through">{entry.oldValue}</span>
-                                                                    <span className="text-slate-400">→</span>
-                                                                    <span className="text-emerald-600 font-medium">{entry.newValue}</span>
-                                                                    {entry.leverageImpact !== undefined && entry.leverageImpact !== 0 && (
-                                                                        <span className={`ml-2 px-1.5 py-0.5 rounded ${entry.leverageImpact > 0
-                                                                            ? 'bg-emerald-100 text-emerald-700'
-                                                                            : 'bg-amber-100 text-amber-700'
-                                                                            }`}>
-                                                                            {entry.leverageImpact > 0 ? '+' : ''}{entry.leverageImpact.toFixed(1)}% for you
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            )}
-
-                                                            {entry.clauseName && entry.eventType !== 'position_change' && (
-                                                                <div className="mt-1">
-                                                                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
-                                                                        {entry.clauseName}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className={`p-2 rounded-lg ${userInfo.role === 'customer' ? 'bg-emerald-50 border border-emerald-200' : 'bg-slate-50'}`}>
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                                        <span className="text-xs font-medium text-slate-700">{session.customerCompany}</span>
+                                                        {userInfo.role === 'customer' && <span className="text-xs text-emerald-600">(You)</span>}
                                                     </div>
-                                                ))}
-
-                                            {negotiationHistory.filter(e => e.clauseId === selectedClause.clauseId).length === 0 && (
-                                                <div className="text-center py-8 pl-10">
-                                                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                                        <span className="text-2xl">📋</span>
+                                                    <div className="text-lg font-bold text-slate-800">
+                                                        {selectedClause.customerPosition?.toFixed(1) ?? 'Not set'}
                                                     </div>
-                                                    <p className="text-slate-600">No changes to this clause yet</p>
-                                                    <p className="text-sm text-slate-400 mt-1">
-                                                        History will appear when positions are adjusted on {selectedClause.clauseName}
-                                                    </p>
+                                                    <div className="text-xs text-slate-500">
+                                                        Weight: {selectedClause.customerWeight}/5
+                                                    </div>
+                                                </div>
+
+                                                <div className={`p-2 rounded-lg ${userInfo.role === 'provider' ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50'}`}>
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                                        <span className="text-xs font-medium text-slate-700">{session.providerCompany}</span>
+                                                        {userInfo.role === 'provider' && <span className="text-xs text-blue-600">(You)</span>}
+                                                    </div>
+                                                    <div className="text-lg font-bold text-slate-800">
+                                                        {selectedClause.providerPosition?.toFixed(1) ?? 'Not set'}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500">
+                                                        Weight: {selectedClause.providerWeight}/5
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Gap Analysis - CONDENSED */}
+                                        <div className="bg-slate-50 rounded-lg p-2 mb-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-slate-600">Current Gap:</span>
+                                                <span className={`text-sm font-bold ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
+                                                    selectedClause.gapSize <= 3 ? 'text-amber-600' :
+                                                        'text-red-600'
+                                                    }`}>
+                                                    {selectedClause.gapSize?.toFixed(1)} points
+                                                    {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
+                                                </span>
+                                            </div>
+                                            {selectedClause.clarenceRecommendation && (
+                                                <div className="flex items-center justify-between mt-1 pt-1 border-t border-slate-200">
+                                                    <span className="text-xs text-slate-600">CLARENCE Suggests:</span>
+                                                    <span className="text-sm font-semibold text-purple-600">
+                                                        {selectedClause.clarenceRecommendation.toFixed(1)}
+                                                    </span>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* ==================== DRAFT TAB ==================== */}
-                        {activeTab === 'draft' && selectedClause && (
-                            <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
-                                <div className="mb-6">
-                                    {/* Header */}
-                                    <div className="mb-4">
-                                        <h3 className="text-lg font-semibold text-slate-800">Draft Contract Language</h3>
-                                        <p className="text-sm text-slate-500">
-                                            Generate professional clause language based on agreed positions
-                                        </p>
-                                    </div>
-
-                                    {/* Clause Context */}
-                                    <div className="bg-slate-50 rounded-lg p-4 mb-4">
-                                        <div className="grid grid-cols-3 gap-4 text-center">
-                                            <div>
-                                                <div className="text-xs text-slate-500 mb-1">Customer Position</div>
-                                                <div className="text-lg font-bold text-emerald-600">
-                                                    {selectedClause.customerPosition ?? '-'}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs text-slate-500 mb-1">CLARENCE Suggests</div>
-                                                <div className="text-lg font-bold text-purple-600">
-                                                    {selectedClause.clarenceRecommendation ?? '-'}
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div className="text-xs text-slate-500 mb-1">Provider Position</div>
-                                                <div className="text-lg font-bold text-blue-600">
-                                                    {selectedClause.providerPosition ?? '-'}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="text-center mt-3 pt-3 border-t border-slate-200">
-                                            <span className={`text-sm font-medium ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
-                                                selectedClause.gapSize <= 3 ? 'text-amber-600' :
-                                                    'text-red-600'
-                                                }`}>
-                                                Gap: {selectedClause.gapSize.toFixed(1)} points
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* Generate Button */}
-                                    <button
-                                        onClick={() => generateDraftLanguage(selectedClause)}
-                                        disabled={isLoadingDraft}
-                                        className={`w-full py-3 rounded-lg font-medium transition ${isLoadingDraft
-                                            ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                            }`}
-                                    >
-                                        {isLoadingDraft ? (
-                                            <span className="flex items-center justify-center gap-2">
-                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                Generating Draft...
-                                            </span>
-                                        ) : lastDraftedClauseId === selectedClause.clauseId && draftLanguage ? (
-                                            'Regenerate Draft'
-                                        ) : (
-                                            '⚖️ Generate Balanced Draft'
-                                        )}
-                                    </button>
-                                </div>
-
-                                {/* Draft Output */}
-                                {draftLanguage && lastDraftedClauseId === selectedClause.clauseId && (
-                                    <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
-                                            <span className="text-sm font-medium text-slate-700">
-                                                ⚖️ Balanced Draft Language
-                                            </span>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(draftLanguage)
-                                                        alert('Draft copied to clipboard')
-                                                    }}
-                                                    className="px-3 py-1 text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded transition"
-                                                >
-                                                    📋 Copy
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="p-4 bg-white">
-                                            <div
-                                                className="prose prose-sm max-w-none text-slate-700"
-                                                style={{ fontFamily: 'Georgia, serif', lineHeight: '1.7' }}
-                                            >
-                                                <p className="whitespace-pre-wrap">{draftLanguage}</p>
-                                            </div>
-                                        </div>
-                                    </div>
                                 )}
 
-                                {/* No draft yet */}
-                                {(!draftLanguage || lastDraftedClauseId !== selectedClause.clauseId) && !isLoadingDraft && (
-                                    <div className="text-center py-6 text-slate-500">
-                                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                            <span className="text-2xl">📄</span>
-                                        </div>
-                                        <p>Click &quot;Generate Balanced Draft&quot; to create contract text</p>
-                                        <p className="text-sm text-slate-400 mt-1">
-                                            CLARENCE will draft fair, balanced language reflecting a compromise position
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/* Warning for high gap */}
-                                {selectedClause.gapSize > 3 && (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
-                                        <div className="flex items-start gap-2">
-                                            <span className="text-amber-500">⚠️</span>
+                                {/* ==================== TRADEOFFS TAB ==================== */}
+                                {activeTab === 'tradeoffs' && selectedClause && (
+                                    <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-4">
+                                        <div className="space-y-3">
+                                            {/* Header */}
                                             <div>
-                                                <p className="text-sm font-medium text-amber-800">Positions Not Yet Aligned</p>
-                                                <p className="text-xs text-amber-600 mt-1">
-                                                    There&apos;s a significant gap ({selectedClause.gapSize.toFixed(1)} points) between parties.
-                                                    Consider negotiating positions closer before finalising draft language.
+                                                <h3 className="text-base font-semibold text-slate-800">Trade-Off Opportunities</h3>
+                                                <p className="text-xs text-slate-500">
+                                                    Exchange concessions on low-priority clauses for gains on high-priority ones
                                                 </p>
                                             </div>
+
+                                            {/* Scope Toggle + Refresh */}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex bg-slate-100 rounded-lg p-0.5">
+                                                    <button
+                                                        onClick={() => {
+                                                            setTradeOffScope('thisClause')
+                                                            const opportunities = detectTradeOffOpportunities(clauses, selectedClause)
+                                                            setTradeOffOpportunities(opportunities)
+                                                            setSelectedTradeOff(null)
+                                                            setTradeOffExplanation(null)
+                                                        }}
+                                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${tradeOffScope === 'thisClause'
+                                                            ? 'bg-white text-slate-800 shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-700'
+                                                            }`}
+                                                    >
+                                                        This Clause
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setTradeOffScope('allClauses')
+                                                            const opportunities = detectTradeOffOpportunities(clauses, null)
+                                                            setTradeOffOpportunities(opportunities)
+                                                            setSelectedTradeOff(null)
+                                                            setTradeOffExplanation(null)
+                                                        }}
+                                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${tradeOffScope === 'allClauses'
+                                                            ? 'bg-white text-slate-800 shadow-sm'
+                                                            : 'text-slate-500 hover:text-slate-700'
+                                                            }`}
+                                                    >
+                                                        All Clauses
+                                                    </button>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        const opportunities = detectTradeOffOpportunities(
+                                                            clauses,
+                                                            tradeOffScope === 'thisClause' ? selectedClause : null
+                                                        )
+                                                        setTradeOffOpportunities(opportunities)
+                                                        setSelectedTradeOff(null)
+                                                        setTradeOffExplanation(null)
+                                                    }}
+                                                    className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded transition flex items-center gap-1"
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                    Refresh
+                                                </button>
+                                            </div>
+
+                                            {/* Results Summary */}
+                                            <div className="text-xs text-slate-500 border-b border-slate-100 pb-2">
+                                                {tradeOffOpportunities.length > 0 ? (
+                                                    <>
+                                                        Showing <span className="font-medium text-slate-700">{tradeOffOpportunities.length}</span> trade-off{tradeOffOpportunities.length !== 1 ? 's' : ''}{' '}
+                                                        {tradeOffScope === 'thisClause' ? (
+                                                            <>involving <span className="font-medium text-emerald-600">{selectedClause.clauseName}</span></>
+                                                        ) : (
+                                                            <>across <span className="font-medium text-slate-700">all clauses</span></>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <>No trade-offs found {tradeOffScope === 'thisClause' ? `for ${selectedClause.clauseName}` : 'across all clauses'}</>
+                                                )}
+                                            </div>
+
+                                            {/* Trade-off List */}
+                                            {tradeOffOpportunities.length === 0 ? (
+                                                <div className="text-center py-6">
+                                                    <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                                        <span className="text-xl">⇄</span>
+                                                    </div>
+                                                    <p className="text-slate-600 text-sm mb-1">No trade-off opportunities detected</p>
+                                                    <p className="text-xs text-slate-400">
+                                                        Trade-offs appear when parties have complementary priorities on different clauses
+                                                    </p>
+                                                    {tradeOffScope === 'thisClause' && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setTradeOffScope('allClauses')
+                                                                const opportunities = detectTradeOffOpportunities(clauses, null)
+                                                                setTradeOffOpportunities(opportunities)
+                                                            }}
+                                                            className="mt-3 px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition"
+                                                        >
+                                                            Try Scanning All Clauses
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    {tradeOffOpportunities.map((tradeOff) => (
+                                                        <div
+                                                            key={tradeOff.id}
+                                                            className={`border rounded-lg p-3 cursor-pointer transition ${selectedTradeOff?.id === tradeOff.id
+                                                                ? 'border-emerald-300 bg-emerald-50'
+                                                                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                                                }`}
+                                                            onClick={() => {
+                                                                if (selectedTradeOff?.id === tradeOff.id) {
+                                                                    setSelectedTradeOff(null)
+                                                                    setTradeOffExplanation(null)
+                                                                } else {
+                                                                    explainTradeOff(tradeOff)
+                                                                }
+                                                            }}
+                                                        >
+                                                            <div className="flex items-start justify-between">
+                                                                <div className="flex-1">
+                                                                    {/* Trade pair */}
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                                                                            {tradeOff.clauseA.clauseNumber}
+                                                                        </span>
+                                                                        <span className="text-slate-400">⇄</span>
+                                                                        <span className="text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
+                                                                            {tradeOff.clauseB.clauseNumber}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    {/* Clause names */}
+                                                                    <div className="text-sm text-slate-700">
+                                                                        <span className="font-medium">{tradeOff.clauseA.clauseName}</span>
+                                                                        <span className="text-slate-400 mx-1">↔</span>
+                                                                        <span className="font-medium">{tradeOff.clauseB.clauseName}</span>
+                                                                    </div>
+
+                                                                    {/* Gap info */}
+                                                                    <div className="flex gap-3 mt-1 text-xs text-slate-500">
+                                                                        <span>Gap A: {tradeOff.clauseA.gapSize.toFixed(1)}</span>
+                                                                        <span>Gap B: {tradeOff.clauseB.gapSize.toFixed(1)}</span>
+                                                                        <span>Value: {tradeOff.tradeOffValue.toFixed(1)}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="text-right ml-2">
+                                                                    <div className="text-xs text-slate-500">Impact</div>
+                                                                    <div className="text-sm font-bold text-emerald-600">
+                                                                        +{tradeOff.alignmentImpact}%
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Trade-off Explanation Panel */}
+                                            {selectedTradeOff && (
+                                                <div className="mt-3 border-t border-slate-200 pt-3">
+                                                    <h4 className="text-xs font-semibold text-slate-700 mb-2">
+                                                        CLARENCE Analysis
+                                                    </h4>
+                                                    {isLoadingTradeOff ? (
+                                                        <div className="flex items-center gap-2 text-slate-500">
+                                                            <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                                                            <span className="text-xs">Analyzing trade-off...</span>
+                                                        </div>
+                                                    ) : tradeOffExplanation ? (
+                                                        <div className="bg-slate-50 rounded-lg p-3">
+                                                            <p className="text-xs text-slate-700 whitespace-pre-wrap">{tradeOffExplanation}</p>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ==================== HISTORY TAB ==================== */}
+                                {activeTab === 'history' && selectedClause && (
+                                    <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
+                                        <div className="space-y-4">
+                                            {/* Header */}
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="text-lg font-semibold text-slate-800">Position History</h3>
+                                                    <p className="text-sm text-slate-500">
+                                                        Changes for <span className="font-medium text-slate-700">{selectedClause.clauseName}</span>
+                                                    </p>
+                                                </div>
+                                                <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                                                    {(['all', 'positions', 'agreements'] as const).map(filter => (
+                                                        <button
+                                                            key={filter}
+                                                            onClick={() => setHistoryFilter(filter)}
+                                                            className={`px-3 py-1 text-xs rounded-md transition capitalize ${historyFilter === filter
+                                                                ? 'bg-white text-slate-800 shadow-sm'
+                                                                : 'text-slate-600 hover:text-slate-800'
+                                                                }`}
+                                                        >
+                                                            {filter}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Timeline */}
+                                            <div className="relative">
+                                                {/* Vertical line */}
+                                                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200"></div>
+
+                                                {/* History entries - FILTERED BY SELECTED CLAUSE */}
+                                                <div className="space-y-4">
+                                                    {negotiationHistory
+                                                        .filter(entry => {
+                                                            // First: filter to selected clause only
+                                                            if (entry.clauseId !== selectedClause.clauseId) return false
+                                                            // Then: apply type filter
+                                                            if (historyFilter === 'all') return true
+                                                            if (historyFilter === 'positions') return entry.eventType === 'position_change'
+                                                            if (historyFilter === 'agreements') return entry.eventType === 'agreement'
+                                                            return true
+                                                        })
+                                                        .slice(0, 20)
+                                                        .map((entry) => (
+                                                            <div key={entry.id} className="relative pl-10">
+                                                                {/* Timeline dot */}
+                                                                <div className={`absolute left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs ${entry.eventType === 'agreement'
+                                                                    ? 'border-emerald-400 bg-emerald-100 text-emerald-600'
+                                                                    : entry.party === 'customer'
+                                                                        ? 'border-emerald-400 bg-white text-emerald-600'
+                                                                        : entry.party === 'provider'
+                                                                            ? 'border-blue-400 bg-white text-blue-600'
+                                                                            : 'border-slate-400 bg-slate-100 text-slate-600'
+                                                                    }`}>
+                                                                    {entry.eventType === 'position_change' ? '↔' :
+                                                                        entry.eventType === 'agreement' ? '✓' :
+                                                                            entry.eventType === 'session_started' ? '🚀' : '•'}
+                                                                </div>
+
+                                                                {/* Entry content */}
+                                                                <div className={`border rounded-lg p-3 ${entry.eventType === 'agreement' ? 'border-emerald-400 bg-emerald-50' :
+                                                                    entry.eventType === 'session_started' ? 'border-slate-400 bg-slate-50' :
+                                                                        entry.party === 'customer' ? 'border-emerald-300 bg-white' :
+                                                                            entry.party === 'provider' ? 'border-blue-300 bg-white' :
+                                                                                'border-slate-300 bg-white'
+                                                                    }`}>
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <span className={`text-xs font-medium ${entry.party === 'customer' ? 'text-emerald-600' :
+                                                                            entry.party === 'provider' ? 'text-blue-600' :
+                                                                                'text-slate-600'
+                                                                            }`}>
+                                                                            {entry.partyName}
+                                                                        </span>
+                                                                        <span className="text-xs text-slate-400">
+                                                                            {formatHistoryTimestamp(entry.timestamp)}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <p className="text-sm text-slate-700">{entry.description}</p>
+
+                                                                    {entry.oldValue !== undefined && entry.newValue !== undefined && (
+                                                                        <div className="flex items-center gap-2 mt-2 text-xs">
+                                                                            <span className="text-slate-500">Position:</span>
+                                                                            <span className="text-red-500 line-through">{entry.oldValue}</span>
+                                                                            <span className="text-slate-400">→</span>
+                                                                            <span className="text-emerald-600 font-medium">{entry.newValue}</span>
+                                                                            {entry.leverageImpact !== undefined && entry.leverageImpact !== 0 && (
+                                                                                <span className={`ml-2 px-1.5 py-0.5 rounded ${entry.leverageImpact > 0
+                                                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                                                    : 'bg-amber-100 text-amber-700'
+                                                                                    }`}>
+                                                                                    {entry.leverageImpact > 0 ? '+' : ''}{entry.leverageImpact.toFixed(1)}% for you
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+
+                                                                    {entry.clauseName && entry.eventType !== 'position_change' && (
+                                                                        <div className="mt-1">
+                                                                            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                                                                {entry.clauseName}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+
+                                                    {negotiationHistory.filter(e => e.clauseId === selectedClause.clauseId).length === 0 && (
+                                                        <div className="text-center py-8 pl-10">
+                                                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                                <span className="text-2xl">📋</span>
+                                                            </div>
+                                                            <p className="text-slate-600">No changes to this clause yet</p>
+                                                            <p className="text-sm text-slate-400 mt-1">
+                                                                History will appear when positions are adjusted on {selectedClause.clauseName}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ==================== DRAFT TAB ==================== */}
+                                {activeTab === 'draft' && selectedClause && (
+                                    <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
+                                        <div className="mb-6">
+                                            {/* Header */}
+                                            <div className="mb-4">
+                                                <h3 className="text-lg font-semibold text-slate-800">Draft Contract Language</h3>
+                                                <p className="text-sm text-slate-500">
+                                                    Generate professional clause language based on agreed positions
+                                                </p>
+                                            </div>
+
+                                            {/* Clause Context */}
+                                            <div className="bg-slate-50 rounded-lg p-4 mb-4">
+                                                <div className="grid grid-cols-3 gap-4 text-center">
+                                                    <div>
+                                                        <div className="text-xs text-slate-500 mb-1">Customer Position</div>
+                                                        <div className="text-lg font-bold text-emerald-600">
+                                                            {selectedClause.customerPosition ?? '-'}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs text-slate-500 mb-1">CLARENCE Suggests</div>
+                                                        <div className="text-lg font-bold text-purple-600">
+                                                            {selectedClause.clarenceRecommendation ?? '-'}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-xs text-slate-500 mb-1">Provider Position</div>
+                                                        <div className="text-lg font-bold text-blue-600">
+                                                            {selectedClause.providerPosition ?? '-'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-center mt-3 pt-3 border-t border-slate-200">
+                                                    <span className={`text-sm font-medium ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :
+                                                        selectedClause.gapSize <= 3 ? 'text-amber-600' :
+                                                            'text-red-600'
+                                                        }`}>
+                                                        Gap: {selectedClause.gapSize.toFixed(1)} points
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Generate Button */}
+                                            <button
+                                                onClick={() => generateDraftLanguage(selectedClause)}
+                                                disabled={isLoadingDraft}
+                                                className={`w-full py-3 rounded-lg font-medium transition ${isLoadingDraft
+                                                    ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                                    }`}
+                                            >
+                                                {isLoadingDraft ? (
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                        Generating Draft...
+                                                    </span>
+                                                ) : lastDraftedClauseId === selectedClause.clauseId && draftLanguage ? (
+                                                    'Regenerate Draft'
+                                                ) : (
+                                                    '⚖️ Generate Balanced Draft'
+                                                )}
+                                            </button>
+                                        </div>
+
+                                        {/* Draft Output */}
+                                        {draftLanguage && lastDraftedClauseId === selectedClause.clauseId && (
+                                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+                                                    <span className="text-sm font-medium text-slate-700">
+                                                        ⚖️ Balanced Draft Language
+                                                    </span>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(draftLanguage)
+                                                                alert('Draft copied to clipboard')
+                                                            }}
+                                                            className="px-3 py-1 text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded transition"
+                                                        >
+                                                            📋 Copy
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="p-4 bg-white">
+                                                    <div
+                                                        className="prose prose-sm max-w-none text-slate-700"
+                                                        style={{ fontFamily: 'Georgia, serif', lineHeight: '1.7' }}
+                                                    >
+                                                        <p className="whitespace-pre-wrap">{draftLanguage}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* No draft yet */}
+                                        {(!draftLanguage || lastDraftedClauseId !== selectedClause.clauseId) && !isLoadingDraft && (
+                                            <div className="text-center py-6 text-slate-500">
+                                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <span className="text-2xl">📄</span>
+                                                </div>
+                                                <p>Click &quot;Generate Balanced Draft&quot; to create contract text</p>
+                                                <p className="text-sm text-slate-400 mt-1">
+                                                    CLARENCE will draft fair, balanced language reflecting a compromise position
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Warning for high gap */}
+                                        {selectedClause.gapSize > 3 && (
+                                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
+                                                <div className="flex items-start gap-2">
+                                                    <span className="text-amber-500">⚠️</span>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-amber-800">Positions Not Yet Aligned</p>
+                                                        <p className="text-xs text-amber-600 mt-1">
+                                                            There&apos;s a significant gap ({selectedClause.gapSize.toFixed(1)} points) between parties.
+                                                            Consider negotiating positions closer before finalising draft language.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* ==================== NO CLAUSE SELECTED ==================== */}
+                                {!selectedClause && (
+                                    <div className="h-full flex items-center justify-center">
+                                        <div className="text-center">
+                                            <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-medium text-slate-700 mb-2">Select a Clause</h3>
+                                            <p className="text-sm text-slate-500">Choose a clause from the left panel to view and adjust positions</p>
                                         </div>
                                     </div>
                                 )}
                             </div>
-                        )}
-
-                        {/* ==================== NO CLAUSE SELECTED ==================== */}
-                        {!selectedClause && (
-                            <div className="h-full flex items-center justify-center">
-                                <div className="text-center">
-                                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                    </div>
-                                    <h3 className="text-lg font-medium text-slate-700 mb-2">Select a Clause</h3>
-                                    <p className="text-sm text-slate-500">Choose a clause from the left panel to view and adjust positions</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                        </div>
 
                 {/* RIGHT PANEL: CLARENCE Chat */}
-                <div className="w-96 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-                    <div className="flex-shrink-0 p-4 border-b border-slate-200">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
-                                <span className="text-white font-bold">C</span>
-                            </div>
-                            <div className="flex-1">
-                                <div className="font-semibold text-slate-800">CLARENCE</div>
-                                <div className="text-xs text-slate-500">
-                                    {selectedClause
-                                        ? `Discussing: ${selectedClause.clauseNumber} ${selectedClause.clauseName}`
-                                        : 'General Discussion'
-                                    }
+                    <div className="w-96 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+                        <div className="flex-shrink-0 p-4 border-b border-slate-200">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
+                                    <span className="text-white font-bold">C</span>
+                                </div>
+                                <div className="flex-1">
+                                    <div className="font-semibold text-slate-800">CLARENCE</div>
+                                    <div className="text-xs text-slate-500">
+                                        {selectedClause
+                                            ? `Discussing: ${selectedClause.clauseNumber} ${selectedClause.clauseName}`
+                                            : 'General Discussion'
+                                        }
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
-                        {chatMessages.map((msg, index) => {
-                            const isLatestMessage = index === chatMessages.length - 1
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+                            {chatMessages.map((msg, index) => {
+                                const isLatestMessage = index === chatMessages.length - 1
 
-                            return (
-                                <div
-                                    key={msg.messageId}
-                                    ref={isLatestMessage ? latestMessageRef : null}
-                                    className={`flex ${msg.sender === 'customer' || msg.sender === 'provider' ? 'justify-end' : 'justify-start'}`}
-                                >
-                                    <div className={`max-w-[85%] rounded-lg p-3 ${msg.sender === 'clarence'
-                                        ? 'bg-white text-slate-700 border border-slate-200'
-                                        : msg.sender === 'customer'
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-blue-500 text-white'
-                                        }`}>
-                                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                                        <div className={`text-xs mt-2 ${msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'}`}>
-                                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                return (
+                                    <div
+                                        key={msg.messageId}
+                                        ref={isLatestMessage ? latestMessageRef : null}
+                                        className={`flex ${msg.sender === 'customer' || msg.sender === 'provider' ? 'justify-end' : 'justify-start'}`}
+                                    >
+                                        <div className={`max-w-[85%] rounded-lg p-3 ${msg.sender === 'clarence'
+                                            ? 'bg-white text-slate-700 border border-slate-200'
+                                            : msg.sender === 'customer'
+                                                ? 'bg-emerald-500 text-white'
+                                                : 'bg-blue-500 text-white'
+                                            }`}>
+                                            <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                                            <div className={`text-xs mt-2 ${msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'}`}>
+                                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+
+                            {isChatLoading && (
+                                <div className="flex justify-start">
+                                    <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                                         </div>
                                     </div>
                                 </div>
-                            )
-                        })}
-
-                        {isChatLoading && (
-                            <div className="flex justify-start">
-                                <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex-shrink-0 p-4 border-t border-slate-200 bg-white">
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                onKeyPress={handleKeyPress}
-                                placeholder="Ask CLARENCE anything..."
-                                className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                disabled={isChatLoading}
-                            />
-                            <button
-                                onClick={handleSendMessage}
-                                disabled={!chatInput.trim() || isChatLoading}
-                                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 text-white rounded-lg transition"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                </svg>
-                            </button>
+                            )}
                         </div>
-                    </div>
-                </div>
-            </div>
-            {/* Add Sub-Clause Modal */}
-            <AddSubClauseModal />
-        </div>
-    )
-}
 
-// ============================================================================
-// SECTION 15: PENDING PROVIDER VIEW COMPONENT
-// ============================================================================
-
-interface PendingProviderViewProps {
-    session: Session | null
-    sessionStatus: SessionStatus
-    setSessionStatus: (status: SessionStatus) => void
-    providerEmail: string
-    setProviderEmail: (email: string) => void
-    inviteSending: boolean
-    inviteSent: boolean
-    setInviteSent: (sent: boolean) => void
-    handleSendInvite: () => void
-    router: ReturnType<typeof useRouter>
-}
-
-function PendingProviderView({
-    session,
-    sessionStatus,
-    providerEmail,
-    setProviderEmail,
-    inviteSending,
-    inviteSent,
-    handleSendInvite,
-    router
-}: PendingProviderViewProps) {
-    return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="bg-slate-800 text-white px-6 py-4">
-                <div className="max-w-4xl mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">C</span>
-                        </div>
-                        <div>
-                            <h1 className="font-semibold">Contract Studio</h1>
-                            <p className="text-sm text-slate-400">{session?.sessionNumber}</p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => router.push('/auth/contracts-dashboard')}
-                        className="text-slate-400 hover:text-white transition"
-                    >
-                        ← Back to Dashboard
-                    </button>
-                </div>
-            </div>
-
-            <div className="max-w-4xl mx-auto p-8">
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
-                    <div className="text-center">
-                        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                        <h2 className="text-2xl font-semibold text-slate-800 mb-2">
-                            {sessionStatus === 'pending_provider' && !inviteSent ? 'Invite Your Provider' : 'Awaiting Provider Response'}
-                        </h2>
-                        <p className="text-slate-600 max-w-md mx-auto mb-6">
-                            {sessionStatus === 'pending_provider' && !inviteSent
-                                ? 'Your strategic assessment is complete. Invite the provider to complete their intake.'
-                                : 'We\'ve sent an invitation. You\'ll be notified when they complete their questionnaire.'
-                            }
-                        </p>
-
-                        {sessionStatus === 'pending_provider' && !inviteSent && (
-                            <div className="max-w-md mx-auto">
+                        <div className="flex-shrink-0 p-4 border-t border-slate-200 bg-white">
+                            <div className="flex gap-2">
                                 <input
-                                    type="email"
-                                    value={providerEmail}
-                                    onChange={(e) => setProviderEmail(e.target.value)}
-                                    placeholder="provider@company.com"
-                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg mb-4"
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    onKeyPress={handleKeyPress}
+                                    placeholder="Ask CLARENCE anything..."
+                                    className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    disabled={isChatLoading}
                                 />
                                 <button
-                                    onClick={handleSendInvite}
-                                    disabled={!providerEmail.trim() || inviteSending}
-                                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-semibold rounded-lg"
+                                    onClick={handleSendMessage}
+                                    disabled={!chatInput.trim() || isChatLoading}
+                                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 text-white rounded-lg transition"
                                 >
-                                    {inviteSending ? 'Sending...' : 'Send Invitation'}
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
                                 </button>
                             </div>
-                        )}
-
-                        {(sessionStatus === 'provider_invited' || inviteSent) && (
-                            <button
-                                onClick={() => router.push('/auth/contracts-dashboard')}
-                                className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
-                            >
-                                ← Return to Dashboard
-                            </button>
-                        )}
+                        </div>
                     </div>
                 </div>
+                {/* Add Sub-Clause Modal */}
+                <AddSubClauseModal />
             </div>
-        </div>
-    )
+            )
 }
 
-// ============================================================================
-// SECTION 16: DEFAULT EXPORT WITH SUSPENSE WRAPPER
-// ============================================================================
+            // ============================================================================
+            // SECTION 15: PENDING PROVIDER VIEW COMPONENT
+            // ============================================================================
 
-export default function ContractStudioPage() {
+            interface PendingProviderViewProps {
+                session: Session | null
+            sessionStatus: SessionStatus
+    setSessionStatus: (status: SessionStatus) => void
+            providerEmail: string
+    setProviderEmail: (email: string) => void
+            inviteSending: boolean
+            inviteSent: boolean
+    setInviteSent: (sent: boolean) => void
+    handleSendInvite: () => void
+            router: ReturnType<typeof useRouter>
+}
+
+                function PendingProviderView({
+                    session,
+                    sessionStatus,
+                    providerEmail,
+                    setProviderEmail,
+                    inviteSending,
+                    inviteSent,
+                    handleSendInvite,
+                    router
+                }: PendingProviderViewProps) {
     return (
-        <Suspense fallback={<ContractStudioLoading />}>
-            <ContractStudioContent />
-        </Suspense>
-    )
+                <div className="min-h-screen bg-slate-50">
+                    <div className="bg-slate-800 text-white px-6 py-4">
+                        <div className="max-w-4xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                                    <span className="text-white font-bold text-lg">C</span>
+                                </div>
+                                <div>
+                                    <h1 className="font-semibold">Contract Studio</h1>
+                                    <p className="text-sm text-slate-400">{session?.sessionNumber}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => router.push('/auth/contracts-dashboard')}
+                                className="text-slate-400 hover:text-white transition"
+                            >
+                                ← Back to Dashboard
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="max-w-4xl mx-auto p-8">
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+                            <div className="text-center">
+                                <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <h2 className="text-2xl font-semibold text-slate-800 mb-2">
+                                    {sessionStatus === 'pending_provider' && !inviteSent ? 'Invite Your Provider' : 'Awaiting Provider Response'}
+                                </h2>
+                                <p className="text-slate-600 max-w-md mx-auto mb-6">
+                                    {sessionStatus === 'pending_provider' && !inviteSent
+                                        ? 'Your strategic assessment is complete. Invite the provider to complete their intake.'
+                                        : 'We\'ve sent an invitation. You\'ll be notified when they complete their questionnaire.'
+                                    }
+                                </p>
+
+                                {sessionStatus === 'pending_provider' && !inviteSent && (
+                                    <div className="max-w-md mx-auto">
+                                        <input
+                                            type="email"
+                                            value={providerEmail}
+                                            onChange={(e) => setProviderEmail(e.target.value)}
+                                            placeholder="provider@company.com"
+                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg mb-4"
+                                        />
+                                        <button
+                                            onClick={handleSendInvite}
+                                            disabled={!providerEmail.trim() || inviteSending}
+                                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-semibold rounded-lg"
+                                        >
+                                            {inviteSending ? 'Sending...' : 'Send Invitation'}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {(sessionStatus === 'provider_invited' || inviteSent) && (
+                                    <button
+                                        onClick={() => router.push('/auth/contracts-dashboard')}
+                                        className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
+                                    >
+                                        ← Return to Dashboard
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                )
+}
+
+                // ============================================================================
+                // SECTION 16: DEFAULT EXPORT WITH SUSPENSE WRAPPER
+                // ============================================================================
+
+                export default function ContractStudioPage() {
+    return (
+                <Suspense fallback={<ContractStudioLoading />}>
+                    <ContractStudioContent />
+                </Suspense>
+                )
 }
