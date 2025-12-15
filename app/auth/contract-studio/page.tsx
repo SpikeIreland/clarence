@@ -152,6 +152,17 @@ interface ContractClause {
     // Position options from API (preferred over hardcoded)
     positionOptions?: PositionOption[] | null
 
+    // Confirmation tracking
+    customerConfirmedAt?: string | null
+    customerConfirmedPosition?: number | null
+    providerConfirmedAt?: string | null
+    providerConfirmedPosition?: number | null
+    agreementReachedAt?: string | null
+    finalAgreedPosition?: number | null
+    isAgreed?: boolean
+    isCustomerConfirmed?: boolean
+    isProviderConfirmed?: boolean
+
     // AI context
     aiContext?: string | null
     negotiationGuidance?: string | null
@@ -262,6 +273,17 @@ interface ApiClauseResponse {
     aiContext?: string | null
     negotiationGuidance?: string | null
     isCategoryHeader?: boolean
+
+    // Confirmation tracking fields
+    customerConfirmedAt?: string | null
+    customerConfirmedPosition?: number | null
+    providerConfirmedAt?: string | null
+    providerConfirmedPosition?: number | null
+    agreementReachedAt?: string | null
+    finalAgreedPosition?: number | null
+    isAgreed?: boolean
+    isCustomerConfirmed?: boolean
+    isProviderConfirmed?: boolean
 }
 
 interface ApiMessageResponse {
@@ -743,6 +765,66 @@ async function commitPositionChange(
     } catch (error) {
         console.error('Error committing position:', error)
         return { success: false }
+    }
+}
+
+// ============================================================================
+// SECTION 2F: CLAUSE CONFIRMATION API
+// ============================================================================
+
+async function confirmClausePosition(
+    sessionId: string,
+    positionId: string,
+    party: 'customer' | 'provider',
+    confirmedPosition: number
+): Promise<{ success: boolean; status?: string; message?: string; error?: string }> {
+    try {
+        const response = await fetch(`${API_BASE}/confirm-clause-position`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: sessionId,
+                position_id: positionId,
+                party: party,
+                confirmed_position: confirmedPosition
+            })
+        })
+
+        if (!response.ok) {
+            throw new Error('Failed to confirm clause position')
+        }
+
+        return await response.json()
+    } catch (error) {
+        console.error('Error confirming clause position:', error)
+        return { success: false, error: 'Failed to confirm clause position' }
+    }
+}
+
+async function withdrawClauseConfirmation(
+    sessionId: string,
+    positionId: string,
+    party: 'customer' | 'provider'
+): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+        const response = await fetch(`${API_BASE}/withdraw-clause-confirmation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: sessionId,
+                position_id: positionId,
+                party: party
+            })
+        })
+
+        if (!response.ok) {
+            throw new Error('Failed to withdraw confirmation')
+        }
+
+        return await response.json()
+    } catch (error) {
+        console.error('Error withdrawing confirmation:', error)
+        return { success: false, error: 'Failed to withdraw confirmation' }
     }
 }
 
@@ -1717,6 +1799,7 @@ function ContractStudioContent() {
     const [newSubClauseDescription, setNewSubClauseDescription] = useState('')
     const [isAddingSubClause, setIsAddingSubClause] = useState(false)
     const [newSubClauseReason, setNewSubClauseReason] = useState('')
+    const [isConfirming, setIsConfirming] = useState(false)
 
     // Unseen moves tracking (badges for other party's changes)
     const [unseenMoves, setUnseenMoves] = useState<Map<string, number>>(new Map())
@@ -2807,6 +2890,9 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
     const handlePositionDrag = (newPosition: number) => {
         if (!selectedClause || !userInfo || !leverage) return
 
+        // Don't allow position changes for agreed clauses
+        if (selectedClause.isAgreed) return
+
         // Don't allow position changes while working
         if (workingState.isWorking) return
 
@@ -2834,6 +2920,9 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
 
     const handleSetPosition = async () => {
         if (!selectedClause || !userInfo || !session || !leverage || proposedPosition === null) return
+
+        // Don't allow position changes for agreed clauses
+        if (selectedClause.isAgreed) return
 
         const currentPosition = userInfo.role === 'customer'
             ? selectedClause.customerPosition
@@ -3347,6 +3436,107 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             setIsLoadingDraft(false)
         }
     }, [session?.sessionId, userInfo?.role, workingState.isWorking, startWorking, stopWorking])
+
+
+    // ============================================================================
+    // SECTION 8Y: CLAUSE CONFIRMATION HANDLERS
+    // ============================================================================
+
+    const handleConfirmAgreement = async () => {
+        if (!selectedClause || !session || !userInfo) return
+
+        const myPosition = userInfo.role === 'customer'
+            ? selectedClause.customerPosition
+            : selectedClause.providerPosition
+
+        if (myPosition === null) {
+            alert('Cannot confirm - no position set')
+            return
+        }
+
+        setIsConfirming(true)
+
+        try {
+            const result = await confirmClausePosition(
+                session.sessionId,
+                selectedClause.positionId,
+                userInfo.role as 'customer' | 'provider',
+                myPosition
+            )
+
+            if (result.success) {
+                // Refresh clause data
+                try {
+                    const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${session.sessionId}`)
+                    if (response.ok) {
+                        const data = await response.json()
+                        if (data.clauses) {
+                            const mappedClauses: ContractClause[] = data.clauses.map((c: ApiClauseResponse) => ({
+                                positionId: c.positionId,
+                                clauseId: c.clauseId,
+                                clauseNumber: c.clauseNumber,
+                                clauseName: c.clauseName,
+                                category: c.category,
+                                description: c.description,
+                                parentPositionId: c.parentPositionId,
+                                clauseLevel: c.clauseLevel,
+                                displayOrder: c.displayOrder,
+                                customerPosition: c.customerPosition ? parseFloat(String(c.customerPosition)) : null,
+                                providerPosition: c.providerPosition ? parseFloat(String(c.providerPosition)) : null,
+                                originalCustomerPosition: c.originalCustomerPosition ? parseFloat(String(c.originalCustomerPosition)) : null,
+                                originalProviderPosition: c.originalProviderPosition ? parseFloat(String(c.originalProviderPosition)) : null,
+                                currentCompromise: c.currentCompromise ? parseFloat(String(c.currentCompromise)) : null,
+                                clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(String(c.aiSuggestedCompromise)) : null,
+                                industryStandard: null,
+                                gapSize: c.gapSize ? parseFloat(String(c.gapSize)) : 0,
+                                customerWeight: c.customerWeight || 5,
+                                providerWeight: c.providerWeight || 5,
+                                isDealBreakerCustomer: c.isDealBreakerCustomer || false,
+                                isDealBreakerProvider: c.isDealBreakerProvider || false,
+                                clauseContent: c.clauseContent,
+                                customerNotes: c.customerNotes,
+                                providerNotes: c.providerNotes,
+                                status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                                isExpanded: false,
+                                positionOptions: c.positionOptions || null,
+                                sourceType: c.sourceType || 'legacy',
+                                addedMidSession: c.addedMidSession || false,
+                                addedByParty: c.addedByParty || null,
+                                // Confirmation fields
+                                customerConfirmedAt: c.customerConfirmedAt || null,
+                                customerConfirmedPosition: c.customerConfirmedPosition || null,
+                                providerConfirmedAt: c.providerConfirmedAt || null,
+                                providerConfirmedPosition: c.providerConfirmedPosition || null,
+                                agreementReachedAt: c.agreementReachedAt || null,
+                                finalAgreedPosition: c.finalAgreedPosition || null,
+                                isAgreed: c.isAgreed || false,
+                                isCustomerConfirmed: c.isCustomerConfirmed || false,
+                                isProviderConfirmed: c.isProviderConfirmed || false,
+                            }))
+                            const tree = buildClauseTree(mappedClauses, clauseTree)
+                            setClauseTree(tree)
+                            setClauses(mappedClauses)
+
+                            // Update selected clause
+                            const updatedClause = mappedClauses.find(c => c.positionId === selectedClause.positionId)
+                            if (updatedClause) {
+                                setSelectedClause(updatedClause)
+                            }
+                        }
+                    }
+                } catch (refreshError) {
+                    console.error('Error refreshing clauses:', refreshError)
+                }
+            } else {
+                alert(result.error || 'Failed to confirm agreement')
+            }
+        } catch (error) {
+            console.error('Error confirming agreement:', error)
+            alert('Failed to confirm agreement')
+        } finally {
+            setIsConfirming(false)
+        }
+    }
 
     // ============================================================================
     // SECTION 9: LOADING & CONDITIONAL RENDERING
@@ -4740,6 +4930,175 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     }
 
     // ============================================================================
+    // SECTION 13Y: CLAUSE CONFIRMATION PANEL
+    // ============================================================================
+
+    const ClauseConfirmationPanel = () => {
+        if (!selectedClause || !userInfo) return null
+
+        const isCustomer = userInfo.role === 'customer'
+        const myPosition = isCustomer ? selectedClause.customerPosition : selectedClause.providerPosition
+        const otherPosition = isCustomer ? selectedClause.providerPosition : selectedClause.customerPosition
+        const otherPartyName = isCustomer ? session.providerCompany : session.customerCompany
+
+        const iHaveConfirmed = isCustomer ? selectedClause.isCustomerConfirmed : selectedClause.isProviderConfirmed
+        const otherHasConfirmed = isCustomer ? selectedClause.isProviderConfirmed : selectedClause.isCustomerConfirmed
+        const isFullyAgreed = selectedClause.isAgreed
+
+        // Calculate if positions are close enough to confirm (gap < 1)
+        const gap = myPosition !== null && otherPosition !== null
+            ? Math.abs(myPosition - otherPosition)
+            : 999
+        const canConfirm = gap < 1 && !iHaveConfirmed && !isFullyAgreed
+
+        // Don't show for category headers
+        if (selectedClause.clauseLevel === 0) return null
+
+        // Fully Agreed State
+        if (isFullyAgreed) {
+            return (
+                <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-semibold text-emerald-800">Agreement Reached</h4>
+                            <p className="text-sm text-emerald-600">
+                                Both parties confirmed position {selectedClause.finalAgreedPosition?.toFixed(1)}
+                            </p>
+                            <p className="text-xs text-emerald-500 mt-1">
+                                Agreed on {selectedClause.agreementReachedAt
+                                    ? new Date(selectedClause.agreementReachedAt).toLocaleString()
+                                    : 'Unknown'}
+                            </p>
+                        </div>
+                        <div className="px-3 py-1 bg-emerald-200 text-emerald-800 rounded-full text-sm font-medium">
+                            🔒 Locked
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        // Waiting for other party
+        if (iHaveConfirmed && !otherHasConfirmed) {
+            return (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-semibold text-amber-800">Awaiting {otherPartyName}</h4>
+                            <p className="text-sm text-amber-600">
+                                You confirmed position {myPosition?.toFixed(1)}. Waiting for other party to confirm.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        // Other party confirmed, waiting for me
+        if (!iHaveConfirmed && otherHasConfirmed) {
+            const otherConfirmedPosition = isCustomer
+                ? selectedClause.providerConfirmedPosition
+                : selectedClause.customerConfirmedPosition
+
+            return (
+                <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center">
+                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                            </svg>
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-semibold text-blue-800">{otherPartyName} Has Confirmed</h4>
+                            <p className="text-sm text-blue-600">
+                                They confirmed position {otherConfirmedPosition?.toFixed(1)}. Your confirmation will lock this clause.
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleConfirmAgreement}
+                            disabled={isConfirming || gap >= 1}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {isConfirming ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Confirming...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Confirm Agreement
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )
+        }
+
+        // Can confirm (positions aligned, neither confirmed)
+        if (canConfirm) {
+            return (
+                <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                            <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-semibold text-emerald-800">Positions Aligned</h4>
+                            <p className="text-sm text-emerald-600">
+                                Both parties are at position {myPosition?.toFixed(1)}. Ready to confirm agreement.
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleConfirmAgreement}
+                            disabled={isConfirming}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {isConfirming ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Confirming...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Confirm Agreement
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            )
+        }
+
+        // Positions not aligned - no confirmation UI
+        return null
+    }
+
+    // ============================================================================
     // SECTION 14: MAIN LAYOUT RENDER
     // ============================================================================
 
@@ -5002,6 +5361,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 ref={positionPanelRef}
                                 className="flex-1 overflow-y-auto p-3 bg-white mx-4 mb-2 rounded-b-xl border border-t-0 border-slate-200"
                             >
+                                {/* Clause Confirmation Panel */}
+                                <ClauseConfirmationPanel />
+
+                                {/* Position Adjustment Panel */}
                                 {selectedClause && (
                                     <PositionAdjustmentPanel />
                                 )}
