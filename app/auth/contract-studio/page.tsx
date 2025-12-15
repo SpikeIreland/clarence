@@ -3808,50 +3808,187 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     /* Numeric Slider Fallback - for clauses without position options - FLIPPED */
                     <div className="space-y-4">
                         {(() => {
-                            console.log('=== SLIDER FALLBACK DEBUG ===')
-                            console.log('isCustomer:', isCustomer)
-                            console.log('userInfo.role:', userInfo?.role)
-                            console.log('myDbPosition:', myDbPosition)
-                            console.log('otherDbPosition:', otherDbPosition)
-                            console.log('selectedClause.customerPosition:', selectedClause.customerPosition)
-                            console.log('selectedClause.providerPosition:', selectedClause.providerPosition)
-                            return null
-                        })()}
-                        <div className="flex items-center gap-4">
-                            <div className="flex-1">
-                                <input
-                                    type="range"
-                                    min="1"
-                                    max="10"
-                                    step="0.5"
-                                    value={11 - (proposedPosition ?? myDbPosition ?? 5)}
-                                    onChange={(e) => handlePositionDrag(11 - parseFloat(e.target.value))}
-                                    className="w-full h-3 bg-gradient-to-r from-emerald-200 via-slate-200 to-blue-200 rounded-full appearance-none cursor-pointer"
-                                />
-                                <div className="flex justify-between mt-1 px-1">
-                                    <span className="text-xs text-emerald-600">Customer</span>
-                                    <span className="text-xs text-slate-400">Neutral</span>
-                                    <span className="text-xs text-blue-600">Provider</span>
-                                </div>
-                            </div>
-                            <div className="w-20">
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="10"
-                                    step="0.5"
-                                    value={proposedPosition ?? myDbPosition ?? 5}
-                                    onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
-                                    className="w-full px-3 py-2 text-center text-lg font-bold border border-slate-300 rounded-lg"
-                                />
-                            </div>
-                        </div>
+                            // Convert DB positions (1-10) to percentage for marker placement
+                            // FLIPPED: Value 10 (customer-friendly) = LEFT (0%), Value 1 (provider-friendly) = RIGHT (100%)
+                            const toBarPercent = (dbPos: number | null) => dbPos !== null ? ((10 - dbPos) / 9) * 100 : null
 
-                        {/* Position markers for slider view */}
-                        <div className="flex justify-between text-xs text-slate-500">
-                            <span>Your Position: <strong>{myDbPosition?.toFixed(1) ?? 'Not set'}</strong></span>
-                            <span>{isCustomer ? 'Provider' : 'Customer'}: <strong>{otherDbPosition?.toFixed(1) ?? 'Not set'}</strong></span>
-                        </div>
+                            const myBarPercent = toBarPercent(myDbPosition)
+                            const otherBarPercent = toBarPercent(otherDbPosition)
+                            const proposedBarPercent = toBarPercent(proposedPosition)
+
+                            // Check for alignment
+                            const isAligned = myDbPosition !== null && otherDbPosition !== null &&
+                                Math.abs(myDbPosition - otherDbPosition) < 0.5
+
+                            const isProposing = isAdjusting && proposedPosition !== myDbPosition
+
+                            return (
+                                <div className="space-y-3">
+                                    {/* Spectrum Labels */}
+                                    <div className="flex justify-between text-xs text-slate-500">
+                                        <span className="flex items-center gap-1">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                            Customer-Friendly
+                                        </span>
+                                        <span className="flex items-center gap-1">
+                                            Provider-Friendly
+                                            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                                        </span>
+                                    </div>
+
+                                    {/* Position Bar with Markers */}
+                                    <div
+                                        className="relative h-12 bg-gradient-to-r from-emerald-200 via-slate-100 to-blue-200 rounded-lg border border-slate-300 cursor-pointer hover:border-slate-400 transition-all"
+                                        onClick={(e) => {
+                                            const rect = e.currentTarget.getBoundingClientRect()
+                                            const clickPercent = ((e.clientX - rect.left) / rect.width) * 100
+                                            // FLIPPED: 0% = value 10, 100% = value 1
+                                            const newPosition = Math.round((10 - (clickPercent / 100) * 9) * 10) / 10
+                                            const clampedPosition = Math.max(1, Math.min(10, newPosition))
+                                            handlePositionDrag(clampedPosition)
+                                        }}
+                                        title="Click to set your position"
+                                    >
+                                        {/* Other Party marker */}
+                                        {otherBarPercent !== null && !isAligned && (
+                                            <div
+                                                className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md"
+                                                style={{
+                                                    left: `${otherBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)',
+                                                    backgroundColor: isCustomer ? '#3b82f6' : '#10b981',
+                                                    borderColor: isCustomer ? '#1d4ed8' : '#047857',
+                                                    color: 'white'
+                                                }}
+                                                title={`${isCustomer ? 'Provider' : 'Customer'}: ${otherDbPosition?.toFixed(1)}`}
+                                            >
+                                                {isCustomer ? 'P' : 'C'}
+                                            </div>
+                                        )}
+
+                                        {/* Your position / Aligned marker */}
+                                        {isAligned && myBarPercent !== null ? (
+                                            <div
+                                                className="absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg"
+                                                style={{
+                                                    left: `${myBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)',
+                                                    background: 'linear-gradient(135deg, #10b981 50%, #3b82f6 50%)',
+                                                    color: 'white',
+                                                    border: '3px solid white'
+                                                }}
+                                                title={`Aligned at ${myDbPosition?.toFixed(1)}`}
+                                            >
+                                                ✓
+                                            </div>
+                                        ) : myBarPercent !== null && (
+                                            <div
+                                                className="absolute top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg"
+                                                style={{
+                                                    left: `${myBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)',
+                                                    backgroundColor: isCustomer ? '#10b981' : '#3b82f6',
+                                                    borderColor: 'white',
+                                                    color: 'white',
+                                                    borderWidth: '3px'
+                                                }}
+                                                title={`You: ${myDbPosition?.toFixed(1)}`}
+                                            >
+                                                {isCustomer ? 'C' : 'P'}
+                                            </div>
+                                        )}
+
+                                        {/* Proposed position marker */}
+                                        {proposedBarPercent !== null && proposedPosition !== myDbPosition && (
+                                            <div
+                                                className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-amber-500 border-3 border-white flex items-center justify-center text-xs font-bold text-white z-25 shadow-lg animate-pulse"
+                                                style={{
+                                                    left: `${proposedBarPercent}%`,
+                                                    transform: 'translate(-50%, -50%)'
+                                                }}
+                                                title={`Proposed: ${proposedPosition?.toFixed(1)}`}
+                                            >
+                                                →
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Fine-tune controls */}
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex-1">
+                                            <input
+                                                type="range"
+                                                min="1"
+                                                max="10"
+                                                step="0.5"
+                                                value={11 - (proposedPosition ?? myDbPosition ?? 5)}
+                                                onChange={(e) => handlePositionDrag(11 - parseFloat(e.target.value))}
+                                                className="w-full h-2 bg-slate-200 rounded-full appearance-none cursor-pointer"
+                                            />
+                                        </div>
+                                        <div className="w-20">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="10"
+                                                step="0.5"
+                                                value={proposedPosition ?? myDbPosition ?? 5}
+                                                onChange={(e) => handlePositionDrag(parseFloat(e.target.value))}
+                                                className="w-full px-3 py-2 text-center text-lg font-bold border border-slate-300 rounded-lg"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Position Info */}
+                                    <div className={`p-3 rounded-lg border-2 ${isProposing
+                                        ? 'bg-amber-50 border-amber-300'
+                                        : isAligned
+                                            ? 'bg-emerald-50 border-emerald-300'
+                                            : 'bg-slate-50 border-slate-200'
+                                        }`}>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <span className="text-xs text-slate-500">
+                                                    {isAligned ? 'Aligned Position' : isProposing ? 'Proposed Position' : 'Your Position'}
+                                                </span>
+                                                <div className="font-medium text-slate-800">
+                                                    {(proposedPosition ?? myDbPosition)?.toFixed(1)} / 10
+                                                    {isAligned && <span className="ml-2 text-emerald-600">✓ Aligned with {isCustomer ? 'Provider' : 'Customer'}</span>}
+                                                </div>
+                                            </div>
+                                            {isProposing && (
+                                                <span className="px-2 py-1 bg-amber-200 text-amber-800 text-xs font-medium rounded">
+                                                    Unsaved
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Legend */}
+                                    <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500 pt-2 border-t border-slate-200">
+                                        <div className="flex items-center gap-1">
+                                            <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
+                                            <span>You</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                                            <span>{isCustomer ? 'Provider' : 'Customer'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                                            <span>Proposed</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 rounded-full overflow-hidden flex">
+                                                <div className="w-1/2 h-full bg-emerald-500"></div>
+                                                <div className="w-1/2 h-full bg-blue-500"></div>
+                                            </div>
+                                            <span>Aligned</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })()}
                     </div>
                 )}
 
