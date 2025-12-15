@@ -3527,6 +3527,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 return []
                             })()
 
+                            // DEBUG: Position marker colors
+                            console.log('=== POSITION DEBUG ===')
+                            console.log('isCustomer:', isCustomer)
+                            console.log('userInfo.role:', userInfo?.role)
+                            console.log('myDbPosition:', myDbPosition)
+                            console.log('otherDbPosition:', otherDbPosition)
+                            console.log('selectedClause.customerPosition:', selectedClause.customerPosition)
+                            console.log('selectedClause.providerPosition:', selectedClause.providerPosition)
                             // ============================================================
                             // COMPACT SPECTRUM BAR WITH ZONE LABELS
                             // FLIPPED: Customer (Green) on LEFT, Provider (Blue) on RIGHT
