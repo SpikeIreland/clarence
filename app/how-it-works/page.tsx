@@ -26,7 +26,7 @@ const processSteps: ProcessStep[] = [
     icon: "📋",
     description: "CLARENCE creates a comprehensive deal profile from party inputs.",
     details: [
-      "CLARENCE will ask the parties for several data points from which it will create a comprehensive deal profile.",
+      "CLARENCE asks the parties for several data points from which it will create a comprehensive deal profile.",
       "These data points become the foundation for the negotiation and auto-populate into the relevant parts of the contract negotiation process."
     ],
     color: 'emerald'

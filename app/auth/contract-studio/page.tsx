@@ -138,8 +138,26 @@ interface ContractClause {
     isExpanded?: boolean
     children?: ContractClause[]
 
-    // Position options from John's Appendix A
+    // ========== NEW: Clause Management System Fields ==========
+
+    // Source tracking
+    sourceType?: 'legacy' | 'template' | 'master' | 'custom'
+    sourceMasterClauseId?: string | null
+    sourceTemplateClauseId?: string | null
+
+    // Mid-session additions
+    addedMidSession?: boolean
+    addedByParty?: 'customer' | 'provider' | null
+
+    // Position options from API (preferred over hardcoded)
     positionOptions?: PositionOption[] | null
+
+    // AI context
+    aiContext?: string | null
+    negotiationGuidance?: string | null
+
+    // Category header flag
+    isCategoryHeader?: boolean
 }
 
 // ============================================================================
@@ -545,13 +563,33 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
 }
 
 // Helper function to find position options for a clause
-function getPositionOptionsForClause(clauseId: string, clauseName: string): PositionOption[] | null {
-    // First: Direct match on clauseName (most reliable)
+// PRIORITY: 1) API data (clause.positionOptions), 2) Hardcoded lookup, 3) null (use slider)
+function getPositionOptionsForClause(
+    clause: ContractClause
+): PositionOption[] | null {
+
+    // FIRST: Check if API returned position options
+    if (clause.positionOptions && Array.isArray(clause.positionOptions) && clause.positionOptions.length > 0) {
+        return clause.positionOptions
+    }
+
+    // SECOND: Check if API returned nested options structure (from JSONB)
+    if (clause.positionOptions && typeof clause.positionOptions === 'object' && 'options' in clause.positionOptions) {
+        const apiOptions = (clause.positionOptions as unknown as { type: string; options: PositionOption[] }).options
+        if (Array.isArray(apiOptions) && apiOptions.length > 0) {
+            return apiOptions
+        }
+    }
+
+    // THIRD: Fallback to hardcoded lookup by clause name
+    const clauseName = clause.clauseName
+
+    // Direct match on clauseName
     if (CLAUSE_POSITION_OPTIONS[clauseName]) {
         return CLAUSE_POSITION_OPTIONS[clauseName]
     }
 
-    // Second: Try normalized clauseName (lowercase, trimmed)
+    // Try normalized clauseName (lowercase, trimmed)
     const normalizedName = clauseName.trim()
     for (const [key, options] of Object.entries(CLAUSE_POSITION_OPTIONS)) {
         if (key.toLowerCase() === normalizedName.toLowerCase()) {
@@ -559,10 +597,9 @@ function getPositionOptionsForClause(clauseId: string, clauseName: string): Posi
         }
     }
 
-    // Third: Keyword matching for partial matches
+    // Keyword matching for partial matches
     const nameWords = clauseName.toLowerCase()
 
-    // Map keywords to lookup keys
     const keywordMap: Record<string, string> = {
         'payment': 'Time for Payment',
         'interest': 'Interest / Late Payment Sanctions',
@@ -2004,7 +2041,10 @@ function ContractStudioContent() {
                     providerNotes: c.providerNotes,
                     status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
                     isExpanded: c.isExpanded,
-                    positionOptions: c.positionOptions || getPositionOptionsForClause(c.clauseId, c.clauseName)
+                    positionOptions: c.positionOptions || getPositionOptionsForClause({
+                        positionOptions: null,
+                        clauseName: c.clauseName
+                    } as ContractClause)
                 }
             })
 
@@ -2159,7 +2199,10 @@ function ContractStudioContent() {
                     providerNotes: c.providerNotes,
                     status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
                     isExpanded: c.isExpanded,
-                    positionOptions: c.positionOptions || getPositionOptionsForClause(c.clauseId, c.clauseName)
+                    positionOptions: c.positionOptions || getPositionOptionsForClause({
+                        positionOptions: null,
+                        clauseName: c.clauseName
+                    } as ContractClause)
                 }
             })
 
@@ -3242,7 +3285,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const myWeight = isCustomer ? selectedClause.customerWeight : selectedClause.providerWeight
 
         const hasChanged = originalDbPosition !== null && myDbPosition !== originalDbPosition
-        const hasPositionOptions = selectedClause.positionOptions && selectedClause.positionOptions.length > 0
+        const resolvedPositionOptions = getPositionOptionsForClause(selectedClause)
+        const hasPositionOptions = resolvedPositionOptions !== null && resolvedPositionOptions.length > 0
         const optionCount = hasPositionOptions ? selectedClause.positionOptions!.length : 10
 
         // Map database positions to option values for display
@@ -3303,12 +3347,29 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Position Options View */}
                 {hasPositionOptions ? (
                     <div className="space-y-2">
-
-                        {/* ============================================================ */}
-                        {/* COMPACT SPECTRUM BAR WITH ZONE LABELS */}
-                        {/* FLIPPED: Customer (Green) on LEFT, Provider (Blue) on RIGHT */}
-                        {/* ============================================================ */}
                         {(() => {
+                            // Resolve position options - handle both API format and direct array
+                            const resolvedOptions: PositionOption[] = (() => {
+                                // Check for API nested format: { type: "options", options: [...] }
+                                if (selectedClause.positionOptions &&
+                                    typeof selectedClause.positionOptions === 'object' &&
+                                    'options' in selectedClause.positionOptions &&
+                                    Array.isArray((selectedClause.positionOptions as { options: PositionOption[] }).options)) {
+                                    return (selectedClause.positionOptions as { options: PositionOption[] }).options
+                                }
+                                // Check for direct array format
+                                if (Array.isArray(selectedClause.positionOptions)) {
+                                    return selectedClause.positionOptions
+                                }
+                                // Fallback to empty array (shouldn't happen if hasPositionOptions is true)
+                                return []
+                            })()
+
+                            // ============================================================
+                            // COMPACT SPECTRUM BAR WITH ZONE LABELS
+                            // FLIPPED: Customer (Green) on LEFT, Provider (Blue) on RIGHT
+                            // ============================================================
+
                             // Convert DB positions (1-10) to percentage for bar placement
                             // FLIPPED: Value 10 (customer-friendly) = LEFT (0%), Value 1 (provider-friendly) = RIGHT (100%)
                             const toBarPercent = (dbPos: number | null) => dbPos !== null ? ((10 - dbPos) / 9) * 100 : null
@@ -3328,16 +3389,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                             // Get zone info for current/proposed position
                             const getZoneForPosition = (pos: number | null) => {
-                                if (pos === null || !selectedClause.positionOptions) return null
+                                if (pos === null || resolvedOptions.length === 0) return null
                                 const zoneIndex = Math.min(
-                                    Math.floor((pos - 1) / (9 / selectedClause.positionOptions.length)),
-                                    selectedClause.positionOptions.length - 1
+                                    Math.floor((pos - 1) / (9 / resolvedOptions.length)),
+                                    resolvedOptions.length - 1
                                 )
-                                return selectedClause.positionOptions[zoneIndex]
+                                return resolvedOptions[zoneIndex]
                             }
 
                             const currentZone = getZoneForPosition(proposedPosition ?? myDbPosition)
-                            const zoneCount = selectedClause.positionOptions?.length || 4
+                            const zoneCount = resolvedOptions.length || 4
 
                             // Handle bar click to set position - FLIPPED
                             const handleBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -3350,7 +3411,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             }
 
                             // Reverse the options for display (customer-friendly first on left)
-                            const reversedOptions = [...(selectedClause.positionOptions || [])].reverse()
+                            const reversedOptions = [...resolvedOptions].reverse()
 
                             return (
                                 <div className="space-y-3">
@@ -3569,7 +3630,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     </div>
                                 </div>
                             )
-                        })()}
+                        })()
+                        }
                     </div>
 
                 ) : (
