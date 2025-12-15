@@ -3807,6 +3807,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 ) : (
                     /* Numeric Slider Fallback - for clauses without position options - FLIPPED */
                     <div className="space-y-4">
+                        {(() => {
+                            console.log('=== SLIDER FALLBACK DEBUG ===')
+                            console.log('isCustomer:', isCustomer)
+                            console.log('userInfo.role:', userInfo?.role)
+                            console.log('myDbPosition:', myDbPosition)
+                            console.log('otherDbPosition:', otherDbPosition)
+                            console.log('selectedClause.customerPosition:', selectedClause.customerPosition)
+                            console.log('selectedClause.providerPosition:', selectedClause.providerPosition)
+                            return null
+                        })()}
                         <div className="flex items-center gap-4">
                             <div className="flex-1">
                                 <input
