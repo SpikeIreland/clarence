@@ -251,7 +251,17 @@ interface ApiClauseResponse {
     priorityLevel: number
     status: string
     isExpanded: boolean
-    positionOptions?: PositionOption[] | null
+    positionOptions?: PositionOption[] | { type: string; options: PositionOption[] } | null
+
+    // Clause Management System fields
+    sourceType?: string
+    sourceMasterClauseId?: string | null
+    sourceTemplateClauseId?: string | null
+    addedMidSession?: boolean
+    addedByParty?: string | null
+    aiContext?: string | null
+    negotiationGuidance?: string | null
+    isCategoryHeader?: boolean
 }
 
 interface ApiMessageResponse {
@@ -765,6 +775,42 @@ function parsePhaseFromState(state: string | null): number {
         'completed': 6
     }
     return phaseMap[state] || 2
+}
+
+// ============================================================================
+// SECTION 2E: ADD SUB-CLAUSE API
+// ============================================================================
+
+async function addSubClause(
+    sessionId: string,
+    parentPositionId: string,
+    clauseName: string,
+    description: string | null,
+    addedByParty: 'customer' | 'provider'
+): Promise<{ success: boolean; subClause?: ContractClause; error?: string }> {
+    try {
+        const response = await fetch(`${API_BASE}/add-sub-clause`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: sessionId,
+                parent_position_id: parentPositionId,
+                clause_name: clauseName,
+                description: description,
+                added_by_party: addedByParty
+            })
+        })
+
+        if (!response.ok) {
+            throw new Error('Failed to add sub-clause')
+        }
+
+        const data = await response.json()
+        return data
+    } catch (error) {
+        console.error('Error adding sub-clause:', error)
+        return { success: false, error: 'Failed to add sub-clause' }
+    }
 }
 
 async function fetchClauseChat(sessionId: string, positionId: string | null): Promise<ClauseChatMessage[]> {
@@ -1658,6 +1704,16 @@ function ContractStudioContent() {
     const [negotiationHistory, setNegotiationHistory] = useState<NegotiationHistoryEntry[]>([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'agreements'>('all')
+
+    // ============================================================================
+    // SECTION 6X: SUB-CLAUSE MODAL STATE
+    // ============================================================================
+
+    const [showAddSubClauseModal, setShowAddSubClauseModal] = useState(false)
+    const [subClauseParent, setSubClauseParent] = useState<ContractClause | null>(null)
+    const [newSubClauseName, setNewSubClauseName] = useState('')
+    const [newSubClauseDescription, setNewSubClauseDescription] = useState('')
+    const [isAddingSubClause, setIsAddingSubClause] = useState(false)
 
     // Unseen moves tracking (badges for other party's changes)
     const [unseenMoves, setUnseenMoves] = useState<Map<string, number>>(new Map())
@@ -2641,6 +2697,100 @@ function ContractStudioContent() {
     // ============================================================================
     // SECTION 8: EVENT HANDLERS
     // ============================================================================
+
+    // ============================================================================
+    // SECTION 8a: SUB-CLAUSE HANDLERS
+    // ============================================================================
+
+    const handleOpenAddSubClause = (parentClause: ContractClause) => {
+        setSubClauseParent(parentClause)
+        setNewSubClauseName('')
+        setNewSubClauseDescription('')
+        setShowAddSubClauseModal(true)
+    }
+
+    const handleAddSubClause = async () => {
+        if (!subClauseParent || !newSubClauseName.trim() || !session || !userInfo) return
+
+        setIsAddingSubClause(true)
+
+        try {
+            const result = await addSubClause(
+                session.sessionId,
+                subClauseParent.positionId,
+                newSubClauseName.trim(),
+                newSubClauseDescription.trim() || null,
+                userInfo.role as 'customer' | 'provider'
+            )
+
+            if (result.success && result.subClause) {
+                // Refresh clause data to show new sub-clause
+                try {
+                    const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${session.sessionId}`)
+                    if (response.ok) {
+                        const data = await response.json()
+                        if (data.clauses) {
+                            const mappedClauses: ContractClause[] = data.clauses.map((c: ApiClauseResponse) => ({
+                                positionId: c.positionId,
+                                clauseId: c.clauseId,
+                                clauseNumber: c.clauseNumber,
+                                clauseName: c.clauseName,
+                                category: c.category,
+                                description: c.description,
+                                parentPositionId: c.parentPositionId,
+                                clauseLevel: c.clauseLevel,
+                                displayOrder: c.displayOrder,
+                                customerPosition: c.customerPosition ? parseFloat(String(c.customerPosition)) : null,
+                                providerPosition: c.providerPosition ? parseFloat(String(c.providerPosition)) : null,
+                                originalCustomerPosition: c.originalCustomerPosition ? parseFloat(String(c.originalCustomerPosition)) : null,
+                                originalProviderPosition: c.originalProviderPosition ? parseFloat(String(c.originalProviderPosition)) : null,
+                                currentCompromise: c.currentCompromise ? parseFloat(String(c.currentCompromise)) : null,
+                                clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(String(c.aiSuggestedCompromise)) : null,
+                                industryStandard: null,
+                                gapSize: c.gapSize ? parseFloat(String(c.gapSize)) : 0,
+                                customerWeight: c.customerWeight || 5,
+                                providerWeight: c.providerWeight || 5,
+                                isDealBreakerCustomer: c.isDealBreakerCustomer || false,
+                                isDealBreakerProvider: c.isDealBreakerProvider || false,
+                                clauseContent: c.clauseContent,
+                                customerNotes: c.customerNotes,
+                                providerNotes: c.providerNotes,
+                                status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                                isExpanded: false,
+                                positionOptions: c.positionOptions || null,
+                                sourceType: c.sourceType || 'legacy',
+                                addedMidSession: c.addedMidSession || false,
+                                addedByParty: c.addedByParty || null
+                            }))
+                            const tree = buildClauseTree(mappedClauses, clauseTree)
+                            setClauseTree(tree)
+                            setClauses(mappedClauses)
+                        }
+                    }
+                } catch (refreshError) {
+                    console.error('Error refreshing clauses:', refreshError)
+                }
+
+                // Close modal
+                setShowAddSubClauseModal(false)
+                setSubClauseParent(null)
+                setNewSubClauseName('')
+                setNewSubClauseDescription('')
+
+                // Select the new sub-clause
+                if (result.subClause) {
+                    setSelectedClause(result.subClause as ContractClause)
+                }
+            } else {
+                alert(result.error || 'Failed to add sub-clause')
+            }
+        } catch (error) {
+            console.error('Error adding sub-clause:', error)
+            alert('Failed to add sub-clause')
+        } finally {
+            setIsAddingSubClause(false)
+        }
+    }
 
     const handlePositionDrag = (newPosition: number) => {
         if (!selectedClause || !userInfo || !leverage) return
@@ -4059,6 +4209,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             : clause.customerWeight
         const weightDisplay = clauseWeight ? clauseWeight.toFixed(0) : null
 
+        // Can add sub-clauses to level 1 clauses only (not category headers or existing sub-clauses)
+        const canAddSubClause = clause.clauseLevel === 1
+
+        // Check for unseen moves on this clause
+        const unseenCount = unseenMoves.get(clause.clauseId) || 0
+
         return (
             <div>
                 <div
@@ -4068,8 +4224,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         }`}
                     style={{ paddingLeft: `${12 + depth * 16}px` }}
                     onClick={() => {
-                        // Parent clauses (level 0) only toggle expand/collapse
-                        // Child clauses trigger selection and position panel
                         if (clause.clauseLevel === 0) {
                             handleClauseToggle(clause.positionId)
                         } else {
@@ -4083,48 +4237,74 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 e.stopPropagation()
                                 handleClauseToggle(clause.positionId)
                             }}
-                            className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-slate-600 relative"
+                            className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-slate-600"
                         >
                             <svg
                                 className={`w-3 h-3 transition-transform ${clause.isExpanded ? 'rotate-90' : ''}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
                             >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                             </svg>
                         </button>
                     ) : (
-                        <span className="w-4"></span>
+                        <span className="w-4" />
                     )}
 
-                    {/* Status indicator */}
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'aligned' ? 'bg-emerald-500' :
-                        clause.status === 'negotiating' ? 'bg-amber-500' :
-                            clause.status === 'disputed' ? 'bg-red-500' :
-                                'bg-slate-300'
-                        }`}></span>
+                    <div
+                        className={`w-2 h-2 rounded-full ${getStatusBgColor(clause.status)}`}
+                        title={clause.status}
+                    />
 
-                    {/* Clause number & name */}
-                    <span className="text-xs text-slate-400 font-mono flex-shrink-0">{clause.clauseNumber}</span>
-                    <span className={`text-sm truncate flex-1 ${isSelected ? 'text-emerald-700 font-medium' : 'text-slate-700'}`}>
-                        {clause.clauseName}
-                    </span>
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className="text-xs text-slate-400 font-mono">{clause.clauseNumber}</span>
+                        <span className={`text-sm truncate ${clause.clauseLevel === 0 ? 'font-semibold text-slate-700' :
+                            isSelected ? 'text-emerald-700 font-medium' : 'text-slate-700'}`}>
+                            {clause.clauseName}
+                        </span>
 
-                    {/* Weight indicator - only show for child clauses (level > 0) */}
-                    {clause.clauseLevel > 0 && weightDisplay && (
+                        {/* Sub-clause badge */}
+                        {clause.clauseLevel === 2 && clause.addedMidSession && (
+                            <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">
+                                Added
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Unseen moves indicator */}
+                    {unseenCount > 0 && (
+                        <span className="w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                            {unseenCount > 9 ? '9+' : unseenCount}
+                        </span>
+                    )}
+
+                    {/* Weight badge */}
+                    {weightDisplay && clause.clauseLevel !== 0 && parseInt(weightDisplay) >= 3 && (
                         <span
-                            className={`flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${clauseWeight >= 4 ? 'bg-red-100 text-red-700' :
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clauseWeight >= 4 ? 'bg-red-100 text-red-700' :
                                 clauseWeight >= 3 ? 'bg-amber-100 text-amber-700' :
                                     'bg-slate-100 text-slate-600'
                                 }`}
-                            title={`Weight: ${weightDisplay}/5 - ${clauseWeight >= 4 ? 'High Impact' :
-                                clauseWeight >= 3 ? 'Medium Impact' :
-                                    'Standard'
-                                }`}
+                            title={`Weight: ${weightDisplay}/5`}
                         >
                             W{weightDisplay}
                         </span>
+                    )}
+
+                    {/* Add Sub-Clause button - only on level 1 clauses */}
+                    {canAddSubClause && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                handleOpenAddSubClause(clause)
+                            }}
+                            className="w-5 h-5 rounded bg-slate-200 hover:bg-emerald-500 hover:text-white text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Add sub-clause"
+                        >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                        </button>
                     )}
                 </div>
 
@@ -4395,6 +4575,96 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     // ============================================================================
     // SECTION 14: MAIN LAYOUT RENDER
     // ============================================================================
+
+    // ============================================================================
+    // SECTION 13X: ADD SUB-CLAUSE MODAL
+    // ============================================================================
+
+    const AddSubClauseModal = () => {
+        if (!showAddSubClauseModal || !subClauseParent) return null
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                    {/* Header */}
+                    <div className="px-6 py-4 border-b border-slate-200">
+                        <h3 className="text-lg font-semibold text-slate-800">Add Sub-Clause</h3>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Adding under: <span className="font-medium">{subClauseParent.clauseNumber} {subClauseParent.clauseName}</span>
+                        </p>
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-6 py-4 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Sub-Clause Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={newSubClauseName}
+                                onChange={(e) => setNewSubClauseName(e.target.value)}
+                                placeholder="e.g., Data Breach Notification Timeline"
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Description <span className="text-slate-400">(optional)</span>
+                            </label>
+                            <textarea
+                                value={newSubClauseDescription}
+                                onChange={(e) => setNewSubClauseDescription(e.target.value)}
+                                placeholder="Brief description of this sub-clause..."
+                                rows={3}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                            />
+                        </div>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <p className="text-sm text-amber-800">
+                                <strong>Note:</strong> This sub-clause will be visible to both parties.
+                                The other party will need to set their position on it.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                        <button
+                            onClick={() => {
+                                setShowAddSubClauseModal(false)
+                                setSubClauseParent(null)
+                            }}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                            disabled={isAddingSubClause}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleAddSubClause}
+                            disabled={!newSubClauseName.trim() || isAddingSubClause}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {isAddingSubClause ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Adding...
+                                </>
+                            ) : (
+                                'Add Sub-Clause'
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -5146,6 +5416,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     </div>
                 </div>
             </div>
+            {/* Add Sub-Clause Modal */}
+            <AddSubClauseModal />
         </div>
     )
 }
