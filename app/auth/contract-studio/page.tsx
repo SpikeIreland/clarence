@@ -786,7 +786,8 @@ async function addSubClause(
     parentPositionId: string,
     clauseName: string,
     description: string | null,
-    addedByParty: 'customer' | 'provider'
+    addedByParty: 'customer' | 'provider',
+    aiContext: string | null = null  // Add this parameter
 ): Promise<{ success: boolean; subClause?: ContractClause; error?: string }> {
     try {
         const response = await fetch(`${API_BASE}/add-sub-clause`, {
@@ -797,7 +798,8 @@ async function addSubClause(
                 parent_position_id: parentPositionId,
                 clause_name: clauseName,
                 description: description,
-                added_by_party: addedByParty
+                added_by_party: addedByParty,
+                ai_context: aiContext  // Add this
             })
         })
 
@@ -1714,6 +1716,7 @@ function ContractStudioContent() {
     const [newSubClauseName, setNewSubClauseName] = useState('')
     const [newSubClauseDescription, setNewSubClauseDescription] = useState('')
     const [isAddingSubClause, setIsAddingSubClause] = useState(false)
+    const [newSubClauseReason, setNewSubClauseReason] = useState('')
 
     // Unseen moves tracking (badges for other party's changes)
     const [unseenMoves, setUnseenMoves] = useState<Map<string, number>>(new Map())
@@ -2710,9 +2713,15 @@ function ContractStudioContent() {
     }
 
     const handleAddSubClause = async () => {
-        if (!subClauseParent || !newSubClauseName.trim() || !session || !userInfo) return
+        if (!subClauseParent || !newSubClauseName.trim() || !newSubClauseReason.trim() || !session || !userInfo) return
 
         setIsAddingSubClause(true)
+
+        // Build AI context from the reason
+        const aiContext = `This sub-clause was added mid-negotiation by the ${userInfo.role}. 
+Reason for adding: ${newSubClauseReason.trim()}
+Parent clause: ${subClauseParent.clauseNumber} ${subClauseParent.clauseName}
+The ${userInfo.role} wants to negotiate specific terms for this aspect of the contract.`
 
         try {
             const result = await addSubClause(
@@ -2720,7 +2729,8 @@ function ContractStudioContent() {
                 subClauseParent.positionId,
                 newSubClauseName.trim(),
                 newSubClauseDescription.trim() || null,
-                userInfo.role as 'customer' | 'provider'
+                userInfo.role as 'customer' | 'provider',
+                aiContext  // Pass the context
             )
 
             if (result.success && result.subClause) {
@@ -2771,11 +2781,13 @@ function ContractStudioContent() {
                     console.error('Error refreshing clauses:', refreshError)
                 }
 
+
                 // Close modal
                 setShowAddSubClauseModal(false)
                 setSubClauseParent(null)
                 setNewSubClauseName('')
                 setNewSubClauseDescription('')
+                setNewSubClauseReason('')  // Add this line
 
                 // Select the new sub-clause
                 if (result.subClause) {
@@ -4577,7 +4589,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     // ============================================================================
 
     // ============================================================================
-    // SECTION 13X: ADD SUB-CLAUSE MODAL
+    // SECTION 14A:  SUB-CLAUSE MODAL
     // ============================================================================
 
     const AddSubClauseModal = () => {
@@ -4617,16 +4629,32 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             <textarea
                                 value={newSubClauseDescription}
                                 onChange={(e) => setNewSubClauseDescription(e.target.value)}
-                                placeholder="Brief description of this sub-clause..."
+                                placeholder="Brief description of what this sub-clause covers..."
+                                rows={2}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Why are you adding this? <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                value={newSubClauseReason}
+                                onChange={(e) => setNewSubClauseReason(e.target.value)}
+                                placeholder="e.g., We need specific timelines for GDPR compliance - the parent clause is too vague on notification windows..."
                                 rows={3}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
                             />
+                            <p className="text-xs text-slate-500 mt-1">
+                                This helps CLARENCE understand your intent and mediate effectively.
+                            </p>
                         </div>
 
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                             <p className="text-sm text-amber-800">
                                 <strong>Note:</strong> This sub-clause will be visible to both parties.
-                                The other party will need to set their position on it.
+                                Your reason for adding it will help CLARENCE provide balanced mediation.
                             </p>
                         </div>
                     </div>
@@ -4637,6 +4665,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             onClick={() => {
                                 setShowAddSubClauseModal(false)
                                 setSubClauseParent(null)
+                                setNewSubClauseName('')
+                                setNewSubClauseDescription('')
+                                setNewSubClauseReason('')
                             }}
                             className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
                             disabled={isAddingSubClause}
@@ -4645,7 +4676,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </button>
                         <button
                             onClick={handleAddSubClause}
-                            disabled={!newSubClauseName.trim() || isAddingSubClause}
+                            disabled={!newSubClauseName.trim() || !newSubClauseReason.trim() || isAddingSubClause}
                             className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             {isAddingSubClause ? (
