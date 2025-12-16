@@ -2767,8 +2767,65 @@ function ContractStudioContent() {
                 partyName: 'CLARENCE',
                 description: `Negotiation session opened between ${session.customerCompany} and ${session.providerCompany}`
             })
+            // ========== ADD CONFIRMATION EVENTS FROM CLAUSE DATA ==========
+            clauses.forEach(clause => {
+                // Customer confirmed (but not yet fully agreed)
+                if (clause.customerConfirmedAt) {
+                    history.push({
+                        id: `confirm-customer-${clause.clauseId}`,
+                        timestamp: clause.customerConfirmedAt,
+                        eventType: 'confirmation' as const,
+                        party: 'customer' as const,
+                        partyName: session.customerCompany,
+                        clauseId: clause.clauseId,
+                        clauseName: clause.clauseName,
+                        clauseNumber: clause.clauseNumber,
+                        description: `${session.customerCompany} confirmed position ${clause.customerConfirmedPosition?.toFixed(1)}`,
+                        newValue: clause.customerConfirmedPosition || undefined,
+                        seen: true
+                    })
+                }
+
+                // Provider confirmed (but not yet fully agreed)
+                if (clause.providerConfirmedAt) {
+                    history.push({
+                        id: `confirm-provider-${clause.clauseId}`,
+                        timestamp: clause.providerConfirmedAt,
+                        eventType: 'confirmation' as const,
+                        party: 'provider' as const,
+                        partyName: session.providerCompany,
+                        clauseId: clause.clauseId,
+                        clauseName: clause.clauseName,
+                        clauseNumber: clause.clauseNumber,
+                        description: `${session.providerCompany} confirmed position ${clause.providerConfirmedPosition?.toFixed(1)}`,
+                        newValue: clause.providerConfirmedPosition || undefined,
+                        seen: true
+                    })
+                }
+
+                // Full agreement reached (both confirmed)
+                if (clause.agreementReachedAt && clause.status === 'agreed') {
+                    history.push({
+                        id: `agreed-${clause.clauseId}`,
+                        timestamp: clause.agreementReachedAt,
+                        eventType: 'agreement' as const,
+                        party: 'system' as const,
+                        partyName: 'CLARENCE',
+                        clauseId: clause.clauseId,
+                        clauseName: clause.clauseName,
+                        clauseNumber: clause.clauseNumber,
+                        description: `🔒 Agreement locked on ${clause.clauseName} at position ${clause.finalAgreedPosition?.toFixed(1)}`,
+                        newValue: clause.finalAgreedPosition || undefined,
+                        seen: true
+                    })
+                }
+            })
+
+            // Sort all history by timestamp (newest first)
+            history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
             setNegotiationHistory(history)
+
 
         } catch (error) {
             console.error('Error fetching negotiation history:', error)
@@ -4969,6 +5026,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const otherHasConfirmed = isCustomer ? selectedClause.isProviderConfirmed : selectedClause.isCustomerConfirmed
         const isFullyAgreed = selectedClause.isAgreed
 
+        const myConfirmedAt = isCustomer ? selectedClause.customerConfirmedAt : selectedClause.providerConfirmedAt
+        const myConfirmedPosition = isCustomer ? selectedClause.customerConfirmedPosition : selectedClause.providerConfirmedPosition
+
         // Calculate if positions are close enough to confirm (gap < 1)
         const gap = myPosition !== null && otherPosition !== null
             ? Math.abs(myPosition - otherPosition)
@@ -4978,20 +5038,20 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         // Don't show for category headers
         if (selectedClause.clauseLevel === 0) return null
 
-        // Fully Agreed State
+        // Fully Agreed State - LOCKED
         if (isFullyAgreed) {
             return (
                 <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-4 mb-4">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
                             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-emerald-800">Agreement Reached</h4>
+                            <h4 className="font-semibold text-emerald-800">🔒 Agreement Locked</h4>
                             <p className="text-sm text-emerald-600">
-                                Both parties confirmed position {selectedClause.finalAgreedPosition?.toFixed(1)}
+                                Both parties confirmed position {selectedClause.finalAgreedPosition?.toFixed(1)} — Ready for drafting
                             </p>
                             <p className="text-xs text-emerald-500 mt-1">
                                 Agreed on {selectedClause.agreementReachedAt
@@ -4999,15 +5059,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     : 'Unknown'}
                             </p>
                         </div>
-                        <div className="px-3 py-1 bg-emerald-200 text-emerald-800 rounded-full text-sm font-medium">
-                            🔒 Locked
-                        </div>
                     </div>
                 </div>
             )
         }
 
-        // Waiting for other party
+        // I have confirmed, waiting for other party
         if (iHaveConfirmed && !otherHasConfirmed) {
             return (
                 <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-4">
@@ -5018,10 +5075,21 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-amber-800">Awaiting {otherPartyName}</h4>
+                            <h4 className="font-semibold text-amber-800">⏳ Awaiting {otherPartyName}</h4>
                             <p className="text-sm text-amber-600">
-                                You confirmed position {myPosition?.toFixed(1)}. Waiting for other party to confirm.
+                                You confirmed position {myConfirmedPosition?.toFixed(1)}. Waiting for the other party to confirm.
                             </p>
+                            <p className="text-xs text-amber-500 mt-1">
+                                Confirmed on {myConfirmedAt
+                                    ? new Date(myConfirmedAt).toLocaleString()
+                                    : 'Unknown'}
+                            </p>
+                        </div>
+                        <div className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Confirmed
                         </div>
                     </div>
                 </div>
@@ -5033,6 +5101,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             const otherConfirmedPosition = isCustomer
                 ? selectedClause.providerConfirmedPosition
                 : selectedClause.customerConfirmedPosition
+            const otherConfirmedAt = isCustomer
+                ? selectedClause.providerConfirmedAt
+                : selectedClause.customerConfirmedAt
 
             return (
                 <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4 mb-4">
@@ -5043,9 +5114,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-blue-800">{otherPartyName} Has Confirmed</h4>
+                            <h4 className="font-semibold text-blue-800">📩 {otherPartyName} Has Confirmed</h4>
                             <p className="text-sm text-blue-600">
-                                They confirmed position {otherConfirmedPosition?.toFixed(1)}. Your confirmation will lock this clause.
+                                They confirmed position {otherConfirmedPosition?.toFixed(1)} on {otherConfirmedAt
+                                    ? new Date(otherConfirmedAt).toLocaleString()
+                                    : 'Unknown'}
+                            </p>
+                            <p className="text-xs text-blue-500 mt-1">
+                                Your confirmation will lock this clause for drafting.
                             </p>
                         </div>
                         <button
@@ -5075,7 +5151,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             )
         }
 
-        // Can confirm (positions aligned, neither confirmed)
+        // Both not confirmed, but positions are aligned - can confirm
         if (canConfirm) {
             return (
                 <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 mb-4">
@@ -5086,7 +5162,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-emerald-800">Positions Aligned</h4>
+                            <h4 className="font-semibold text-emerald-800">✓ Positions Aligned</h4>
                             <p className="text-sm text-emerald-600">
                                 Both parties are at position {myPosition?.toFixed(1)}. Ready to confirm agreement.
                             </p>
