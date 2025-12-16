@@ -33,21 +33,7 @@ interface Session {
     createdAt?: string  // ADD THIS IF MISSING
 }
 
-interface NegotiationHistoryEntry {
-    id: string
-    timestamp: string
-    eventType: 'position_change' | 'agreement' | 'comment' | 'tradeoff_accepted' | 'session_started'
-    party: 'customer' | 'provider' | 'system'
-    partyName: string
-    clauseId?: string
-    clauseName?: string
-    clauseNumber?: string      // ADD THIS
-    description: string
-    oldValue?: number | string
-    newValue?: number | string
-    leverageImpact?: number
-    seen?: boolean             // ADD THIS
-}
+
 
 // ============================================================================
 // SECTION 1A: PROVIDER BID INTERFACE (MULTI-PROVIDER SUPPORT)
@@ -340,6 +326,26 @@ interface ClarenceAIResponse {
         alignment: number
     }
     timestamp: string
+}
+
+// ============================================================================
+// SECTION 1X: NEGOTIATION HISTORY INTERFACE
+// ============================================================================
+
+interface NegotiationHistoryEntry {
+    id: string
+    timestamp: string
+    eventType: 'position_change' | 'agreement' | 'confirmation' | 'comment' | 'tradeoff_accepted' | 'session_started'
+    party: 'customer' | 'provider' | 'system'
+    partyName: string
+    clauseId?: string
+    clauseName?: string
+    clauseNumber?: string
+    description: string
+    oldValue?: number | string
+    newValue?: number | string
+    leverageImpact?: number
+    seen?: boolean
 }
 
 // ============================================================================
@@ -5323,11 +5329,18 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         <span className="text-sm font-mono text-slate-400">{selectedClause.clauseNumber}</span>
                                         <h2 className="text-lg font-semibold text-slate-800">{selectedClause.clauseName}</h2>
                                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${selectedClause.status === 'aligned' ? 'bg-emerald-100 text-emerald-700' :
-                                            selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
-                                                selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
-                                                    'bg-slate-100 text-slate-700'
+                                            selectedClause.status === 'agreed' ? 'bg-emerald-100 text-emerald-700' :
+                                                selectedClause.status === 'customer_confirmed' ? 'bg-amber-100 text-amber-700' :
+                                                    selectedClause.status === 'provider_confirmed' ? 'bg-amber-100 text-amber-700' :
+                                                        selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
+                                                            selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
+                                                                'bg-slate-100 text-slate-700'
                                             }`}>
-                                            {selectedClause.status}
+                                            {selectedClause.status === 'agreed' ? '🔒 Agreed' :
+                                                selectedClause.status === 'customer_confirmed' ? '⏳ Awaiting Provider' :
+                                                    selectedClause.status === 'provider_confirmed' ? '⏳ Awaiting Customer' :
+                                                        selectedClause.status === 'aligned' ? '✓ Aligned' :
+                                                            selectedClause.status}
                                         </span>
                                     </div>
                                     <p className="text-sm text-slate-500 mt-1">{selectedClause.description}</p>
