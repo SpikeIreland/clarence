@@ -179,6 +179,10 @@ function ProviderAuthContent() {
     const [isValidatingToken, setIsValidatingToken] = useState(false);
     const [tokenValidated, setTokenValidated] = useState(false);
 
+    // Activate Account flow (for existing providers without Supabase Auth)
+    const [showActivateAccount, setShowActivateAccount] = useState(false);
+    const [activationEmailSent, setActivationEmailSent] = useState(false);
+
     // Signup form
     const [signupForm, setSignupForm] = useState<SignupFormData>({
         token: '',
@@ -457,6 +461,7 @@ function ProviderAuthContent() {
         setIsLoading(true);
         setErrorMessage('');
         setSuccessMessage('');
+        setShowActivateAccount(false);
 
         try {
             if (!loginForm.email || !loginForm.password) {
@@ -472,10 +477,17 @@ function ProviderAuthContent() {
             });
 
             if (authError) {
+                // Check if this might be an existing provider without Supabase Auth
                 if (authError.message.includes('Invalid login')) {
-                    throw new Error('Invalid email or password.');
+                    const existsInSystem = await checkExistingProvider(loginForm.email);
+                    if (existsInSystem) {
+                        // They exist in our system but not in Supabase Auth
+                        setShowActivateAccount(true);
+                        setIsLoading(false);
+                        return;
+                    }
                 }
-                throw new Error(authError.message);
+                throw new Error('Invalid email or password.');
             }
 
             if (!authData.user) {
@@ -572,6 +584,64 @@ function ProviderAuthContent() {
     };
 
     // ========================================================================
+    // SECTION 7E2: CHECK EXISTING PROVIDER
+    // ========================================================================
+
+    const checkExistingProvider = async (email: string): Promise<boolean> => {
+        try {
+            const response = await fetch(
+                `${API_BASE}/provider-sessions-api?email=${encodeURIComponent(email)}`
+            );
+            if (response.ok) {
+                const data = await response.json();
+                return data.sessions && data.sessions.length > 0;
+            }
+            return false;
+        } catch {
+            return false;
+        }
+    };
+
+    // ========================================================================
+    // SECTION 7E3: ACTIVATE ACCOUNT HANDLER
+    // ========================================================================
+
+    const handleActivateAccount = async () => {
+        if (!loginForm.email) {
+            setErrorMessage('Please enter your email address.');
+            return;
+        }
+
+        setIsLoading(true);
+        setErrorMessage('');
+
+        try {
+            // Send password reset email - this will work even if account doesn't exist in Supabase
+            // It essentially creates the account on first password set
+            const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
+                redirectTo: `${window.location.origin}/auth/reset-password?type=activation`
+            });
+
+            if (error) {
+                throw new Error(error.message);
+            }
+
+            setActivationEmailSent(true);
+            setShowActivateAccount(false);
+
+            eventLogger.completed('provider_onboarding', 'activation_email_sent', {
+                email: loginForm.email
+            });
+
+        } catch (error) {
+            console.error('Activation error:', error);
+            setErrorMessage(error instanceof Error ? error.message : 'Failed to send activation email.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ========================================================================
     // SECTION 7F: FORGOT PASSWORD HANDLER
     // ========================================================================
 
@@ -659,6 +729,8 @@ function ProviderAuthContent() {
                                     setActiveTab('signup');
                                     setErrorMessage('');
                                     setSuccessMessage('');
+                                    setShowActivateAccount(false);
+                                    setActivationEmailSent(false);
                                 }}
                                 className={`flex-1 py-4 text-sm font-medium transition-colors
                                     ${activeTab === 'signup'
@@ -673,6 +745,8 @@ function ProviderAuthContent() {
                                     setActiveTab('login');
                                     setErrorMessage('');
                                     setSuccessMessage('');
+                                    setShowActivateAccount(false);
+                                    setActivationEmailSent(false);
                                 }}
                                 className={`flex-1 py-4 text-sm font-medium transition-colors
                                     ${activeTab === 'login'
@@ -935,78 +1009,159 @@ function ProviderAuthContent() {
                             {/* ======================================================== */}
 
                             {activeTab === 'login' && (
-                                <form onSubmit={handleLogin} className="space-y-5">
+                                <>
+                                    {/* Activation Email Sent Success */}
+                                    {activationEmailSent ? (
+                                        <div className="text-center py-6">
+                                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                                                Check Your Email
+                                            </h3>
+                                            <p className="text-slate-600 text-sm mb-4">
+                                                We&apos;ve sent an activation link to <strong>{loginForm.email}</strong>
+                                            </p>
+                                            <p className="text-slate-500 text-xs mb-6">
+                                                Click the link in the email to set your password and activate your account.
+                                                The link will expire in 24 hours.
+                                            </p>
+                                            <button
+                                                onClick={() => {
+                                                    setActivationEmailSent(false);
+                                                    setLoginForm({ email: '', password: '' });
+                                                }}
+                                                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                            >
+                                                ← Back to Login
+                                            </button>
+                                        </div>
+                                    ) : showActivateAccount ? (
+                                        /* Activate Account Prompt */
+                                        <div className="text-center py-4">
+                                            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                                                Account Activation Required
+                                            </h3>
+                                            <p className="text-slate-600 text-sm mb-2">
+                                                We found your account for <strong>{loginForm.email}</strong>
+                                            </p>
+                                            <p className="text-slate-500 text-xs mb-6">
+                                                Your account was created before our new login system.
+                                                Click below to receive an email to set your password and activate your account.
+                                            </p>
 
-                                    {/* Email */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                            Email Address
-                                        </label>
-                                        <input
-                                            type="email"
-                                            value={loginForm.email}
-                                            onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-                                            placeholder="you@company.com"
-                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
-                                        />
-                                    </div>
+                                            <button
+                                                onClick={handleActivateAccount}
+                                                disabled={isLoading}
+                                                className={`w-full py-3 rounded-lg text-white font-medium transition mb-4
+                                                    ${isLoading
+                                                        ? 'bg-slate-300 cursor-not-allowed'
+                                                        : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                                                    }`}
+                                            >
+                                                {isLoading ? (
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                        Sending...
+                                                    </span>
+                                                ) : (
+                                                    'Send Activation Email'
+                                                )}
+                                            </button>
 
-                                    {/* Password */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                            Password
-                                        </label>
-                                        <input
-                                            type="password"
-                                            value={loginForm.password}
-                                            onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                                            placeholder="Enter your password"
-                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
-                                        />
-                                    </div>
+                                            <button
+                                                onClick={() => {
+                                                    setShowActivateAccount(false);
+                                                    setLoginForm(prev => ({ ...prev, password: '' }));
+                                                }}
+                                                className="text-slate-500 hover:text-slate-700 text-sm"
+                                            >
+                                                ← Try different credentials
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* Standard Login Form */
+                                        <form onSubmit={handleLogin} className="space-y-5">
 
-                                    {/* Forgot Password Link */}
-                                    <div className="text-right">
-                                        <button
-                                            type="button"
-                                            onClick={handleForgotPassword}
-                                            disabled={isLoading}
-                                            className="text-sm text-blue-600 hover:text-blue-700"
-                                        >
-                                            Forgot password?
-                                        </button>
-                                    </div>
+                                            {/* Email */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                                    Email Address
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    value={loginForm.email}
+                                                    onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
+                                                    placeholder="you@company.com"
+                                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                                                />
+                                            </div>
 
-                                    {/* Submit Button */}
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className={`w-full py-3.5 rounded-lg text-white font-medium transition
-                                            ${isLoading
-                                                ? 'bg-slate-300 cursor-not-allowed'
-                                                : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
-                                            }`}
-                                    >
-                                        {isLoading ? (
-                                            <span className="flex items-center justify-center gap-2">
-                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                Signing In...
-                                            </span>
-                                        ) : (
-                                            'Sign In'
-                                        )}
-                                    </button>
+                                            {/* Password */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                                    Password
+                                                </label>
+                                                <input
+                                                    type="password"
+                                                    value={loginForm.password}
+                                                    onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                                                    placeholder="Enter your password"
+                                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                                                />
+                                            </div>
 
-                                    {/* Help Text */}
-                                    <div className="text-center pt-4 border-t border-slate-200">
-                                        <p className="text-sm text-slate-500">
-                                            Don&apos;t have an account?
-                                        </p>
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            Check your email for an invitation from a customer, then use the Sign Up tab.
-                                        </p>
-                                    </div>
-                                </form>
+                                            {/* Forgot Password Link */}
+                                            <div className="text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleForgotPassword}
+                                                    disabled={isLoading}
+                                                    className="text-sm text-blue-600 hover:text-blue-700"
+                                                >
+                                                    Forgot password?
+                                                </button>
+                                            </div>
+
+                                            {/* Submit Button */}
+                                            <button
+                                                type="submit"
+                                                disabled={isLoading}
+                                                className={`w-full py-3.5 rounded-lg text-white font-medium transition
+                                                    ${isLoading
+                                                        ? 'bg-slate-300 cursor-not-allowed'
+                                                        : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                                                    }`}
+                                            >
+                                                {isLoading ? (
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                        Signing In...
+                                                    </span>
+                                                ) : (
+                                                    'Sign In'
+                                                )}
+                                            </button>
+
+                                            {/* Help Text */}
+                                            <div className="text-center pt-4 border-t border-slate-200">
+                                                <p className="text-sm text-slate-500">
+                                                    Don&apos;t have an account?
+                                                </p>
+                                                <p className="text-xs text-slate-400 mt-1">
+                                                    Check your email for an invitation from a customer, then use the Sign Up tab.
+                                                </p>
+                                            </div>
+                                        </form>
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>
