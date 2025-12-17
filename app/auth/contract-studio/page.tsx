@@ -606,9 +606,16 @@ function getPositionOptionsForClause(
     clause: ContractClause
 ): PositionOption[] | null {
 
-    // FIRST: Check if API returned position options
-    if (clause.positionOptions && Array.isArray(clause.positionOptions) && clause.positionOptions.length > 0) {
-        return clause.positionOptions
+    // FIRST: Check if API returned position options (handles both array and nested object format)
+    if (clause.positionOptions) {
+        if (Array.isArray(clause.positionOptions) && clause.positionOptions.length > 0) {
+            return clause.positionOptions
+        }
+        // Handle nested object format { type: string; options: PositionOption[] }
+        const nested = clause.positionOptions as { type?: string; options?: PositionOption[] }
+        if (nested.options && Array.isArray(nested.options) && nested.options.length > 0) {
+            return nested.options
+        }
     }
 
     // SECOND: Check if API returned nested options structure (from JSONB)
@@ -3708,7 +3715,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const hasChanged = originalDbPosition !== null && myDbPosition !== originalDbPosition
         const resolvedPositionOptions = getPositionOptionsForClause(selectedClause)
         const hasPositionOptions = resolvedPositionOptions !== null && resolvedPositionOptions.length > 0
-        const optionCount = hasPositionOptions ? selectedClause.positionOptions!.length : 10
+        const positionOptionsArray = selectedClause.positionOptions
+            ? (Array.isArray(selectedClause.positionOptions)
+                ? selectedClause.positionOptions
+                : (selectedClause.positionOptions as { options: PositionOption[] })?.options)
+            : null
+        const optionCount = positionOptionsArray?.length || 10
 
         // Map database positions to option values for display
         const myOptionValue = myDbPosition !== null
@@ -3743,7 +3755,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             if (dbPos === null) return 'Not set'
             if (!hasPositionOptions) return `Position ${dbPos.toFixed(1)}`
             const optVal = mapDbPositionToOptionValue(dbPos, optionCount)
-            const option = selectedClause.positionOptions?.find(o => o.value === optVal)
+
+            // Handle both array format and nested object format
+            const posOpts = selectedClause.positionOptions as PositionOption[] | { type: string; options: PositionOption[] } | null
+            const optionsArray = Array.isArray(posOpts)
+                ? posOpts
+                : (posOpts as { options: PositionOption[] } | null)?.options
+
+            const option = optionsArray?.find(o => o.value === optVal)
             return option?.label || `Position ${optVal}`
         }
 
