@@ -619,7 +619,7 @@ function ProviderAuthContent() {
             // Send password reset email - this will work even if account doesn't exist in Supabase
             // It essentially creates the account on first password set
             const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
-                redirectTo: `${window.location.origin}/auth/reset-password?type=activation`
+                redirectTo: `${window.location.origin}/reset-password?type=activation`
             });
 
             if (error) {
@@ -656,7 +656,7 @@ function ProviderAuthContent() {
 
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
-                redirectTo: `${window.location.origin}/auth/reset-password`
+                redirectTo: `${window.location.origin}/reset-password`
             });
 
             if (error) {
