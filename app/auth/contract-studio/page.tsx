@@ -3014,6 +3014,30 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         setIsCommitting(true)
 
         try {
+            // ============================================================
+            // CALCULATE NEW LEVERAGE BEFORE API CALL
+            // ============================================================
+            const previewClauses = clauses.map(c => {
+                if (c.positionId === selectedClause.positionId) {
+                    return {
+                        ...c,
+                        customerPosition: userInfo.role === 'customer' ? proposedPosition : c.customerPosition,
+                        providerPosition: userInfo.role === 'provider' ? proposedPosition : c.providerPosition,
+                    }
+                }
+                return c
+            })
+
+            const newLeverage = recalculateLeverageTracker(
+                leverage.leverageScoreCustomer,
+                leverage.leverageScoreProvider,
+                previewClauses,
+                userInfo.role as 'customer' | 'provider'
+            )
+
+            // ============================================================
+            // COMMIT WITH CALCULATED LEVERAGE VALUES
+            // ============================================================
             const result = await commitPositionChange(
                 session.sessionId,
                 selectedClause.positionId,
@@ -3023,7 +3047,9 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 {
                     userId: userInfo.userId,
                     userName: `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || undefined,
-                    companyName: userInfo.company
+                    companyName: userInfo.company,
+                    newLeverageCustomer: newLeverage.customerLeverage,
+                    newLeverageProvider: newLeverage.providerLeverage
                 }
             )
 
@@ -3053,14 +3079,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     setSelectedClause(updatedSelectedClause)
                 }
 
-                const newLeverage = recalculateLeverageTracker(
-                    leverage.leverageScoreCustomer,
-                    leverage.leverageScoreProvider,
-                    updatedClauses,
-                    userInfo.role as 'customer' | 'provider'
-                )
-
-                // Use the values we already calculated
+                // Use the values we already calculated (before API call)
                 setLeverage({
                     ...leverage,
                     leverageTrackerCustomer: newLeverage.customerLeverage,
