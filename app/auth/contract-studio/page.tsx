@@ -88,6 +88,9 @@ interface ContractClause {
     clauseName: string
     category: string
     description: string
+    isLocked?: boolean
+    lockedAt?: string
+    lockedByUserId?: string
 
     // Nesting
     parentPositionId: string | null
@@ -4658,14 +4661,18 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             </div>
         )
     }
-
     // ============================================================================
     // SECTION 12: CLAUSE TREE ITEM COMPONENT
     // ============================================================================
 
     const ClauseTreeItem = ({ clause, depth = 0 }: { clause: ContractClause, depth?: number }) => {
+        const [showMenu, setShowMenu] = useState(false)
+        const menuRef = useRef<HTMLDivElement>(null)
+
         const hasChildren = clause.children && clause.children.length > 0
         const isSelected = selectedClause?.positionId === clause.positionId
+        const isCustomer = userInfo?.role === 'customer'
+        const isLocked = clause.isLocked || false
 
         // Get the weight based on current user's role (or default to customerWeight)
         const clauseWeight = userInfo?.role === 'provider'
@@ -4674,10 +4681,80 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const weightDisplay = clauseWeight ? clauseWeight.toFixed(0) : null
 
         // Can add sub-clauses to level 1 clauses only (not category headers or existing sub-clauses)
-        const canAddSubClause = clause.clauseLevel === 1
+        // Only customers can add sub-clauses
+        const canAddSubClause = clause.clauseLevel === 1 && isCustomer
+
+        // Can lock level 1 and level 2 clauses (not category headers)
+        // Only customers can lock
+        const canLock = clause.clauseLevel >= 1 && isCustomer
 
         // Check for unseen moves on this clause
         const unseenCount = unseenMoves.get(clause.clauseId) || 0
+
+        // Close menu when clicking outside
+        useEffect(() => {
+            const handleClickOutside = (event: MouseEvent) => {
+                if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                    setShowMenu(false)
+                }
+            }
+            if (showMenu) {
+                document.addEventListener('mousedown', handleClickOutside)
+            }
+            return () => document.removeEventListener('mousedown', handleClickOutside)
+        }, [showMenu])
+
+        const handleToggleLock = async (e: React.MouseEvent) => {
+            e.stopPropagation()
+            setShowMenu(false)
+
+            if (!session?.sessionId || !clause.positionId) return
+
+            try {
+                const response = await fetch(`${API_BASE}/clause-lock-api`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: session.sessionId,
+                        positionId: clause.positionId,
+                        clauseId: clause.clauseId,
+                        lock: !isLocked,
+                        userId: userInfo?.userId,
+                        userName: `${userInfo?.firstName || ''} ${userInfo?.lastName || ''}`.trim()
+                    })
+                })
+
+                if (response.ok) {
+                    // Update local state
+                    const updatedClauses = clauses.map(c => {
+                        if (c.positionId === clause.positionId) {
+                            return { ...c, isLocked: !isLocked }
+                        }
+                        // Also update in children if this is a parent
+                        if (c.children) {
+                            return {
+                                ...c,
+                                children: c.children.map(child =>
+                                    child.positionId === clause.positionId
+                                        ? { ...child, isLocked: !isLocked }
+                                        : child
+                                )
+                            }
+                        }
+                        return c
+                    })
+                    setClauses(updatedClauses)
+                    setClauseTree(buildClauseTree(updatedClauses))
+
+                    // Update selected clause if it's the one being locked
+                    if (selectedClause?.positionId === clause.positionId) {
+                        setSelectedClause({ ...selectedClause, isLocked: !isLocked })
+                    }
+                }
+            } catch (error) {
+                console.error('Error toggling clause lock:', error)
+            }
+        }
 
         return (
             <div>
@@ -4715,8 +4792,17 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <span className="w-4" />
                     )}
 
-                    {/* Status indicator */}
-                    {clause.status === 'agreed' ? (
+                    {/* Status indicator - show lock icon if locked, otherwise show status */}
+                    {isLocked ? (
+                        <div
+                            className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center"
+                            title={isCustomer ? "Locked - Click menu to unlock" : `Locked by ${session?.customerCompany || 'Customer'}`}
+                        >
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                        </div>
+                    ) : clause.status === 'agreed' ? (
                         <div
                             className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center"
                             title="Agreement Locked"
@@ -4767,20 +4853,65 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </span>
                     )}
 
-                    {/* Add Sub-Clause button - only on level 1 clauses */}
-                    {canAddSubClause && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                handleOpenAddSubClause(clause)
-                            }}
-                            className="w-5 h-5 rounded bg-slate-200 hover:bg-emerald-500 hover:text-white text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Add sub-clause"
-                        >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                        </button>
+                    {/* Clause Menu - Only for Customer on negotiable clauses */}
+                    {isCustomer && (canAddSubClause || canLock) && (
+                        <div className="relative" ref={menuRef}>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    setShowMenu(!showMenu)
+                                }}
+                                className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Clause options"
+                            >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                </svg>
+                            </button>
+
+                            {/* Dropdown Menu */}
+                            {showMenu && (
+                                <div className="absolute right-0 top-7 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                                    {canAddSubClause && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setShowMenu(false)
+                                                handleOpenAddSubClause(clause)
+                                            }}
+                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+                                            Add Sub-Clause
+                                        </button>
+                                    )}
+                                    {canLock && (
+                                        <button
+                                            onClick={handleToggleLock}
+                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                        >
+                                            {isLocked ? (
+                                                <>
+                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                                    </svg>
+                                                    Unlock Clause
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                    </svg>
+                                                    Lock Clause
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
 
