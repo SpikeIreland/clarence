@@ -4048,8 +4048,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                         handlePositionDrag(Math.round(midpoint * 10) / 10)
                                                     }}
                                                     className={`p-2 rounded text-center transition-all ${isLocked
-                                                            ? 'cursor-not-allowed opacity-60 ' + (isCurrentZone ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-500')
-                                                            : 'cursor-pointer ' + (isCurrentZone ? 'bg-slate-800 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600')
+                                                        ? 'cursor-not-allowed opacity-60 ' + (isCurrentZone ? 'bg-slate-600 text-white' : 'bg-slate-100 text-slate-500')
+                                                        : 'cursor-pointer ' + (isCurrentZone ? 'bg-slate-800 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600')
                                                         }`}
                                                     title={option.description}
                                                 >
@@ -4753,7 +4753,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 })
 
                 if (response.ok) {
-                    // Update local state
+                    // Update local state - preserve isExpanded from existing clauses
+                    const expansionMap = new Map<string, boolean>()
+                    clauses.forEach(c => {
+                        if (c.isExpanded !== undefined) {
+                            expansionMap.set(c.positionId, c.isExpanded)
+                        }
+                    })
+
                     const updatedClauses = clauses.map(c => {
                         if (c.positionId === clause.positionId) {
                             return { ...c, isLocked: !isLocked }
@@ -4772,7 +4779,17 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         return c
                     })
                     setClauses(updatedClauses)
-                    setClauseTree(buildClauseTree(updatedClauses))
+
+                    // Rebuild tree but preserve expansion state
+                    const newTree = buildClauseTree(updatedClauses)
+                    const preserveExpansion = (nodes: ContractClause[]): ContractClause[] => {
+                        return nodes.map(node => ({
+                            ...node,
+                            isExpanded: expansionMap.get(node.positionId) ?? node.isExpanded,
+                            children: node.children ? preserveExpansion(node.children) : undefined
+                        }))
+                    }
+                    setClauseTree(preserveExpansion(newTree))
 
                     // Update selected clause if it's the one being locked
                     if (selectedClause?.positionId === clause.positionId) {
