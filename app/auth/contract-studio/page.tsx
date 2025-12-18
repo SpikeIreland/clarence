@@ -252,6 +252,12 @@ interface ApiClauseResponse {
     status: string
     isExpanded: boolean
     positionOptions?: PositionOption[] | { type: string; options: PositionOption[] } | null
+    isLocked?: boolean
+    is_locked?: boolean
+    lockedAt?: string
+    locked_at?: string
+    lockedByUserId?: string
+    locked_by_user_id?: string
 
     // Clause Management System fields
     sourceType?: string
@@ -338,7 +344,7 @@ interface ClarenceAIResponse {
 interface NegotiationHistoryEntry {
     id: string
     timestamp: string
-    eventType: 'position_change' | 'agreement' | 'confirmation' | 'comment' | 'tradeoff_accepted' | 'session_started'
+    eventType: 'position_change' | 'clause_locked' | 'clause_unlocked' | 'agreement' | 'confirmation' | 'comment' | 'tradeoff_accepted' | 'session_started'
     party: 'customer' | 'provider' | 'system'
     partyName: string
     clauseId?: string
@@ -1809,7 +1815,7 @@ function ContractStudioContent() {
     const [showLeverageDetails, setShowLeverageDetails] = useState(false)
     const [negotiationHistory, setNegotiationHistory] = useState<NegotiationHistoryEntry[]>([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-    const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'agreements'>('all')
+    const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'locks' | 'agreements'>('all')
 
     // ============================================================================
     // SECTION 6X: SUB-CLAUSE MODAL STATE
@@ -2719,6 +2725,7 @@ function ContractStudioContent() {
                     new_position,
                     position_delta,
                     leverage_impact,
+                    change_type,
                     changed_at,
                     seen_by_customer,
                     seen_by_provider
@@ -2751,19 +2758,36 @@ function ContractStudioContent() {
                     displayName = change.party === 'customer' ? session.customerCompany : session.providerCompany
                 }
 
+                // Determine event type from change_type column
+                const eventType = change.change_type === 'clause_locked'
+                    ? 'clause_locked' as const
+                    : change.change_type === 'clause_unlocked'
+                        ? 'clause_unlocked' as const
+                        : 'position_change' as const
+
+                // Build description based on event type
+                let description: string
+                if (change.change_type === 'clause_locked') {
+                    description = `${displayName} locked ${change.clause_name} as non-negotiable`
+                } else if (change.change_type === 'clause_unlocked') {
+                    description = `${displayName} unlocked ${change.clause_name} for negotiation`
+                } else {
+                    description = `${displayName} moved position on ${change.clause_name}`
+                }
+
                 return {
                     id: change.id,
                     timestamp: change.changed_at,  // REAL TIMESTAMP FROM DB
-                    eventType: 'position_change' as const,
+                    eventType,
                     party: change.party as 'customer' | 'provider',
                     partyName: displayName,
                     clauseId: change.clause_id,
                     clauseName: change.clause_name || 'Unknown Clause',
                     clauseNumber: change.clause_number,
-                    description: `${displayName} moved position on ${change.clause_name}`,
-                    oldValue: parseFloat(change.old_position),
-                    newValue: parseFloat(change.new_position),
-                    leverageImpact: parseFloat(change.leverage_impact) || 0,
+                    description,
+                    oldValue: change.change_type === 'position_change' ? parseFloat(change.old_position) : undefined,
+                    newValue: change.change_type === 'position_change' ? parseFloat(change.new_position) : undefined,
+                    leverageImpact: change.change_type === 'position_change' ? (parseFloat(change.leverage_impact) || 0) : 0,
                     seen: isViewerCustomer ? change.seen_by_customer : change.seen_by_provider
                 }
             })
@@ -2932,7 +2956,21 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                                 positionOptions: c.positionOptions || null,
                                 sourceType: c.sourceType || 'legacy',
                                 addedMidSession: c.addedMidSession || false,
-                                addedByParty: c.addedByParty || null
+                                addedByParty: c.addedByParty || null,
+                                // Confirmation fields
+                                customerConfirmedAt: c.customerConfirmedAt || null,
+                                customerConfirmedPosition: c.customerConfirmedPosition || null,
+                                providerConfirmedAt: c.providerConfirmedAt || null,
+                                providerConfirmedPosition: c.providerConfirmedPosition || null,
+                                agreementReachedAt: c.agreementReachedAt || null,
+                                finalAgreedPosition: c.finalAgreedPosition || null,
+                                isAgreed: c.isAgreed || false,
+                                isCustomerConfirmed: c.isCustomerConfirmed || false,
+                                isProviderConfirmed: c.isProviderConfirmed || false,
+                                // Locking fields
+                                isLocked: c.isLocked || c.is_locked || false,
+                                lockedAt: c.lockedAt || c.locked_at || null,
+                                lockedByUserId: c.lockedByUserId || c.locked_by_user_id || null
                             }))
                             const tree = buildClauseTree(mappedClauses, clauseTree)
                             setClauseTree(tree)
@@ -3610,6 +3648,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 isAgreed: c.isAgreed || false,
                                 isCustomerConfirmed: c.isCustomerConfirmed || false,
                                 isProviderConfirmed: c.isProviderConfirmed || false,
+                                // Locking fields
+                                isLocked: c.isLocked || c.is_locked || false,
+                                lockedAt: c.lockedAt || c.locked_at || null,
+                                lockedByUserId: c.lockedByUserId || c.locked_by_user_id || null,
                             }))
                             const tree = buildClauseTree(mappedClauses, clauseTree)
                             setClauseTree(tree)
@@ -4753,47 +4795,33 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 })
 
                 if (response.ok) {
-                    // Update local state - preserve isExpanded from existing clauses
-                    const expansionMap = new Map<string, boolean>()
-                    clauses.forEach(c => {
-                        if (c.isExpanded !== undefined) {
-                            expansionMap.set(c.positionId, c.isExpanded)
-                        }
-                    })
+                    const newLockedState = !isLocked
 
-                    const updatedClauses = clauses.map(c => {
-                        if (c.positionId === clause.positionId) {
-                            return { ...c, isLocked: !isLocked }
-                        }
-                        // Also update in children if this is a parent
-                        if (c.children) {
-                            return {
-                                ...c,
-                                children: c.children.map(child =>
-                                    child.positionId === clause.positionId
-                                        ? { ...child, isLocked: !isLocked }
-                                        : child
-                                )
-                            }
-                        }
-                        return c
-                    })
+                    // Update clauses array (flat)
+                    const updatedClauses = clauses.map(c =>
+                        c.positionId === clause.positionId
+                            ? { ...c, isLocked: newLockedState }
+                            : c
+                    )
                     setClauses(updatedClauses)
 
-                    // Rebuild tree but preserve expansion state
-                    const newTree = buildClauseTree(updatedClauses)
-                    const preserveExpansion = (nodes: ContractClause[]): ContractClause[] => {
-                        return nodes.map(node => ({
-                            ...node,
-                            isExpanded: expansionMap.get(node.positionId) ?? node.isExpanded,
-                            children: node.children ? preserveExpansion(node.children) : undefined
-                        }))
+                    // Update clause tree in place - don't rebuild
+                    const updateTreeNode = (nodes: ContractClause[]): ContractClause[] => {
+                        return nodes.map(node => {
+                            if (node.positionId === clause.positionId) {
+                                return { ...node, isLocked: newLockedState }
+                            }
+                            if (node.children) {
+                                return { ...node, children: updateTreeNode(node.children) }
+                            }
+                            return node
+                        })
                     }
-                    setClauseTree(preserveExpansion(newTree))
+                    setClauseTree(updateTreeNode(clauseTree))
 
                     // Update selected clause if it's the one being locked
                     if (selectedClause?.positionId === clause.positionId) {
-                        setSelectedClause({ ...selectedClause, isLocked: !isLocked })
+                        setSelectedClause({ ...selectedClause, isLocked: newLockedState })
                     }
                 }
             } catch (error) {
@@ -5946,7 +5974,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             </p>
                                         </div>
                                         <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                                            {(['all', 'positions', 'agreements'] as const).map(filter => (
+                                            {(['all', 'positions', 'locks', 'agreements'] as const).map(filter => (
                                                 <button
                                                     key={filter}
                                                     onClick={() => setHistoryFilter(filter)}
@@ -5975,74 +6003,106 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     // Then: apply type filter
                                                     if (historyFilter === 'all') return true
                                                     if (historyFilter === 'positions') return entry.eventType === 'position_change'
+                                                    if (historyFilter === 'locks') return entry.eventType === 'clause_locked' || entry.eventType === 'clause_unlocked'
                                                     if (historyFilter === 'agreements') return entry.eventType === 'agreement'
                                                     return true
                                                 })
                                                 .slice(0, 20)
-                                                .map((entry) => (
-                                                    <div key={entry.id} className="relative pl-10">
-                                                        {/* Timeline dot */}
-                                                        <div className={`absolute left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs ${entry.eventType === 'agreement'
-                                                            ? 'border-emerald-400 bg-emerald-100 text-emerald-600'
-                                                            : entry.party === 'customer'
-                                                                ? 'border-emerald-400 bg-white text-emerald-600'
-                                                                : entry.party === 'provider'
-                                                                    ? 'border-blue-400 bg-white text-blue-600'
-                                                                    : 'border-slate-400 bg-slate-100 text-slate-600'
-                                                            }`}>
-                                                            {entry.eventType === 'position_change' ? '↔' :
-                                                                entry.eventType === 'agreement' ? '✓' :
-                                                                    entry.eventType === 'session_started' ? '🚀' : '•'}
-                                                        </div>
+                                                .map((entry) => {
+                                                    // Determine if this is a lock event
+                                                    const isLockEvent = entry.eventType === 'clause_locked' || entry.eventType === 'clause_unlocked'
+                                                    const isLocked = entry.eventType === 'clause_locked'
 
-                                                        {/* Entry content */}
-                                                        <div className={`border rounded-lg p-3 ${entry.eventType === 'agreement' ? 'border-emerald-400 bg-emerald-50' :
-                                                            entry.eventType === 'session_started' ? 'border-slate-400 bg-slate-50' :
-                                                                entry.party === 'customer' ? 'border-emerald-300 bg-white' :
-                                                                    entry.party === 'provider' ? 'border-blue-300 bg-white' :
-                                                                        'border-slate-300 bg-white'
-                                                            }`}>
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <span className={`text-xs font-medium ${entry.party === 'customer' ? 'text-emerald-600' :
-                                                                    entry.party === 'provider' ? 'text-blue-600' :
-                                                                        'text-slate-600'
-                                                                    }`}>
-                                                                    {entry.partyName}
-                                                                </span>
-                                                                <span className="text-xs text-slate-400">
-                                                                    {formatHistoryTimestamp(entry.timestamp)}
-                                                                </span>
+                                                    return (
+                                                        <div key={entry.id} className="relative pl-10">
+                                                            {/* Timeline dot */}
+                                                            <div className={`absolute left-2 w-5 h-5 rounded-full border-2 flex items-center justify-center text-xs ${entry.eventType === 'agreement'
+                                                                ? 'border-emerald-400 bg-emerald-100 text-emerald-600'
+                                                                : isLockEvent
+                                                                    ? 'border-slate-500 bg-slate-600 text-white'
+                                                                    : entry.party === 'customer'
+                                                                        ? 'border-emerald-400 bg-white text-emerald-600'
+                                                                        : entry.party === 'provider'
+                                                                            ? 'border-blue-400 bg-white text-blue-600'
+                                                                            : 'border-slate-400 bg-slate-100 text-slate-600'
+                                                                }`}>
+                                                                {entry.eventType === 'position_change' ? '↔' :
+                                                                    entry.eventType === 'agreement' ? '✓' :
+                                                                        entry.eventType === 'clause_locked' ? '🔒' :
+                                                                            entry.eventType === 'clause_unlocked' ? '🔓' :
+                                                                                entry.eventType === 'session_started' ? '🚀' : '•'}
                                                             </div>
 
-                                                            <p className="text-sm text-slate-700">{entry.description}</p>
-
-                                                            {entry.oldValue !== undefined && entry.newValue !== undefined && (
-                                                                <div className="flex items-center gap-2 mt-2 text-xs">
-                                                                    <span className="text-slate-500">Position:</span>
-                                                                    <span className="text-red-500 line-through">{entry.oldValue}</span>
-                                                                    <span className="text-slate-400">→</span>
-                                                                    <span className="text-emerald-600 font-medium">{entry.newValue}</span>
-                                                                    {entry.leverageImpact !== undefined && entry.leverageImpact !== 0 && (
-                                                                        <span className={`ml-2 px-1.5 py-0.5 rounded ${entry.leverageImpact > 0
-                                                                            ? 'bg-emerald-100 text-emerald-700'
-                                                                            : 'bg-amber-100 text-amber-700'
-                                                                            }`}>
-                                                                            {entry.leverageImpact > 0 ? '+' : ''}{entry.leverageImpact.toFixed(1)}% for you
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            )}
-
-                                                            {entry.clauseName && entry.eventType !== 'position_change' && (
-                                                                <div className="mt-1">
-                                                                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
-                                                                        {entry.clauseName}
+                                                            {/* Entry content */}
+                                                            <div className={`border rounded-lg p-3 ${entry.eventType === 'agreement' ? 'border-emerald-400 bg-emerald-50' :
+                                                                isLockEvent ? 'border-slate-400 bg-slate-50' :
+                                                                    entry.eventType === 'session_started' ? 'border-slate-400 bg-slate-50' :
+                                                                        entry.party === 'customer' ? 'border-emerald-300 bg-white' :
+                                                                            entry.party === 'provider' ? 'border-blue-300 bg-white' :
+                                                                                'border-slate-300 bg-white'
+                                                                }`}>
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className={`text-xs font-medium ${isLockEvent ? 'text-slate-600' :
+                                                                        entry.party === 'customer' ? 'text-emerald-600' :
+                                                                            entry.party === 'provider' ? 'text-blue-600' :
+                                                                                'text-slate-600'
+                                                                        }`}>
+                                                                        {entry.partyName}
+                                                                    </span>
+                                                                    <span className="text-xs text-slate-400">
+                                                                        {formatHistoryTimestamp(entry.timestamp)}
                                                                     </span>
                                                                 </div>
-                                                            )}
+
+                                                                <p className="text-sm text-slate-700">
+                                                                    {isLockEvent
+                                                                        ? isLocked
+                                                                            ? 'Locked this clause as non-negotiable'
+                                                                            : 'Unlocked this clause for negotiation'
+                                                                        : entry.description
+                                                                    }
+                                                                </p>
+
+                                                                {/* Lock badge */}
+                                                                {isLockEvent && (
+                                                                    <div className="flex items-center gap-2 mt-2">
+                                                                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded ${isLocked
+                                                                            ? 'bg-slate-200 text-slate-700'
+                                                                            : 'bg-emerald-100 text-emerald-700'
+                                                                            }`}>
+                                                                            {isLocked ? '🔒 Locked' : '🔓 Unlocked'}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+
+                                                                {entry.oldValue !== undefined && entry.newValue !== undefined && !isLockEvent && (
+                                                                    <div className="flex items-center gap-2 mt-2 text-xs">
+                                                                        <span className="text-slate-500">Position:</span>
+                                                                        <span className="text-red-500 line-through">{entry.oldValue}</span>
+                                                                        <span className="text-slate-400">→</span>
+                                                                        <span className="text-emerald-600 font-medium">{entry.newValue}</span>
+                                                                        {entry.leverageImpact !== undefined && entry.leverageImpact !== 0 && (
+                                                                            <span className={`ml-2 px-1.5 py-0.5 rounded ${entry.leverageImpact > 0
+                                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                                : 'bg-amber-100 text-amber-700'
+                                                                                }`}>
+                                                                                {entry.leverageImpact > 0 ? '+' : ''}{entry.leverageImpact.toFixed(1)}% for you
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+
+                                                                {entry.clauseName && entry.eventType !== 'position_change' && !isLockEvent && (
+                                                                    <div className="mt-1">
+                                                                        <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                                                            {entry.clauseName}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    )
+                                                })}
 
                                             {negotiationHistory.filter(e => e.clauseId === selectedClause.clauseId).length === 0 && (
                                                 <div className="text-center py-8 pl-10">
