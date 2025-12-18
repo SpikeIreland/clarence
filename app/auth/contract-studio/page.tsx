@@ -26,6 +26,7 @@ interface Session {
     providerCompany: string
     customerContactName: string | null
     providerContactName: string | null
+    providerId: string | null
     serviceType: string
     dealValue: string
     phase: number
@@ -1816,6 +1817,8 @@ function ContractStudioContent() {
     const [negotiationHistory, setNegotiationHistory] = useState<NegotiationHistoryEntry[]>([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'locks' | 'agreements'>('all')
+    // Preview Contract state
+    const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
 
     // ============================================================================
     // SECTION 6X: SUB-CLAUSE MODAL STATE
@@ -2142,18 +2145,21 @@ function ContractStudioContent() {
                 return null
             } else if (status === 'provider_invited' || status === 'providers_invited') {
                 setSessionStatus('provider_invited')
+
                 const basicSession: Session = {
                     sessionId: data.session.sessionId || sessionId,
                     sessionNumber: data.session.sessionNumber || '',
                     customerCompany: data.session.customerCompany || '',
-                    providerCompany: 'Awaiting Provider Response',
+                    providerCompany: data.session.providerCompany || 'Provider (Pending)',
+                    providerId: data.session.providerId || null,      // ADD THIS
                     customerContactName: data.session.customerContactName || null,
                     providerContactName: null,
-                    serviceType: data.session.contractType || 'Service Agreement',
+                    serviceType: data.session.contractType || 'IT Services',
                     dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
-                    phase: 1,
-                    status: status
+                    phase: parsePhaseFromState(data.session.phase),
+                    status: data.session.status
                 }
+
                 setSession(basicSession)
                 return null
             } else if (status === 'provider_intake_complete' || status === 'leverage_pending') {
@@ -2168,6 +2174,7 @@ function ContractStudioContent() {
                 sessionNumber: data.session.sessionNumber,
                 customerCompany: data.session.customerCompany,
                 providerCompany: data.session.providerCompany || 'Provider (Pending)',
+                providerId: data.session.providerId || null,      // ADD THIS
                 customerContactName: data.session.customerContactName || null,
                 providerContactName: data.session.providerContactName || null,
                 serviceType: data.session.contractType || 'IT Services',
@@ -2549,11 +2556,12 @@ function ContractStudioContent() {
                             sessionId: sessionId,
                             sessionNumber: data.sessionNumber || sessionNumber || '',
                             customerCompany: data.companyName || data.company_name || user.company || '',
-                            providerCompany: 'Awaiting Provider',
-                            customerContactName: data.contactName || data.contact_name || null,
+                            providerCompany: 'Provider (Pending)',
+                            providerId: null,      // ADD THIS
+                            customerContactName: data.contactName || data.contact_name || user.firstName || '',
                             providerContactName: null,
-                            serviceType: data.serviceRequired || data.service_required || 'Service Agreement',
-                            dealValue: formatCurrency(data.dealValue || data.deal_value || '0', 'GBP'),
+                            serviceType: data.serviceRequired || data.service_required || 'IT Services',
+                            dealValue: formatCurrency(data.dealValue || data.deal_value, data.currency || 'GBP'),
                             phase: 1,
                             status: 'pending_provider'
                         })
@@ -2563,6 +2571,7 @@ function ContractStudioContent() {
                             sessionNumber: sessionNumber || '',
                             customerCompany: user.company || 'Your Company',
                             providerCompany: 'Awaiting Provider',
+                            providerId: null,
                             customerContactName: null,
                             providerContactName: null,
                             serviceType: 'Service Agreement',
@@ -2578,6 +2587,7 @@ function ContractStudioContent() {
                         sessionNumber: sessionNumber || '',
                         customerCompany: user.company || 'Your Company',
                         providerCompany: 'Awaiting Provider',
+                        providerId: null,
                         customerContactName: null,
                         providerContactName: null,
                         serviceType: 'Service Agreement',
@@ -3701,6 +3711,52 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             setIsConfirming(false)
         }
     }
+
+    // ============================================================================
+    // SECTION 8Z: CONTRACT PREVIEW HANDLER
+    // ============================================================================
+
+    const handlePreviewContract = useCallback(async () => {
+        if (!session?.sessionId || isGeneratingPreview) return
+
+        setIsGeneratingPreview(true)
+
+        try {
+            // Call N8N workflow to generate contract preview
+            const response = await fetch('https://n8n.clarencelegal.ai/webhook/document-contract-preview', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    user_id: userInfo?.userId,
+                    provider_id: session.providerId || null,
+                    viewer_role: userInfo?.role || 'customer'
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to generate preview')
+            }
+
+            const result = await response.json()
+
+            if (result.success && result.pdf_url) {
+                // Open PDF in new browser window
+                window.open(result.pdf_url, '_blank', 'noopener,noreferrer')
+            } else {
+                console.error('Preview generation failed:', result.error || 'Unknown error')
+                alert('Failed to generate contract preview. Please try again.')
+            }
+
+        } catch (error) {
+            console.error('Preview contract error:', error)
+            alert('An error occurred while generating the preview. Please try again.')
+        } finally {
+            setIsGeneratingPreview(false)
+        }
+    }, [session?.sessionId, session?.providerId, userInfo?.userId, userInfo?.role, isGeneratingPreview])
 
     // ============================================================================
     // SECTION 9: LOADING & CONDITIONAL RENDERING
@@ -5067,16 +5123,45 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
 
-                        {/* Right: Documents Centre Button */}
-                        <button
-                            onClick={() => router.push(`/auth/document-centre?session_id=${session.sessionId}`)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Documents
-                        </button>
+                        {/* Right: Preview Contract + Documents Centre Buttons */}
+                        <div className="flex items-center gap-2">
+                            {/* Preview Contract Button */}
+                            <button
+                                onClick={handlePreviewContract}
+                                disabled={isGeneratingPreview || clauses.length === 0}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition ${isGeneratingPreview || clauses.length === 0
+                                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                    : 'bg-slate-700 hover:bg-slate-600 text-white'
+                                    }`}
+                                title="Generate a preview of the full contract"
+                            >
+                                {isGeneratingPreview ? (
+                                    <>
+                                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Generating...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        </svg>
+                                        <span>Preview Contract</span>
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Documents Centre Button */}
+                            <button
+                                onClick={() => router.push(`/auth/document-centre?session_id=${session.sessionId}`)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Documents
+                            </button>
+                        </div>
                     </div>
                 </div>
 
