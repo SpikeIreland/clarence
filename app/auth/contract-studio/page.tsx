@@ -2214,7 +2214,19 @@ function ContractStudioContent() {
                     positionOptions: c.positionOptions || getPositionOptionsForClause({
                         positionOptions: null,
                         clauseName: c.clauseName
-                    } as ContractClause)
+                    } as ContractClause),
+                    // Confirmation fields
+                    // Confirmation fields
+                    customerConfirmedAt: c.customerConfirmedAt || null,
+                    customerConfirmedPosition: c.customerConfirmedPosition != null ? Number(c.customerConfirmedPosition) : null,
+                    providerConfirmedAt: c.providerConfirmedAt || null,
+                    providerConfirmedPosition: c.providerConfirmedPosition != null ? Number(c.providerConfirmedPosition) : null,
+                    agreementReachedAt: c.agreementReachedAt || null,
+                    finalAgreedPosition: c.finalAgreedPosition != null ? Number(c.finalAgreedPosition) : null,
+                    // Locking fields
+                    isLocked: c.isLocked || c.is_locked || false,
+                    lockedAt: c.lockedAt || c.locked_at || null,
+                    lockedByUserId: c.lockedByUserId || c.locked_by_user_id || null
                 }
             })
 
@@ -2372,7 +2384,19 @@ function ContractStudioContent() {
                     positionOptions: c.positionOptions || getPositionOptionsForClause({
                         positionOptions: null,
                         clauseName: c.clauseName
-                    } as ContractClause)
+                    } as ContractClause),
+                    // Confirmation fields
+                    // Confirmation fields
+                    customerConfirmedAt: c.customerConfirmedAt || null,
+                    customerConfirmedPosition: c.customerConfirmedPosition != null ? Number(c.customerConfirmedPosition) : null,
+                    providerConfirmedAt: c.providerConfirmedAt || null,
+                    providerConfirmedPosition: c.providerConfirmedPosition != null ? Number(c.providerConfirmedPosition) : null,
+                    agreementReachedAt: c.agreementReachedAt || null,
+                    finalAgreedPosition: c.finalAgreedPosition != null ? Number(c.finalAgreedPosition) : null,
+                    // Locking fields
+                    isLocked: c.isLocked || c.is_locked || false,
+                    lockedAt: c.lockedAt || c.locked_at || null,
+                    lockedByUserId: c.lockedByUserId || c.locked_by_user_id || null
                 }
             })
 
