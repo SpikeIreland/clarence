@@ -3723,7 +3723,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
         try {
             // Call N8N workflow to generate contract preview
-            const response = await fetch('https://n8n.clarencelegal.ai/webhook/document-contract-preview', {
+            const response = await fetch(`${API_BASE}/document-contract-preview`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
