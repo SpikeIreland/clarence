@@ -5085,6 +5085,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     // ============================================================================
 
     const PartyStatusBanner = () => {
+
+        console.log('PartyStatusBanner - clauses.length:', clauses.length, 'isGeneratingPreview:', isGeneratingPreview)
+        
         const isCustomer = userInfo.role === 'customer'
         const myCompany = isCustomer ? session.customerCompany : session.providerCompany
         const otherCompany = isCustomer ? session.providerCompany : session.customerCompany
