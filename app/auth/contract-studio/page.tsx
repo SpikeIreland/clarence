@@ -3721,9 +3721,56 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
         setIsGeneratingPreview(true)
 
+        // Open blank window IMMEDIATELY (before async operation)
+        // This is allowed because it's directly triggered by user click
+        const previewWindow = window.open('', '_blank')
+
+        // Show loading message in the new window
+        if (previewWindow) {
+            previewWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Generating Contract Preview...</title>
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        height: 100vh;
+                        margin: 0;
+                        background: #f8fafc;
+                        color: #334155;
+                    }
+                    .spinner {
+                        width: 40px;
+                        height: 40px;
+                        border: 4px solid #e2e8f0;
+                        border-top-color: #10b981;
+                        border-radius: 50%;
+                        animation: spin 1s linear infinite;
+                        margin-bottom: 20px;
+                    }
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                    h2 { margin: 0 0 10px 0; font-size: 18px; }
+                    p { margin: 0; color: #64748b; font-size: 14px; }
+                </style>
+            </head>
+            <body>
+                <div class="spinner"></div>
+                <h2>Generating Contract Preview</h2>
+                <p>Please wait while CLARENCE prepares your document...</p>
+            </body>
+            </html>
+        `)
+        }
+
         try {
-            // Call N8N workflow to generate contract preview
-            const response = await fetch(`${API_BASE}/document-contract-preview`, {
+            const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/document-contract-preview', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -3741,18 +3788,37 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             }
 
             const result = await response.json()
+            console.log('Preview result:', result)
 
             if (result.success && result.pdf_url) {
-                // Open PDF in new browser window
-                window.open(result.pdf_url, '_blank', 'noopener,noreferrer')
+                // Redirect the already-open window to the PDF
+                if (previewWindow) {
+                    previewWindow.location.href = result.pdf_url
+                }
             } else {
-                console.error('Preview generation failed:', result.error || 'Unknown error')
-                alert('Failed to generate contract preview. Please try again.')
+                // Show error in the window
+                if (previewWindow) {
+                    previewWindow.document.body.innerHTML = `
+                    <div style="text-align: center; padding: 40px;">
+                        <h2 style="color: #dc2626;">Generation Failed</h2>
+                        <p>Unable to generate the contract preview. Please close this window and try again.</p>
+                    </div>
+                `
+                }
+                console.error('Missing pdf_url:', result)
             }
 
         } catch (error) {
             console.error('Preview contract error:', error)
-            alert('An error occurred while generating the preview. Please try again.')
+            // Show error in the window
+            if (previewWindow) {
+                previewWindow.document.body.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <h2 style="color: #dc2626;">Error</h2>
+                    <p>An error occurred while generating the preview. Please close this window and try again.</p>
+                </div>
+            `
+            }
         } finally {
             setIsGeneratingPreview(false)
         }
@@ -5087,7 +5153,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     const PartyStatusBanner = () => {
 
         console.log('PartyStatusBanner - clauses.length:', clauses.length, 'isGeneratingPreview:', isGeneratingPreview)
-        
+
         const isCustomer = userInfo.role === 'customer'
         const myCompany = isCustomer ? session.customerCompany : session.providerCompany
         const otherCompany = isCustomer ? session.providerCompany : session.customerCompany
