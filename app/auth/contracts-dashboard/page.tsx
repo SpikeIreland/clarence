@@ -27,18 +27,34 @@ interface UserInfo {
   userId?: string
 }
 
+interface ProviderBid {
+  bidId: string
+  providerId: string
+  providerCompany: string
+  providerContactName: string
+  providerContactEmail: string
+  status: 'invited' | 'intake_pending' | 'intake_complete' | 'questionnaire_pending' | 'questionnaire_complete' | 'negotiation_ready' | 'negotiating' | 'accepted' | 'rejected' | 'withdrawn'
+  intakeComplete: boolean
+  questionnaireComplete: boolean
+  invitedAt: string
+  submittedAt?: string
+}
+
 interface Session {
   sessionId: string
   sessionNumber?: string
   customerCompany: string
-  providerCompany?: string
   serviceRequired: string
   dealValue: string
+  currency: string
   status: string
   phase?: number
   phaseAlignment?: number
   createdAt?: string
   lastUpdated?: string
+  industry?: string
+  // Provider bids for this session
+  providerBids?: ProviderBid[]
 }
 
 interface ChatMessage {
@@ -111,6 +127,7 @@ export default function ContractsDashboard() {
   const [chatMinimized, setChatMinimized] = useState(false)
   const [isCreatingContract, setIsCreatingContract] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
 
   // ==========================================================================
   // SECTION 6: DATA LOADING FUNCTIONS
@@ -133,7 +150,7 @@ export default function ContractsDashboard() {
       if (!auth) return
 
       const authData = JSON.parse(auth)
-      const apiUrl = `${API_BASE}/sessions-api?role=${authData.userInfo?.role || 'customer'}&email=${authData.userInfo?.email}`
+      const apiUrl = `${API_BASE}/sessions-api?role=${authData.userInfo?.role || 'customer'}&email=${authData.userInfo?.email}&includeProviderBids=true`
 
       console.log('Loading sessions from:', apiUrl)
 
@@ -160,21 +177,15 @@ export default function ContractsDashboard() {
 
   async function handleSignOut() {
     try {
-      // Sign out from Supabase Auth
       await supabase.auth.signOut();
-
-      // Clear all localStorage
       localStorage.removeItem('clarence_auth');
       localStorage.removeItem('clarence_provider_session');
       localStorage.removeItem('providerSession');
       localStorage.removeItem('currentSessionId');
       localStorage.removeItem('currentSession');
-
-      // Redirect to login
       router.push('/auth/login');
     } catch (error) {
       console.error('Sign out error:', error);
-      // Force redirect even if error
       localStorage.removeItem('clarence_auth');
       router.push('/auth/login');
     }
@@ -188,8 +199,6 @@ export default function ContractsDashboard() {
     if (isCreatingContract) return
 
     setIsCreatingContract(true)
-
-    // LOG: Create contract button clicked
     eventLogger.started('contract_session_creation', 'create_contract_clicked');
 
     try {
@@ -202,7 +211,6 @@ export default function ContractsDashboard() {
 
       const authData = JSON.parse(auth)
 
-      // Call the session-create API
       const response = await fetch(`${API_BASE}/session-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -217,34 +225,24 @@ export default function ContractsDashboard() {
       if (response.ok) {
         const data = await response.json()
         console.log('New session created:', data)
-
-        // LOG: Session created successfully
         eventLogger.completed('contract_session_creation', 'session_record_created', {
           sessionId: data.sessionId,
           sessionNumber: data.sessionNumber
         });
-
-        // Store the new session ID and redirect to Customer Requirements
         localStorage.setItem('currentSessionId', data.sessionId)
         localStorage.setItem('newSessionNumber', data.sessionNumber)
-
-        // LOG: Redirect to requirements
         eventLogger.completed('contract_session_creation', 'redirect_to_requirements', {
           sessionId: data.sessionId
         });
-
-        // Redirect to Customer Requirements form with session ID
         router.push(`/auth/customer-requirements?session_id=${data.sessionId}&session_number=${data.sessionNumber}`)
       } else {
         const errorData = await response.json()
         console.error('Failed to create session:', errorData)
-        // LOG: Session creation failed
         eventLogger.failed('contract_session_creation', 'session_record_created', 'Failed to create session', 'API_ERROR');
         alert('Failed to create new contract. Please try again.')
       }
     } catch (error) {
       console.error('Error creating contract:', error)
-      // LOG: Exception during creation
       eventLogger.failed('contract_session_creation', 'create_contract_clicked', error instanceof Error ? error.message : 'Unknown error', 'EXCEPTION');
       alert('Failed to create new contract. Please try again.')
     } finally {
@@ -316,7 +314,6 @@ export default function ContractsDashboard() {
 
   function continueWithClarence(sessionId?: string) {
     if (sessionId) {
-      // LOG: Opening CLARENCE chat for existing session
       eventLogger.completed('contract_studio', 'clarence_chat_opened', {
         sessionId: sessionId,
         source: 'dashboard'
@@ -328,48 +325,27 @@ export default function ContractsDashboard() {
     }
   }
 
-  function navigateToPhase(session: Session, providerId?: string) {
-    // LOG: Existing contract selected
-    eventLogger.completed('contract_session_creation', 'existing_contract_selected', {
-      sessionId: session.sessionId,
-      sessionNumber: session.sessionNumber,
-      phase: session.phase,
-      status: session.status,
-      providerId: providerId
+  function openContractStudio(sessionId: string, providerId: string) {
+    eventLogger.completed('contract_studio', 'studio_opened', {
+      sessionId: sessionId,
+      providerId: providerId,
+      source: 'dashboard'
     });
+    localStorage.setItem('currentSessionId', sessionId)
+    localStorage.setItem('selectedProviderId', providerId)
+    router.push(`/auth/contract-studio?session_id=${sessionId}&provider_id=${providerId}`)
+  }
 
-    localStorage.setItem('currentSessionId', session.sessionId)
-    localStorage.setItem('currentSession', JSON.stringify(session))
-
-    if (providerId) {
-      localStorage.setItem('selectedProviderId', providerId)
-    }
-
-    const phase = session.phase || 1
-    const queryParams = providerId
-      ? `?session_id=${session.sessionId}&provider=${providerId}`
-      : `?session_id=${session.sessionId}`
-
-    switch (phase) {
-      case 1:
-        router.push(`/auth/assessment${queryParams}`)
-        break
-      case 2:
-        router.push(`/auth/foundation${queryParams}`)
-        break
-      case 3:
-      case 4:
-        router.push(`/auth/assessment${queryParams}`)
-        break
-      case 5:
-        router.push(`/auth/commercial${queryParams}`)
-        break
-      case 6:
-        continueWithClarence(session.sessionId)
-        break
-      default:
-        router.push(`/auth/assessment${queryParams}`)
-    }
+  function toggleSessionExpand(sessionId: string) {
+    setExpandedSessions(prev => {
+      const next = new Set(prev)
+      if (next.has(sessionId)) {
+        next.delete(sessionId)
+      } else {
+        next.add(sessionId)
+      }
+      return next
+    })
   }
 
   // ==========================================================================
@@ -384,6 +360,7 @@ export default function ContractsDashboard() {
       'customer_onboarding_complete': 'bg-indigo-100 text-indigo-700',
       'providers_invited': 'bg-purple-100 text-purple-700',
       'assessment_complete': 'bg-slate-100 text-slate-700',
+      'negotiation_ready': 'bg-emerald-100 text-emerald-700',
       'completed': 'bg-emerald-100 text-emerald-700',
       'provider_matched': 'bg-purple-100 text-purple-700',
       'mediation_pending': 'bg-orange-100 text-orange-700',
@@ -401,6 +378,7 @@ export default function ContractsDashboard() {
       'customer_onboarding_complete': 'Ready to Invite',
       'providers_invited': 'Awaiting Providers',
       'assessment_complete': 'Assessment Complete',
+      'negotiation_ready': 'Ready to Negotiate',
       'completed': 'Completed',
       'provider_matched': 'Provider Matched',
       'mediation_pending': 'Mediation Pending',
@@ -410,8 +388,31 @@ export default function ContractsDashboard() {
     return statusTexts[status] || status.replace(/_/g, ' ')
   }
 
-  function getPhaseActionButton(session: Session) {
-    const phase = session.phase || 1
+  function getProviderBidStatusBadge(bid: ProviderBid) {
+    if (bid.status === 'rejected' || bid.status === 'withdrawn') {
+      return { text: 'Closed', className: 'bg-slate-100 text-slate-500' }
+    }
+    if (bid.status === 'accepted') {
+      return { text: 'Accepted', className: 'bg-emerald-100 text-emerald-700' }
+    }
+    if (bid.status === 'negotiating' || bid.status === 'negotiation_ready') {
+      return { text: 'Negotiating', className: 'bg-blue-100 text-blue-700' }
+    }
+    if (bid.questionnaireComplete) {
+      return { text: 'Ready', className: 'bg-emerald-100 text-emerald-700' }
+    }
+    if (bid.intakeComplete) {
+      return { text: 'Questionnaire Pending', className: 'bg-amber-100 text-amber-700' }
+    }
+    return { text: 'Intake Pending', className: 'bg-slate-100 text-slate-500' }
+  }
+
+  function canNegotiateWithProvider(bid: ProviderBid): boolean {
+    return bid.questionnaireComplete &&
+      !['rejected', 'withdrawn', 'accepted'].includes(bid.status)
+  }
+
+  function getSessionActionButton(session: Session) {
     const status = session.status
 
     if (status === 'completed') {
@@ -423,7 +424,6 @@ export default function ContractsDashboard() {
       }
     }
 
-    // Handle onboarding statuses
     if (status === 'created' || status === 'initiated') {
       return {
         text: 'Continue Setup →',
@@ -451,41 +451,8 @@ export default function ContractsDashboard() {
       }
     }
 
-    if (status === 'providers_invited') {
-      return {
-        text: 'View Provider Status',
-        className: 'bg-slate-600 hover:bg-slate-700 text-white',
-        disabled: false,
-        action: () => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
-      }
-    }
-
-    // Standard phase-based buttons
-    switch (phase) {
-      case 1:
-        return {
-          text: status === 'assessment_complete'
-            ? 'Review Assessment'
-            : 'Start Phase 1: Assessment',
-          className: 'bg-slate-600 hover:bg-slate-700 text-white',
-          disabled: false,
-          action: () => navigateToPhase(session)
-        }
-      case 2:
-        return {
-          text: 'Continue Phase 2: Foundation',
-          className: 'bg-slate-600 hover:bg-slate-700 text-white',
-          disabled: false,
-          action: () => navigateToPhase(session)
-        }
-      default:
-        return {
-          text: 'Open Contract Studio',
-          className: 'bg-blue-600 hover:bg-blue-700 text-white',
-          disabled: false,
-          action: () => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
-        }
-    }
+    // For sessions with providers invited or beyond
+    return null // No main action button - actions are per-provider now
   }
 
   // ==========================================================================
@@ -582,7 +549,6 @@ export default function ContractsDashboard() {
     loadSessions()
   }, [loadUserInfo])
 
-  // Close user menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Element
@@ -599,19 +565,15 @@ export default function ContractsDashboard() {
   // ==========================================================================
 
   useEffect(() => {
-    // Set user context when userInfo is available
     if (userInfo?.userId) {
       eventLogger.setUser(userInfo.userId);
     }
-
-    // Log dashboard loaded
     eventLogger.completed('contract_session_creation', 'dashboard_loaded', {
       userEmail: userInfo?.email,
       company: userInfo?.company
     });
   }, [userInfo]);
 
-  // Log when sessions data is fetched
   useEffect(() => {
     if (!loading && sessions !== null) {
       eventLogger.completed('contract_session_creation', 'dashboard_data_fetched', {
@@ -628,14 +590,29 @@ export default function ContractsDashboard() {
   const metrics = getMetricsData()
 
   // ==========================================================================
-  // SECTION 15: RENDER
+  // SECTION 15: CURRENCY HELPER
+  // ==========================================================================
+
+  function formatCurrency(value: string | number, currency: string = 'GBP') {
+    const numValue = typeof value === 'string' ? parseInt(value) : value
+    const symbols: Record<string, string> = {
+      'GBP': '£',
+      'USD': '$',
+      'EUR': '€',
+      'AUD': 'A$'
+    }
+    const symbol = symbols[currency] || currency + ' '
+    return `${symbol}${numValue.toLocaleString()}`
+  }
+
+  // ==========================================================================
+  // SECTION 16: RENDER
   // ==========================================================================
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* ================================================================== */}
-      {/* SECTION 16: NAVIGATION HEADER */}
-      {/* Consistent with other pages, adapted for logged-in users */}
+      {/* SECTION 17: NAVIGATION HEADER */}
       {/* ================================================================== */}
       <header className="bg-slate-800 text-white">
         <div className="container mx-auto px-6">
@@ -689,14 +666,11 @@ export default function ContractsDashboard() {
                 {/* Dropdown Menu */}
                 {showUserMenu && (
                   <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
-                    {/* User Info */}
                     <div className="px-4 py-3 border-b border-slate-100">
                       <div className="font-medium text-slate-800">{userInfo?.firstName} {userInfo?.lastName}</div>
                       <div className="text-sm text-slate-500">{userInfo?.email}</div>
                       <div className="text-xs text-slate-400 mt-1">{userInfo?.company}</div>
                     </div>
-
-                    {/* Menu Items */}
                     <div className="py-2">
                       <Link
                         href="/how-it-works"
@@ -717,8 +691,6 @@ export default function ContractsDashboard() {
                         The 6 Phases
                       </Link>
                     </div>
-
-                    {/* Sign Out */}
                     <div className="border-t border-slate-100 pt-2">
                       <button
                         onClick={handleSignOut}
@@ -739,7 +711,7 @@ export default function ContractsDashboard() {
       </header>
 
       {/* ================================================================== */}
-      {/* SECTION 17: MAIN CONTENT */}
+      {/* SECTION 18: MAIN CONTENT */}
       {/* ================================================================== */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -751,7 +723,7 @@ export default function ContractsDashboard() {
                 Welcome back, {userInfo?.firstName || 'User'}
               </h1>
               <p className="text-slate-500 text-sm">
-                Manage your contract negotiations and track progress
+                Manage your contract negotiations and track provider bids
               </p>
             </div>
             <button
@@ -777,7 +749,7 @@ export default function ContractsDashboard() {
         </div>
 
         {/* ================================================================ */}
-        {/* SECTION 18: QUICK STATS CARDS */}
+        {/* SECTION 19: QUICK STATS CARDS */}
         {/* ================================================================ */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
@@ -812,7 +784,7 @@ export default function ContractsDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-2xl font-bold text-emerald-600">
-                  £{metrics.totalValue.toLocaleString()}
+                  {formatCurrency(metrics.totalValue)}
                 </div>
                 <div className="text-slate-500 text-sm">Total Deal Value</div>
               </div>
@@ -826,14 +798,14 @@ export default function ContractsDashboard() {
           <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-bold text-amber-600">
-                  {metrics.avgCompletion}%
+                <div className="text-2xl font-bold text-purple-600">
+                  {sessions.reduce((sum, s) => sum + (s.providerBids?.length || 0), 0)}
                 </div>
-                <div className="text-slate-500 text-sm">Avg. Completion</div>
+                <div className="text-slate-500 text-sm">Total Provider Bids</div>
               </div>
-              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
             </div>
@@ -841,7 +813,7 @@ export default function ContractsDashboard() {
         </div>
 
         {/* ================================================================ */}
-        {/* SECTION 19: COLLAPSIBLE METRICS */}
+        {/* SECTION 20: COLLAPSIBLE METRICS */}
         {/* ================================================================ */}
         {sessions.length > 0 && (
           <div className="mb-8">
@@ -872,7 +844,7 @@ export default function ContractsDashboard() {
             {showMetrics && (
               <div className="mt-4 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Active vs Closed */}
+                  {/* Charts - same as before */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-base font-semibold mb-4 text-slate-800">Active vs Closed</h3>
                     <ResponsiveContainer width="100%" height={200}>
@@ -896,7 +868,6 @@ export default function ContractsDashboard() {
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Contract Types */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-base font-semibold mb-4 text-slate-800">By Type</h3>
                     <ResponsiveContainer width="100%" height={200}>
@@ -910,7 +881,6 @@ export default function ContractsDashboard() {
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Deal Size Distribution */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="text-base font-semibold mb-4 text-slate-800">Deal Size Distribution</h3>
                     {metrics.dealSizeData.length > 0 ? (
@@ -944,7 +914,7 @@ export default function ContractsDashboard() {
         )}
 
         {/* ================================================================ */}
-        {/* SECTION 20: SESSIONS LIST */}
+        {/* SECTION 21: SESSIONS LIST - REDESIGNED WITH SPLIT LAYOUT */}
         {/* ================================================================ */}
         <div>
           <h2 className="text-xl font-bold mb-4 text-slate-800">Your Contracts</h2>
@@ -998,97 +968,211 @@ export default function ContractsDashboard() {
               </div>
             </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="space-y-4">
               {sessions.map(session => {
                 const phase = session.phase || 1
-                const actionButton = getPhaseActionButton(session)
+                const actionButton = getSessionActionButton(session)
+                const providerBids = session.providerBids || []
+                const isExpanded = expandedSessions.has(session.sessionId)
+                const hasProviders = providerBids.length > 0
+                const readyProviders = providerBids.filter(b => canNegotiateWithProvider(b))
 
                 return (
-                  <div key={session.sessionId} className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md hover:border-slate-300 transition-all">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="text-base font-semibold text-slate-800">
-                          {session.sessionNumber || (session?.sessionId || 'NEW')?.substring(0, 8)}
-                        </h3>
-                        <p className="text-slate-500 text-sm">{session.serviceRequired || 'Service type pending'}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(session.status)}`}>
-                        {getStatusDisplayText(session.status)}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 text-sm">
-                      <div>
-                        <span className="text-slate-400 text-xs">Customer</span>
-                        <p className="font-medium text-slate-700">{session.customerCompany}</p>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 text-xs">Provider</span>
-                        <p className="font-medium text-slate-700">{session.providerCompany || 'Pending'}</p>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 text-xs">Value</span>
-                        <p className="font-medium text-slate-700">
-                          {session.dealValue ? `£${parseInt(session.dealValue).toLocaleString()}` : 'TBD'}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 text-xs">Phase</span>
-                        <p className="font-medium text-slate-700">{phases[phase]?.name || 'Setup'}</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <div className="flex justify-between text-xs text-slate-400 mb-1">
-                        <span>Progress</span>
-                        <span>{session.phaseAlignment || 0}%</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
-                          style={{ width: `${session.phaseAlignment || 0}%` }}
-                        />
+                  <div
+                    key={session.sessionId}
+                    className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md hover:border-slate-300 transition-all"
+                  >
+                    {/* Session Header */}
+                    <div className="p-5 border-b border-slate-100">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <h3 className="text-lg font-semibold text-slate-800">
+                              {session.sessionNumber || session.sessionId.substring(0, 8)}
+                            </h3>
+                            <p className="text-slate-500 text-sm">{session.serviceRequired || 'Service type pending'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(session.status)}`}>
+                            {getStatusDisplayText(session.status)}
+                          </span>
+                          {/* Phase indicator */}
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4, 5, 6].map(p => (
+                              <div
+                                key={p}
+                                className={`w-2 h-2 rounded-full ${p <= phase ? 'bg-blue-500' : 'bg-slate-200'}`}
+                                title={`Phase ${p}: ${phases[p]?.name}`}
+                              />
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={actionButton.action}
-                        disabled={actionButton.disabled}
-                        className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${actionButton.className}`}
-                      >
-                        {actionButton.text}
-                      </button>
+                    {/* Split Content Area */}
+                    <div className="flex flex-col md:flex-row">
+                      {/* Left Side: Contract Details */}
+                      <div className="flex-1 p-5 border-b md:border-b-0 md:border-r border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Contract Details</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-xs text-slate-400">Customer</span>
+                            <p className="font-medium text-slate-700">{session.customerCompany}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-400">Deal Value</span>
+                            <p className="font-medium text-slate-700">
+                              {session.dealValue ? formatCurrency(session.dealValue, session.currency) : 'TBD'}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-400">Phase</span>
+                            <p className="font-medium text-slate-700">{phases[phase]?.name || 'Setup'}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-400">Industry</span>
+                            <p className="font-medium text-slate-700">{session.industry || 'General'}</p>
+                          </div>
+                        </div>
 
-                      {/* Invite More Providers Button - Always show except for early draft stages and completed */}
-                      {!['created', 'initiated', 'customer_intake_complete', 'completed'].includes(session.status) && (
-                        <button
-                          onClick={() => router.push(`/auth/invite-providers?session_id=${session.sessionId}&session_number=${session.sessionNumber || ''}`)}
-                          className="px-4 py-2.5 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
-                          title="Invite more providers"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                          </svg>
-                          <span className="hidden sm:inline">Invite</span>
-                        </button>
-                      )}
+                        {/* Progress Bar */}
+                        <div className="mt-4">
+                          <div className="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Progress</span>
+                            <span>{session.phaseAlignment || 0}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all"
+                              style={{ width: `${session.phaseAlignment || 0}%` }}
+                            />
+                          </div>
+                        </div>
 
+                        {/* Setup action button for early stages */}
+                        {actionButton && (
+                          <div className="mt-4">
+                            <button
+                              onClick={actionButton.action}
+                              disabled={actionButton.disabled}
+                              className={`w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${actionButton.className}`}
+                            >
+                              {actionButton.text}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Side: Provider Bids */}
+                      <div className="flex-1 p-5 bg-slate-50/50">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                            Provider Bids ({providerBids.length})
+                          </h4>
+                          {!['created', 'initiated', 'customer_intake_complete', 'completed'].includes(session.status) && (
+                            <button
+                              onClick={() => router.push(`/auth/invite-providers?session_id=${session.sessionId}&session_number=${session.sessionNumber || ''}`)}
+                              className="text-xs text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              Invite More
+                            </button>
+                          )}
+                        </div>
+
+                        {!hasProviders ? (
+                          <div className="text-center py-6 text-slate-400 text-sm">
+                            <svg className="w-8 h-8 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            No providers invited yet
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {/* Show first 2 providers, expandable */}
+                            {(isExpanded ? providerBids : providerBids.slice(0, 2)).map(bid => {
+                              const bidStatus = getProviderBidStatusBadge(bid)
+                              const canNegotiate = canNegotiateWithProvider(bid)
+
+                              return (
+                                <div
+                                  key={bid.bidId}
+                                  className="bg-white rounded-lg p-3 border border-slate-200 flex items-center justify-between"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-slate-700 text-sm truncate">
+                                        {bid.providerCompany}
+                                      </p>
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${bidStatus.className}`}>
+                                        {bidStatus.text}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 truncate">
+                                      {bid.providerContactName || bid.providerContactEmail}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 ml-3">
+                                    {canNegotiate ? (
+                                      <button
+                                        onClick={() => openContractStudio(session.sessionId, bid.providerId)}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                                      >
+                                        Open Studio
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                      </button>
+                                    ) : (
+                                      <span className="text-xs text-slate-400">Awaiting completion</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+
+                            {/* Show more / less toggle */}
+                            {providerBids.length > 2 && (
+                              <button
+                                onClick={() => toggleSessionExpand(session.sessionId)}
+                                className="w-full text-center text-xs text-slate-500 hover:text-slate-700 py-2 transition-colors"
+                              >
+                                {isExpanded ? (
+                                  <>Show less ↑</>
+                                ) : (
+                                  <>Show {providerBids.length - 2} more provider{providerBids.length - 2 > 1 ? 's' : ''} ↓</>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Summary for providers ready to negotiate */}
+                        {readyProviders.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-200">
+                            <p className="text-xs text-emerald-600 font-medium">
+                              ✓ {readyProviders.length} provider{readyProviders.length > 1 ? 's' : ''} ready to negotiate
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
                       <button
                         onClick={() => continueWithClarence(session.sessionId)}
-                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                        className="px-3 py-1.5 text-slate-600 hover:text-slate-800 text-xs font-medium transition-colors flex items-center gap-1"
                         title="Chat with CLARENCE"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
                         </svg>
-                      </button>
-
-                      <button
-                        onClick={() => router.push(`/auth/contract-studio?session_id=${session.sessionId}`)}
-                        className="px-4 py-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm font-medium text-slate-600 transition-colors"
-                      >
-                        Details
+                        Ask CLARENCE
                       </button>
                     </div>
                   </div>
@@ -1100,7 +1184,7 @@ export default function ContractsDashboard() {
       </div>
 
       {/* ================================================================== */}
-      {/* SECTION 21: CHAT OVERLAY */}
+      {/* SECTION 22: CHAT OVERLAY */}
       {/* ================================================================== */}
       {showChatOverlay && (
         <div className={`fixed ${chatMinimized ? 'bottom-4 right-4' : 'inset-0'} z-50 ${chatMinimized ? '' : 'bg-black/50'}`}>
@@ -1204,7 +1288,7 @@ export default function ContractsDashboard() {
       )}
 
       {/* ================================================================== */}
-      {/* SECTION 22: FLOATING CHAT BUTTON */}
+      {/* SECTION 23: FLOATING CHAT BUTTON */}
       {/* ================================================================== */}
       {!showChatOverlay && (
         <button
