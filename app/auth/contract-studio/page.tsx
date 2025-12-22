@@ -2527,12 +2527,10 @@ function ContractStudioContent() {
             const user = loadUserInfo()
             if (!user) return
 
-            // Check for provider_id in URL - if present, user is a provider
-            const providerId = searchParams.get('provider_id')
-            if (providerId) {
-                user.role = 'provider'
-            }
+            // Get provider_id from URL (customer viewing specific provider OR provider viewing their own)
+            const providerIdFromUrl = searchParams.get('provider_id')
 
+            // DON'T change user role based on URL params - keep role from localStorage auth
             setUserInfo(user)
 
             const sessionId = searchParams.get('session_id') || searchParams.get('session')
@@ -2557,7 +2555,7 @@ function ContractStudioContent() {
                             sessionNumber: data.sessionNumber || sessionNumber || '',
                             customerCompany: data.companyName || data.company_name || user.company || '',
                             providerCompany: 'Provider (Pending)',
-                            providerId: null,      // ADD THIS
+                            providerId: null,
                             customerContactName: data.contactName || data.contact_name || user.firstName || '',
                             providerContactName: null,
                             serviceType: data.serviceRequired || data.service_required || 'IT Services',
@@ -2612,15 +2610,22 @@ function ContractStudioContent() {
                 return
             }
 
-            // For providers, get their own provider_id from localStorage
+            // Determine which provider_id to load
             let providerIdToLoad: string | undefined = undefined
-            if (user.role === 'provider') {
+
+            // First priority: provider_id from URL (works for both customer and provider)
+            if (providerIdFromUrl) {
+                providerIdToLoad = providerIdFromUrl
+                console.log('Using provider_id from URL:', providerIdToLoad)
+            }
+            // Fallback for providers: check localStorage
+            else if (user.role === 'provider') {
                 try {
                     const providerSession = localStorage.getItem('clarence_provider_session') || localStorage.getItem('providerSession')
                     if (providerSession) {
                         const parsed = JSON.parse(providerSession)
                         providerIdToLoad = parsed.providerId
-                        console.log('Provider loading their own data, provider_id:', providerIdToLoad)
+                        console.log('Provider loading from localStorage, provider_id:', providerIdToLoad)
                     }
                 } catch (e) {
                     console.error('Error getting provider_id from localStorage:', e)
@@ -2628,7 +2633,7 @@ function ContractStudioContent() {
             }
 
             const data = await loadContractData(sessionId, user.role, providerIdToLoad)
-
+            
             if (data) {
                 console.log('=== CLAUSE DATA DEBUG ===')
                 console.log('Clauses from API:', data.clauses.length)
