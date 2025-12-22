@@ -11,7 +11,8 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
-import { eventLogger } from '@/lib/eventLogger';
+import { eventLogger } from '@/lib/eventLogger'
+import { createClient } from '@/lib/supabase'
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -92,6 +93,7 @@ const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 export default function ContractsDashboard() {
   const router = useRouter()
+  const supabase = createClient()
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   // ==========================================================================
@@ -156,11 +158,26 @@ export default function ContractsDashboard() {
   // SECTION 7: SIGN OUT FUNCTION
   // ==========================================================================
 
-  function handleSignOut() {
-    localStorage.removeItem('clarence_auth')
-    localStorage.removeItem('currentSessionId')
-    localStorage.removeItem('currentSession')
-    router.push('/')
+  async function handleSignOut() {
+    try {
+      // Sign out from Supabase Auth
+      await supabase.auth.signOut();
+
+      // Clear all localStorage
+      localStorage.removeItem('clarence_auth');
+      localStorage.removeItem('clarence_provider_session');
+      localStorage.removeItem('providerSession');
+      localStorage.removeItem('currentSessionId');
+      localStorage.removeItem('currentSession');
+
+      // Redirect to login
+      router.push('/auth/login');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Force redirect even if error
+      localStorage.removeItem('clarence_auth');
+      router.push('/auth/login');
+    }
   }
 
   // ==========================================================================
