@@ -389,22 +389,34 @@ export default function ContractsDashboard() {
   }
 
   function getProviderBidStatusBadge(bid: ProviderBid) {
+    // Closed states
     if (bid.status === 'rejected' || bid.status === 'withdrawn') {
       return { text: 'Closed', className: 'bg-slate-100 text-slate-500' }
     }
     if (bid.status === 'accepted') {
       return { text: 'Accepted', className: 'bg-emerald-100 text-emerald-700' }
     }
+
+    // Active negotiation states
     if (bid.status === 'negotiating' || bid.status === 'negotiation_ready') {
       return { text: 'Negotiating', className: 'bg-blue-100 text-blue-700' }
     }
+
+    // Completion states based on flags
     if (bid.questionnaireComplete) {
       return { text: 'Ready', className: 'bg-emerald-100 text-emerald-700' }
     }
     if (bid.intakeComplete) {
       return { text: 'Questionnaire Pending', className: 'bg-amber-100 text-amber-700' }
     }
-    return { text: 'Intake Pending', className: 'bg-slate-100 text-slate-500' }
+
+    // Newly invited - hasn't started intake yet
+    if (bid.status === 'invited' || (!bid.intakeComplete && !bid.questionnaireComplete)) {
+      return { text: 'Awaiting Response', className: 'bg-purple-100 text-purple-700' }
+    }
+
+    // Default fallback
+    return { text: 'Pending', className: 'bg-slate-100 text-slate-500' }
   }
 
   function canNegotiateWithProvider(bid: ProviderBid): boolean {
@@ -1074,12 +1086,12 @@ export default function ContractsDashboard() {
                           {!['created', 'initiated', 'customer_intake_complete', 'completed'].includes(session.status) && (
                             <button
                               onClick={() => router.push(`/auth/invite-providers?session_id=${session.sessionId}&session_number=${session.sessionNumber || ''}`)}
-                              className="text-xs text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+                              className="text-xs text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1 cursor-pointer"
                             >
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                               </svg>
-                              Invite More
+                              Invite Provider
                             </button>
                           )}
                         </div>
