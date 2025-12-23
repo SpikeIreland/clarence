@@ -134,7 +134,16 @@ function LoginSignupContent() {
 
         if (userError) throw userError
 
-        // Store user info in localStorage for legacy compatibility
+        // Check role and redirect accordingly
+        if (userData.role === 'provider') {
+          // Provider logged in via customer portal - sign them out and redirect to provider portal
+          await supabase.auth.signOut()
+          setError('This is a provider account. Please use the Provider Portal to sign in.')
+          setLoading(false)
+          return
+        }
+
+        // Customer - store auth and redirect to dashboard
         const authData = {
           userInfo: {
             userId: userData.auth_id,
@@ -147,21 +156,7 @@ function LoginSignupContent() {
           timestamp: new Date().toISOString()
         }
         localStorage.setItem('clarence_auth', JSON.stringify(authData))
-
-        // Check role and redirect accordingly
-        if (userData.role === 'provider') {
-          // Provider logged in via customer portal - redirect to provider dashboard
-          localStorage.setItem('clarence_provider_session', JSON.stringify({
-            providerId: userData.auth_id,
-            email: userData.email,
-            role: 'provider'
-          }))
-          setSuccess('Redirecting to Provider Portal...')
-          router.push('/provider/dashboard')
-        } else {
-          // Customer - redirect to customer dashboard
-          router.push('/auth/contracts-dashboard')
-        }
+        router.push('/auth/contracts-dashboard')
       }
     } catch (err: unknown) {
       console.error('Login error:', err)
