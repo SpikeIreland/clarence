@@ -268,11 +268,13 @@ function ProviderQuestionnaireContent() {
         console.log('URL providerId:', providerId)
 
         if (!sessionId) {
-            console.log('No sessionId in URL, checking localStorage...')
+            console.log('=== NO SESSION ID IN URL ===')
             const stored = localStorage.getItem('clarence_provider_session')
             console.log('localStorage stored:', stored)
             if (stored) {
                 const parsed = JSON.parse(stored)
+                console.log('=== SETTING sessionData from localStorage ===')
+                console.log('parsed data:', parsed)
                 setSessionData({
                     sessionId: parsed.sessionId,
                     sessionNumber: parsed.sessionNumber || '',
@@ -281,8 +283,8 @@ function ProviderQuestionnaireContent() {
                     serviceRequired: parsed.serviceRequired || 'Service Contract',
                     dealValue: parsed.dealValue || ''
                 })
+                console.log('=== sessionData SET from localStorage ===')
 
-                // LOG: Page loaded from localStorage
                 if (parsed.sessionId) {
                     eventLogger.setSession(parsed.sessionId)
                     eventLogger.completed('provider_onboarding', 'provider_questionnaire_page_loaded', {
@@ -292,20 +294,19 @@ function ProviderQuestionnaireContent() {
                     })
                 }
             } else {
-                // LOG: Page load failed - no session
+                console.log('=== NO localStorage DATA ===')
                 eventLogger.failed('provider_onboarding', 'provider_questionnaire_page_loaded', 'No session data available', 'NO_SESSION')
             }
             setLoading(false)
+            console.log('=== EARLY RETURN - setLoading(false) called ===')
             return
         }
 
-        console.log('=== HAS SESSION ID, CONTINUING ===')
+        console.log('=== HAS SESSION ID - CONTINUING ===')
 
-        // Set session context early
         eventLogger.setSession(sessionId)
         console.log('=== eventLogger.setSession called ===')
 
-        // Try to get providerId from localStorage if not in URL
         let finalProviderId = providerId || ''
         if (!finalProviderId) {
             const stored = localStorage.getItem('clarence_provider_session')
@@ -317,38 +318,49 @@ function ProviderQuestionnaireContent() {
         console.log('=== finalProviderId:', finalProviderId)
 
         try {
+            const fetchUrl = `${API_BASE}/contract-studio-api?session_id=${sessionId}`
             console.log('=== ABOUT TO FETCH ===')
-            console.log('Fetch URL:', `${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+            console.log('=== Fetch URL:', fetchUrl)
 
-            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+            const response = await fetch(fetchUrl)
 
             console.log('=== FETCH COMPLETE ===')
-            console.log('response.ok:', response.ok)
-            console.log('response.status:', response.status)
+            console.log('=== response.ok:', response.ok)
+            console.log('=== response.status:', response.status)
 
             if (response.ok) {
                 const data = await response.json()
-                console.log('=== API DATA:', data)
-                setSessionData({
-                    sessionId: sessionId,
-                    sessionNumber: data.sessionNumber || data.session_number || '',
-                    providerId: finalProviderId,
-                    customerCompany: data.customerCompany || data.customer_company || 'Customer',
-                    serviceRequired: data.serviceRequired || data.service_required || 'Service Contract',
-                    dealValue: data.dealValue || data.deal_value || ''
-                })
+                console.log('=== API DATA RECEIVED ===')
+                console.log('=== data:', data)
 
-                // LOG: Page loaded successfully from API
+                // Handle nested session object from API
+                const sessionInfo = data.session || data
+                console.log('=== sessionInfo:', sessionInfo)
+
+                const newSessionData = {
+                    sessionId: sessionId,
+                    sessionNumber: sessionInfo.sessionNumber || sessionInfo.session_number || '',
+                    providerId: finalProviderId,
+                    customerCompany: sessionInfo.customerCompany || sessionInfo.customer_company || 'Customer',
+                    serviceRequired: sessionInfo.contractType || sessionInfo.contract_type || 'Service Contract',
+                    dealValue: sessionInfo.dealValue || sessionInfo.deal_value || ''
+                }
+                console.log('=== SETTING sessionData:', newSessionData)
+                setSessionData(newSessionData)
+                console.log('=== sessionData SET from API ===')
+
                 eventLogger.completed('provider_onboarding', 'provider_questionnaire_page_loaded', {
                     sessionId: sessionId,
                     providerId: finalProviderId,
-                    customerCompany: data.customerCompany || data.customer_company,
+                    customerCompany: sessionInfo.customerCompany || sessionInfo.customer_company,
                     source: 'api'
                 })
             } else {
+                console.log('=== FETCH NOT OK - status:', response.status)
                 const stored = localStorage.getItem('clarence_provider_session')
                 if (stored) {
                     const parsed = JSON.parse(stored)
+                    console.log('=== FALLING BACK to localStorage ===')
                     setSessionData({
                         sessionId: sessionId,
                         sessionNumber: parsed.sessionNumber || '',
@@ -358,7 +370,6 @@ function ProviderQuestionnaireContent() {
                         dealValue: parsed.dealValue || ''
                     })
 
-                    // LOG: Page loaded from localStorage fallback
                     eventLogger.completed('provider_onboarding', 'provider_questionnaire_page_loaded', {
                         sessionId: sessionId,
                         providerId: parsed.providerId || finalProviderId,
@@ -367,14 +378,29 @@ function ProviderQuestionnaireContent() {
                 }
             }
         } catch (error) {
-            console.error('Failed to load session:', error)
-            // LOG: Page load failed
+            console.error('=== FETCH ERROR ===', error)
             eventLogger.failed('provider_onboarding', 'provider_questionnaire_page_loaded',
                 error instanceof Error ? error.message : 'Failed to load session',
                 'API_ERROR'
             )
+
+            // Fallback to localStorage on error
+            const stored = localStorage.getItem('clarence_provider_session')
+            if (stored) {
+                const parsed = JSON.parse(stored)
+                console.log('=== ERROR FALLBACK to localStorage ===')
+                setSessionData({
+                    sessionId: sessionId,
+                    sessionNumber: parsed.sessionNumber || '',
+                    providerId: parsed.providerId || finalProviderId || '',
+                    customerCompany: parsed.customerCompany || 'Customer',
+                    serviceRequired: parsed.serviceRequired || 'Service Contract',
+                    dealValue: parsed.dealValue || ''
+                })
+            }
         }
 
+        console.log('=== setLoading(false) ===')
         setLoading(false)
     }, [searchParams])
 
