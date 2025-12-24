@@ -407,7 +407,14 @@ function ProviderQuestionnaireContent() {
     // ========================================================================
 
     const handleSubmit = async () => {
-        if (!sessionData?.sessionId) return
+        console.log('handleSubmit called')
+        console.log('sessionData:', sessionData)
+        console.log('sessionData?.sessionId:', sessionData?.sessionId)
+
+        if (!sessionData?.sessionId) {
+            console.log('EARLY RETURN - no sessionId')
+            return
+        }
 
         setSubmitting(true)
 

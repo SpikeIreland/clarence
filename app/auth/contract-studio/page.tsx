@@ -1820,6 +1820,26 @@ function ContractStudioContent() {
     // Preview Contract state
     const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
 
+    // ==========================================================================
+    // SIGN OUT FUNCTION
+    // ==========================================================================
+
+    async function handleSignOut() {
+        try {
+            const supabase = createClient()
+            await supabase.auth.signOut()
+            localStorage.removeItem('clarence_auth')
+            localStorage.removeItem('clarence_provider_session')
+            localStorage.removeItem('providerSession')
+            localStorage.removeItem('currentSessionId')
+            localStorage.removeItem('currentSession')
+            router.push('/provider')
+        } catch (error) {
+            console.error('Sign out error:', error)
+            router.push('/provider')
+        }
+    }
+
     // ============================================================================
     // SECTION 6X: SUB-CLAUSE MODAL STATE
     // ============================================================================
@@ -2633,7 +2653,7 @@ function ContractStudioContent() {
             }
 
             const data = await loadContractData(sessionId, user.role, providerIdToLoad)
-            
+
             if (data) {
                 console.log('=== CLAUSE DATA DEBUG ===')
                 console.log('Clauses from API:', data.clauses.length)
@@ -3849,6 +3869,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             setInviteSent={setInviteSent}
             handleSendInvite={handleSendInvite}
             router={router}
+            userInfo={userInfo}
+            handleSignOut={handleSignOut}
         />
     }
 
@@ -3858,10 +3880,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <div className="text-center">
                     <p className="text-red-600 mb-4">Failed to load contract data</p>
                     <button
-                        onClick={() => router.push('/auth/contracts-dashboard')}
-                        className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
+                        onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
+                        className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
                     >
-                        ← Return to Dashboard
+                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
                     </button>
                 </div>
             </div>
@@ -5175,16 +5197,20 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* ============================================================ */}
                 <div className="px-6 py-2 border-b border-slate-700">
                     <div className="flex items-center justify-between">
-                        {/* Left: Dashboard Button */}
-                        <button
-                            onClick={() => router.push('/auth/contracts-dashboard')}
-                            className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                            </svg>
-                            <span className="text-sm">Dashboard</span>
-                        </button>
+                        {/* Left: Dashboard Button (Customers only) */}
+                        {userInfo?.role !== 'provider' ? (
+                            <button
+                                onClick={() => router.push('/auth/contracts-dashboard')}
+                                className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                </svg>
+                                <span className="text-sm">Dashboard</span>
+                            </button>
+                        ) : (
+                            <div className="w-20"></div>
+                        )}
 
                         {/* Center: Title */}
                         <div className="flex items-center gap-3">
@@ -6550,6 +6576,8 @@ interface PendingProviderViewProps {
     setInviteSent: (sent: boolean) => void
     handleSendInvite: () => void
     router: ReturnType<typeof useRouter>
+    userInfo: UserInfo | null
+    handleSignOut: () => Promise<void>
 }
 
 function PendingProviderView({
@@ -6560,8 +6588,11 @@ function PendingProviderView({
     inviteSending,
     inviteSent,
     handleSendInvite,
-    router
+    router,
+    userInfo,
+    handleSignOut
 }: PendingProviderViewProps) {
+
     return (
         <div className="min-h-screen bg-slate-50">
             <div className="bg-slate-800 text-white px-6 py-4">
@@ -6576,10 +6607,10 @@ function PendingProviderView({
                         </div>
                     </div>
                     <button
-                        onClick={() => router.push('/auth/contracts-dashboard')}
-                        className="text-slate-400 hover:text-white transition"
+                        onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
+                        className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
                     >
-                        ← Back to Dashboard
+                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
                     </button>
                 </div>
             </div>
@@ -6623,10 +6654,10 @@ function PendingProviderView({
 
                         {(sessionStatus === 'provider_invited' || inviteSent) && (
                             <button
-                                onClick={() => router.push('/auth/contracts-dashboard')}
-                                className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
+                                onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
+                                className="text-slate-400 hover:text-white transition"
                             >
-                                ← Return to Dashboard
+                                {userInfo?.role === 'provider' ? '← Sign Out' : '← Back to Dashboard'}
                             </button>
                         )}
                     </div>
