@@ -259,11 +259,18 @@ function ProviderQuestionnaireContent() {
     // ========================================================================
 
     const loadSessionData = useCallback(async () => {
+        console.log('=== loadSessionData CALLED ===')
+
         const sessionId = searchParams.get('session_id')
         const providerId = searchParams.get('provider_id')
 
+        console.log('URL sessionId:', sessionId)
+        console.log('URL providerId:', providerId)
+
         if (!sessionId) {
+            console.log('No sessionId in URL, checking localStorage...')
             const stored = localStorage.getItem('clarence_provider_session')
+            console.log('localStorage stored:', stored)
             if (stored) {
                 const parsed = JSON.parse(stored)
                 setSessionData({
@@ -359,6 +366,7 @@ function ProviderQuestionnaireContent() {
     }, [searchParams])
 
     useEffect(() => {
+        console.log('=== useEffect RUNNING ===')
         loadSessionData()
     }, [loadSessionData])
 
