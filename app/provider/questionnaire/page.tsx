@@ -299,8 +299,11 @@ function ProviderQuestionnaireContent() {
             return
         }
 
+        console.log('=== HAS SESSION ID, CONTINUING ===')
+
         // Set session context early
         eventLogger.setSession(sessionId)
+        console.log('=== eventLogger.setSession called ===')
 
         // Try to get providerId from localStorage if not in URL
         let finalProviderId = providerId || ''
@@ -311,11 +314,21 @@ function ProviderQuestionnaireContent() {
                 finalProviderId = parsed.providerId || ''
             }
         }
+        console.log('=== finalProviderId:', finalProviderId)
 
         try {
+            console.log('=== ABOUT TO FETCH ===')
+            console.log('Fetch URL:', `${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+
             const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+
+            console.log('=== FETCH COMPLETE ===')
+            console.log('response.ok:', response.ok)
+            console.log('response.status:', response.status)
+
             if (response.ok) {
                 const data = await response.json()
+                console.log('=== API DATA:', data)
                 setSessionData({
                     sessionId: sessionId,
                     sessionNumber: data.sessionNumber || data.session_number || '',
