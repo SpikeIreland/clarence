@@ -159,6 +159,19 @@ interface ContractClause {
 
     // Category header flag
     isCategoryHeader?: boolean
+
+    // ========== FOCUS-12: Clause Management Fields ==========
+
+    // N/A (Not Applicable) tracking
+    isApplicable?: boolean
+    markedNaBy?: 'customer' | 'provider' | null
+    markedNaAt?: string | null
+    naReason?: string | null
+
+    // Custom clause tracking (for manually added clauses)
+    isCustomClause?: boolean
+    customClauseId?: string | null
+    proposedLanguage?: string | null
 }
 
 // ============================================================================
@@ -1911,6 +1924,44 @@ function ContractStudioContent() {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
+    //   ============================================================================
+    // SECTION 6F: CLAUSE MANAGEMENT STATE (FOCUS-12)
+    // ============================================================================
+
+    // Add Clause Modal state
+    const [showAddClauseModal, setShowAddClauseModal] = useState(false)
+    const [newClauseName, setNewClauseName] = useState('')
+    const [newClauseCategory, setNewClauseCategory] = useState('')
+    const [newClauseDescription, setNewClauseDescription] = useState('')
+    const [newClauseReason, setNewClauseReason] = useState('')
+    const [newClausePosition, setNewClausePosition] = useState<number>(5)
+    const [newClauseProposedLanguage, setNewClauseProposedLanguage] = useState('')
+    const [isAddingClause, setIsAddingClause] = useState(false)
+
+    // N/A Modal state
+    const [showNaModal, setShowNaModal] = useState(false)
+    const [naTargetClause, setNaTargetClause] = useState<ContractClause | null>(null)
+    const [naReason, setNaReason] = useState('')
+    const [isMarkingNa, setIsMarkingNa] = useState(false)
+
+    // Show/hide N/A clauses section
+    const [showNaClauses, setShowNaClauses] = useState(false)
+
+    // Available categories for new clauses
+    const CLAUSE_CATEGORIES = [
+        'Service',
+        'Charges and Payment',
+        'Term and Termination',
+        'Service Levels',
+        'Governance',
+        'Staff',
+        'Liability',
+        'Change',
+        'General',
+        'Custom'
+    ]
+
+
     const latestMessageRef = useRef<HTMLDivElement>(null)
     const positionPanelRef = useRef<HTMLDivElement>(null)
 
@@ -3062,6 +3113,237 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
             setIsAddingSubClause(false)
         }
     }
+
+    // ============================================================================
+    // SECTION 7X: CLAUSE MANAGEMENT HANDLERS (FOCUS-12)
+    // ============================================================================
+
+    // Open Add Clause modal
+    const handleOpenAddClause = () => {
+        setNewClauseName('')
+        setNewClauseCategory('')
+        setNewClauseDescription('')
+        setNewClauseReason('')
+        setNewClausePosition(5)
+        setNewClauseProposedLanguage('')
+        setShowAddClauseModal(true)
+    }
+
+    // Add new clause (placeholder - sends to N8N API)
+    const handleAddClause = async () => {
+        if (!session?.sessionId || !newClauseName.trim() || !newClauseCategory || !newClauseReason.trim()) {
+            return
+        }
+
+        setIsAddingClause(true)
+
+        try {
+            // Get the current provider's bid_id if provider role
+            let bidId = null
+            if (userInfo?.role === 'provider') {
+                const providerSession = localStorage.getItem('clarence_provider_session') || localStorage.getItem('providerSession')
+                if (providerSession) {
+                    const parsed = JSON.parse(providerSession)
+                    const currentProvider = availableProviders.find(p => p.providerId === parsed.providerId)
+                    bidId = currentProvider?.bidId
+                }
+            } else {
+                // Customer - use selected provider or first provider
+                const targetProvider = availableProviders.find(p => p.isCurrentProvider) || availableProviders[0]
+                bidId = targetProvider?.bidId
+            }
+
+            const response = await fetch(`${API_BASE}/add-clause-api`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: session.sessionId,
+                    bidId: bidId,
+                    clauseName: newClauseName.trim(),
+                    category: newClauseCategory,
+                    description: newClauseDescription.trim(),
+                    reason: newClauseReason.trim(),
+                    initialPosition: newClausePosition,
+                    proposedLanguage: newClauseProposedLanguage.trim(),
+                    addedByParty: userInfo?.role,
+                    addedByUserId: userInfo?.userId
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to add clause')
+            }
+
+            const result = await response.json()
+            console.log('Clause added:', result)
+
+            // Refresh clauses from API
+            const providerIdToLoad = userInfo?.role === 'provider' ? selectedProviderId : undefined
+            const data = await loadContractData(session.sessionId, userInfo?.role, providerIdToLoad || undefined)
+            if (data) {
+                setClauses(data.clauses)
+                setClauseTree(buildClauseTree(data.clauses))
+            }
+
+            // Close modal and reset
+            setShowAddClauseModal(false)
+            setNewClauseName('')
+            setNewClauseCategory('')
+            setNewClauseDescription('')
+            setNewClauseReason('')
+            setNewClausePosition(5)
+            setNewClauseProposedLanguage('')
+
+        } catch (error) {
+            console.error('Error adding clause:', error)
+            alert('Failed to add clause. Please try again.')
+        } finally {
+            setIsAddingClause(false)
+        }
+    }
+
+    // Open Mark as N/A modal
+    const handleOpenNaModal = (clause: ContractClause) => {
+        setNaTargetClause(clause)
+        setNaReason('')
+        setShowNaModal(true)
+    }
+
+    // Mark clause as N/A
+    const handleMarkAsNa = async () => {
+        if (!session?.sessionId || !naTargetClause) {
+            return
+        }
+
+        setIsMarkingNa(true)
+
+        try {
+            const response = await fetch(`${API_BASE}/mark-clause-na-api`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: session.sessionId,
+                    positionId: naTargetClause.positionId,
+                    clauseId: naTargetClause.clauseId,
+                    isApplicable: false,
+                    markedNaBy: userInfo?.role,
+                    naReason: naReason.trim()
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to mark clause as N/A')
+            }
+
+            // Update local state
+            const updateClauseNa = (clauseList: ContractClause[]): ContractClause[] => {
+                return clauseList.map(c => {
+                    if (c.positionId === naTargetClause.positionId) {
+                        return {
+                            ...c,
+                            isApplicable: false,
+                            markedNaBy: userInfo?.role as 'customer' | 'provider',
+                            markedNaAt: new Date().toISOString(),
+                            naReason: naReason.trim()
+                        }
+                    }
+                    if (c.children) {
+                        return { ...c, children: updateClauseNa(c.children) }
+                    }
+                    return c
+                })
+            }
+
+            setClauses(updateClauseNa(clauses))
+            setClauseTree(updateClauseNa(clauseTree))
+
+            // Close modal
+            setShowNaModal(false)
+            setNaTargetClause(null)
+            setNaReason('')
+
+            // Clear selection if the marked clause was selected
+            if (selectedClause?.positionId === naTargetClause.positionId) {
+                setSelectedClause(null)
+            }
+
+        } catch (error) {
+            console.error('Error marking clause as N/A:', error)
+            alert('Failed to mark clause as N/A. Please try again.')
+        } finally {
+            setIsMarkingNa(false)
+        }
+    }
+
+    // Restore clause from N/A
+    const handleRestoreFromNa = async (clause: ContractClause) => {
+        if (!session?.sessionId) return
+
+        try {
+            const response = await fetch(`${API_BASE}/mark-clause-na-api`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: session.sessionId,
+                    positionId: clause.positionId,
+                    clauseId: clause.clauseId,
+                    isApplicable: true,
+                    markedNaBy: null,
+                    naReason: null
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to restore clause')
+            }
+
+            // Update local state
+            const restoreClause = (clauseList: ContractClause[]): ContractClause[] => {
+                return clauseList.map(c => {
+                    if (c.positionId === clause.positionId) {
+                        return {
+                            ...c,
+                            isApplicable: true,
+                            markedNaBy: null,
+                            markedNaAt: null,
+                            naReason: null
+                        }
+                    }
+                    if (c.children) {
+                        return { ...c, children: restoreClause(c.children) }
+                    }
+                    return c
+                })
+            }
+
+            setClauses(restoreClause(clauses))
+            setClauseTree(restoreClause(clauseTree))
+
+        } catch (error) {
+            console.error('Error restoring clause:', error)
+            alert('Failed to restore clause. Please try again.')
+        }
+    }
+
+    // Get N/A clauses for display
+    const getNaClauses = useCallback((): ContractClause[] => {
+        const naClauses: ContractClause[] = []
+
+        const findNaClauses = (clauseList: ContractClause[]) => {
+            clauseList.forEach(clause => {
+                if (clause.isApplicable === false) {
+                    naClauses.push(clause)
+                }
+                if (clause.children) {
+                    findNaClauses(clause.children)
+                }
+            })
+        }
+
+        findNaClauses(clauseTree)
+        return naClauses
+    }, [clauseTree])
+
 
     const handlePositionDrag = (newPosition: number) => {
         if (!selectedClause || !userInfo || !leverage) return
@@ -4905,107 +5187,49 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         )
     }
     // ============================================================================
-    // SECTION 12: CLAUSE TREE ITEM COMPONENT
+    // SECTION 12: CLAUSE TREE ITEM COMPONENT (FOCUS-12 Updated)
     // ============================================================================
 
     const ClauseTreeItem = ({ clause, depth = 0 }: { clause: ContractClause, depth?: number }) => {
-        const [showMenu, setShowMenu] = useState(false)
-        const menuRef = useRef<HTMLDivElement>(null)
+        // Skip N/A clauses in main tree (they show in separate section)
+        if (clause.isApplicable === false) return null
 
-        const hasChildren = clause.children && clause.children.length > 0
+        const hasChildren = clause.children && clause.children.filter(c => c.isApplicable !== false).length > 0
         const isSelected = selectedClause?.positionId === clause.positionId
-        const isCustomer = userInfo?.role === 'customer'
-        const isLocked = clause.isLocked || false
 
-        // Get the weight based on current user's role (or default to customerWeight)
+        // Get the weight based on current user's role
         const clauseWeight = userInfo?.role === 'provider'
             ? clause.providerWeight
             : clause.customerWeight
         const weightDisplay = clauseWeight ? clauseWeight.toFixed(0) : null
 
-        // Can add sub-clauses to level 1 clauses only (not category headers or existing sub-clauses)
-        // Only customers can add sub-clauses
-        const canAddSubClause = clause.clauseLevel === 1 && isCustomer
-
-        // Can lock level 1 and level 2 clauses (not category headers)
-        // Only customers can lock
-        const canLock = clause.clauseLevel >= 1 && isCustomer
+        // Can add sub-clauses to level 1 clauses only
+        const canAddSubClause = clause.clauseLevel === 1
 
         // Check for unseen moves on this clause
         const unseenCount = unseenMoves.get(clause.clauseId) || 0
 
-        // Close menu when clicking outside
+        // Context menu state (local to this component instance)
+        const [showContextMenu, setShowContextMenu] = useState(false)
+        const contextMenuRef = useRef<HTMLDivElement>(null)
+
+        // Close context menu when clicking outside
         useEffect(() => {
             const handleClickOutside = (event: MouseEvent) => {
-                if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                    setShowMenu(false)
+                if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+                    setShowContextMenu(false)
                 }
             }
-            if (showMenu) {
+            if (showContextMenu) {
                 document.addEventListener('mousedown', handleClickOutside)
             }
             return () => document.removeEventListener('mousedown', handleClickOutside)
-        }, [showMenu])
-
-        const handleToggleLock = async (e: React.MouseEvent) => {
-            e.stopPropagation()
-            setShowMenu(false)
-
-            if (!session?.sessionId || !clause.positionId) return
-
-            try {
-                const response = await fetch(`${API_BASE}/clause-lock-api`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sessionId: session.sessionId,
-                        positionId: clause.positionId,
-                        clauseId: clause.clauseId,
-                        lock: !isLocked,
-                        userId: userInfo?.userId,
-                        userName: `${userInfo?.firstName || ''} ${userInfo?.lastName || ''}`.trim()
-                    })
-                })
-
-                if (response.ok) {
-                    const newLockedState = !isLocked
-
-                    // Update clauses array (flat)
-                    const updatedClauses = clauses.map(c =>
-                        c.positionId === clause.positionId
-                            ? { ...c, isLocked: newLockedState }
-                            : c
-                    )
-                    setClauses(updatedClauses)
-
-                    // Update clause tree in place - don't rebuild
-                    const updateTreeNode = (nodes: ContractClause[]): ContractClause[] => {
-                        return nodes.map(node => {
-                            if (node.positionId === clause.positionId) {
-                                return { ...node, isLocked: newLockedState }
-                            }
-                            if (node.children) {
-                                return { ...node, children: updateTreeNode(node.children) }
-                            }
-                            return node
-                        })
-                    }
-                    setClauseTree(updateTreeNode(clauseTree))
-
-                    // Update selected clause if it's the one being locked
-                    if (selectedClause?.positionId === clause.positionId) {
-                        setSelectedClause({ ...selectedClause, isLocked: newLockedState })
-                    }
-                }
-            } catch (error) {
-                console.error('Error toggling clause lock:', error)
-            }
-        }
+        }, [showContextMenu])
 
         return (
             <div>
                 <div
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition group ${isSelected
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition group relative ${isSelected
                         ? 'bg-emerald-50 border border-emerald-200'
                         : 'hover:bg-slate-50'
                         }`}
@@ -5015,6 +5239,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             handleClauseToggle(clause.positionId)
                         } else {
                             handleClauseSelect(clause)
+                        }
+                    }}
+                    onContextMenu={(e) => {
+                        if (clause.clauseLevel !== 0) {
+                            e.preventDefault()
+                            setShowContextMenu(true)
                         }
                     }}
                 >
@@ -5038,17 +5268,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <span className="w-4" />
                     )}
 
-                    {/* Status indicator - show lock icon if locked, otherwise show status */}
-                    {isLocked ? (
-                        <div
-                            className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center"
-                            title={isCustomer ? "Locked - Click menu to unlock" : `Locked by ${session?.customerCompany || 'Customer'}`}
-                        >
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                        </div>
-                    ) : clause.status === 'agreed' ? (
+                    {/* Status indicator */}
+                    {clause.status === 'agreed' ? (
                         <div
                             className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center"
                             title="Agreement Locked"
@@ -5071,6 +5292,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             {clause.clauseName}
                         </span>
 
+                        {/* Custom clause badge */}
+                        {clause.isCustomClause && (
+                            <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">
+                                Custom
+                            </span>
+                        )}
+
                         {/* Sub-clause badge */}
                         {clause.clauseLevel === 2 && clause.addedMidSession && (
                             <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">
@@ -5089,8 +5317,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {/* Weight badge */}
                     {weightDisplay && clause.clauseLevel !== 0 && parseInt(weightDisplay) >= 3 && (
                         <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clauseWeight >= 4 ? 'bg-red-100 text-red-700' :
-                                clauseWeight >= 3 ? 'bg-amber-100 text-amber-700' :
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clauseWeight && clauseWeight >= 4 ? 'bg-red-100 text-red-700' :
+                                clauseWeight && clauseWeight >= 3 ? 'bg-amber-100 text-amber-700' :
                                     'bg-slate-100 text-slate-600'
                                 }`}
                             title={`Weight: ${weightDisplay}/5`}
@@ -5099,63 +5327,70 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </span>
                     )}
 
-                    {/* Clause Menu - Only for Customer on negotiable clauses */}
-                    {isCustomer && (canAddSubClause || canLock) && (
-                        <div className="relative" ref={menuRef}>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    setShowMenu(!showMenu)
-                                }}
-                                className="w-6 h-6 rounded bg-slate-200 hover:bg-slate-300 text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                title="Clause options"
-                            >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                                </svg>
-                            </button>
+                    {/* More options button (three dots) - only for negotiable clauses */}
+                    {clause.clauseLevel !== 0 && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setShowContextMenu(!showContextMenu)
+                            }}
+                            className="w-6 h-6 rounded hover:bg-slate-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="More options"
+                        >
+                            <svg className="w-4 h-4 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                            </svg>
+                        </button>
+                    )}
 
-                            {/* Dropdown Menu */}
-                            {showMenu && (
-                                <div className="absolute right-0 top-7 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
-                                    {canAddSubClause && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setShowMenu(false)
-                                                handleOpenAddSubClause(clause)
-                                            }}
-                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                        >
-                                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                            </svg>
-                                            Add Sub-Clause
-                                        </button>
-                                    )}
-                                    {canLock && (
-                                        <button
-                                            onClick={handleToggleLock}
-                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                                        >
-                                            {isLocked ? (
-                                                <>
-                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                                                    </svg>
-                                                    Unlock Clause
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                                    </svg>
-                                                    Lock Clause
-                                                </>
-                                            )}
-                                        </button>
-                                    )}
-                                </div>
+                    {/* Add Sub-Clause button - only on level 1 clauses */}
+                    {canAddSubClause && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                handleOpenAddSubClause(clause)
+                            }}
+                            className="w-5 h-5 rounded bg-slate-200 hover:bg-emerald-500 hover:text-white text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Add sub-clause"
+                        >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                        </button>
+                    )}
+
+                    {/* Context Menu */}
+                    {showContextMenu && (
+                        <div
+                            ref={contextMenuRef}
+                            className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1 z-50 min-w-[160px]"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <button
+                                onClick={() => {
+                                    handleOpenNaModal(clause)
+                                    setShowContextMenu(false)
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            >
+                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                </svg>
+                                Mark as N/A
+                            </button>
+                            {canAddSubClause && (
+                                <button
+                                    onClick={() => {
+                                        handleOpenAddSubClause(clause)
+                                        setShowContextMenu(false)
+                                    }}
+                                    className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                >
+                                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add Sub-Clause
+                                </button>
                             )}
                         </div>
                     )}
@@ -5164,9 +5399,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* Children */}
                 {hasChildren && clause.isExpanded && (
                     <div>
-                        {clause.children!.map(child => (
-                            <ClauseTreeItem key={child.positionId} clause={child} depth={depth + 1} />
-                        ))}
+                        {clause.children!
+                            .filter(c => c.isApplicable !== false)
+                            .map(child => (
+                                <ClauseTreeItem key={child.positionId} clause={child} depth={depth + 1} />
+                            ))}
                     </div>
                 )}
             </div>
@@ -5762,6 +5999,254 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         )
     }
 
+    // ============================================================================
+    // SECTION 14B: ADD CLAUSE MODAL (FOCUS-12)
+    // ============================================================================
+
+    const AddClauseModal = () => {
+        if (!showAddClauseModal) return null
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+                    {/* Header */}
+                    <div className="px-6 py-4 border-b border-slate-200 sticky top-0 bg-white">
+                        <h3 className="text-lg font-semibold text-slate-800">Add New Clause</h3>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Add a custom clause to this negotiation
+                        </p>
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-6 py-4 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Clause Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={newClauseName}
+                                onChange={(e) => setNewClauseName(e.target.value)}
+                                placeholder="e.g., Anti-Bribery Compliance"
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Category <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                                value={newClauseCategory}
+                                onChange={(e) => setNewClauseCategory(e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                            >
+                                <option value="">Select a category...</option>
+                                {CLAUSE_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Description <span className="text-slate-400">(optional)</span>
+                            </label>
+                            <textarea
+                                value={newClauseDescription}
+                                onChange={(e) => setNewClauseDescription(e.target.value)}
+                                placeholder="Brief description of what this clause covers..."
+                                rows={2}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Why are you adding this? <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                value={newClauseReason}
+                                onChange={(e) => setNewClauseReason(e.target.value)}
+                                placeholder="e.g., Required for regulatory compliance in our industry..."
+                                rows={3}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                                This helps CLARENCE understand your intent and mediate effectively.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Your Initial Position
+                            </label>
+                            <div className="flex items-center gap-4">
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    step="1"
+                                    value={newClausePosition}
+                                    onChange={(e) => setNewClausePosition(parseInt(e.target.value))}
+                                    className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                />
+                                <span className="w-12 text-center font-semibold text-emerald-600">
+                                    {newClausePosition}
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                <span>Provider-Favourable</span>
+                                <span>Customer-Favourable</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Proposed Language <span className="text-slate-400">(optional)</span>
+                            </label>
+                            <textarea
+                                value={newClauseProposedLanguage}
+                                onChange={(e) => setNewClauseProposedLanguage(e.target.value)}
+                                placeholder="Draft the clause language you'd like to propose..."
+                                rows={4}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none font-mono text-sm"
+                            />
+                        </div>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <p className="text-sm text-amber-800">
+                                <strong>Note:</strong> This clause will be visible to both parties.
+                                The other party will be notified and can negotiate positions on this clause.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3 sticky bottom-0 bg-white">
+                        <button
+                            onClick={() => {
+                                setShowAddClauseModal(false)
+                                setNewClauseName('')
+                                setNewClauseCategory('')
+                                setNewClauseDescription('')
+                                setNewClauseReason('')
+                                setNewClausePosition(5)
+                                setNewClauseProposedLanguage('')
+                            }}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                            disabled={isAddingClause}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleAddClause}
+                            disabled={!newClauseName.trim() || !newClauseCategory || !newClauseReason.trim() || isAddingClause}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {isAddingClause ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Adding...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    Add Clause
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ============================================================================
+    // SECTION 14C: MARK AS N/A MODAL (FOCUS-12)
+    // ============================================================================
+
+    const MarkAsNaModal = () => {
+        if (!showNaModal || !naTargetClause) return null
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                    {/* Header */}
+                    <div className="px-6 py-4 border-b border-slate-200">
+                        <h3 className="text-lg font-semibold text-slate-800">Mark as Not Applicable</h3>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Marking: <span className="font-medium">{naTargetClause.clauseNumber} {naTargetClause.clauseName}</span>
+                        </p>
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-6 py-4 space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Reason <span className="text-slate-400">(optional)</span>
+                            </label>
+                            <textarea
+                                value={naReason}
+                                onChange={(e) => setNaReason(e.target.value)}
+                                placeholder="e.g., This clause is not relevant to our service type..."
+                                rows={3}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p className="text-sm text-blue-800">
+                                <strong>What happens:</strong> This clause will be moved to a separate "N/A" section.
+                                It won't be included in the final contract. The other party can see that you marked it as N/A.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                        <button
+                            onClick={() => {
+                                setShowNaModal(false)
+                                setNaTargetClause(null)
+                                setNaReason('')
+                            }}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                            disabled={isMarkingNa}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleMarkAsNa}
+                            disabled={isMarkingNa}
+                            className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {isMarkingNa ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Marking...
+                                </>
+                            ) : (
+                                'Mark as N/A'
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <PartyStatusBanner />
@@ -5813,6 +6298,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     <div className="flex-shrink-0 p-4 border-b border-slate-200">
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="font-semibold text-slate-800">Contract Clauses</h2>
+                            <button
+                                onClick={handleOpenAddClause}
+                                className="flex items-center gap-1 px-2 py-1 text-sm text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                                title="Add new clause"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Add
+                            </button>
                         </div>
 
                         <div className="grid grid-cols-4 gap-2 text-center">
@@ -5836,9 +6331,58 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-2">
+                        {/* Main clause tree */}
                         {clauseTree.map(clause => (
                             <ClauseTreeItem key={clause.positionId} clause={clause} />
                         ))}
+
+                        {/* N/A Clauses Section */}
+                        {getNaClauses().length > 0 && (
+                            <div className="mt-4 border-t border-slate-200 pt-4">
+                                <button
+                                    onClick={() => setShowNaClauses(!showNaClauses)}
+                                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-lg"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                        </svg>
+                                        <span>Not Applicable ({getNaClauses().length})</span>
+                                    </div>
+                                    <svg
+                                        className={`w-4 h-4 transition-transform ${showNaClauses ? 'rotate-180' : ''}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {showNaClauses && (
+                                    <div className="mt-2 space-y-1">
+                                        {getNaClauses().map(clause => (
+                                            <div
+                                                key={clause.positionId}
+                                                className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg text-slate-400"
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-xs font-mono">{clause.clauseNumber}</span>
+                                                    <span className="text-sm truncate line-through">{clause.clauseName}</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRestoreFromNa(clause)}
+                                                    className="text-xs text-emerald-600 hover:text-emerald-700 whitespace-nowrap"
+                                                    title="Restore this clause"
+                                                >
+                                                    Restore
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -6557,6 +7101,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             </div>
             {/* Add Sub-Clause Modal */}
             <AddSubClauseModal />
+            {/* FOCUS-12: Add Clause Modal */}
+            <AddClauseModal />
+            {/* FOCUS-12: Mark as N/A Modal */}
+            <MarkAsNaModal />
         </div>
     )
 }
