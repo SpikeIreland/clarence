@@ -206,21 +206,33 @@ function ClauseBuilderContent() {
     const loadInitialData = useCallback(async () => {
         const sessionId = searchParams.get('session_id')
 
+        console.log('[ClauseBuilder] Starting initialization...')
+        console.log('[ClauseBuilder] Session ID:', sessionId)
+
         if (!sessionId) {
-            console.error('No session_id provided')
+            console.error('[ClauseBuilder] No session_id provided, redirecting...')
             router.push('/auth/contract-dashboard')
             return
         }
 
-        eventLogger.setSession(sessionId)
-        eventLogger.started('clause_builder', 'page_loaded')
+        // Try eventLogger but don't let it block the page
+        try {
+            eventLogger.setSession(sessionId)
+            eventLogger.started('clause_builder', 'page_loaded')
+        } catch (logError) {
+            console.warn('[ClauseBuilder] EventLogger error (non-fatal):', logError)
+        }
 
         try {
             // Load session data
+            console.log('[ClauseBuilder] Fetching session data...')
             const sessionResponse = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+            console.log('[ClauseBuilder] Session response status:', sessionResponse.status)
+
             if (sessionResponse.ok) {
                 const sessionData = await sessionResponse.json()
                 const sessionInfo = sessionData.session || sessionData
+                console.log('[ClauseBuilder] Session data:', sessionInfo)
 
                 setSession({
                     sessionId: sessionId,
@@ -235,30 +247,59 @@ function ClauseBuilderContent() {
                 if (sessionInfo.serviceRequired || sessionInfo.contractType) {
                     setServiceFilter(sessionInfo.serviceRequired || sessionInfo.contractType)
                 }
+            } else {
+                console.error('[ClauseBuilder] Session fetch failed:', sessionResponse.status)
+                // Set minimal session data so page can still function
+                setSession({
+                    sessionId: sessionId,
+                    sessionNumber: '',
+                    customerCompany: '',
+                    serviceRequired: '',
+                    dealValue: '',
+                    status: 'draft'
+                })
             }
 
             // Load master clause library
+            console.log('[ClauseBuilder] Fetching clause library...')
             const clausesResponse = await fetch(`${API_BASE}/clause-library-api`)
+            console.log('[ClauseBuilder] Clause library response status:', clausesResponse.status)
+
             if (clausesResponse.ok) {
                 const clausesData = await clausesResponse.json()
+                console.log('[ClauseBuilder] Clause library raw data:', clausesData)
                 const clauses = Array.isArray(clausesData) ? clausesData : (clausesData.clauses || [])
+                console.log('[ClauseBuilder] Processed clauses count:', clauses.length)
                 setMasterClauses(clauses)
                 setFilteredClauses(clauses)
+            } else {
+                console.error('[ClauseBuilder] Clause library fetch failed:', clausesResponse.status)
             }
 
             // Load available packs
+            console.log('[ClauseBuilder] Fetching clause packs...')
             const packsResponse = await fetch(`${API_BASE}/clause-packs-api?session_id=${sessionId}`)
+            console.log('[ClauseBuilder] Clause packs response status:', packsResponse.status)
+
             if (packsResponse.ok) {
                 const packsData = await packsResponse.json()
                 const packs = Array.isArray(packsData) ? packsData : (packsData.packs || [])
+                console.log('[ClauseBuilder] Packs count:', packs.length)
                 setAvailablePacks(packs)
+            } else {
+                console.error('[ClauseBuilder] Packs fetch failed:', packsResponse.status)
             }
 
             // Load existing session clauses (if returning to page)
+            console.log('[ClauseBuilder] Fetching existing session clauses...')
             const existingResponse = await fetch(`${API_BASE}/session-clauses-api?session_id=${sessionId}&customer_selected=true`)
+            console.log('[ClauseBuilder] Session clauses response status:', existingResponse.status)
+
             if (existingResponse.ok) {
                 const existingData = await existingResponse.json()
                 const existing = Array.isArray(existingData) ? existingData : (existingData.clauses || [])
+                console.log('[ClauseBuilder] Existing clauses count:', existing.length)
+
                 if (existing.length > 0) {
                     setSelectedClauses(existing.map((c: any) => ({
                         clauseId: c.clauseId || c.clause_id,
@@ -274,17 +315,30 @@ function ClauseBuilderContent() {
                         hasSubClauses: false
                     })))
                 }
+            } else {
+                console.error('[ClauseBuilder] Session clauses fetch failed:', existingResponse.status)
             }
 
-            eventLogger.completed('clause_builder', 'page_loaded', { sessionId })
+            console.log('[ClauseBuilder] All data loading complete')
+
+            try {
+                eventLogger.completed('clause_builder', 'page_loaded', { sessionId })
+            } catch (logError) {
+                // Ignore eventLogger errors
+            }
 
         } catch (error) {
-            console.error('Error loading clause builder data:', error)
-            eventLogger.failed('clause_builder', 'page_loaded',
-                error instanceof Error ? error.message : 'Unknown error',
-                'LOAD_ERROR'
-            )
+            console.error('[ClauseBuilder] Error loading clause builder data:', error)
+            try {
+                eventLogger.failed('clause_builder', 'page_loaded',
+                    error instanceof Error ? error.message : 'Unknown error',
+                    'LOAD_ERROR'
+                )
+            } catch (logError) {
+                // Ignore eventLogger errors
+            }
         } finally {
+            console.log('[ClauseBuilder] Setting loading to false')
             setLoading(false)
         }
     }, [searchParams, router])
