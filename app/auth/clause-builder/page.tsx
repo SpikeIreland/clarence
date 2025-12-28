@@ -223,124 +223,163 @@ function ClauseBuilderContent() {
             console.warn('[ClauseBuilder] EventLogger error (non-fatal):', logError)
         }
 
-        try {
-            // Load session data
-            console.log('[ClauseBuilder] Fetching session data...')
-            const sessionResponse = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
-            console.log('[ClauseBuilder] Session response status:', sessionResponse.status)
+        // Set minimal session data immediately so page can render
+        setSession({
+            sessionId: sessionId,
+            sessionNumber: '',
+            customerCompany: '',
+            serviceRequired: '',
+            dealValue: '',
+            status: 'draft'
+        })
 
-            if (sessionResponse.ok) {
-                const sessionData = await sessionResponse.json()
-                const sessionInfo = sessionData.session || sessionData
-                console.log('[ClauseBuilder] Session data:', sessionInfo)
-
-                setSession({
-                    sessionId: sessionId,
-                    sessionNumber: sessionInfo.sessionNumber || sessionInfo.session_number || '',
-                    customerCompany: sessionInfo.customerCompany || sessionInfo.customer_company || '',
-                    serviceRequired: sessionInfo.contractType || sessionInfo.contract_type || sessionInfo.serviceRequired || '',
-                    dealValue: sessionInfo.dealValue || sessionInfo.deal_value || '',
-                    status: sessionInfo.status || 'draft'
-                })
-
-                // Auto-set service filter based on session
-                if (sessionInfo.serviceRequired || sessionInfo.contractType) {
-                    setServiceFilter(sessionInfo.serviceRequired || sessionInfo.contractType)
-                }
-            } else {
-                console.error('[ClauseBuilder] Session fetch failed:', sessionResponse.status)
-                // Set minimal session data so page can still function
-                setSession({
-                    sessionId: sessionId,
-                    sessionNumber: '',
-                    customerCompany: '',
-                    serviceRequired: '',
-                    dealValue: '',
-                    status: 'draft'
-                })
-            }
-
-            // Load master clause library
-            console.log('[ClauseBuilder] Fetching clause library...')
-            const clausesResponse = await fetch(`${API_BASE}/clause-library-api`)
-            console.log('[ClauseBuilder] Clause library response status:', clausesResponse.status)
-
-            if (clausesResponse.ok) {
-                const clausesData = await clausesResponse.json()
-                console.log('[ClauseBuilder] Clause library raw data:', clausesData)
-                const clauses = Array.isArray(clausesData) ? clausesData : (clausesData.clauses || [])
-                console.log('[ClauseBuilder] Processed clauses count:', clauses.length)
-                setMasterClauses(clauses)
-                setFilteredClauses(clauses)
-            } else {
-                console.error('[ClauseBuilder] Clause library fetch failed:', clausesResponse.status)
-            }
-
-            // Load available packs
-            console.log('[ClauseBuilder] Fetching clause packs...')
-            const packsResponse = await fetch(`${API_BASE}/clause-packs-api?session_id=${sessionId}`)
-            console.log('[ClauseBuilder] Clause packs response status:', packsResponse.status)
-
-            if (packsResponse.ok) {
-                const packsData = await packsResponse.json()
-                const packs = Array.isArray(packsData) ? packsData : (packsData.packs || [])
-                console.log('[ClauseBuilder] Packs count:', packs.length)
-                setAvailablePacks(packs)
-            } else {
-                console.error('[ClauseBuilder] Packs fetch failed:', packsResponse.status)
-            }
-
-            // Load existing session clauses (if returning to page)
-            console.log('[ClauseBuilder] Fetching existing session clauses...')
-            const existingResponse = await fetch(`${API_BASE}/session-clauses-api?session_id=${sessionId}&customer_selected=true`)
-            console.log('[ClauseBuilder] Session clauses response status:', existingResponse.status)
-
-            if (existingResponse.ok) {
-                const existingData = await existingResponse.json()
-                const existing = Array.isArray(existingData) ? existingData : (existingData.clauses || [])
-                console.log('[ClauseBuilder] Existing clauses count:', existing.length)
-
-                if (existing.length > 0) {
-                    setSelectedClauses(existing.map((c: any) => ({
-                        clauseId: c.clauseId || c.clause_id,
-                        clauseName: c.clauseName || c.clause_name,
-                        category: c.category,
-                        description: c.description,
-                        displayOrder: c.displayOrder || c.display_order || 0,
-                        position: c.customerPosition || c.customer_position || 5,
-                        weight: c.customerWeight || c.customer_weight || 5,
-                        isNonNegotiable: c.isDealBreakerCustomer || c.is_deal_breaker_customer || false,
-                        sourcePackId: c.sourcePackId || c.source_pack_id || null,
-                        addedManually: !c.sourcePackId && !c.source_pack_id,
-                        hasSubClauses: false
-                    })))
-                }
-            } else {
-                console.error('[ClauseBuilder] Session clauses fetch failed:', existingResponse.status)
-            }
-
-            console.log('[ClauseBuilder] All data loading complete')
-
+        // Load session data (independent - failure won't stop other loads)
+        const loadSession = async () => {
             try {
-                eventLogger.completed('clause_builder', 'page_loaded', { sessionId })
-            } catch (logError) {
-                // Ignore eventLogger errors
-            }
+                console.log('[ClauseBuilder] Fetching session data...')
+                const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+                console.log('[ClauseBuilder] Session response status:', response.status)
 
-        } catch (error) {
-            console.error('[ClauseBuilder] Error loading clause builder data:', error)
-            try {
-                eventLogger.failed('clause_builder', 'page_loaded',
-                    error instanceof Error ? error.message : 'Unknown error',
-                    'LOAD_ERROR'
-                )
-            } catch (logError) {
-                // Ignore eventLogger errors
+                if (response.ok) {
+                    const text = await response.text()
+                    console.log('[ClauseBuilder] Session response text length:', text.length)
+
+                    if (text && text.length > 0) {
+                        const sessionData = JSON.parse(text)
+                        const sessionInfo = sessionData.session || sessionData
+                        console.log('[ClauseBuilder] Session data parsed:', sessionInfo)
+
+                        setSession({
+                            sessionId: sessionId,
+                            sessionNumber: sessionInfo.sessionNumber || sessionInfo.session_number || '',
+                            customerCompany: sessionInfo.customerCompany || sessionInfo.customer_company || '',
+                            serviceRequired: sessionInfo.contractType || sessionInfo.contract_type || sessionInfo.serviceRequired || '',
+                            dealValue: sessionInfo.dealValue || sessionInfo.deal_value || '',
+                            status: sessionInfo.status || 'draft'
+                        })
+
+                        if (sessionInfo.serviceRequired || sessionInfo.contractType) {
+                            setServiceFilter(sessionInfo.serviceRequired || sessionInfo.contractType)
+                        }
+                    } else {
+                        console.warn('[ClauseBuilder] Session response was empty')
+                    }
+                } else {
+                    console.error('[ClauseBuilder] Session fetch failed:', response.status)
+                }
+            } catch (error) {
+                console.error('[ClauseBuilder] Error loading session (non-fatal):', error)
             }
-        } finally {
-            console.log('[ClauseBuilder] Setting loading to false')
-            setLoading(false)
         }
+
+        // Load master clause library (independent)
+        const loadClauses = async () => {
+            try {
+                console.log('[ClauseBuilder] Fetching clause library...')
+                const response = await fetch(`${API_BASE}/clause-library-api`)
+                console.log('[ClauseBuilder] Clause library response status:', response.status)
+
+                if (response.ok) {
+                    const text = await response.text()
+                    console.log('[ClauseBuilder] Clause library response length:', text.length)
+
+                    if (text && text.length > 0) {
+                        const clausesData = JSON.parse(text)
+                        console.log('[ClauseBuilder] Clause library raw data:', clausesData)
+                        const clauses = Array.isArray(clausesData) ? clausesData : (clausesData.clauses || [])
+                        console.log('[ClauseBuilder] Processed clauses count:', clauses.length)
+                        setMasterClauses(clauses)
+                        setFilteredClauses(clauses)
+                    } else {
+                        console.warn('[ClauseBuilder] Clause library response was empty')
+                    }
+                } else {
+                    console.error('[ClauseBuilder] Clause library fetch failed:', response.status)
+                }
+            } catch (error) {
+                console.error('[ClauseBuilder] Error loading clauses:', error)
+            }
+        }
+
+        // Load available packs (independent)
+        const loadPacks = async () => {
+            try {
+                console.log('[ClauseBuilder] Fetching clause packs...')
+                const response = await fetch(`${API_BASE}/clause-packs-api?session_id=${sessionId}`)
+                console.log('[ClauseBuilder] Clause packs response status:', response.status)
+
+                if (response.ok) {
+                    const text = await response.text()
+                    if (text && text.length > 0) {
+                        const packsData = JSON.parse(text)
+                        const packs = Array.isArray(packsData) ? packsData : (packsData.packs || [])
+                        console.log('[ClauseBuilder] Packs count:', packs.length)
+                        setAvailablePacks(packs)
+                    }
+                } else {
+                    console.error('[ClauseBuilder] Packs fetch failed:', response.status)
+                }
+            } catch (error) {
+                console.error('[ClauseBuilder] Error loading packs:', error)
+            }
+        }
+
+        // Load existing session clauses (independent)
+        const loadExistingClauses = async () => {
+            try {
+                console.log('[ClauseBuilder] Fetching existing session clauses...')
+                const response = await fetch(`${API_BASE}/session-clauses-api?session_id=${sessionId}&customer_selected=true`)
+                console.log('[ClauseBuilder] Session clauses response status:', response.status)
+
+                if (response.ok) {
+                    const text = await response.text()
+                    if (text && text.length > 0) {
+                        const existingData = JSON.parse(text)
+                        const existing = Array.isArray(existingData) ? existingData : (existingData.clauses || [])
+                        console.log('[ClauseBuilder] Existing clauses count:', existing.length)
+
+                        if (existing.length > 0) {
+                            setSelectedClauses(existing.map((c: any) => ({
+                                clauseId: c.clauseId || c.clause_id,
+                                clauseName: c.clauseName || c.clause_name,
+                                category: c.category,
+                                description: c.description,
+                                displayOrder: c.displayOrder || c.display_order || 0,
+                                position: c.customerPosition || c.customer_position || 5,
+                                weight: c.customerWeight || c.customer_weight || 5,
+                                isNonNegotiable: c.isDealBreakerCustomer || c.is_deal_breaker_customer || false,
+                                sourcePackId: c.sourcePackId || c.source_pack_id || null,
+                                addedManually: !c.sourcePackId && !c.source_pack_id,
+                                hasSubClauses: false
+                            })))
+                        }
+                    }
+                } else {
+                    console.error('[ClauseBuilder] Session clauses fetch failed:', response.status)
+                }
+            } catch (error) {
+                console.error('[ClauseBuilder] Error loading existing clauses:', error)
+            }
+        }
+
+        // Run all loads in parallel - each is independent
+        await Promise.all([
+            loadSession(),
+            loadClauses(),
+            loadPacks(),
+            loadExistingClauses()
+        ])
+
+        console.log('[ClauseBuilder] All data loading complete')
+
+        try {
+            eventLogger.completed('clause_builder', 'page_loaded', { sessionId })
+        } catch (logError) {
+            // Ignore eventLogger errors
+        }
+
+        console.log('[ClauseBuilder] Setting loading to false')
+        setLoading(false)
     }, [searchParams, router])
 
     useEffect(() => {
