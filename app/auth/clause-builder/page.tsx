@@ -727,7 +727,7 @@ function ClauseBuilderContent() {
     // ========================================================================
 
     return (
-        <div className="min-h-screen bg-slate-100 flex flex-col">
+        <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
             {/* ============================================================ */}
             {/* SECTION 16: HEADER */}
             {/* ============================================================ */}
@@ -798,7 +798,7 @@ function ClauseBuilderContent() {
                 {/* ======================================================== */}
                 {/* SECTION 19: LEFT PANEL - CLAUSE LIBRARY */}
                 {/* ======================================================== */}
-                <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+                <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
                     {/* Panel Header */}
                     <div className="p-4 border-b border-slate-200 bg-slate-50">
                         <h2 className="font-semibold text-slate-800 mb-3">Clause Library</h2>
@@ -925,7 +925,7 @@ function ClauseBuilderContent() {
                 {/* ======================================================== */}
                 {/* SECTION 20: CENTRE PANEL - CLAUSE CONFIGURATOR */}
                 {/* ======================================================== */}
-                <div className="flex-1 bg-slate-50 flex flex-col">
+                <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
                     {/* Template Dropdown */}
                     <div className="p-4 bg-white border-b border-slate-200">
                         <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1100,7 +1100,7 @@ function ClauseBuilderContent() {
                 {/* ======================================================== */}
                 {/* SECTION 21: RIGHT PANEL - YOUR CONTRACT */}
                 {/* ======================================================== */}
-                <div className="w-80 bg-white border-l border-slate-200 flex flex-col">
+                <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
                     {/* Panel Header */}
                     <div className="p-4 border-b border-slate-200 bg-slate-50">
                         <div className="flex items-center justify-between mb-2">
