@@ -36,15 +36,14 @@ const SERVICE_CATEGORIES = [
 
 // Clause categories (matches contract_clauses structure)
 const CLAUSE_CATEGORIES = [
-    'Commercial Terms',
-    'Service Delivery',
-    'Termination',
+    'Service',
+    'Service Levels',
+    'Term and Termination',
     'Intellectual Property',
-    'Data Protection',
+    'Employment',
+    'Charges and Payment',
     'Liability',
-    'Governance',
-    'Personnel',
-    'Miscellaneous'
+    'Data Protection'
 ]
 
 // Weight options
@@ -523,6 +522,7 @@ function ClauseBuilderContent() {
         if (!session?.sessionId) return
 
         try {
+            console.log('[ClauseBuilder] Loading pack:', packId)
             const response = await fetch(`${API_BASE}/load-clause-pack`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -535,9 +535,11 @@ function ClauseBuilderContent() {
 
             if (response.ok) {
                 const data = await response.json()
+                console.log('[ClauseBuilder] Pack response:', data)
                 const loadedClauses = data.clauses || []
+                console.log('[ClauseBuilder] Loaded clauses count:', loadedClauses.length)
 
-                setSelectedClauses(loadedClauses.map((c: any) => ({
+                const mappedClauses = loadedClauses.map((c: any) => ({
                     clauseId: c.clauseId || c.clause_id,
                     clauseName: c.clauseName || c.clause_name,
                     category: c.category,
@@ -549,17 +551,23 @@ function ClauseBuilderContent() {
                     sourcePackId: packId,
                     addedManually: false,
                     hasSubClauses: false
-                })))
+                }))
 
+                console.log('[ClauseBuilder] Mapped clauses:', mappedClauses)
+                console.log('[ClauseBuilder] Categories in loaded clauses:', [...new Set(mappedClauses.map((c: any) => c.category))])
+
+                setSelectedClauses(mappedClauses)
                 setSelectedPackId(packId)
 
                 eventLogger.completed('clause_builder', 'pack_loaded', {
                     packId,
                     clauseCount: loadedClauses.length
                 })
+            } else {
+                console.error('[ClauseBuilder] Pack load failed:', response.status)
             }
         } catch (error) {
-            console.error('Error loading pack:', error)
+            console.error('[ClauseBuilder] Error loading pack:', error)
         }
 
         setShowConfirmReplace(false)
