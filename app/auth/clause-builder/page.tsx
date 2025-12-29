@@ -791,6 +791,45 @@ function ClauseBuilderContent() {
             </div>
 
             {/* ============================================================ */}
+            {/* SECTION 17B: TEMPLATE SELECTOR SUB-HEADER */}
+            {/* ============================================================ */}
+            <div className="bg-white border-b border-slate-200 px-6 py-3">
+                <div className="flex items-center gap-4">
+                    <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                        Load Template:
+                    </label>
+                    <select
+                        className="flex-1 max-w-md px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        value={selectedPackId}
+                        onChange={(e) => handlePackSelect(e.target.value)}
+                    >
+                        <option value="">Select a template...</option>
+                        <optgroup label="CLARENCE Templates">
+                            {availablePacks.filter(p => p.ownerType === 'clarence').map(pack => (
+                                <option key={pack.packId} value={pack.packId}>
+                                    {pack.packName} ({pack.clauseCount} clauses)
+                                </option>
+                            ))}
+                        </optgroup>
+                        {availablePacks.filter(p => p.ownerType === 'customer').length > 0 && (
+                            <optgroup label="Your Favourites">
+                                {availablePacks.filter(p => p.ownerType === 'customer').map(pack => (
+                                    <option key={pack.packId} value={pack.packId}>
+                                        {pack.packName} ({pack.clauseCount} clauses)
+                                    </option>
+                                ))}
+                            </optgroup>
+                        )}
+                    </select>
+                    {selectedPackId && (
+                        <span className="text-sm text-emerald-600 font-medium">
+                            ✓ Template loaded
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* ============================================================ */}
             {/* SECTION 18: THREE-PANEL LAYOUT */}
             {/* ============================================================ */}
             <div className="flex-1 flex overflow-hidden">
@@ -867,45 +906,48 @@ function ClauseBuilderContent() {
 
                                     {/* Category Clauses */}
                                     {expandedCategories.has(category) && (
-                                        <div className="mt-1 space-y-1">
+                                        <div className="mt-1 ml-2 border-l-2 border-slate-200">
                                             {categoryClauses.map(clause => (
                                                 <div
                                                     key={clause.clauseId}
-                                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer group transition ${activeClause?.clauseId === clause.clauseId
-                                                            ? 'bg-emerald-50 border border-emerald-200'
-                                                            : 'hover:bg-slate-50'
+                                                    className={`flex items-center gap-2 px-3 py-2 ml-2 rounded-r-lg cursor-pointer group transition ${activeClause?.clauseId === clause.clauseId
+                                                            ? 'bg-emerald-50 border-l-2 border-emerald-500 -ml-[2px]'
+                                                            : isClauseSelected(clause.clauseId)
+                                                                ? 'bg-emerald-50/50'
+                                                                : 'hover:bg-slate-50'
                                                         }`}
                                                     onClick={() => handleClauseClick(clause)}
                                                 >
-                                                    {/* Selection indicator */}
-                                                    {isClauseSelected(clause.clauseId) ? (
-                                                        <div className="w-5 h-5 bg-emerald-500 rounded flex items-center justify-center flex-shrink-0">
-                                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="w-5 h-5 border-2 border-slate-300 rounded flex-shrink-0 group-hover:border-emerald-400" />
-                                                    )}
-
                                                     {/* Clause name */}
-                                                    <span className="text-sm text-slate-700 truncate flex-1">
+                                                    <span className={`text-sm truncate flex-1 ${isClauseSelected(clause.clauseId)
+                                                            ? 'text-emerald-700 font-medium'
+                                                            : 'text-slate-700'
+                                                        }`}>
                                                         {clause.clauseName}
                                                     </span>
 
+                                                    {/* Selected indicator */}
+                                                    {isClauseSelected(clause.clauseId) && (
+                                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
+                                                            In Contract
+                                                        </span>
+                                                    )}
+
                                                     {/* Hover add button */}
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            handleClauseClick(clause)
-                                                        }}
-                                                        className="w-5 h-5 rounded bg-slate-200 hover:bg-emerald-500 hover:text-white text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        title="Configure clause"
-                                                    >
-                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                                        </svg>
-                                                    </button>
+                                                    {!isClauseSelected(clause.clauseId) && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleClauseClick(clause)
+                                                            }}
+                                                            className="w-5 h-5 rounded bg-slate-200 hover:bg-emerald-500 hover:text-white text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            title="Configure clause"
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -926,36 +968,6 @@ function ClauseBuilderContent() {
                 {/* SECTION 20: CENTRE PANEL - CLAUSE CONFIGURATOR */}
                 {/* ======================================================== */}
                 <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
-                    {/* Template Dropdown */}
-                    <div className="p-4 bg-white border-b border-slate-200">
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Load Template or Favourite
-                        </label>
-                        <select
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            value={selectedPackId}
-                            onChange={(e) => handlePackSelect(e.target.value)}
-                        >
-                            <option value="">Select a template...</option>
-                            <optgroup label="CLARENCE Templates">
-                                {availablePacks.filter(p => p.ownerType === 'clarence').map(pack => (
-                                    <option key={pack.packId} value={pack.packId}>
-                                        {pack.packName} ({pack.clauseCount} clauses)
-                                    </option>
-                                ))}
-                            </optgroup>
-                            {availablePacks.filter(p => p.ownerType === 'customer').length > 0 && (
-                                <optgroup label="Your Favourites">
-                                    {availablePacks.filter(p => p.ownerType === 'customer').map(pack => (
-                                        <option key={pack.packId} value={pack.packId}>
-                                            {pack.packName} ({pack.clauseCount} clauses)
-                                        </option>
-                                    ))}
-                                </optgroup>
-                            )}
-                        </select>
-                    </div>
-
                     {/* Clause Configurator */}
                     <div className="flex-1 p-6 overflow-y-auto">
                         {activeClause ? (
@@ -991,22 +1003,22 @@ function ClauseBuilderContent() {
                                         Your Starting Position: <span className="text-emerald-600 font-bold">{clausePosition}</span>
                                     </label>
                                     <div className="flex items-center gap-4">
-                                        <span className="text-xs text-blue-600">Provider</span>
+                                        <span className="text-xs text-emerald-600 font-medium">Customer</span>
                                         <input
                                             type="range"
                                             min="1"
                                             max="10"
                                             step="1"
-                                            value={clausePosition}
-                                            onChange={(e) => setClausePosition(parseInt(e.target.value))}
-                                            className="flex-1 h-2 bg-gradient-to-r from-blue-200 via-slate-200 to-emerald-200 rounded-lg appearance-none cursor-pointer"
+                                            value={11 - clausePosition}
+                                            onChange={(e) => setClausePosition(11 - parseInt(e.target.value))}
+                                            className="flex-1 h-2 bg-gradient-to-r from-emerald-200 via-slate-200 to-blue-200 rounded-lg appearance-none cursor-pointer"
                                         />
-                                        <span className="text-xs text-emerald-600">Customer</span>
+                                        <span className="text-xs text-blue-600 font-medium">Provider</span>
                                     </div>
                                     <div className="flex justify-between text-xs text-slate-500 mt-1">
-                                        <span>1 (Provider-favourable)</span>
-                                        <span>5 (Balanced)</span>
                                         <span>10 (Customer-favourable)</span>
+                                        <span>5 (Balanced)</span>
+                                        <span>1 (Provider-favourable)</span>
                                     </div>
                                 </div>
 
@@ -1149,46 +1161,53 @@ function ClauseBuilderContent() {
 
                                         {/* Category Clauses */}
                                         {expandedSelectedCategories.has(category) && (
-                                            <div className="mt-1 space-y-1">
+                                            <div className="mt-1 ml-2 border-l-2 border-emerald-200">
                                                 {categoryClauses.map(clause => (
                                                     <div
                                                         key={clause.clauseId}
-                                                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-100 hover:border-emerald-200 transition group"
+                                                        className="flex items-center gap-2 px-3 py-2 ml-2 rounded-r-lg bg-white border-l-2 border-transparent hover:border-emerald-400 transition group"
+                                                        onClick={() => handleEditClause(clause)}
                                                     >
-                                                        {/* Status indicators */}
-                                                        <div className="flex items-center gap-1 flex-shrink-0">
-                                                            {clause.isNonNegotiable && (
-                                                                <span className="w-4 h-4 bg-red-100 text-red-600 rounded flex items-center justify-center" title="Locked">
-                                                                    🔒
-                                                                </span>
-                                                            )}
-                                                            <span
-                                                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.weight >= 7 ? 'bg-red-100 text-red-700' :
-                                                                        clause.weight >= 4 ? 'bg-amber-100 text-amber-700' :
-                                                                            'bg-slate-100 text-slate-600'
-                                                                    }`}
-                                                                title={`Weight: ${clause.weight}`}
-                                                            >
-                                                                W{clause.weight}
+                                                        {/* Lock indicator */}
+                                                        {clause.isNonNegotiable && (
+                                                            <span className="text-sm" title="Non-Negotiable">
+                                                                🔒
                                                             </span>
-                                                        </div>
+                                                        )}
 
                                                         {/* Clause name */}
-                                                        <span
-                                                            className="text-sm text-slate-700 truncate flex-1 cursor-pointer hover:text-emerald-600"
-                                                            onClick={() => handleEditClause(clause)}
-                                                        >
+                                                        <span className="text-sm text-slate-700 truncate flex-1 cursor-pointer hover:text-emerald-600">
                                                             {clause.clauseName}
                                                         </span>
 
-                                                        {/* Position */}
-                                                        <span className="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">
+                                                        {/* Weight badge */}
+                                                        <span
+                                                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.weight >= 7 ? 'bg-red-100 text-red-700' :
+                                                                    clause.weight >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                                        'bg-slate-100 text-slate-600'
+                                                                }`}
+                                                            title={`Weight: ${clause.weight}`}
+                                                        >
+                                                            W{clause.weight}
+                                                        </span>
+
+                                                        {/* Position badge */}
+                                                        <span
+                                                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.position >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                                    clause.position >= 4 ? 'bg-slate-100 text-slate-600' :
+                                                                        'bg-blue-100 text-blue-700'
+                                                                }`}
+                                                            title={`Position: ${clause.position}`}
+                                                        >
                                                             P{clause.position}
                                                         </span>
 
                                                         {/* Remove button */}
                                                         <button
-                                                            onClick={() => handleRemoveClause(clause.clauseId)}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleRemoveClause(clause.clauseId)
+                                                            }}
                                                             className="w-5 h-5 rounded bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                                                             title="Remove clause"
                                                         >
