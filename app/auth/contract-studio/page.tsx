@@ -6321,34 +6321,41 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </button>
                         </div>
 
-                        {/* Template & Clause Builder Row */}
-                        <div className="flex items-center justify-between mb-3 py-2 px-3 bg-slate-50 rounded-lg border border-slate-200">
-                            <div className="flex items-center gap-2 min-w-0">
+                        {/* Template & Clause Builder Row - REDESIGNED FOR BETTER VISIBILITY */}
+                        <div className="mb-3 py-2 px-3 bg-slate-50 rounded-lg border border-slate-200">
+                            {/* Row 1: Template Name - Full Width */}
+                            <div className="flex items-center gap-2 mb-2">
                                 <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
-                                <div className="min-w-0">
+                                <div className="flex-1 min-w-0">
                                     <div className="text-xs text-slate-500">Template</div>
-                                    <div className="text-sm font-medium text-slate-700 truncate">
+                                    <div className="text-sm font-medium text-slate-700">
                                         {session?.templateName || 'Not selected'}
                                     </div>
                                 </div>
-                                {session?.clauseCount && session.clauseCount > 0 && (
-                                    <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
-                                        {session.clauseCount} clauses
-                                    </span>
-                                )}
                             </div>
-                            <button
-                                onClick={() => router.push(`/auth/clause-builder?session_id=${session?.sessionId}`)}
-                                className="flex items-center gap-1 px-2 py-1 text-xs text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition whitespace-nowrap"
-                                title="Edit clause selection"
-                            >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                </svg>
-                                Clause Builder
-                            </button>
+
+                            {/* Row 2: Clause Count + Clause Builder Link */}
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+                                {session?.clauseCount && session.clauseCount > 0 ? (
+                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
+                                        {session.clauseCount} clauses selected
+                                    </span>
+                                ) : (
+                                    <span className="text-xs text-slate-400">No clauses configured</span>
+                                )}
+                                <button
+                                    onClick={() => router.push(`/auth/clause-builder?session_id=${session?.sessionId}`)}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition"
+                                    title="Edit clause selection"
+                                >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Clause Builder
+                                </button>
+                            </div>
                         </div>
 
                         {/* Stats Grid */}
