@@ -31,10 +31,13 @@ interface Session {
     dealValue: string
     phase: number
     status: string
-    createdAt?: string  // ADD THIS IF MISSING
+    createdAt?: string
+    // Template & Clause Builder tracking
+    templateName?: string
+    templatePackId?: string
+    clausesSelected?: boolean
+    clauseCount?: number
 }
-
-
 
 // ============================================================================
 // SECTION 1A: PROVIDER BID INTERFACE (MULTI-PROVIDER SUPPORT)
@@ -2245,13 +2248,19 @@ function ContractStudioContent() {
                 sessionNumber: data.session.sessionNumber,
                 customerCompany: data.session.customerCompany,
                 providerCompany: data.session.providerCompany || 'Provider (Pending)',
-                providerId: data.session.providerId || null,      // ADD THIS
+                providerId: data.session.providerId || null,
                 customerContactName: data.session.customerContactName || null,
                 providerContactName: data.session.providerContactName || null,
                 serviceType: data.session.contractType || 'IT Services',
                 dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
                 phase: parsePhaseFromState(data.session.phase),
-                status: data.session.status
+                status: data.session.status,
+                createdAt: data.session.createdAt || null,
+                // Template & Clause Builder tracking
+                templateName: data.session.templateName || null,
+                templatePackId: data.session.templatePackId || null,
+                clausesSelected: data.session.clausesSelected || false,
+                clauseCount: data.session.clauseCount || 0
             }
 
             const clauseData: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
@@ -6295,7 +6304,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                 {/* LEFT PANEL: Clause Navigation */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+                    {/* Panel Header */}
                     <div className="flex-shrink-0 p-4 border-b border-slate-200">
+                        {/* Title Row */}
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="font-semibold text-slate-800">Contract Clauses</h2>
                             <button
@@ -6310,6 +6321,37 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </button>
                         </div>
 
+                        {/* Template & Clause Builder Row */}
+                        <div className="flex items-center justify-between mb-3 py-2 px-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <div className="min-w-0">
+                                    <div className="text-xs text-slate-500">Template</div>
+                                    <div className="text-sm font-medium text-slate-700 truncate">
+                                        {session?.templateName || 'Not selected'}
+                                    </div>
+                                </div>
+                                {session?.clauseCount && session.clauseCount > 0 && (
+                                    <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
+                                        {session.clauseCount} clauses
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => router.push(`/auth/clause-builder?session_id=${session?.sessionId}`)}
+                                className="flex items-center gap-1 px-2 py-1 text-xs text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition whitespace-nowrap"
+                                title="Edit clause selection"
+                            >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                                Clause Builder
+                            </button>
+                        </div>
+
+                        {/* Stats Grid */}
                         <div className="grid grid-cols-4 gap-2 text-center">
                             <div className="bg-emerald-50 rounded p-2">
                                 <div className="text-lg font-bold text-emerald-600">{clauseStats.aligned}</div>
@@ -6330,6 +6372,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </div>
                     </div>
 
+                    {/* Clause Tree */}
                     <div className="flex-1 overflow-y-auto p-2">
                         {/* Main clause tree */}
                         {clauseTree.map(clause => (
