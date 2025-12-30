@@ -53,6 +53,10 @@ interface Session {
   createdAt?: string
   lastUpdated?: string
   industry?: string
+  // NEW: Template tracking
+  templateName?: string
+  clausesSelected?: boolean
+  clauseCount?: number
   // Provider bids for this session
   providerBids?: ProviderBid[]
 }
@@ -1040,6 +1044,16 @@ export default function ContractsDashboard() {
                             </p>
                           </div>
                           <div>
+                            <span className="text-xs text-slate-400">Template</span>
+                            <p className="font-medium text-slate-700">{session.templateName || 'Not selected'}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-400">Clauses</span>
+                            <p className="font-medium text-slate-700">
+                              {session.clauseCount ? `${session.clauseCount} selected` : 'Not configured'}
+                            </p>
+                          </div>
+                          <div>
                             <span className="text-xs text-slate-400">Phase</span>
                             <p className="font-medium text-slate-700">{phases[phase]?.name || 'Setup'}</p>
                           </div>
@@ -1063,18 +1077,35 @@ export default function ContractsDashboard() {
                           </div>
                         </div>
 
-                        {/* Setup action button for early stages */}
-                        {actionButton && (
-                          <div className="mt-4">
+                        {/* Action Buttons */}
+                        <div className="mt-4 flex gap-2">
+                          {/* Clause Builder Button - show after intake, before completion */}
+                          {!['created', 'initiated', 'customer_intake_complete', 'completed'].includes(session.status) && (
+                            <button
+                              onClick={() => router.push(`/auth/clause-builder?session_id=${session.sessionId}`)}
+                              className="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all border border-slate-300 text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                              </svg>
+                              Clause Builder
+                              {!session.clausesSelected && (
+                                <span className="w-2 h-2 bg-amber-500 rounded-full" title="Not configured"></span>
+                              )}
+                            </button>
+                          )}
+
+                          {/* Setup action button for early stages */}
+                          {actionButton && (
                             <button
                               onClick={actionButton.action}
                               disabled={actionButton.disabled}
-                              className={`w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${actionButton.className}`}
+                              className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${actionButton.className}`}
                             >
                               {actionButton.text}
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
 
                       {/* Right Side: Provider Bids */}
