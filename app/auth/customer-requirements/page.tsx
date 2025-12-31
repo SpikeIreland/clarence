@@ -18,6 +18,13 @@ interface CustomerRequirements {
     industry: string
     annualRevenue: string
 
+    // Contract Type & Template (NEW)
+    contractTypeId: string
+    contractTypeCode: string
+    serviceRequired: string
+    templatePackId: string
+    templateName: string
+
     // Market Dynamics (for leverage - Algorithm 25% weight)
     numberOfBidders: string
     marketPosition: string
@@ -25,7 +32,6 @@ interface CustomerRequirements {
     incumbentStatus: string
 
     // Service Requirements
-    serviceRequired: string
     serviceCriticality: string
     businessChallenge: string
     desiredOutcome: string
@@ -77,6 +83,38 @@ interface CustomerRequirements {
     additionalContext: string
 }
 
+// ============================================================================
+// SECTION 1A: CONTRACT TYPE & TEMPLATE INTERFACES (NEW)
+// ============================================================================
+interface ContractTemplate {
+    packId: string
+    packName: string
+    version: string
+    isDefault: boolean
+    isCustom: boolean
+    isPublic: boolean
+    clauseCount: number
+    createdAt: string
+}
+
+interface ContractType {
+    typeId: string
+    typeName: string
+    typeCode: string
+    description: string
+    icon: string
+    displayOrder: number
+    isActive: boolean
+    templateCount: number
+    defaultTemplate: {
+        packId: string
+        packName: string
+        version: string
+        clauseCount: number
+    } | null
+    templates: ContractTemplate[]
+}
+
 interface ChatMessage {
     id: string
     type: 'user' | 'clarence'
@@ -98,6 +136,22 @@ interface NestedStepComponentProps {
 
 interface PrioritiesStepProps extends NestedStepComponentProps {
     priorityPoints: number
+}
+
+// NEW: Service Requirements Step Props with contract types
+interface ServiceRequirementsStepProps extends StepComponentProps {
+    contractTypes: ContractType[]
+    contractTypesLoading: boolean
+    selectedContractType: ContractType | null
+    onContractTypeChange: (typeId: string) => void
+}
+
+// NEW: Template Selection Step Props
+interface TemplateSelectionStepProps {
+    formData: Partial<CustomerRequirements>
+    selectedContractType: ContractType | null
+    selectedTemplate: ContractTemplate | null
+    onTemplateSelect: (template: ContractTemplate) => void
 }
 
 // ============================================================================
@@ -324,7 +378,7 @@ function CustomerRequirementsForm() {
     const [loading, setLoading] = useState(false)
     const [initialLoading, setInitialLoading] = useState(true)
     const [currentStep, setCurrentStep] = useState(1)
-    const [totalSteps] = useState(9)
+    const [totalSteps] = useState(10) // UPDATED: Now 10 steps
     const [priorityPoints, setPriorityPoints] = useState(25)
 
     // Session state
@@ -337,10 +391,22 @@ function CustomerRequirementsForm() {
     const [chatInput, setChatInput] = useState('')
     const [chatLoading, setChatLoading] = useState(false)
 
+    // NEW: Contract Types & Template State
+    const [contractTypes, setContractTypes] = useState<ContractType[]>([])
+    const [contractTypesLoading, setContractTypesLoading] = useState(true)
+    const [selectedContractType, setSelectedContractType] = useState<ContractType | null>(null)
+    const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null)
+
     // ========================================================================
     // SECTION 6: FORM STATE
     // ========================================================================
     const [formData, setFormData] = useState<Partial<CustomerRequirements>>({
+        // Contract type & template (NEW)
+        contractTypeId: '',
+        contractTypeCode: '',
+        serviceRequired: '',
+        templatePackId: '',
+        templateName: '',
         // Contract positions defaults
         contractPositions: {
             liabilityCap: 200,
@@ -370,7 +436,32 @@ function CustomerRequirementsForm() {
     })
 
     // ========================================================================
-    // SECTION 7: INITIALIZE FROM URL PARAMS
+    // SECTION 7: FETCH CONTRACT TYPES ON MOUNT
+    // ========================================================================
+    useEffect(() => {
+        const fetchContractTypes = async () => {
+            try {
+                setContractTypesLoading(true)
+                const response = await fetch(`${API_BASE}/contract-types-api`)
+                if (response.ok) {
+                    const data = await response.json()
+                    if (data.success && data.contractTypes) {
+                        setContractTypes(data.contractTypes)
+                        console.log('Contract types loaded:', data.contractTypes.length)
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching contract types:', error)
+            } finally {
+                setContractTypesLoading(false)
+            }
+        }
+
+        fetchContractTypes()
+    }, [])
+
+    // ========================================================================
+    // SECTION 8: INITIALIZE FROM URL PARAMS
     // ========================================================================
     useEffect(() => {
         const urlSessionId = searchParams.get('session_id')
@@ -379,7 +470,6 @@ function CustomerRequirementsForm() {
         if (urlSessionId) {
             setSessionId(urlSessionId)
             setFormData(prev => ({ ...prev, sessionId: urlSessionId }))
-            // LOG: Set session context for event logger
             eventLogger.setSession(urlSessionId)
         }
 
@@ -399,7 +489,6 @@ function CustomerRequirementsForm() {
                     contactName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim(),
                     contactEmail: authData.userInfo?.email || ''
                 }))
-                // LOG: Set user context
                 if (authData.userInfo?.userId) {
                     eventLogger.setUser(authData.userInfo.userId)
                 }
@@ -408,7 +497,7 @@ function CustomerRequirementsForm() {
             }
         }
 
-        // UPDATED: Welcome message with trust/confidentiality emphasis
+        // Welcome message
         setChatMessages([{
             id: '1',
             type: 'clarence',
@@ -427,7 +516,6 @@ How can I help you today?`,
             timestamp: new Date()
         }])
 
-        // LOG: Requirements form loaded
         eventLogger.completed('customer_requirements', 'requirements_form_loaded', {
             sessionId: urlSessionId,
             sessionNumber: urlSessionNumber
@@ -437,7 +525,64 @@ How can I help you today?`,
     }, [searchParams])
 
     // ========================================================================
-    // SECTION 8: VALIDATION FUNCTIONS
+    // SECTION 9: CONTRACT TYPE CHANGE HANDLER (NEW)
+    // ========================================================================
+    const handleContractTypeChange = (typeId: string) => {
+        const contractType = contractTypes.find(ct => ct.typeId === typeId)
+        setSelectedContractType(contractType || null)
+
+        if (contractType) {
+            // Update form data with contract type info
+            setFormData(prev => ({
+                ...prev,
+                contractTypeId: contractType.typeId,
+                contractTypeCode: contractType.typeCode,
+                serviceRequired: contractType.typeName
+            }))
+
+            // Auto-select default template if available
+            if (contractType.defaultTemplate) {
+                const defaultTpl = contractType.templates.find(t => t.isDefault) || contractType.templates[0]
+                if (defaultTpl) {
+                    handleTemplateSelect(defaultTpl)
+                }
+            } else {
+                // Clear template selection if no templates available
+                setSelectedTemplate(null)
+                setFormData(prev => ({
+                    ...prev,
+                    templatePackId: '',
+                    templateName: ''
+                }))
+            }
+        } else {
+            // Clear selections
+            setSelectedTemplate(null)
+            setFormData(prev => ({
+                ...prev,
+                contractTypeId: '',
+                contractTypeCode: '',
+                serviceRequired: '',
+                templatePackId: '',
+                templateName: ''
+            }))
+        }
+    }
+
+    // ========================================================================
+    // SECTION 10: TEMPLATE SELECTION HANDLER (NEW)
+    // ========================================================================
+    const handleTemplateSelect = (template: ContractTemplate) => {
+        setSelectedTemplate(template)
+        setFormData(prev => ({
+            ...prev,
+            templatePackId: template.packId,
+            templateName: template.packName
+        }))
+    }
+
+    // ========================================================================
+    // SECTION 11: VALIDATION FUNCTIONS
     // ========================================================================
     const validatePriorityPoints = useCallback(() => {
         const total = Object.values(formData.priorities || {}).reduce((sum, val) => sum + val, 0)
@@ -451,7 +596,7 @@ How can I help you today?`,
     }, [validatePriorityPoints])
 
     // ========================================================================
-    // SECTION 9: FORM HANDLERS
+    // SECTION 12: FORM HANDLERS
     // ========================================================================
     const updateFormData = (field: keyof CustomerRequirements, value: string | number | string[]) => {
         setFormData(prev => ({
@@ -471,32 +616,34 @@ How can I help you today?`,
     }
 
     // ========================================================================
-    // SECTION 10: FORM SUBMISSION (UPDATE, not INSERT)
+    // SECTION 13: FORM SUBMISSION
     // ========================================================================
     const handleSubmit = async () => {
         if (!validatePriorityPoints()) {
             alert('Please adjust priority points to not exceed 25')
-            // LOG: Validation failed
             eventLogger.failed('customer_requirements', 'requirements_form_validated', 'Priority points exceed 25', 'VALIDATION_ERROR')
             return
         }
 
         if (!sessionId) {
             alert('Session ID is missing. Please go back to dashboard and create a new contract.')
-            // LOG: Missing session
             eventLogger.failed('customer_requirements', 'requirements_form_validated', 'Session ID missing', 'SESSION_MISSING')
             return
         }
 
-        // LOG: Form validated successfully
+        // NEW: Validate template selection
+        if (!formData.templatePackId) {
+            alert('Please select a contract template in Step 10 before submitting.')
+            setCurrentStep(10)
+            return
+        }
+
         eventLogger.completed('customer_requirements', 'requirements_form_validated', {
             sessionId: sessionId,
             totalSteps: totalSteps
         })
 
         setLoading(true)
-
-        // LOG: Form submission started
         eventLogger.started('customer_requirements', 'requirements_form_submitted')
 
         try {
@@ -505,11 +652,10 @@ How can I help you today?`,
                 sessionId: sessionId,
                 sessionNumber: sessionNumber,
                 timestamp: new Date().toISOString(),
-                formVersion: '7.0',
+                formVersion: '8.0', // Updated version
                 formSource: 'customer-requirements-form'
             }
 
-            // Call the N8N webhook to UPDATE the session (not create)
             const response = await fetch(`${API_BASE}/customer-requirements`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -517,7 +663,6 @@ How can I help you today?`,
             })
 
             if (response.ok) {
-                // Handle empty or non-JSON responses gracefully
                 let result = null
                 const responseText = await response.text()
 
@@ -526,29 +671,27 @@ How can I help you today?`,
                         result = JSON.parse(responseText)
                         console.log('Requirements submitted:', result)
                     } catch (parseError) {
-                        // Response was not JSON, but that's okay if status was OK
                         console.log('Requirements submitted (no JSON response)')
                     }
                 } else {
                     console.log('Requirements submitted (empty response)')
                 }
 
-                // LOG: Form submitted successfully
                 eventLogger.completed('customer_requirements', 'requirements_form_submitted', {
                     sessionId: sessionId,
                     sessionNumber: sessionNumber,
-                    formVersion: '7.0'
+                    formVersion: '8.0',
+                    contractTypeCode: formData.contractTypeCode,
+                    templatePackId: formData.templatePackId
                 })
 
-                // LOG: Redirect to questionnaire
                 eventLogger.completed('customer_requirements', 'redirect_to_questionnaire', {
                     sessionId: sessionId
                 })
 
-                // Redirect to strategic assessment (next phase)
+                // Redirect to strategic assessment
                 router.push(`/auth/strategic-assessment?session_id=${sessionId}&session_number=${sessionNumber}`)
             } else {
-                // Try to get error message from response
                 let errorMessage = 'Submission failed'
                 try {
                     const errorText = await response.text()
@@ -563,7 +706,6 @@ How can I help you today?`,
             }
         } catch (error) {
             console.error('Submission error:', error)
-            // LOG: Submission failed
             eventLogger.failed(
                 'customer_requirements',
                 'requirements_form_submitted',
@@ -577,7 +719,7 @@ How can I help you today?`,
     }
 
     // ========================================================================
-    // SECTION 11: CHAT FUNCTIONS
+    // SECTION 14: CHAT FUNCTIONS
     // ========================================================================
     const sendChatMessage = async () => {
         if (!chatInput.trim() || chatLoading) return
@@ -594,7 +736,6 @@ How can I help you today?`,
         setChatLoading(true)
 
         try {
-            // Build context from current form state
             const context = {
                 currentStep,
                 stepName: getStepName(currentStep),
@@ -639,18 +780,19 @@ How can I help you today?`,
         }
     }
 
-    // UPDATED: Step names for 9 steps
+    // UPDATED: Step names for 10 steps
     const getStepName = (step: number): string => {
         const stepNames: Record<number, string> = {
             1: 'Company Information',
             2: 'Market Context & Leverage',
-            3: 'Service Requirements',
+            3: 'Contract Type & Service', // UPDATED
             4: 'Alternative Options (BATNA)',
             5: 'Commercial Terms',
             6: 'Priority Allocation',
             7: 'Contract Positions',
             8: 'Technical & Compliance',
-            9: 'Additional Context'
+            9: 'Additional Context',
+            10: 'Contract Template' // NEW
         }
         return stepNames[step] || 'Unknown Step'
     }
@@ -661,10 +803,9 @@ How can I help you today?`,
     }, [chatMessages])
 
     // ========================================================================
-    // SECTION 12: STEP NAVIGATION
+    // SECTION 15: STEP NAVIGATION
     // ========================================================================
     const nextStep = () => {
-        // LOG: Section completed (optional granular tracking)
         eventLogger.completed('customer_requirements', `requirements_section_${currentStep}_completed`, {
             sectionName: getStepName(currentStep),
             sessionId: sessionId
@@ -675,7 +816,7 @@ How can I help you today?`,
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
 
     // ========================================================================
-    // SECTION 13: RENDER STEPS - UPDATED FOR 9 STEPS
+    // SECTION 16: RENDER STEPS - UPDATED FOR 10 STEPS
     // ========================================================================
     const renderStep = () => {
         switch (currentStep) {
@@ -684,7 +825,16 @@ How can I help you today?`,
             case 2:
                 return <MarketContextStep formData={formData} updateFormData={updateFormData} />
             case 3:
-                return <ServiceRequirementsStep formData={formData} updateFormData={updateFormData} />
+                return (
+                    <ServiceRequirementsStep
+                        formData={formData}
+                        updateFormData={updateFormData}
+                        contractTypes={contractTypes}
+                        contractTypesLoading={contractTypesLoading}
+                        selectedContractType={selectedContractType}
+                        onContractTypeChange={handleContractTypeChange}
+                    />
+                )
             case 4:
                 return <BATNAStep formData={formData} updateFormData={updateFormData} />
             case 5:
@@ -697,13 +847,22 @@ How can I help you today?`,
                 return <TechnicalRequirementsStep formData={formData} updateFormData={updateFormData} />
             case 9:
                 return <AdditionalContextStep formData={formData} updateFormData={updateFormData} />
+            case 10:
+                return (
+                    <TemplateSelectionStep
+                        formData={formData}
+                        selectedContractType={selectedContractType}
+                        selectedTemplate={selectedTemplate}
+                        onTemplateSelect={handleTemplateSelect}
+                    />
+                )
             default:
                 return null
         }
     }
 
     // ========================================================================
-    // SECTION 14: LOADING STATE
+    // SECTION 17: LOADING STATE
     // ========================================================================
     if (initialLoading) {
         return (
@@ -717,12 +876,12 @@ How can I help you today?`,
     }
 
     // ========================================================================
-    // SECTION 15: MAIN RENDER
+    // SECTION 18: MAIN RENDER
     // ========================================================================
     return (
         <div className="min-h-screen bg-slate-50 flex">
             {/* ================================================================ */}
-            {/* SECTION 16: MAIN CONTENT AREA */}
+            {/* SECTION 19: MAIN CONTENT AREA */}
             {/* ================================================================ */}
             <div className={`flex-1 transition-all duration-300 ${chatOpen ? 'mr-96' : ''}`}>
                 {/* Navigation */}
@@ -805,9 +964,9 @@ How can I help you today?`,
                             />
                         </div>
 
-                        {/* Step Indicators - Updated for 9 steps */}
+                        {/* Step Indicators - Updated for 10 steps */}
                         <div className="flex justify-between mt-4">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((step) => (
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((step) => (
                                 <button
                                     key={step}
                                     onClick={() => setCurrentStep(step)}
@@ -853,7 +1012,7 @@ How can I help you today?`,
                         ) : (
                             <button
                                 onClick={handleSubmit}
-                                disabled={loading || priorityPoints < 0}
+                                disabled={loading || priorityPoints < 0 || !formData.templatePackId}
                                 className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                             >
                                 {loading ? (
@@ -881,7 +1040,7 @@ How can I help you today?`,
             </div>
 
             {/* ================================================================ */}
-            {/* SECTION 17: CLARENCE CHAT PANEL */}
+            {/* SECTION 20: CLARENCE CHAT PANEL */}
             {/* ================================================================ */}
             <div className={`fixed right-0 top-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl transform transition-transform duration-300 z-50 ${chatOpen ? 'translate-x-0' : 'translate-x-full'
                 }`}>
@@ -994,7 +1153,7 @@ How can I help you today?`,
 }
 
 // ============================================================================
-// SECTION 18: STEP COMPONENTS
+// SECTION 21: STEP COMPONENTS
 // ============================================================================
 
 // STEP 1 - COMPANY INFO
@@ -1003,7 +1162,6 @@ function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Company Information</h2>
 
-            {/* Session ID - Read Only if pre-populated */}
             {formData.sessionId && (
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
                     <div className="flex items-center gap-2">
@@ -1223,52 +1381,106 @@ function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
     )
 }
 
-// STEP 3: Service Requirements
-function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProps) {
+// ============================================================================
+// STEP 3: SERVICE REQUIREMENTS - UPDATED WITH DYNAMIC CONTRACT TYPES
+// ============================================================================
+function ServiceRequirementsStep({
+    formData,
+    updateFormData,
+    contractTypes,
+    contractTypesLoading,
+    selectedContractType,
+    onContractTypeChange
+}: ServiceRequirementsStepProps) {
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Service Requirements</h2>
+            <h2 className="text-2xl font-medium text-slate-800 mb-4">Contract Type & Service Requirements</h2>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Service Category <span className="text-red-500">*</span>
-                    </label>
+            {/* Contract Type Selection */}
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Contract Type <span className="text-red-500">*</span>
+                </label>
+                {contractTypesLoading ? (
+                    <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500">
+                        Loading contract types...
+                    </div>
+                ) : (
                     <select
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.serviceRequired || ''}
-                        onChange={(e) => updateFormData('serviceRequired', e.target.value)}
+                        value={formData.contractTypeId || ''}
+                        onChange={(e) => onContractTypeChange(e.target.value)}
                     >
-                        <option value="">Select Service</option>
-                        <option value="Back Office Operations">Back Office Operations</option>
-                        <option value="Customer Support">Customer Support</option>
-                        <option value="Technical Support">Technical Support</option>
-                        <option value="Data Processing">Data Processing</option>
-                        <option value="IT Services">IT Services</option>
-                        <option value="Finance & Accounting">Finance & Accounting</option>
-                        <option value="HR Services">HR Services</option>
+                        <option value="">Select Contract Type</option>
+                        {contractTypes.map((ct) => (
+                            <option key={ct.typeId} value={ct.typeId}>
+                                {ct.icon} {ct.typeName}
+                                {ct.templateCount > 0 && ` (${ct.templateCount} template${ct.templateCount > 1 ? 's' : ''})`}
+                            </option>
+                        ))}
                     </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Service Criticality
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.serviceCriticality || ''}
-                        onChange={(e) => updateFormData('serviceCriticality', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="mission-critical">Mission Critical</option>
-                        <option value="business-critical">Business Critical</option>
-                        <option value="important">Important</option>
-                        <option value="standard">Standard</option>
-                        <option value="non-core">Non-core</option>
-                    </select>
-                </div>
+                )}
             </div>
 
+            {/* Selected Contract Type Info */}
+            {selectedContractType && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                        <span className="text-2xl">{selectedContractType.icon}</span>
+                        <div className="flex-1">
+                            <h3 className="font-medium text-slate-800">{selectedContractType.typeName}</h3>
+                            <p className="text-sm text-slate-600 mt-1">{selectedContractType.description}</p>
+
+                            {/* Default Template Preview */}
+                            {selectedContractType.defaultTemplate ? (
+                                <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="text-xs text-slate-500">Recommended Template</span>
+                                            <div className="font-medium text-slate-700">
+                                                {selectedContractType.defaultTemplate.packName}
+                                            </div>
+                                        </div>
+                                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
+                                            {selectedContractType.defaultTemplate.clauseCount} clauses
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        ℹ️ You can customize or change the template in Step 10
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                                    <p className="text-sm text-amber-800">
+                                        ⚠️ No templates available for this contract type. You can build a custom contract in Step 10.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Service Criticality */}
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Service Criticality
+                </label>
+                <select
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
+                    value={formData.serviceCriticality || ''}
+                    onChange={(e) => updateFormData('serviceCriticality', e.target.value)}
+                >
+                    <option value="">Select</option>
+                    <option value="mission-critical">Mission Critical</option>
+                    <option value="business-critical">Business Critical</option>
+                    <option value="important">Important</option>
+                    <option value="standard">Standard</option>
+                    <option value="non-core">Non-core</option>
+                </select>
+            </div>
+
+            {/* Business Challenge */}
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                     Business Challenge <span className="text-red-500">*</span>
@@ -1282,6 +1494,7 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
                 />
             </div>
 
+            {/* Desired Outcome */}
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                     Desired Outcome <span className="text-red-500">*</span>
@@ -1298,13 +1511,12 @@ function ServiceRequirementsStep({ formData, updateFormData }: StepComponentProp
     )
 }
 
-// STEP 4: BATNA Assessment - UPDATED with confidentiality notice
+// STEP 4: BATNA Assessment
 function BATNAStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Alternative Options (BATNA)</h2>
 
-            {/* UPDATED: Use new ConfidentialityNotice component */}
             <ConfidentialityNotice type="batna" />
 
             <div>
@@ -1383,15 +1595,12 @@ function BATNAStep({ formData, updateFormData }: StepComponentProps) {
     )
 }
 
-// ============================================================================
-// SECTION 19: COMMERCIAL TERMS STEP - UPDATED with confidentiality notice
-// ============================================================================
+// STEP 5: Commercial Terms
 function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Commercial Terms</h2>
 
-            {/* UPDATED: Use new ConfidentialityNotice component */}
             <ConfidentialityNotice type="budget" />
 
             <div className="grid grid-cols-2 gap-4">
@@ -1472,13 +1681,12 @@ function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
     )
 }
 
-// STEP 6: Priorities with Point System - UPDATED with confidentiality notice
+// STEP 6: Priorities with Point System
 function PrioritiesStep({ formData, updateNestedData, priorityPoints }: PrioritiesStepProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Priority Allocation</h2>
 
-            {/* UPDATED: Use new ConfidentialityNotice component */}
             <ConfidentialityNotice type="priority" />
 
             <div className={`border rounded-lg p-4 mb-6 ${priorityPoints >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'
@@ -1656,9 +1864,7 @@ function ContractPositionsStep({ formData, updateNestedData }: NestedStepCompone
     )
 }
 
-// ============================================================================
-// SECTION 20: TECHNICAL & COMPLIANCE REQUIREMENTS
-// ============================================================================
+// STEP 8: Technical Requirements
 function TechnicalRequirementsStep({ formData, updateFormData }: StepComponentProps) {
     const securityOptions = [
         'ISO 27001',
@@ -1761,15 +1967,12 @@ function TechnicalRequirementsStep({ formData, updateFormData }: StepComponentPr
     )
 }
 
-// ============================================================================
-// SECTION 21: ADDITIONAL CONTEXT - UPDATED with confidentiality notice
-// ============================================================================
+// STEP 9: Additional Context
 function AdditionalContextStep({ formData, updateFormData }: StepComponentProps) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-medium text-slate-800 mb-4">Additional Context</h2>
 
-            {/* UPDATED: Use new ConfidentialityNotice component */}
             <ConfidentialityNotice type="context" />
 
             <div>
@@ -1823,8 +2026,140 @@ function AdditionalContextStep({ formData, updateFormData }: StepComponentProps)
                     placeholder="Anything else CLARENCE should know about this engagement..."
                 />
             </div>
+        </div>
+    )
+}
 
-            {/* Summary Card - UPDATED messaging */}
+// ============================================================================
+// STEP 10: TEMPLATE SELECTION (NEW)
+// ============================================================================
+function TemplateSelectionStep({
+    formData,
+    selectedContractType,
+    selectedTemplate,
+    onTemplateSelect
+}: TemplateSelectionStepProps) {
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-medium text-slate-800 mb-4">Contract Template</h2>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800">
+                    📋 Select and confirm your contract template. This defines the clauses that will be negotiated with providers.
+                    You can customize individual clauses in the Clause Builder after completing this form.
+                </p>
+            </div>
+
+            {/* No Contract Type Selected */}
+            {!selectedContractType && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+                    <span className="text-3xl mb-3 block">⚠️</span>
+                    <h3 className="font-medium text-amber-800 mb-2">No Contract Type Selected</h3>
+                    <p className="text-sm text-amber-700">
+                        Please go back to Step 3 and select a contract type to see available templates.
+                    </p>
+                </div>
+            )}
+
+            {/* Contract Type Selected but No Templates */}
+            {selectedContractType && selectedContractType.templates.length === 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 text-center">
+                    <span className="text-3xl mb-3 block">✏️</span>
+                    <h3 className="font-medium text-slate-800 mb-2">Custom Contract</h3>
+                    <p className="text-sm text-slate-600 mb-4">
+                        No pre-built templates are available for {selectedContractType.typeName}.
+                        You&apos;ll be able to build a custom contract in the Clause Builder.
+                    </p>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg">
+                        <span>✓</span>
+                        <span>Custom contract will be configured after submission</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Templates Available */}
+            {selectedContractType && selectedContractType.templates.length > 0 && (
+                <>
+                    {/* Selected Contract Type Summary */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">{selectedContractType.icon}</span>
+                            <div>
+                                <h3 className="font-medium text-slate-800">{selectedContractType.typeName}</h3>
+                                <p className="text-sm text-slate-600">{selectedContractType.templateCount} template(s) available</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Template Options */}
+                    <div className="space-y-3">
+                        {selectedContractType.templates.map((template) => (
+                            <div
+                                key={template.packId}
+                                onClick={() => onTemplateSelect(template)}
+                                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${selectedTemplate?.packId === template.packId
+                                    ? 'border-emerald-500 bg-emerald-50'
+                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                    }`}
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-start gap-3">
+                                        {/* Selection Indicator */}
+                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${selectedTemplate?.packId === template.packId
+                                            ? 'border-emerald-500 bg-emerald-500'
+                                            : 'border-slate-300'
+                                            }`}>
+                                            {selectedTemplate?.packId === template.packId && (
+                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-medium text-slate-800">{template.packName}</h4>
+                                                {template.isDefault && (
+                                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                                                        Recommended
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-slate-600 mt-1">
+                                                Version {template.version} • {template.clauseCount} clauses
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <span className="px-3 py-1 bg-slate-100 text-slate-600 text-sm font-medium rounded-full">
+                                        {template.clauseCount} clauses
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Selected Template Confirmation */}
+                    {selectedTemplate && (
+                        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                            <div className="flex items-start gap-3">
+                                <span className="text-emerald-600 text-xl">✓</span>
+                                <div>
+                                    <h4 className="font-medium text-emerald-800">Template Selected</h4>
+                                    <p className="text-sm text-emerald-700 mt-1">
+                                        <strong>{selectedTemplate.packName}</strong> with {selectedTemplate.clauseCount} clauses will be used as your contract foundation.
+                                    </p>
+                                    <p className="text-xs text-emerald-600 mt-2">
+                                        ℹ️ After completing the Strategic Assessment, you&apos;ll be directed to the Clause Builder where you can customize these clauses before inviting providers.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* Summary Card */}
             <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-6 mt-8">
                 <h3 className="text-lg font-medium text-slate-800 mb-4">📋 Ready to Submit</h3>
                 <p className="text-sm text-slate-600 mb-4">
