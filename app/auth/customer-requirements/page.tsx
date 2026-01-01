@@ -160,8 +160,16 @@ interface TemplateSelectionStepProps {
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 // ============================================================================
-// SECTION 2A: TRUST BANNER COMPONENT
+// ENHANCED TRUST BANNER COMPONENT
+// Location: Replace SECTION 2A in customer-requirements.tsx
+// 
+// This updated component addresses John's data protection feedback:
+// - Minimal personal data collection (name + work email only)
+// - Data sovereignty messaging
+// - AI training data assurance
+// - Third-party platform security
 // ============================================================================
+
 function TrustBanner({ onLearnMore }: { onLearnMore: () => void }) {
     const [isExpanded, setIsExpanded] = useState(false)
 
@@ -192,7 +200,7 @@ function TrustBanner({ onLearnMore }: { onLearnMore: () => void }) {
                             onClick={() => setIsExpanded(!isExpanded)}
                             className="mt-3 text-sm text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
                         >
-                            {isExpanded ? 'Hide details' : 'How does CLARENCE use my information?'}
+                            {isExpanded ? 'Hide details' : 'How does CLARENCE protect my data?'}
                             <svg
                                 className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                                 fill="none"
@@ -209,7 +217,8 @@ function TrustBanner({ onLearnMore }: { onLearnMore: () => void }) {
             {/* Expanded Details */}
             {isExpanded && (
                 <div className="bg-slate-900/50 border-t border-slate-700 p-6">
-                    <div className="grid md:grid-cols-3 gap-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+
                         {/* What CLARENCE Does */}
                         <div>
                             <div className="flex items-center gap-2 mb-3">
@@ -269,23 +278,96 @@ function TrustBanner({ onLearnMore }: { onLearnMore: () => void }) {
                                 </li>
                             </ul>
                         </div>
+                    </div>
 
-                        {/* The Honest Broker Principle */}
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                                    </svg>
-                                </div>
-                                <h4 className="font-medium text-blue-400">The Honest Broker</h4>
+                    {/* Data Protection Section - NEW */}
+                    <div className="mt-6 pt-6 border-t border-slate-700">
+                        <div className="flex items-center gap-2 mb-4">
+                            <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
                             </div>
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                                CLARENCE works equally with both parties, using each side&apos;s information to find genuine common ground—not to advantage one party over the other.
-                            </p>
-                            <p className="text-sm text-slate-400 mt-2 italic">
-                                Think of CLARENCE as a skilled mediator who understands both positions but maintains strict confidentiality.
-                            </p>
+                            <h4 className="font-medium text-blue-400">Data Protection & Privacy</h4>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div className="bg-slate-800/50 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-200">Minimal Personal Data</p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            We only collect your name and work email address. No phone numbers or personal identifiers.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-800/50 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-200">Secure Data Storage</p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            Your data is stored securely with enterprise-grade encryption. Multi-tenant architecture ensures complete isolation.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-800/50 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-200">No AI Training on Your Data</p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            Your business data is never used to train CLARENCE or any AI models. We use only anonymised, generic data for improvements.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-800/50 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-200">The Honest Broker Principle</p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            CLARENCE works equally with both parties, finding genuine common ground without advantaging either side.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Security Link */}
+                        <div className="mt-4 text-center">
+                            <a
+                                href="/security"
+                                className="text-xs text-slate-400 hover:text-blue-400 transition-colors inline-flex items-center gap-1"
+                            >
+                                View our Security & Privacy Policy
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                            </a>
                         </div>
                     </div>
                 </div>
