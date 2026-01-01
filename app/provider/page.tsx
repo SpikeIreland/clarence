@@ -10,6 +10,8 @@
 //
 // Token is ONLY used to validate invitation during signup.
 // After account creation, providers use standard email/password login.
+//
+// DATA PROTECTION: Only collects name and work email (no phone numbers)
 // ============================================================================
 
 // ============================================================================
@@ -62,7 +64,7 @@ interface SignupFormData {
     confirmPassword: string;
     companyName: string;
     contactName: string;
-    phone: string;
+    // REMOVED: phone field - data protection compliance
 }
 
 interface LoginFormData {
@@ -183,15 +185,14 @@ function ProviderAuthContent() {
     const [showActivateAccount, setShowActivateAccount] = useState(false);
     const [activationEmailSent, setActivationEmailSent] = useState(false);
 
-    // Signup form
+    // Signup form - REMOVED phone field for data protection
     const [signupForm, setSignupForm] = useState<SignupFormData>({
         token: '',
         email: '',
         password: '',
         confirmPassword: '',
         companyName: '',
-        contactName: '',
-        phone: ''
+        contactName: ''
     });
 
     // Login form
@@ -369,6 +370,7 @@ function ProviderAuthContent() {
 
             // ================================================================
             // STEP 2: Register provider via N8N workflow
+            // REMOVED: contactPhone field - data protection compliance
             // ================================================================
             const registerResponse = await fetch(`${API_BASE}/provider-register`, {
                 method: 'POST',
@@ -380,7 +382,7 @@ function ProviderAuthContent() {
                     companyName: signupForm.companyName,
                     contactName: signupForm.contactName,
                     contactEmail: signupForm.email,
-                    contactPhone: signupForm.phone,
+                    // REMOVED: contactPhone - data protection compliance
                     registeredAt: new Date().toISOString()
                 })
             });
@@ -883,7 +885,7 @@ function ProviderAuthContent() {
                                     {/* Email */}
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                            Email Address <span className="text-red-500">*</span>
+                                            Work Email Address <span className="text-red-500">*</span>
                                         </label>
                                         <input
                                             type="email"
@@ -962,19 +964,18 @@ function ProviderAuthContent() {
                                         />
                                     </div>
 
-                                    {/* Phone (Optional) */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                            Phone Number <span className="text-slate-400">(optional)</span>
-                                        </label>
-                                        <input
-                                            type="tel"
-                                            value={signupForm.phone}
-                                            onChange={(e) => setSignupForm(prev => ({ ...prev, phone: e.target.value }))}
-                                            placeholder="Your phone number"
-                                            disabled={!tokenValidated}
-                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
-                                        />
+                                    {/* REMOVED: Phone Number field - data protection compliance */}
+
+                                    {/* Data Protection Notice */}
+                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                        <div className="flex items-start gap-2">
+                                            <svg className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                            </svg>
+                                            <p className="text-xs text-slate-600">
+                                                We only collect your name and work email. Your data is stored securely and never used to train AI models.
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {/* Submit Button */}
