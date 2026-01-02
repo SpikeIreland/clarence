@@ -311,15 +311,15 @@ function IntelligentQuestionnaireContent() {
     },
     {
       id: 'complete',
-      name: 'Invite Provider',
-      icon: '✉️',
+      name: 'Review Clauses',
+      icon: '📝',
       questionIndices: [] as number[],
     }
   ]
 
   // Calculate which section the current question belongs to
   const getCurrentSectionId = (): string => {
-    if (conversationComplete) return 'complete'  // Changed from 'result'
+    if (conversationComplete) return 'complete'
     if (currentQuestionIndex === 0 && messages.length <= 2) return 'summary'
 
     for (const section of questionnaireSections) {
@@ -336,7 +336,7 @@ function IntelligentQuestionnaireContent() {
     if (!section) return 'pending'
 
     if (sectionId === 'summary') return 'complete'
-    if (sectionId === 'complete') return conversationComplete ? 'complete' : 'pending'  // Changed from 'result'
+    if (sectionId === 'complete') return conversationComplete ? 'complete' : 'pending'
 
     if (section.questionIndices.length === 0) return 'pending'
 
@@ -704,53 +704,7 @@ ${priorityRanking}
 I have the facts. Now I need to understand the *dynamics* that will determine your leverage.`
   }
 
-  // ========== SECTION 11: HELPER FUNCTIONS ==========
-  const getPriorityRanking = (priorities: ExistingRequirements['priorities']): string => {
-    if (!priorities || Object.values(priorities).every(v => v === 0)) {
-      return '• Not specified'
-    }
-
-    const labels: Record<string, string> = {
-      cost: 'Cost Optimization',
-      quality: 'Quality Standards',
-      speed: 'Speed of Delivery',
-      innovation: 'Innovation & Technology',
-      riskMitigation: 'Risk Mitigation'
-    }
-
-    const sorted = Object.entries(priorities)
-      .filter(([, value]) => value > 0)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 3)
-      .map(([key, value], index) => `${index + 1}. ${labels[key] || key} (${value} points)`)
-
-    return sorted.length > 0 ? sorted.join('\n') : '• Not specified'
-  }
-
-  const getTimelineDescription = (timeline: string): string => {
-    const descriptions: Record<string, string> = {
-      'Urgent': 'Under pressure - less than 2 weeks',
-      'Normal': 'Standard - within 1 month',
-      'Flexible': 'Relaxed - 1-3 months',
-      'No Rush': 'No time pressure',
-      'urgent': 'Under pressure - less than 2 weeks',
-      'normal': 'Standard - within 1 month',
-      'flexible': 'Relaxed - 1-3 months',
-      'no-rush': 'No time pressure'
-    }
-    return descriptions[timeline] || timeline || 'Not specified'
-  }
-
-  const formatCurrency = (value: string): string => {
-    if (!value) return 'Not specified'
-    const num = parseFloat(value.replace(/[^0-9.]/g, ''))
-    if (isNaN(num)) return value
-    if (num >= 1000000) return `£${(num / 1000000).toFixed(1)}M`
-    if (num >= 1000) return `£${(num / 1000).toFixed(0)}K`
-    return `£${num}`
-  }
-
-  // ========== SECTION 12: ASK STRATEGIC QUESTION ==========
+  // ========== SECTION 11: ASK STRATEGIC QUESTION ==========
   const askStrategicQuestion = async (index: number, data: ExistingRequirements) => {
     if (index >= STRATEGIC_QUESTIONS.length) {
       // All questions answered - proceed to assessment
@@ -779,7 +733,7 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
     setIsTyping(false)
   }
 
-  // ========== SECTION 13: HANDLE USER RESPONSE ==========
+  // ========== SECTION 12: HANDLE USER RESPONSE ==========
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userInput.trim() || isTyping) return
@@ -835,7 +789,7 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
     }
   }
 
-  // ========== SECTION 14: COMPLETE ASSESSMENT ==========
+  // ========== SECTION 13: COMPLETE ASSESSMENT ==========
   const completeAssessment = async () => {
     setIsTyping(true)
 
@@ -859,15 +813,14 @@ I've captured your position on:
 ✓ **Risk Tolerance** - How much uncertainty you can accept
 ✓ **Internal Dynamics** - Stakeholder pressures and politics
 ✓ **Relationship Priorities** - Partnership vs. commercial focus
-✓ **Provider Trust** - Your confidence level and concerns
 
 **What happens next:**
 
-1. **Invite your provider** to complete their intake questionnaire
-2. Once they submit, I'll calculate the **true leverage balance** using both parties' data
-3. Then I'll generate **defensible first-draft positions** calibrated to that leverage
+1. **Review your contract clauses** - Confirm or customize the clauses in your contract template
+2. **Invite your provider** - Once clauses are confirmed, you can send the invitation
+3. **Negotiate** - I'll calculate leverage and generate draft positions once the provider responds
 
-Your data is saved and ready. Click below to proceed to the Contract Studio where you can invite your provider.`
+Your data is saved and ready. Click below to review and confirm your contract clauses.`
 
     addClarenceMessage(summaryMessage)
 
@@ -890,7 +843,7 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
     setConversationComplete(true)
   }
 
-  // ========== SECTION 14B: CALCULATE CUSTOMER-SIDE FACTORS ONLY ==========
+  // ========== SECTION 14: CALCULATE CUSTOMER-SIDE FACTORS ONLY ==========
   const calculateCustomerFactors = (): LeverageBreakdown => {
     // These are preliminary scores based on customer data only
     // Full leverage calculation requires provider data too
@@ -952,179 +905,10 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
     }
   }
 
-  // ========== SECTION 15: CALCULATE LEVERAGE (ALIGNED WITH ALGORITHM SPEC) ==========
-  const calculateLeverage = (): LeverageAssessment => {
-    // Algorithm spec: 4 factors at 25% weight each
-    // Each factor scored 0-100, then weighted average determines final leverage
-
-    const factors: string[] = []
-
-    // ===== MARKET DYNAMICS (25% weight) =====
-    // Factors: Alternative providers, market conditions, time pressure, capacity constraints
-    let marketScore = 50 // Neutral baseline
-
-    // Number of bidders
-    if (existingData?.numberOfBidders === '4+' || existingData?.numberOfBidders === '4-plus') {
-      marketScore += 20
-      factors.push("Strong competition: 4+ providers bidding")
-    } else if (existingData?.numberOfBidders === '2-3') {
-      marketScore += 10
-      factors.push("Moderate competition: 2-3 providers in play")
-    } else if (existingData?.numberOfBidders === 'Single Source' || existingData?.numberOfBidders === 'single') {
-      marketScore -= 25
-      factors.push("Single source: No competitive pressure")
-    }
-
-    // Timeline pressure
-    if (existingData?.decisionTimeline === 'Urgent' || existingData?.decisionTimeline === 'urgent') {
-      marketScore -= 15
-      factors.push("Time pressure: Urgency reduces leverage")
-    } else if (existingData?.decisionTimeline === 'Flexible' || existingData?.decisionTimeline === 'flexible' ||
-      existingData?.decisionTimeline === 'No Rush' || existingData?.decisionTimeline === 'no-rush') {
-      marketScore += 10
-      factors.push("Flexible timeline: No urgency strengthens position")
-    }
-
-    marketScore = Math.max(0, Math.min(100, marketScore))
-
-    // ===== ECONOMIC FACTORS (25% weight) =====
-    // Factors: Deal size to revenue, switching costs, budget flexibility
-    let economicScore = 50
-
-    // Deal size attractiveness
-    const dealValue = parseFloat((existingData?.dealValue || '0').replace(/[^0-9.]/g, ''))
-    if (dealValue >= 1000000) {
-      economicScore += 15
-      factors.push("Large deal value: Very attractive to providers")
-    } else if (dealValue >= 500000) {
-      economicScore += 10
-      factors.push("Significant deal value: Attractive to providers")
-    }
-
-    // Switching costs
-    if (existingData?.switchingCosts === 'High' || existingData?.switchingCosts === 'high') {
-      economicScore -= 15
-      factors.push("High switching costs: Makes walking away expensive")
-    } else if (existingData?.switchingCosts === 'Low' || existingData?.switchingCosts === 'low') {
-      economicScore += 10
-      factors.push("Low switching costs: Easier to change if needed")
-    }
-
-    // Budget flexibility
-    if (existingData?.budgetFlexibility === 'high' || existingData?.budgetFlexibility === 'flexible') {
-      economicScore += 5
-    } else if (existingData?.budgetFlexibility === 'none' || existingData?.budgetFlexibility === 'fixed') {
-      economicScore -= 5
-    }
-
-    economicScore = Math.max(0, Math.min(100, economicScore))
-
-    // ===== STRATEGIC POSITION (25% weight) =====
-    // Factors: Service criticality, incumbent advantage, reputational value
-    let strategicScore = 50
-
-    // Service criticality (cuts both ways - more critical = more provider leverage)
-    if (existingData?.serviceCriticality === 'Mission Critical' || existingData?.serviceCriticality === 'mission-critical') {
-      strategicScore -= 10
-      factors.push("Mission critical service: Provider knows you need this")
-    } else if (existingData?.serviceCriticality === 'business-critical') {
-      strategicScore -= 5
-    } else if (existingData?.serviceCriticality === 'Nice to Have' || existingData?.serviceCriticality === 'nice-to-have') {
-      strategicScore += 10
-      factors.push("Non-critical service: You can walk away easily")
-    }
-
-    // Incumbent status
-    if (existingData?.incumbentStatus === 'no-incumbent') {
-      strategicScore += 5
-      factors.push("No incumbent: Fresh start, more options")
-    } else if (existingData?.incumbentStatus === 'replacing-incumbent' || existingData?.incumbentStatus === 'Replacing Provider') {
-      strategicScore += 10
-      factors.push("Replacing incumbent: Demonstrated willingness to change")
-    }
-
-    strategicScore = Math.max(0, Math.min(100, strategicScore))
-
-    // ===== BATNA ANALYSIS (25% weight) =====
-    // Based on strategic questionnaire answers
-    let batnaScore = 50
-
-    // BATNA realism score (from questionnaire)
-    const batnaRealism = strategicAnswers.batnaRealismScore
-    if (batnaRealism) {
-      const score = parseInt(batnaRealism)
-      if (!isNaN(score)) {
-        if (score >= 8) {
-          batnaScore += 20
-          factors.push("Strong BATNA: Your alternatives are credible (rated ${score}/10)")
-        } else if (score >= 6) {
-          batnaScore += 10
-          factors.push("Moderate BATNA: Decent alternatives available")
-        } else if (score <= 4) {
-          batnaScore -= 15
-          factors.push("Weak BATNA: Limited realistic alternatives")
-        }
-      }
-    }
-
-    // BATNA timeline
-    if (strategicAnswers.batnaTimeline) {
-      const timeline = strategicAnswers.batnaTimeline.toLowerCase()
-      if (timeline.includes('immediate') || timeline.includes('week') || timeline.includes('quick')) {
-        batnaScore += 10
-        factors.push("Quick BATNA execution: Can pivot rapidly")
-      } else if (timeline.includes('month') || timeline.includes('long') || timeline.includes('slow')) {
-        batnaScore -= 5
-      }
-    }
-
-    // Alternative options from form
-    if (existingData?.alternativeOptions === 'many-alternatives' || existingData?.alternativeOptions === 'strong') {
-      batnaScore += 10
-    } else if (existingData?.alternativeOptions === 'no-alternatives' || existingData?.alternativeOptions === 'none') {
-      batnaScore -= 15
-    }
-
-    // In-house capability
-    if (existingData?.inHouseCapability === 'full' || existingData?.inHouseCapability === 'strong') {
-      batnaScore += 10
-      factors.push("In-house capability: Can do this internally if needed")
-    } else if (existingData?.inHouseCapability === 'none') {
-      batnaScore -= 5
-    }
-
-    batnaScore = Math.max(0, Math.min(100, batnaScore))
-
-    // ===== CALCULATE WEIGHTED AVERAGE =====
-    // Each factor is 25% weight per algorithm spec
-    const customerLeverage = Math.round(
-      (marketScore * 0.25) +
-      (economicScore * 0.25) +
-      (strategicScore * 0.25) +
-      (batnaScore * 0.25)
-    )
-
-    // Clamp to reasonable range (no one has 0% or 100% leverage)
-    const finalCustomerLeverage = Math.max(25, Math.min(75, customerLeverage))
-    const finalProviderLeverage = 100 - finalCustomerLeverage
-
-    return {
-      customerLeverage: finalCustomerLeverage,
-      providerLeverage: finalProviderLeverage,
-      breakdown: {
-        marketDynamicsScore: marketScore,
-        economicFactorsScore: economicScore,
-        strategicPositionScore: strategicScore,
-        batnaScore: batnaScore
-      },
-      reasoning: factors.length > 0
-        ? "**Key factors:**\n• " + factors.join("\n• ")
-        : "Assessment based on market dynamics and strategic positioning."
-    }
-  }
-
-  // ========== SECTION 16: PROCEED TO STUDIO ==========
-  const handleProceedToStudio = async () => {
+  // ========================================================================
+  // SECTION 15: PROCEED TO CLAUSE BUILDER (UPDATED)
+  // ========================================================================
+  const handleProceedToClauseBuilder = async () => {
     if (!sessionId) return
 
     // LOG: Saving assessment data
@@ -1162,18 +946,18 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
       eventLogger.failed('customer_questionnaire', 'questionnaire_data_saved', error instanceof Error ? error.message : 'Save error', 'SAVE_EXCEPTION')
     }
 
-    // LOG: Redirect to invite provider
-    eventLogger.completed('customer_questionnaire', 'redirect_to_invite_provider', {
+    // LOG: Redirect to clause builder
+    eventLogger.completed('customer_questionnaire', 'redirect_to_clause_builder', {
       sessionId: sessionId,
       sessionNumber: sessionNumber
     })
 
-    // Navigate to Contract Studio (which should show "Invite Provider" state)
-    router.push(`/auth/invite-providers?session_id=${sessionId}&session_number=${sessionNumber}&status=pending_provider`)
+    // Navigate to Clause Builder (not Invite Providers)
+    router.push(`/auth/clause-builder?session_id=${sessionId}&session_number=${sessionNumber}`)
   }
 
   // ========================================================================
-  // SECTION 16B: PROGRESS MENU COMPONENT
+  // SECTION 16: PROGRESS MENU COMPONENT
   // ========================================================================
   const ProgressMenu = () => {
     const overallProgress = getOverallProgress()
@@ -1396,14 +1180,17 @@ Your data is saved and ready. Click below to proceed to the Contract Studio wher
               ) : (
                 <div className="border-t border-slate-200 p-4">
                   <button
-                    onClick={handleProceedToStudio}
-                    className="w-full py-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                    onClick={handleProceedToClauseBuilder}
+                    className="w-full py-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
                   >
-                    Proceed to Contract Studio & Invite Provider
+                    Review & Confirm Clauses
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </button>
+                  <p className="text-center text-sm text-slate-500 mt-3">
+                    You&apos;ll review your contract clauses before inviting providers
+                  </p>
                 </div>
               )}
             </div>
