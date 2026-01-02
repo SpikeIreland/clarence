@@ -310,7 +310,7 @@ function ClauseBuilderContent() {
 
         if (!sessionId) {
             console.error('[ClauseBuilder] No session_id provided, redirecting...')
-            router.push('/auth/contract-dashboard')
+            router.push('/auth/contracts-dashboard')
             return
         }
 
@@ -1253,7 +1253,7 @@ function ClauseBuilderContent() {
                 <div className="px-6">
                     <nav className="flex justify-between items-center h-16">
                         {/* Logo */}
-                        <Link href="/auth/contract-dashboard" className="flex items-center gap-3">
+                        <Link href="/auth/contracts-dashboard" className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center">
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
@@ -1293,7 +1293,7 @@ function ClauseBuilderContent() {
                             )}
 
                             <Link
-                                href="/auth/contract-dashboard"
+                                href="/auth/contracts-dashboard"
                                 className="text-sm text-slate-400 hover:text-white transition"
                             >
                                 ← Back to Dashboard

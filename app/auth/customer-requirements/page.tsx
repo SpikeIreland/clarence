@@ -971,7 +971,7 @@ How can I help you today?`,
                     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                         <div className="flex justify-between h-16">
                             <div className="flex items-center">
-                                <Link href="/auth/contract-dashboard" className="flex items-center">
+                                <Link href="/auth/contracts-dashboard" className="flex items-center">
                                     <div>
                                         <div className="text-2xl font-medium text-slate-700">CLARENCE</div>
                                         <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
@@ -1112,7 +1112,7 @@ How can I help you today?`,
                     {/* Save & Exit Option */}
                     <div className="mt-4 text-center">
                         <button
-                            onClick={() => router.push('/auth/contract-dashboard')}
+                            onClick={() => router.push('/auth/contracts-dashboard')}
                             className="text-sm text-slate-500 hover:text-slate-700 underline"
                         >
                             Save & Return to Dashboard
