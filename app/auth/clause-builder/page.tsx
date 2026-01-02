@@ -1,17 +1,18 @@
 'use client'
 
 // ============================================================================
-// CLAUSE BUILDER PAGE
+// CLAUSE BUILDER PAGE V2.0 - WITH CONTRACT UPLOAD & PARSING
 // auth/clause-builder/page.tsx
 // Created: 2025-12-28
-// Purpose: Allow customers to select and configure clauses before negotiation
+// Updated: 2026-01-03 - Added contract upload, parsing, and verification
+// Purpose: Allow customers to select, upload, or build clauses before negotiation
 // ============================================================================
 
 // ============================================================================
 // SECTION 1: IMPORTS
 // ============================================================================
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger'
@@ -21,6 +22,9 @@ import { eventLogger } from '@/lib/eventLogger'
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+// Builder modes (NEW)
+type BuilderMode = 'select' | 'template' | 'upload' | 'manual' | 'verify'
 
 // Service categories (matches Customer Requirements dropdown)
 const SERVICE_CATEGORIES = [
@@ -54,6 +58,14 @@ const WEIGHT_OPTIONS = [
     { value: 7, label: 'High', description: 'Important to us' },
     { value: 10, label: 'Non-Negotiable', description: 'Deal breaker' }
 ]
+
+// Supported upload file types (NEW)
+const SUPPORTED_FILE_TYPES: Record<string, string> = {
+    'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/msword': 'doc',
+    'text/plain': 'txt'
+}
 
 // ============================================================================
 // SECTION 3: INTERFACES
@@ -129,6 +141,56 @@ interface SubClause {
     description: string | null
 }
 
+// Parsed clause from uploaded document (NEW)
+interface ParsedClause {
+    parsedClauseId: string
+    sessionId: string
+    sourceDocumentName: string
+    sourceDocumentType: string
+    sourceSectionIndex: number
+    parsedNumber: string
+    clauseLevel: number
+    displayOrder: number
+    suggestedName: string
+    suggestedCategory: string
+    clauseText: string
+    detectionMethod: string
+    contractStyle: string
+    confidenceScore: number
+    confidenceFactors: {
+        categoryConfidence: number
+        hasNumbering: boolean
+        contentLength: number
+    }
+    flags: string[]
+    isVerified: boolean
+    verifiedName: string | null
+    verifiedCategory: string | null
+    status: 'pending' | 'verified' | 'rejected' | 'committed'
+}
+
+// Upload state tracking (NEW)
+interface UploadState {
+    file: File | null
+    fileName: string
+    fileType: string
+    fileSize: number
+    status: 'idle' | 'reading' | 'parsing' | 'completed' | 'error'
+    progress: number
+    progressMessage: string
+    error: string | null
+}
+
+// Parsing result from API (NEW)
+interface ParsingResult {
+    success: boolean
+    documentName: string
+    detectedStyle: string
+    styleConfidence: number
+    totalClausesFound: number
+    clauses: ParsedClause[]
+}
+
 // ============================================================================
 // SECTION 4: SUSPENSE WRAPPER
 // ============================================================================
@@ -159,6 +221,7 @@ function LoadingState() {
 function ClauseBuilderContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // ========================================================================
     // SECTION 6: STATE DECLARATIONS
@@ -168,6 +231,10 @@ function ClauseBuilderContent() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [session, setSession] = useState<SessionData | null>(null)
+
+    // Builder mode (NEW)
+    const [builderMode, setBuilderMode] = useState<BuilderMode>('select')
+    const [showModeSelector, setShowModeSelector] = useState(true)
 
     // Clause library (left panel)
     const [masterClauses, setMasterClauses] = useState<MasterClause[]>([])
@@ -198,13 +265,38 @@ function ClauseBuilderContent() {
     const [showConfirmReplace, setShowConfirmReplace] = useState(false)
     const [pendingPackLoad, setPendingPackLoad] = useState<string | null>(null)
 
-    // Provider check modal (NEW)
+    // Provider check modal
     const [showProviderCheckModal, setShowProviderCheckModal] = useState(false)
     const [hasInvitedProviders, setHasInvitedProviders] = useState(false)
 
-    // Auto-load template from session (NEW)
+    // Auto-load template from session
     const [autoLoadAttempted, setAutoLoadAttempted] = useState(false)
     const [sessionTemplatePackId, setSessionTemplatePackId] = useState<string | null>(null)
+
+    // Upload state (NEW)
+    const [uploadState, setUploadState] = useState<UploadState>({
+        file: null,
+        fileName: '',
+        fileType: '',
+        fileSize: 0,
+        status: 'idle',
+        progress: 0,
+        progressMessage: '',
+        error: null
+    })
+
+    // Parsed clauses from upload (NEW)
+    const [parsedClauses, setParsedClauses] = useState<ParsedClause[]>([])
+    const [parsingResult, setParsingResult] = useState<ParsingResult | null>(null)
+
+    // Verification panel state (NEW)
+    const [selectedParsedClause, setSelectedParsedClause] = useState<ParsedClause | null>(null)
+    const [editingClauseName, setEditingClauseName] = useState('')
+    const [editingClauseCategory, setEditingClauseCategory] = useState('')
+    const [verificationFilter, setVerificationFilter] = useState<'all' | 'pending' | 'verified' | 'low-confidence'>('all')
+
+    // Drag and drop state (NEW)
+    const [isDragging, setIsDragging] = useState(false)
 
     // ========================================================================
     // SECTION 7: INITIALIZATION
@@ -269,14 +361,14 @@ function ClauseBuilderContent() {
                             setServiceFilter(sessionInfo.serviceRequired || sessionInfo.contractType)
                         }
 
-                        // Capture template_pack_id for auto-loading (NEW)
+                        // Capture template_pack_id for auto-loading
                         const templatePackId = sessionInfo.templatePackId || sessionInfo.template_pack_id
                         if (templatePackId) {
                             console.log('[ClauseBuilder] Found template_pack_id:', templatePackId)
                             setSessionTemplatePackId(templatePackId)
                         }
 
-                        // Check if providers have been invited (NEW)
+                        // Check if providers have been invited
                         const hasProviders = sessionInfo.providers && sessionInfo.providers.length > 0
                         setHasInvitedProviders(hasProviders)
                     } else {
@@ -370,6 +462,10 @@ function ClauseBuilderContent() {
                                 addedManually: !c.sourcePackId && !c.source_pack_id,
                                 hasSubClauses: false
                             })))
+
+                            // If clauses exist, skip mode selector (NEW)
+                            setShowModeSelector(false)
+                            setBuilderMode('template')
                         }
                     }
                 } else {
@@ -439,7 +535,7 @@ function ClauseBuilderContent() {
     }, [masterClauses, serviceFilter, categoryFilter, searchQuery])
 
     // ========================================================================
-    // SECTION 8B: AUTO-LOAD TEMPLATE FROM SESSION (NEW)
+    // SECTION 8B: AUTO-LOAD TEMPLATE FROM SESSION
     // ========================================================================
 
     useEffect(() => {
@@ -453,6 +549,8 @@ function ClauseBuilderContent() {
         if (autoLoad === 'true' && sessionTemplatePackId && selectedClauses.length === 0) {
             console.log('[ClauseBuilder] Auto-loading template:', sessionTemplatePackId)
             loadPack(sessionTemplatePackId)
+            setShowModeSelector(false)
+            setBuilderMode('template')
         }
 
         setAutoLoadAttempted(true)
@@ -766,6 +864,345 @@ function ClauseBuilderContent() {
     }
 
     // ========================================================================
+    // SECTION 12B: UPLOAD HANDLERS (NEW)
+    // ========================================================================
+
+    const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (file) processSelectedFile(file)
+    }
+
+    const handleDragOver = (event: React.DragEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = (event: React.DragEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+        setIsDragging(false)
+    }
+
+    const handleDrop = (event: React.DragEvent) => {
+        event.preventDefault()
+        event.stopPropagation()
+        setIsDragging(false)
+        const file = event.dataTransfer.files?.[0]
+        if (file) processSelectedFile(file)
+    }
+
+    const processSelectedFile = async (file: File) => {
+        console.log('[ClauseBuilder] File selected:', file.name, file.type, file.size)
+
+        const fileType = SUPPORTED_FILE_TYPES[file.type]
+        if (!fileType) {
+            setUploadState(prev => ({
+                ...prev,
+                status: 'error',
+                error: `Unsupported file type: ${file.type}. Please upload a PDF, DOCX, or TXT file.`
+            }))
+            return
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            setUploadState(prev => ({
+                ...prev,
+                status: 'error',
+                error: 'File too large. Maximum size is 10MB.'
+            }))
+            return
+        }
+
+        setUploadState({
+            file,
+            fileName: file.name,
+            fileType,
+            fileSize: file.size,
+            status: 'reading',
+            progress: 10,
+            progressMessage: 'Reading document...',
+            error: null
+        })
+
+        try {
+            const documentText = await readFileContent(file, fileType)
+
+            if (!documentText || documentText.length < 100) {
+                throw new Error('Could not extract text from document. Please ensure the file is not empty or password-protected.')
+            }
+
+            console.log('[ClauseBuilder] Document text extracted, length:', documentText.length)
+
+            setUploadState(prev => ({
+                ...prev,
+                status: 'parsing',
+                progress: 30,
+                progressMessage: 'CLARENCE is analyzing your contract...'
+            }))
+
+            await parseDocument(documentText, file.name, fileType)
+
+        } catch (error) {
+            console.error('[ClauseBuilder] File processing error:', error)
+            setUploadState(prev => ({
+                ...prev,
+                status: 'error',
+                error: error instanceof Error ? error.message : 'Failed to process document'
+            }))
+        }
+    }
+
+    const readFileContent = async (file: File, fileType: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+
+            reader.onload = (e) => {
+                try {
+                    const content = e.target?.result
+                    if (fileType === 'txt') {
+                        resolve(content as string)
+                    } else {
+                        // For DOCX/PDF, read as text - backend will handle proper extraction
+                        const arrayBuffer = content as ArrayBuffer
+                        const textDecoder = new TextDecoder('utf-8')
+                        resolve(textDecoder.decode(arrayBuffer))
+                    }
+                } catch (err) {
+                    reject(err)
+                }
+            }
+
+            reader.onerror = () => reject(new Error('Failed to read file'))
+
+            if (fileType === 'txt') {
+                reader.readAsText(file)
+            } else {
+                reader.readAsArrayBuffer(file)
+            }
+        })
+    }
+
+    const parseDocument = async (documentText: string, fileName: string, fileType: string) => {
+        if (!session?.sessionId) throw new Error('No active session')
+
+        const progressInterval = setInterval(() => {
+            setUploadState(prev => {
+                if (prev.progress < 85) {
+                    const messages = [
+                        'Identifying clause structure...',
+                        'Detecting contract format...',
+                        'Categorizing clauses...',
+                        'Calculating confidence scores...'
+                    ]
+                    const idx = Math.floor((prev.progress - 30) / 15) % messages.length
+                    return { ...prev, progress: prev.progress + 5, progressMessage: messages[idx] }
+                }
+                return prev
+            })
+        }, 800)
+
+        try {
+            const response = await fetch(`${API_BASE}/parse-contract-document`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    file_name: fileName,
+                    file_type: fileType,
+                    document_text: documentText
+                })
+            })
+
+            clearInterval(progressInterval)
+
+            if (!response.ok) throw new Error('Parsing failed')
+
+            const result = await response.json()
+
+            if (result.success) {
+                setParsingResult({
+                    success: true,
+                    documentName: result.documentName,
+                    detectedStyle: result.parsing.detectedStyle,
+                    styleConfidence: result.parsing.styleConfidence,
+                    totalClausesFound: result.parsing.totalClausesFound,
+                    clauses: []
+                })
+
+                await loadParsedClauses()
+
+                setUploadState(prev => ({
+                    ...prev,
+                    status: 'completed',
+                    progress: 100,
+                    progressMessage: `Found ${result.parsing.totalClausesFound} clauses!`
+                }))
+
+                setBuilderMode('verify')
+            }
+        } catch (error) {
+            clearInterval(progressInterval)
+            throw error
+        }
+    }
+
+    const loadParsedClauses = async () => {
+        if (!session?.sessionId) return
+
+        try {
+            const response = await fetch(`${API_BASE}/get-parsed-clauses?session_id=${session.sessionId}`)
+            if (response.ok) {
+                const data = await response.json()
+                const clauses = Array.isArray(data) ? data : (data.clauses || [])
+                setParsedClauses(clauses)
+            }
+        } catch (error) {
+            console.error('[ClauseBuilder] Error loading parsed clauses:', error)
+        }
+    }
+
+    const resetUpload = () => {
+        setUploadState({
+            file: null, fileName: '', fileType: '', fileSize: 0,
+            status: 'idle', progress: 0, progressMessage: '', error: null
+        })
+        setParsedClauses([])
+        setParsingResult(null)
+        setSelectedParsedClause(null)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+
+    // ========================================================================
+    // SECTION 12C: VERIFICATION HANDLERS (NEW)
+    // ========================================================================
+
+    const verifyClause = async (clause: ParsedClause, verifiedName?: string, verifiedCategory?: string) => {
+        if (!session?.sessionId) return
+
+        setParsedClauses(prev => prev.map(c =>
+            c.parsedClauseId === clause.parsedClauseId
+                ? { ...c, isVerified: true, verifiedName: verifiedName || c.suggestedName, verifiedCategory: verifiedCategory || c.suggestedCategory, status: 'verified' as const }
+                : c
+        ))
+
+        try {
+            await fetch(`${API_BASE}/update-parsed-clause`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    parsed_clause_id: clause.parsedClauseId,
+                    verified_name: verifiedName || clause.suggestedName,
+                    verified_category: verifiedCategory || clause.suggestedCategory,
+                    status: 'verified'
+                })
+            })
+        } catch (error) {
+            console.error('[ClauseBuilder] Error verifying clause:', error)
+        }
+
+        setSelectedParsedClause(null)
+        setEditingClauseName('')
+        setEditingClauseCategory('')
+    }
+
+    const rejectClause = async (clause: ParsedClause) => {
+        if (!session?.sessionId) return
+
+        setParsedClauses(prev => prev.map(c =>
+            c.parsedClauseId === clause.parsedClauseId ? { ...c, status: 'rejected' as const } : c
+        ))
+
+        try {
+            await fetch(`${API_BASE}/update-parsed-clause`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    parsed_clause_id: clause.parsedClauseId,
+                    status: 'rejected'
+                })
+            })
+        } catch (error) {
+            console.error('[ClauseBuilder] Error rejecting clause:', error)
+        }
+    }
+
+    const verifyAllPending = async () => {
+        const pending = parsedClauses.filter(c => c.status === 'pending')
+        for (const clause of pending) {
+            await verifyClause(clause)
+        }
+    }
+
+    const commitVerifiedClauses = async () => {
+        if (!session?.sessionId) return
+
+        const verified = parsedClauses.filter(c => c.status === 'verified')
+        if (verified.length === 0) {
+            alert('No verified clauses to commit.')
+            return
+        }
+
+        setSaving(true)
+
+        try {
+            const response = await fetch(`${API_BASE}/commit-parsed-clauses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    clause_ids: verified.map(c => c.parsedClauseId)
+                })
+            })
+
+            if (response.ok) {
+                // Reload existing clauses to show committed ones
+                const sessionId = session.sessionId
+                const clausesResponse = await fetch(`${API_BASE}/session-clauses-api?session_id=${sessionId}&customer_selected=true`)
+                if (clausesResponse.ok) {
+                    const data = await clausesResponse.json()
+                    const clauses = Array.isArray(data) ? data : (data.clauses || [])
+                    const mapped: SelectedClause[] = clauses.map((c: any) => ({
+                        clauseId: c.clauseId || c.clause_id,
+                        clauseName: c.clauseName || c.clause_name,
+                        category: c.category,
+                        description: c.description || '',
+                        displayOrder: c.displayOrder || c.display_order || 0,
+                        position: c.customerPosition || c.customer_position || 5,
+                        weight: c.customerWeight || c.customer_weight || 5,
+                        isNonNegotiable: c.isDealBreakerCustomer || c.is_deal_breaker_customer || false,
+                        sourcePackId: c.sourcePackId || c.source_pack_id || null,
+                        addedManually: false,
+                        hasSubClauses: false
+                    }))
+                    setSelectedClauses(mapped)
+                }
+
+                setParsedClauses([])
+                setParsingResult(null)
+                setBuilderMode('template')
+                setShowModeSelector(false)
+            }
+        } catch (error) {
+            console.error('[ClauseBuilder] Error committing clauses:', error)
+            alert('Failed to commit clauses.')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const getFilteredParsedClauses = (): ParsedClause[] => {
+        switch (verificationFilter) {
+            case 'pending': return parsedClauses.filter(c => c.status === 'pending')
+            case 'verified': return parsedClauses.filter(c => c.status === 'verified')
+            case 'low-confidence': return parsedClauses.filter(c => c.confidenceScore < 0.7 && c.status !== 'rejected')
+            default: return parsedClauses.filter(c => c.status !== 'rejected')
+        }
+    }
+
+    // ========================================================================
     // SECTION 13: HELPER FUNCTIONS
     // ========================================================================
 
@@ -826,7 +1263,7 @@ function ClauseBuilderContent() {
                             </div>
                         </Link>
 
-                        {/* Session Info */}
+                        {/* Session Info & Mode Badge */}
                         <div className="flex items-center gap-6">
                             {session?.sessionNumber && (
                                 <div className="text-sm">
@@ -840,6 +1277,21 @@ function ClauseBuilderContent() {
                                     <span className="ml-2 text-white">{session.customerCompany}</span>
                                 </div>
                             )}
+
+                            {/* Mode Badge (NEW) */}
+                            {!showModeSelector && builderMode !== 'select' && (
+                                <span className={`px-3 py-1 text-xs font-medium rounded-full ${builderMode === 'template' ? 'bg-emerald-500/20 text-emerald-300' :
+                                        builderMode === 'upload' ? 'bg-blue-500/20 text-blue-300' :
+                                            builderMode === 'verify' ? 'bg-purple-500/20 text-purple-300' :
+                                                'bg-slate-500/20 text-slate-300'
+                                    }`}>
+                                    {builderMode === 'template' ? '📋 Template' :
+                                        builderMode === 'upload' ? '📤 Upload' :
+                                            builderMode === 'verify' ? '✓ Verify' :
+                                                '🔧 Manual'}
+                                </span>
+                            )}
+
                             <Link
                                 href="/auth/contract-dashboard"
                                 className="text-sm text-slate-400 hover:text-white transition"
@@ -852,497 +1304,822 @@ function ClauseBuilderContent() {
             </header>
 
             {/* ============================================================ */}
-            {/* SECTION 17: INSTRUCTIONAL BANNER */}
+            {/* SECTION 17: MODE SELECTOR (NEW) */}
             {/* ============================================================ */}
-            <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white py-4 px-6">
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <div>
-                        <h1 className="text-xl font-semibold">Build Your Contract</h1>
-                        <p className="text-emerald-100 text-sm mt-1">
-                            Select clauses from the library, configure your starting positions, then proceed to negotiation.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="text-right">
-                            <div className="text-2xl font-bold">{selectedClauses.length}</div>
-                            <div className="text-xs text-emerald-200">Clauses Selected</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            {showModeSelector && (
+                <div className="flex-1 overflow-y-auto p-6">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+                            <div className="text-center mb-8">
+                                <h1 className="text-2xl font-bold text-slate-800 mb-2">
+                                    How would you like to set up your contract?
+                                </h1>
+                                <p className="text-slate-500">Choose the method that works best for your situation</p>
+                            </div>
 
-            {/* ============================================================ */}
-            {/* SECTION 17B: TEMPLATE SELECTOR SUB-HEADER */}
-            {/* ============================================================ */}
-            <div className="bg-white border-b border-slate-200 px-6 py-3">
-                <div className="flex items-center gap-4">
-                    <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
-                        Load Template:
-                    </label>
-                    <select
-                        className="flex-1 max-w-md px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                        value={selectedPackId}
-                        onChange={(e) => handlePackSelect(e.target.value)}
-                    >
-                        <option value="">Select a template...</option>
-                        <optgroup label="CLARENCE Templates">
-                            {availablePacks.filter(p => p.ownerType === 'clarence').map(pack => (
-                                <option key={pack.packId} value={pack.packId}>
-                                    {pack.packName} ({pack.clauseCount} clauses)
-                                </option>
-                            ))}
-                        </optgroup>
-                        {availablePacks.filter(p => p.ownerType === 'customer').length > 0 && (
-                            <optgroup label="Your Favourites">
-                                {availablePacks.filter(p => p.ownerType === 'customer').map(pack => (
-                                    <option key={pack.packId} value={pack.packId}>
-                                        {pack.packName} ({pack.clauseCount} clauses)
-                                    </option>
-                                ))}
-                            </optgroup>
-                        )}
-                    </select>
-                    {selectedPackId && (
-                        <span className="text-sm text-emerald-600 font-medium">
-                            ✓ Template loaded
-                        </span>
-                    )}
-                </div>
-            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Template Option */}
+                                <button
+                                    onClick={() => { setBuilderMode('template'); setShowModeSelector(false) }}
+                                    className="group p-6 bg-slate-50 hover:bg-emerald-50 border-2 border-slate-200 hover:border-emerald-400 rounded-xl transition-all duration-200 text-left"
+                                >
+                                    <div className="text-4xl mb-4">📋</div>
+                                    <h3 className="text-lg font-semibold text-slate-800 group-hover:text-emerald-700 mb-2">
+                                        Use a Template
+                                    </h3>
+                                    <p className="text-sm text-slate-500 group-hover:text-emerald-600">
+                                        Start with CLARENCE&apos;s professionally crafted clause templates
+                                    </p>
+                                    <div className="mt-4 text-xs text-emerald-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                        Recommended for new users →
+                                    </div>
+                                </button>
 
-            {/* ============================================================ */}
-            {/* SECTION 18: THREE-PANEL LAYOUT */}
-            {/* ============================================================ */}
-            <div className="flex-1 flex overflow-hidden">
+                                {/* Upload Option */}
+                                <button
+                                    onClick={() => { setBuilderMode('upload'); setShowModeSelector(false) }}
+                                    className="group p-6 bg-slate-50 hover:bg-blue-50 border-2 border-slate-200 hover:border-blue-400 rounded-xl transition-all duration-200 text-left"
+                                >
+                                    <div className="text-4xl mb-4">📤</div>
+                                    <h3 className="text-lg font-semibold text-slate-800 group-hover:text-blue-700 mb-2">
+                                        Upload Your Contract
+                                    </h3>
+                                    <p className="text-sm text-slate-500 group-hover:text-blue-600">
+                                        Upload an existing contract and CLARENCE will parse it
+                                    </p>
+                                    <div className="mt-4 text-xs text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                        Best for existing contracts →
+                                    </div>
+                                </button>
 
-                {/* ======================================================== */}
-                {/* SECTION 19: LEFT PANEL - CLAUSE LIBRARY */}
-                {/* ======================================================== */}
-                <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
-                    {/* Panel Header */}
-                    <div className="p-4 border-b border-slate-200 bg-slate-50">
-                        <h2 className="font-semibold text-slate-800 mb-3">Clause Library</h2>
+                                {/* Manual Option */}
+                                <button
+                                    onClick={() => { setBuilderMode('manual'); setShowModeSelector(false) }}
+                                    className="group p-6 bg-slate-50 hover:bg-purple-50 border-2 border-slate-200 hover:border-purple-400 rounded-xl transition-all duration-200 text-left"
+                                >
+                                    <div className="text-4xl mb-4">🔧</div>
+                                    <h3 className="text-lg font-semibold text-slate-800 group-hover:text-purple-700 mb-2">
+                                        Build from Scratch
+                                    </h3>
+                                    <p className="text-sm text-slate-500 group-hover:text-purple-600">
+                                        Select individual clauses from our comprehensive library
+                                    </p>
+                                    <div className="mt-4 text-xs text-purple-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                                        Full control →
+                                    </div>
+                                </button>
+                            </div>
 
-                        {/* Search */}
-                        <div className="relative mb-3">
-                            <input
-                                type="text"
-                                placeholder="Search clauses..."
-                                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                            <svg className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-
-                        {/* Service Type Filter */}
-                        <select
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white mb-2"
-                            value={serviceFilter}
-                            onChange={(e) => setServiceFilter(e.target.value)}
-                        >
-                            {SERVICE_CATEGORIES.map(cat => (
-                                <option key={cat.value} value={cat.value}>{cat.label}</option>
-                            ))}
-                        </select>
-
-                        {/* Category Filter */}
-                        <select
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white"
-                            value={categoryFilter}
-                            onChange={(e) => setCategoryFilter(e.target.value)}
-                        >
-                            <option value="">All Categories</option>
-                            {CLAUSE_CATEGORIES.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Clause List */}
-                    <div className="flex-1 overflow-y-auto p-2">
-                        {CLAUSE_CATEGORIES.map(category => {
-                            const categoryClauses = getMasterClausesByCategory(filteredClauses, category)
-                            if (categoryClauses.length === 0) return null
-
-                            return (
-                                <div key={category} className="mb-2">
-                                    {/* Category Header */}
+                            {selectedClauses.length > 0 && (
+                                <div className="text-center mt-8 pt-6 border-t border-slate-200">
+                                    <p className="text-sm text-slate-500 mb-2">
+                                        You have {selectedClauses.length} clauses already configured
+                                    </p>
                                     <button
-                                        onClick={() => toggleCategory(category, false)}
-                                        className="w-full flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-200 transition"
+                                        onClick={() => { setShowModeSelector(false); setBuilderMode('template') }}
+                                        className="text-emerald-600 hover:text-emerald-700 font-medium text-sm"
                                     >
-                                        <svg
-                                            className={`w-4 h-4 transition-transform ${expandedCategories.has(category) ? 'rotate-90' : ''}`}
-                                            fill="currentColor"
-                                            viewBox="0 0 20 20"
-                                        >
-                                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                                        </svg>
-                                        <span>{category}</span>
-                                        <span className="ml-auto text-xs text-slate-500">({categoryClauses.length})</span>
+                                        Continue with existing clauses →
                                     </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
-                                    {/* Category Clauses */}
-                                    {expandedCategories.has(category) && (
-                                        <div className="mt-1 ml-2 border-l-2 border-slate-200">
-                                            {categoryClauses.map(clause => (
-                                                <div
-                                                    key={clause.clauseId}
-                                                    className={`flex items-center gap-2 px-3 py-2 ml-2 rounded-r-lg cursor-pointer group transition ${activeClause?.clauseId === clause.clauseId
-                                                            ? 'bg-emerald-50 border-l-2 border-emerald-500 -ml-[2px]'
-                                                            : isClauseSelected(clause.clauseId)
-                                                                ? 'bg-emerald-50/50'
-                                                                : 'hover:bg-slate-50'
-                                                        }`}
-                                                    onClick={() => handleClauseClick(clause)}
-                                                >
-                                                    {/* Clause name */}
-                                                    <span className={`text-sm truncate flex-1 ${isClauseSelected(clause.clauseId)
-                                                            ? 'text-emerald-700 font-medium'
-                                                            : 'text-slate-700'
-                                                        }`}>
-                                                        {clause.clauseName}
-                                                    </span>
+            {/* ============================================================ */}
+            {/* SECTION 17B: UPLOAD PANEL (NEW) */}
+            {/* ============================================================ */}
+            {!showModeSelector && builderMode === 'upload' && (
+                <div className="flex-1 overflow-y-auto p-6">
+                    <div className="max-w-3xl mx-auto">
+                        <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">Upload Your Contract</h2>
+                                    <p className="text-slate-500 text-sm">CLARENCE will analyze and extract clauses for negotiation</p>
+                                </div>
+                                <button
+                                    onClick={() => { setShowModeSelector(true); setBuilderMode('select'); resetUpload() }}
+                                    className="text-slate-400 hover:text-slate-600 text-sm"
+                                >
+                                    ← Change method
+                                </button>
+                            </div>
 
-                                                    {/* Selected indicator */}
-                                                    {isClauseSelected(clause.clauseId) && (
-                                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">
-                                                            In Contract
-                                                        </span>
-                                                    )}
+                            {/* Idle State */}
+                            {uploadState.status === 'idle' && (
+                                <div
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
+                                    className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${isDragging ? 'border-blue-400 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".pdf,.docx,.doc,.txt"
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                    />
+                                    <div className="text-5xl mb-4">{isDragging ? '📥' : '📄'}</div>
+                                    <h3 className="text-lg font-semibold text-slate-700 mb-2">
+                                        {isDragging ? 'Drop your contract here' : 'Drag and drop your contract'}
+                                    </h3>
+                                    <p className="text-slate-500 mb-4">
+                                        or{' '}
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="text-blue-600 hover:text-blue-700 font-medium"
+                                        >
+                                            browse to upload
+                                        </button>
+                                    </p>
+                                    <p className="text-xs text-slate-400">Supported: PDF, DOCX, DOC, TXT • Max 10MB</p>
+                                </div>
+                            )}
 
-                                                    {/* Hover add button */}
-                                                    {!isClauseSelected(clause.clauseId) && (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                handleClauseClick(clause)
-                                                            }}
-                                                            className="w-5 h-5 rounded bg-slate-200 hover:bg-emerald-500 hover:text-white text-slate-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            title="Configure clause"
-                                                        >
-                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                                            </svg>
-                                                        </button>
-                                                    )}
+                            {/* Progress State */}
+                            {(uploadState.status === 'reading' || uploadState.status === 'parsing') && (
+                                <div className="text-center py-12">
+                                    <div className="w-24 h-24 mx-auto mb-6 relative">
+                                        <svg className="w-24 h-24 transform -rotate-90">
+                                            <circle cx="48" cy="48" r="44" stroke="#e2e8f0" strokeWidth="8" fill="none" />
+                                            <circle cx="48" cy="48" r="44" stroke="#3b82f6" strokeWidth="8" fill="none"
+                                                strokeDasharray={`${uploadState.progress * 2.76} 276`} className="transition-all duration-500" />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className="text-2xl font-bold text-blue-600">{uploadState.progress}%</span>
+                                        </div>
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-700 mb-2">
+                                        {uploadState.status === 'reading' ? 'Reading Document' : 'Analyzing Contract'}
+                                    </h3>
+                                    <p className="text-slate-500 mb-4">{uploadState.progressMessage}</p>
+                                    <div className="flex items-center justify-center gap-4 text-sm text-slate-400">
+                                        <span>📄 {uploadState.fileName}</span>
+                                        <span>•</span>
+                                        <span>{Math.round(uploadState.fileSize / 1024)} KB</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Completed State */}
+                            {uploadState.status === 'completed' && parsingResult && (
+                                <div className="text-center py-8">
+                                    <div className="text-5xl mb-4">✅</div>
+                                    <h3 className="text-xl font-bold text-slate-800 mb-2">Contract Parsed Successfully!</h3>
+                                    <p className="text-slate-500 mb-6">
+                                        CLARENCE found <span className="font-semibold text-blue-600">{parsingResult.totalClausesFound} clauses</span>
+                                    </p>
+                                    <div className="bg-slate-50 rounded-lg p-4 max-w-sm mx-auto mb-6">
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div><span className="text-slate-500">Document:</span><p className="font-medium truncate">{parsingResult.documentName}</p></div>
+                                            <div><span className="text-slate-500">Format:</span><p className="font-medium capitalize">{parsingResult.detectedStyle.replace('_', ' ')}</p></div>
+                                            <div><span className="text-slate-500">Confidence:</span><p className="font-medium">{Math.round(parsingResult.styleConfidence * 100)}%</p></div>
+                                            <div><span className="text-slate-500">Clauses:</span><p className="font-medium">{parsingResult.totalClausesFound}</p></div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setBuilderMode('verify')}
+                                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition"
+                                    >
+                                        Review & Verify Clauses →
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Error State */}
+                            {uploadState.status === 'error' && (
+                                <div className="text-center py-8">
+                                    <div className="text-5xl mb-4">❌</div>
+                                    <h3 className="text-xl font-bold text-slate-800 mb-2">Upload Failed</h3>
+                                    <p className="text-red-600 mb-6">{uploadState.error}</p>
+                                    <button
+                                        onClick={resetUpload}
+                                        className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
+                                    >
+                                        Try Again
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 17C: VERIFICATION PANEL (NEW) */}
+            {/* ============================================================ */}
+            {!showModeSelector && builderMode === 'verify' && (
+                <div className="flex-1 flex overflow-hidden p-4 gap-4">
+                    {/* Left: Clause List */}
+                    <div className="w-1/2 bg-white rounded-lg border border-slate-200 flex flex-col">
+                        <div className="p-4 border-b border-slate-200 bg-slate-50">
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="text-lg font-bold text-slate-800">Parsed Clauses ({getFilteredParsedClauses().length})</h2>
+                                <button onClick={() => { setBuilderMode('upload'); resetUpload() }} className="text-sm text-slate-500 hover:text-slate-700">
+                                    Upload different
+                                </button>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                                <button onClick={() => setVerificationFilter('all')} className={`px-3 py-1 text-xs font-medium rounded-full ${verificationFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                    All ({parsedClauses.filter(c => c.status !== 'rejected').length})
+                                </button>
+                                <button onClick={() => setVerificationFilter('pending')} className={`px-3 py-1 text-xs font-medium rounded-full ${verificationFilter === 'pending' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}>
+                                    Pending ({parsedClauses.filter(c => c.status === 'pending').length})
+                                </button>
+                                <button onClick={() => setVerificationFilter('verified')} className={`px-3 py-1 text-xs font-medium rounded-full ${verificationFilter === 'verified' ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
+                                    Verified ({parsedClauses.filter(c => c.status === 'verified').length})
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {getFilteredParsedClauses().length === 0 ? (
+                                <div className="text-center text-slate-400 py-8">No clauses match the current filter</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {getFilteredParsedClauses().map((clause, index) => (
+                                        <button
+                                            key={clause.parsedClauseId || index}
+                                            onClick={() => {
+                                                setSelectedParsedClause(clause)
+                                                setEditingClauseName(clause.verifiedName || clause.suggestedName)
+                                                setEditingClauseCategory(clause.verifiedCategory || clause.suggestedCategory)
+                                            }}
+                                            className={`w-full text-left p-3 rounded-lg border transition-all ${selectedParsedClause?.parsedClauseId === clause.parsedClauseId
+                                                    ? 'border-blue-500 bg-blue-50'
+                                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-mono text-slate-400">{clause.parsedNumber}</span>
+                                                        {clause.confidenceScore < 0.7 && <span className="text-xs text-red-500">⚠️</span>}
+                                                    </div>
+                                                    <p className="font-medium text-slate-800 truncate">{clause.verifiedName || clause.suggestedName}</p>
+                                                    <p className="text-xs text-slate-500">{clause.verifiedCategory || clause.suggestedCategory}</p>
                                                 </div>
-                                            ))}
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${clause.status === 'verified' ? 'bg-emerald-100 text-emerald-700' :
+                                                            clause.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                                        }`}>
+                                                        {clause.status}
+                                                    </span>
+                                                    <span className="text-xs text-slate-400">{Math.round(clause.confidenceScore * 100)}%</span>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                            <button onClick={verifyAllPending} disabled={parsedClauses.filter(c => c.status === 'pending').length === 0} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 disabled:opacity-50 disabled:cursor-not-allowed">
+                                ✓ Verify All Pending
+                            </button>
+                            <button onClick={commitVerifiedClauses} disabled={parsedClauses.filter(c => c.status === 'verified').length === 0 || saving} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg transition">
+                                {saving ? 'Committing...' : `Commit ${parsedClauses.filter(c => c.status === 'verified').length} Clauses →`}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Right: Clause Detail */}
+                    <div className="w-1/2 bg-white rounded-lg border border-slate-200 flex flex-col">
+                        {selectedParsedClause ? (
+                            <>
+                                <div className="p-4 border-b border-slate-200 bg-slate-50">
+                                    <h3 className="font-semibold text-slate-800">Clause Details</h3>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    <div className={`p-3 rounded-lg ${selectedParsedClause.confidenceScore >= 0.8 ? 'bg-emerald-50 border border-emerald-200' :
+                                            selectedParsedClause.confidenceScore >= 0.6 ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'
+                                        }`}>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-medium">
+                                                {selectedParsedClause.confidenceScore >= 0.8 ? '✅ High confidence' :
+                                                    selectedParsedClause.confidenceScore >= 0.6 ? '⚠️ Medium confidence - please verify' : '❌ Low confidence - review carefully'}
+                                            </span>
+                                            <span className="text-sm font-mono">{Math.round(selectedParsedClause.confidenceScore * 100)}%</span>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Clause Name</label>
+                                        <input type="text" value={editingClauseName} onChange={(e) => setEditingClauseName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                                        <select value={editingClauseCategory} onChange={(e) => setEditingClauseCategory(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                            {CLAUSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Original Numbering</label>
+                                        <p className="px-3 py-2 bg-slate-50 rounded-lg text-slate-600 font-mono text-sm">{selectedParsedClause.parsedNumber}</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Clause Content</label>
+                                        <div className="p-3 bg-slate-50 rounded-lg max-h-48 overflow-y-auto">
+                                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{selectedParsedClause.clauseText || 'No content extracted'}</p>
+                                        </div>
+                                    </div>
+
+                                    {selectedParsedClause.flags && selectedParsedClause.flags.length > 0 && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Parsing Notes</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedParsedClause.flags.map((flag, i) => (
+                                                    <span key={i} className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded">{flag.replace(/_/g, ' ')}</span>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
-                            )
-                        })}
-
-                        {filteredClauses.length === 0 && (
-                            <div className="text-center py-8 text-slate-500">
-                                <p className="text-sm">No clauses match your filters</p>
+                                <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                                    <button onClick={() => rejectClause(selectedParsedClause)} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition">
+                                        Reject Clause
+                                    </button>
+                                    <button onClick={() => verifyClause(selectedParsedClause, editingClauseName, editingClauseCategory)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition">
+                                        ✓ Verify Clause
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center text-slate-400">
+                                <div className="text-center">
+                                    <div className="text-4xl mb-2">👈</div>
+                                    <p>Select a clause to review</p>
+                                </div>
                             </div>
                         )}
                     </div>
                 </div>
+            )}
 
-                {/* ======================================================== */}
-                {/* SECTION 20: CENTRE PANEL - CLAUSE CONFIGURATOR */}
-                {/* ======================================================== */}
-                <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden">
-                    {/* Clause Configurator */}
-                    <div className="flex-1 p-6 overflow-y-auto">
-                        {activeClause ? (
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-2xl mx-auto">
-                                {/* Clause Header */}
-                                <div className="mb-6">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">
-                                            {activeClause.category}
-                                        </span>
-                                        {activeClause.regulatoryRequired && (
-                                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
-                                                Regulatory
-                                            </span>
-                                        )}
-                                        {isClauseSelected(activeClause.clauseId) && (
-                                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded">
-                                                ✓ In Contract
-                                            </span>
-                                        )}
-                                    </div>
-                                    <h3 className="text-xl font-semibold text-slate-800">
-                                        {activeClause.clauseName}
-                                    </h3>
-                                    <p className="text-slate-600 mt-2">
-                                        {activeClause.description}
-                                    </p>
+            {/* ============================================================ */}
+            {/* SECTION 17D: TEMPLATE/MANUAL MODE - INSTRUCTIONAL BANNER */}
+            {/* ============================================================ */}
+            {!showModeSelector && (builderMode === 'template' || builderMode === 'manual') && (
+                <>
+                    <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white py-4 px-6">
+                        <div className="max-w-7xl mx-auto flex items-center justify-between">
+                            <div>
+                                <h1 className="text-xl font-semibold">Build Your Contract</h1>
+                                <p className="text-emerald-100 text-sm mt-1">
+                                    Select clauses from the library, configure your starting positions, then proceed to negotiation.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => { setShowModeSelector(true); setBuilderMode('select') }}
+                                    className="text-sm text-emerald-200 hover:text-white transition"
+                                >
+                                    ← Change method
+                                </button>
+                                <div className="text-right">
+                                    <div className="text-2xl font-bold">{selectedClauses.length}</div>
+                                    <div className="text-xs text-emerald-200">Clauses Selected</div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
 
-                                {/* Position Slider */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Your Starting Position: <span className="text-emerald-600 font-bold">{clausePosition}</span>
-                                    </label>
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-xs text-emerald-600 font-medium">Customer</span>
-                                        <input
-                                            type="range"
-                                            min="1"
-                                            max="10"
-                                            step="1"
-                                            value={11 - clausePosition}
-                                            onChange={(e) => setClausePosition(11 - parseInt(e.target.value))}
-                                            className="flex-1 h-2 bg-gradient-to-r from-emerald-200 via-slate-200 to-blue-200 rounded-lg appearance-none cursor-pointer"
-                                        />
-                                        <span className="text-xs text-blue-600 font-medium">Provider</span>
-                                    </div>
-                                    <div className="flex justify-between text-xs text-slate-500 mt-1">
-                                        <span>10 (Customer-favourable)</span>
-                                        <span>5 (Balanced)</span>
-                                        <span>1 (Provider-favourable)</span>
-                                    </div>
-                                </div>
-
-                                {/* Weight Selection */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Importance to You
-                                    </label>
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {WEIGHT_OPTIONS.map(option => (
-                                            <button
-                                                key={option.value}
-                                                onClick={() => {
-                                                    setClauseWeight(option.value)
-                                                    setIsNonNegotiable(option.value === 10)
-                                                }}
-                                                className={`p-3 rounded-lg border text-center transition ${clauseWeight === option.value
-                                                        ? option.value === 10
-                                                            ? 'bg-red-50 border-red-300 text-red-700'
-                                                            : 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                                                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                                                    }`}
-                                            >
-                                                <div className="font-medium text-sm">{option.label}</div>
-                                                <div className="text-xs opacity-75">{option.description}</div>
-                                            </button>
+                    {/* ============================================================ */}
+                    {/* SECTION 17E: TEMPLATE SELECTOR SUB-HEADER */}
+                    {/* ============================================================ */}
+                    <div className="bg-white border-b border-slate-200 px-6 py-3">
+                        <div className="flex items-center gap-4">
+                            <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                                Load Template:
+                            </label>
+                            <select
+                                className="flex-1 max-w-md px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                value={selectedPackId}
+                                onChange={(e) => handlePackSelect(e.target.value)}
+                            >
+                                <option value="">Select a template...</option>
+                                <optgroup label="CLARENCE Templates">
+                                    {availablePacks.filter(p => p.ownerType === 'clarence').map(pack => (
+                                        <option key={pack.packId} value={pack.packId}>
+                                            {pack.packName} ({pack.clauseCount} clauses)
+                                        </option>
+                                    ))}
+                                </optgroup>
+                                {availablePacks.filter(p => p.ownerType === 'customer').length > 0 && (
+                                    <optgroup label="Your Favourites">
+                                        {availablePacks.filter(p => p.ownerType === 'customer').map(pack => (
+                                            <option key={pack.packId} value={pack.packId}>
+                                                {pack.packName} ({pack.clauseCount} clauses)
+                                            </option>
                                         ))}
-                                    </div>
+                                    </optgroup>
+                                )}
+                            </select>
+                            {selectedPackId && (
+                                <span className="text-sm text-emerald-600 font-medium">
+                                    ✓ Template loaded
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ============================================================ */}
+                    {/* SECTION 18: THREE-PANEL LAYOUT */}
+                    {/* ============================================================ */}
+                    <div className="flex-1 flex overflow-hidden">
+
+                        {/* ======================================================== */}
+                        {/* SECTION 19: LEFT PANEL - CLAUSE LIBRARY */}
+                        {/* ======================================================== */}
+                        <div className="w-80 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+                            {/* Panel Header */}
+                            <div className="p-4 border-b border-slate-200 bg-slate-50">
+                                <h2 className="font-semibold text-slate-800 mb-3">Clause Library</h2>
+
+                                {/* Search */}
+                                <div className="relative mb-3">
+                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    <input
+                                        type="text"
+                                        placeholder="Search clauses..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                    />
                                 </div>
 
-                                {/* Non-Negotiable Toggle */}
-                                <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={isNonNegotiable}
-                                            onChange={(e) => {
-                                                setIsNonNegotiable(e.target.checked)
-                                                if (e.target.checked) setClauseWeight(10)
-                                            }}
-                                            className="w-5 h-5 text-red-600 rounded focus:ring-red-500"
-                                        />
-                                        <div>
-                                            <div className="font-medium text-slate-800">Lock as Non-Negotiable</div>
-                                            <div className="text-sm text-slate-500">
-                                                Provider cannot negotiate this clause. Your position is final.
+                                {/* Category Filter */}
+                                <select
+                                    value={categoryFilter}
+                                    onChange={(e) => setCategoryFilter(e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                                >
+                                    <option value="">All Categories</option>
+                                    {CLAUSE_CATEGORIES.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Clause List */}
+                            <div className="flex-1 overflow-y-auto p-2">
+                                {CLAUSE_CATEGORIES.map(category => {
+                                    const categoryClauses = getMasterClausesByCategory(filteredClauses, category)
+                                    if (categoryClauses.length === 0) return null
+
+                                    return (
+                                        <div key={category} className="mb-2">
+                                            {/* Category Header */}
+                                            <button
+                                                onClick={() => toggleCategory(category, false)}
+                                                className="w-full flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-200 transition"
+                                            >
+                                                <svg
+                                                    className={`w-4 h-4 transition-transform ${expandedCategories.has(category) ? 'rotate-90' : ''}`}
+                                                    fill="currentColor"
+                                                    viewBox="0 0 20 20"
+                                                >
+                                                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                                <span>{category}</span>
+                                                <span className="ml-auto text-xs text-slate-500">({categoryClauses.length})</span>
+                                            </button>
+
+                                            {/* Category Clauses */}
+                                            {expandedCategories.has(category) && (
+                                                <div className="mt-1 ml-2 border-l-2 border-slate-200">
+                                                    {categoryClauses.map(clause => (
+                                                        <button
+                                                            key={clause.clauseId}
+                                                            onClick={() => handleClauseClick(clause)}
+                                                            className={`w-full flex items-center gap-2 px-3 py-2 ml-2 rounded-r-lg text-left transition ${activeClause?.clauseId === clause.clauseId
+                                                                    ? 'bg-emerald-50 border-l-2 border-emerald-500 -ml-0.5'
+                                                                    : isClauseSelected(clause.clauseId)
+                                                                        ? 'bg-slate-50 text-slate-500'
+                                                                        : 'hover:bg-slate-50'
+                                                                }`}
+                                                        >
+                                                            {isClauseSelected(clause.clauseId) && (
+                                                                <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                                </svg>
+                                                            )}
+                                                            <span className="text-sm truncate">{clause.clauseName}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+
+                        {/* ======================================================== */}
+                        {/* SECTION 20: CENTRE PANEL - CLAUSE CONFIGURATOR */}
+                        {/* ======================================================== */}
+                        <div className="flex-1 bg-slate-50 overflow-y-auto">
+                            <div className="p-6">
+                                {activeClause ? (
+                                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                                        {/* Clause Header */}
+                                        <div className="mb-6">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded">
+                                                    {activeClause.category}
+                                                </span>
+                                                {isClauseSelected(activeClause.clauseId) && (
+                                                    <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-600 rounded">
+                                                        Already Selected
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <h3 className="text-xl font-semibold text-slate-800">
+                                                {activeClause.clauseName}
+                                            </h3>
+                                            <p className="text-slate-600 mt-2">
+                                                {activeClause.description}
+                                            </p>
+                                        </div>
+
+                                        {/* Position Slider */}
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                                Your Starting Position: <span className="text-emerald-600 font-bold">{clausePosition}</span>
+                                            </label>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-xs text-emerald-600 font-medium">Customer</span>
+                                                <input
+                                                    type="range"
+                                                    min="1"
+                                                    max="10"
+                                                    step="1"
+                                                    value={11 - clausePosition}
+                                                    onChange={(e) => setClausePosition(11 - parseInt(e.target.value))}
+                                                    className="flex-1 h-2 bg-gradient-to-r from-emerald-200 via-slate-200 to-blue-200 rounded-lg appearance-none cursor-pointer"
+                                                />
+                                                <span className="text-xs text-blue-600 font-medium">Provider</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs text-slate-500 mt-1">
+                                                <span>10 (Customer-favourable)</span>
+                                                <span>5 (Balanced)</span>
+                                                <span>1 (Provider-favourable)</span>
                                             </div>
                                         </div>
-                                    </label>
-                                </div>
 
-                                {/* Add Button */}
-                                <button
-                                    onClick={handleAddToContract}
-                                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition flex items-center justify-center gap-2"
-                                >
-                                    {isClauseSelected(activeClause.clauseId) ? (
-                                        <>
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        {/* Weight Selection */}
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                                Importance to You
+                                            </label>
+                                            <div className="grid grid-cols-5 gap-2">
+                                                {WEIGHT_OPTIONS.map(option => (
+                                                    <button
+                                                        key={option.value}
+                                                        onClick={() => {
+                                                            setClauseWeight(option.value)
+                                                            setIsNonNegotiable(option.value === 10)
+                                                        }}
+                                                        className={`p-3 rounded-lg border text-center transition ${clauseWeight === option.value
+                                                                ? option.value === 10
+                                                                    ? 'bg-red-50 border-red-300 text-red-700'
+                                                                    : 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                            }`}
+                                                    >
+                                                        <div className="font-medium text-sm">{option.label}</div>
+                                                        <div className="text-xs opacity-75">{option.description}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Non-Negotiable Toggle */}
+                                        <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isNonNegotiable}
+                                                    onChange={(e) => {
+                                                        setIsNonNegotiable(e.target.checked)
+                                                        if (e.target.checked) setClauseWeight(10)
+                                                    }}
+                                                    className="w-5 h-5 text-red-600 rounded focus:ring-red-500"
+                                                />
+                                                <div>
+                                                    <div className="font-medium text-slate-800">Lock as Non-Negotiable</div>
+                                                    <div className="text-sm text-slate-500">
+                                                        Provider cannot negotiate this clause. Your position is final.
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        {/* Add Button */}
+                                        <button
+                                            onClick={handleAddToContract}
+                                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition flex items-center justify-center gap-2"
+                                        >
+                                            {isClauseSelected(activeClause.clauseId) ? (
+                                                <>
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                    Update Configuration
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                    </svg>
+                                                    Add to Contract
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full">
+                                        <div className="text-center text-slate-500">
+                                            <svg className="w-16 h-16 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                             </svg>
-                                            Update Configuration
+                                            <p className="text-lg font-medium mb-2">Select a Clause</p>
+                                            <p className="text-sm">
+                                                Click a clause from the library to configure<br />
+                                                your starting position and importance.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ======================================================== */}
+                        {/* SECTION 21: RIGHT PANEL - YOUR CONTRACT */}
+                        {/* ======================================================== */}
+                        <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+                            {/* Panel Header */}
+                            <div className="p-4 border-b border-slate-200 bg-slate-50">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h2 className="font-semibold text-slate-800">Your Contract</h2>
+                                    <span className="bg-emerald-100 text-emerald-700 text-sm font-medium px-2 py-1 rounded">
+                                        {selectedClauses.length} clauses
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                    These clauses will be negotiated with your provider.
+                                </p>
+                            </div>
+
+                            {/* Selected Clauses List */}
+                            <div className="flex-1 overflow-y-auto p-2">
+                                {selectedClauses.length === 0 ? (
+                                    <div className="text-center py-8 text-slate-500">
+                                        <svg className="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <p className="text-sm">No clauses selected yet</p>
+                                        <p className="text-xs mt-1">Add clauses from the library or load a template</p>
+                                    </div>
+                                ) : (
+                                    CLAUSE_CATEGORIES.map(category => {
+                                        const categoryClauses = getSelectedClausesByCategory(selectedClauses, category)
+                                        if (categoryClauses.length === 0) return null
+
+                                        return (
+                                            <div key={category} className="mb-2">
+                                                {/* Category Header */}
+                                                <button
+                                                    onClick={() => toggleCategory(category, true)}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg text-sm font-medium text-emerald-800 hover:bg-emerald-100 transition"
+                                                >
+                                                    <svg
+                                                        className={`w-4 h-4 transition-transform ${expandedSelectedCategories.has(category) ? 'rotate-90' : ''}`}
+                                                        fill="currentColor"
+                                                        viewBox="0 0 20 20"
+                                                    >
+                                                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <span>{category}</span>
+                                                    <span className="ml-auto text-xs">({categoryClauses.length})</span>
+                                                </button>
+
+                                                {/* Category Clauses */}
+                                                {expandedSelectedCategories.has(category) && (
+                                                    <div className="mt-1 ml-2 border-l-2 border-emerald-200">
+                                                        {categoryClauses.map(clause => (
+                                                            <div
+                                                                key={clause.clauseId}
+                                                                className="flex items-center gap-2 px-3 py-2 ml-2 rounded-r-lg bg-white border-l-2 border-transparent hover:border-emerald-400 transition group"
+                                                                onClick={() => handleEditClause(clause)}
+                                                            >
+                                                                {/* Lock indicator */}
+                                                                {clause.isNonNegotiable && (
+                                                                    <span className="text-sm" title="Non-Negotiable">
+                                                                        🔒
+                                                                    </span>
+                                                                )}
+
+                                                                {/* Clause name */}
+                                                                <span className="text-sm text-slate-700 truncate flex-1 cursor-pointer hover:text-emerald-600">
+                                                                    {clause.clauseName}
+                                                                </span>
+
+                                                                {/* Weight badge */}
+                                                                <span
+                                                                    className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.weight >= 7 ? 'bg-red-100 text-red-700' :
+                                                                            clause.weight >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                                                'bg-slate-100 text-slate-600'
+                                                                        }`}
+                                                                    title={`Weight: ${clause.weight}`}
+                                                                >
+                                                                    W{clause.weight}
+                                                                </span>
+
+                                                                {/* Position badge */}
+                                                                <span
+                                                                    className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.position >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                                            clause.position >= 4 ? 'bg-slate-100 text-slate-600' :
+                                                                                'bg-blue-100 text-blue-700'
+                                                                        }`}
+                                                                    title={`Position: ${clause.position}`}
+                                                                >
+                                                                    P{clause.position}
+                                                                </span>
+
+                                                                {/* Remove button */}
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        handleRemoveClause(clause.clauseId)
+                                                                    }}
+                                                                    className="w-5 h-5 rounded bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                    title="Remove clause"
+                                                                >
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })
+                                )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="p-4 border-t border-slate-200 space-y-3">
+                                {/* Save as Favourite */}
+                                <button
+                                    onClick={() => setShowSaveModal(true)}
+                                    disabled={selectedClauses.length === 0}
+                                    className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 font-medium rounded-lg transition text-sm flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                    </svg>
+                                    Save as Template
+                                </button>
+
+                                {/* Proceed to Studio */}
+                                <button
+                                    onClick={handleProceedToStudio}
+                                    disabled={selectedClauses.length === 0 || saving}
+                                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-lg transition flex items-center justify-center gap-2"
+                                >
+                                    {saving ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            Saving...
                                         </>
                                     ) : (
                                         <>
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            Proceed to Contract Studio
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                                             </svg>
-                                            Add to Contract
                                         </>
                                     )}
                                 </button>
                             </div>
-                        ) : (
-                            <div className="flex items-center justify-center h-full">
-                                <div className="text-center text-slate-500">
-                                    <svg className="w-16 h-16 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <p className="text-lg font-medium mb-2">Select a Clause</p>
-                                    <p className="text-sm">
-                                        Click a clause from the library to configure<br />
-                                        your starting position and importance.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* ======================================================== */}
-                {/* SECTION 21: RIGHT PANEL - YOUR CONTRACT */}
-                {/* ======================================================== */}
-                <div className="w-80 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-                    {/* Panel Header */}
-                    <div className="p-4 border-b border-slate-200 bg-slate-50">
-                        <div className="flex items-center justify-between mb-2">
-                            <h2 className="font-semibold text-slate-800">Your Contract</h2>
-                            <span className="bg-emerald-100 text-emerald-700 text-sm font-medium px-2 py-1 rounded">
-                                {selectedClauses.length} clauses
-                            </span>
                         </div>
-                        <p className="text-xs text-slate-500">
-                            These clauses will be negotiated with your provider.
-                        </p>
                     </div>
-
-                    {/* Selected Clauses List */}
-                    <div className="flex-1 overflow-y-auto p-2">
-                        {selectedClauses.length === 0 ? (
-                            <div className="text-center py-8 text-slate-500">
-                                <svg className="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <p className="text-sm">No clauses selected yet</p>
-                                <p className="text-xs mt-1">Add clauses from the library or load a template</p>
-                            </div>
-                        ) : (
-                            CLAUSE_CATEGORIES.map(category => {
-                                const categoryClauses = getSelectedClausesByCategory(selectedClauses, category)
-                                if (categoryClauses.length === 0) return null
-
-                                return (
-                                    <div key={category} className="mb-2">
-                                        {/* Category Header */}
-                                        <button
-                                            onClick={() => toggleCategory(category, true)}
-                                            className="w-full flex items-center gap-2 px-3 py-2 bg-emerald-50 rounded-lg text-sm font-medium text-emerald-800 hover:bg-emerald-100 transition"
-                                        >
-                                            <svg
-                                                className={`w-4 h-4 transition-transform ${expandedSelectedCategories.has(category) ? 'rotate-90' : ''}`}
-                                                fill="currentColor"
-                                                viewBox="0 0 20 20"
-                                            >
-                                                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                                            </svg>
-                                            <span>{category}</span>
-                                            <span className="ml-auto text-xs">({categoryClauses.length})</span>
-                                        </button>
-
-                                        {/* Category Clauses */}
-                                        {expandedSelectedCategories.has(category) && (
-                                            <div className="mt-1 ml-2 border-l-2 border-emerald-200">
-                                                {categoryClauses.map(clause => (
-                                                    <div
-                                                        key={clause.clauseId}
-                                                        className="flex items-center gap-2 px-3 py-2 ml-2 rounded-r-lg bg-white border-l-2 border-transparent hover:border-emerald-400 transition group"
-                                                        onClick={() => handleEditClause(clause)}
-                                                    >
-                                                        {/* Lock indicator */}
-                                                        {clause.isNonNegotiable && (
-                                                            <span className="text-sm" title="Non-Negotiable">
-                                                                🔒
-                                                            </span>
-                                                        )}
-
-                                                        {/* Clause name */}
-                                                        <span className="text-sm text-slate-700 truncate flex-1 cursor-pointer hover:text-emerald-600">
-                                                            {clause.clauseName}
-                                                        </span>
-
-                                                        {/* Weight badge */}
-                                                        <span
-                                                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.weight >= 7 ? 'bg-red-100 text-red-700' :
-                                                                    clause.weight >= 4 ? 'bg-amber-100 text-amber-700' :
-                                                                        'bg-slate-100 text-slate-600'
-                                                                }`}
-                                                            title={`Weight: ${clause.weight}`}
-                                                        >
-                                                            W{clause.weight}
-                                                        </span>
-
-                                                        {/* Position badge */}
-                                                        <span
-                                                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.position >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                                    clause.position >= 4 ? 'bg-slate-100 text-slate-600' :
-                                                                        'bg-blue-100 text-blue-700'
-                                                                }`}
-                                                            title={`Position: ${clause.position}`}
-                                                        >
-                                                            P{clause.position}
-                                                        </span>
-
-                                                        {/* Remove button */}
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                handleRemoveClause(clause.clauseId)
-                                                            }}
-                                                            className="w-5 h-5 rounded bg-slate-100 hover:bg-red-500 hover:text-white text-slate-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            title="Remove clause"
-                                                        >
-                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )
-                            })
-                        )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="p-4 border-t border-slate-200 space-y-3">
-                        {/* Save as Favourite */}
-                        <button
-                            onClick={() => setShowSaveModal(true)}
-                            disabled={selectedClauses.length === 0}
-                            className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                            </svg>
-                            Save as Favourite
-                        </button>
-
-                        {/* Proceed to Contract Studio */}
-                        <button
-                            onClick={handleProceedToStudio}
-                            disabled={selectedClauses.length === 0 || saving}
-                            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {saving ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Saving...
-                                </>
-                            ) : (
-                                <>
-                                    Go to Contract Studio
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                    </svg>
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </div>
+                </>
+            )}
 
             {/* ============================================================ */}
             {/* SECTION 22: SAVE AS FAVOURITE MODAL */}
@@ -1350,45 +2127,43 @@ function ClauseBuilderContent() {
             {showSaveModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                     <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-                        <h3 className="text-lg font-semibold text-slate-800 mb-4">Save as Favourite</h3>
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">Save as Template</h3>
 
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Template Name <span className="text-red-500">*</span>
+                                    Template Name *
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                    placeholder="e.g., Standard IT Services 2025"
                                     value={savePackName}
                                     onChange={(e) => setSavePackName(e.target.value)}
+                                    placeholder="e.g., My Standard BPO Clauses"
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Description (Optional)
+                                    Description (optional)
                                 </label>
                                 <textarea
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                    rows={3}
-                                    placeholder="Brief description of when to use this template..."
                                     value={savePackDescription}
                                     onChange={(e) => setSavePackDescription(e.target.value)}
+                                    placeholder="Brief description of this template..."
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
                                 />
-                            </div>
-
-                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                                <p className="text-sm text-slate-600">
-                                    This will save <strong>{selectedClauses.length} clauses</strong> with their current positions and weights.
-                                </p>
                             </div>
                         </div>
 
                         <div className="flex gap-3 mt-6">
                             <button
-                                onClick={() => setShowSaveModal(false)}
+                                onClick={() => {
+                                    setShowSaveModal(false)
+                                    setSavePackName('')
+                                    setSavePackDescription('')
+                                }}
                                 className="flex-1 py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
                             >
                                 Cancel
@@ -1396,13 +2171,13 @@ function ClauseBuilderContent() {
                             <button
                                 onClick={handleSaveAsFavourite}
                                 disabled={!savePackName.trim() || saving}
-                                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                className="flex-1 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-medium rounded-lg transition"
                             >
                                 {saving ? (
-                                    <>
+                                    <span className="flex items-center justify-center gap-2">
                                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                         Saving...
-                                    </>
+                                    </span>
                                 ) : (
                                     'Save Template'
                                 )}
@@ -1447,7 +2222,7 @@ function ClauseBuilderContent() {
             )}
 
             {/* ============================================================ */}
-            {/* SECTION 24: PROVIDER CHECK MODAL (NEW) */}
+            {/* SECTION 24: PROVIDER CHECK MODAL */}
             {/* ============================================================ */}
             {showProviderCheckModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
