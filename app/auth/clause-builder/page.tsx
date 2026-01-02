@@ -198,6 +198,14 @@ function ClauseBuilderContent() {
     const [showConfirmReplace, setShowConfirmReplace] = useState(false)
     const [pendingPackLoad, setPendingPackLoad] = useState<string | null>(null)
 
+    // Provider check modal (NEW)
+    const [showProviderCheckModal, setShowProviderCheckModal] = useState(false)
+    const [hasInvitedProviders, setHasInvitedProviders] = useState(false)
+
+    // Auto-load template from session (NEW)
+    const [autoLoadAttempted, setAutoLoadAttempted] = useState(false)
+    const [sessionTemplatePackId, setSessionTemplatePackId] = useState<string | null>(null)
+
     // ========================================================================
     // SECTION 7: INITIALIZATION
     // ========================================================================
@@ -260,6 +268,17 @@ function ClauseBuilderContent() {
                         if (sessionInfo.serviceRequired || sessionInfo.contractType) {
                             setServiceFilter(sessionInfo.serviceRequired || sessionInfo.contractType)
                         }
+
+                        // Capture template_pack_id for auto-loading (NEW)
+                        const templatePackId = sessionInfo.templatePackId || sessionInfo.template_pack_id
+                        if (templatePackId) {
+                            console.log('[ClauseBuilder] Found template_pack_id:', templatePackId)
+                            setSessionTemplatePackId(templatePackId)
+                        }
+
+                        // Check if providers have been invited (NEW)
+                        const hasProviders = sessionInfo.providers && sessionInfo.providers.length > 0
+                        setHasInvitedProviders(hasProviders)
                     } else {
                         console.warn('[ClauseBuilder] Session response was empty')
                     }
@@ -418,6 +437,26 @@ function ClauseBuilderContent() {
 
         setFilteredClauses(filtered)
     }, [masterClauses, serviceFilter, categoryFilter, searchQuery])
+
+    // ========================================================================
+    // SECTION 8B: AUTO-LOAD TEMPLATE FROM SESSION (NEW)
+    // ========================================================================
+
+    useEffect(() => {
+        // Only run once after initial data load
+        if (loading || autoLoadAttempted) return
+
+        const autoLoad = searchParams.get('auto_load')
+
+        // If auto_load=true and we have a template_pack_id from session
+        // AND no clauses have been selected yet, auto-load the template
+        if (autoLoad === 'true' && sessionTemplatePackId && selectedClauses.length === 0) {
+            console.log('[ClauseBuilder] Auto-loading template:', sessionTemplatePackId)
+            loadPack(sessionTemplatePackId)
+        }
+
+        setAutoLoadAttempted(true)
+    }, [loading, autoLoadAttempted, searchParams, sessionTemplatePackId, selectedClauses.length])
 
     // ========================================================================
     // SECTION 9: CLAUSE ACTIONS
@@ -642,11 +681,40 @@ function ClauseBuilderContent() {
     }
 
     // ========================================================================
-    // SECTION 12: PROCEED TO CONTRACT STUDIO
+    // SECTION 12: PROCEED TO CONTRACT STUDIO (WITH PROVIDER CHECK)
     // ========================================================================
 
-    const handleProceedToStudio = async () => {
+    // Check if user wants to proceed - show modal if no providers
+    const handleProceedToStudio = () => {
         if (!session?.sessionId || selectedClauses.length === 0) return
+
+        // Check if providers have been invited
+        if (!hasInvitedProviders) {
+            setShowProviderCheckModal(true)
+        } else {
+            // Providers exist - proceed directly
+            saveClausesAndNavigate('studio')
+        }
+    }
+
+    // Navigate to Invite Providers page
+    const handleGoToInviteProviders = () => {
+        if (!session?.sessionId) return
+        setShowProviderCheckModal(false)
+
+        // Save clauses first, then navigate to invite
+        saveClausesAndNavigate('invite')
+    }
+
+    // Proceed to studio anyway (user confirmed)
+    const handleProceedAnyway = () => {
+        setShowProviderCheckModal(false)
+        saveClausesAndNavigate('studio')
+    }
+
+    // Save clauses and navigate to destination
+    const saveClausesAndNavigate = async (destination: 'studio' | 'invite') => {
+        if (!session?.sessionId) return
 
         setSaving(true)
 
@@ -676,11 +744,16 @@ function ClauseBuilderContent() {
             if (response.ok) {
                 eventLogger.completed('clause_builder', 'clauses_saved', {
                     sessionId: session.sessionId,
-                    clauseCount: selectedClauses.length
+                    clauseCount: selectedClauses.length,
+                    destination: destination
                 })
 
-                // Navigate to Contract Studio
-                router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
+                // Navigate based on destination
+                if (destination === 'invite') {
+                    router.push(`/auth/invite-providers?session_id=${session.sessionId}&session_number=${session.sessionNumber}`)
+                } else {
+                    router.push(`/auth/contract-studio?session_id=${session.sessionId}`)
+                }
             } else {
                 throw new Error('Failed to save clauses')
             }
@@ -1367,6 +1440,79 @@ function ClauseBuilderContent() {
                                 className="flex-1 py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition"
                             >
                                 Replace All
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 24: PROVIDER CHECK MODAL (NEW) */}
+            {/* ============================================================ */}
+            {showProviderCheckModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4">
+                        {/* Warning Icon */}
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-800">No Providers Invited</h3>
+                                <p className="text-sm text-slate-500">You haven&apos;t invited any providers yet</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6">
+                            <p className="text-slate-600 text-sm">
+                                Your <strong>{selectedClauses.length} clauses</strong> have been configured.
+                                Would you like to invite providers to negotiate, or continue to the Contract Studio to review your setup first?
+                            </p>
+                        </div>
+
+                        <div className="space-y-3">
+                            {/* Primary action - Invite Providers */}
+                            <button
+                                onClick={handleGoToInviteProviders}
+                                disabled={saving}
+                                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {saving ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        Invite Providers First
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Secondary action - Continue to Studio */}
+                            <button
+                                onClick={handleProceedAnyway}
+                                disabled={saving}
+                                className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                Review in Contract Studio First
+                            </button>
+
+                            {/* Cancel */}
+                            <button
+                                onClick={() => setShowProviderCheckModal(false)}
+                                className="w-full py-2 text-slate-500 hover:text-slate-700 text-sm font-medium transition"
+                            >
+                                Cancel
                             </button>
                         </div>
                     </div>

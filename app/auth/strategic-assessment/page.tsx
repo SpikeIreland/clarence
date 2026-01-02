@@ -952,8 +952,8 @@ Your data is saved and ready. Click below to review and confirm your contract cl
       sessionNumber: sessionNumber
     })
 
-    // Navigate to Clause Builder (not Invite Providers)
-    router.push(`/auth/clause-builder?session_id=${sessionId}&session_number=${sessionNumber}`)
+    // Navigate to Clause Builder with auto_load flag to load template from session
+    router.push(`/auth/clause-builder?session_id=${sessionId}&session_number=${sessionNumber}&auto_load=true`)
   }
 
   // ========================================================================
