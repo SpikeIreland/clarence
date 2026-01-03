@@ -2147,12 +2147,9 @@ function ClauseBuilderContent() {
                                                                     W{clause.weight}
                                                                 </span>
 
-                                                                {/* Position badge */}
+                                                                {/* Position badge - always emerald (customer colour) */}
                                                                 <span
-                                                                    className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.position >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                                            clause.position >= 4 ? 'bg-slate-100 text-slate-600' :
-                                                                                'bg-blue-100 text-blue-700'
-                                                                        }`}
+                                                                    className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-100 text-emerald-700"
                                                                     title={`Position: ${clause.position}`}
                                                                 >
                                                                     P{clause.position}
