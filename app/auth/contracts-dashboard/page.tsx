@@ -195,6 +195,7 @@ export default function ContractsDashboard() {
     }
   }
 
+
   // ==========================================================================
   // SECTION 8: CREATE NEW CONTRACT FUNCTION
   // ==========================================================================
@@ -203,6 +204,8 @@ export default function ContractsDashboard() {
     if (isCreatingContract) return
 
     setIsCreatingContract(true)
+
+    // LOG: Create contract button clicked
     eventLogger.started('contract_session_creation', 'create_contract_clicked');
 
     try {
@@ -215,6 +218,7 @@ export default function ContractsDashboard() {
 
       const authData = JSON.parse(auth)
 
+      // Call the session-create API
       const response = await fetch(`${API_BASE}/session-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -229,24 +233,38 @@ export default function ContractsDashboard() {
       if (response.ok) {
         const data = await response.json()
         console.log('New session created:', data)
+
+        // LOG: Session created successfully
         eventLogger.completed('contract_session_creation', 'session_record_created', {
           sessionId: data.sessionId,
           sessionNumber: data.sessionNumber
         });
+
+        // Store the new session ID
         localStorage.setItem('currentSessionId', data.sessionId)
         localStorage.setItem('newSessionNumber', data.sessionNumber)
-        eventLogger.completed('contract_session_creation', 'redirect_to_requirements', {
+
+        // LOG: Redirect to Clause Builder
+        eventLogger.completed('contract_session_creation', 'redirect_to_clause_builder', {
           sessionId: data.sessionId
         });
-        router.push(`/auth/customer-requirements?session_id=${data.sessionId}&session_number=${data.sessionNumber}`)
+
+        // ================================================================
+        // CHANGED: Redirect to Clause Builder (shows 3-method selector)
+        // Previously: router.push(`/auth/customer-requirements?session_id=...`)
+        // ================================================================
+        router.push(`/auth/clause-builder?session_id=${data.sessionId}`)
+
       } else {
         const errorData = await response.json()
         console.error('Failed to create session:', errorData)
+        // LOG: Session creation failed
         eventLogger.failed('contract_session_creation', 'session_record_created', 'Failed to create session', 'API_ERROR');
         alert('Failed to create new contract. Please try again.')
       }
     } catch (error) {
       console.error('Error creating contract:', error)
+      // LOG: Exception during creation
       eventLogger.failed('contract_session_creation', 'create_contract_clicked', error instanceof Error ? error.message : 'Unknown error', 'EXCEPTION');
       alert('Failed to create new contract. Please try again.')
     } finally {

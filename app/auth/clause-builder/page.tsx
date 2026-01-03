@@ -298,6 +298,11 @@ function ClauseBuilderContent() {
     // Drag and drop state (NEW)
     const [isDragging, setIsDragging] = useState(false)
 
+    // Deal value editing (NEW)
+    const [isEditingDealValue, setIsEditingDealValue] = useState(false)
+    const [editingDealValue, setEditingDealValue] = useState('')
+    const [savingDealValue, setSavingDealValue] = useState(false)
+
     // ========================================================================
     // SECTION 7: INITIALIZATION
     // ========================================================================
@@ -1203,6 +1208,56 @@ function ClauseBuilderContent() {
     }
 
     // ========================================================================
+    // SECTION 12D: SAVE DEAL VALUE (NEW)
+    // ========================================================================
+
+    const saveDealValue = async () => {
+        if (!session?.sessionId || !editingDealValue.trim()) return
+
+        setSavingDealValue(true)
+
+        try {
+            const response = await fetch(`${API_BASE}/update-session-deal-value`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    deal_value: editingDealValue.trim()
+                })
+            })
+
+            if (response.ok) {
+                // Update local session state
+                setSession(prev => prev ? { ...prev, dealValue: editingDealValue.trim() } : null)
+                setIsEditingDealValue(false)
+
+                eventLogger.completed('clause_builder', 'deal_value_saved', {
+                    sessionId: session.sessionId,
+                    dealValue: editingDealValue
+                })
+            } else {
+                console.error('Failed to save deal value')
+                alert('Failed to save deal value. Please try again.')
+            }
+        } catch (error) {
+            console.error('Error saving deal value:', error)
+            alert('Failed to save deal value. Please try again.')
+        } finally {
+            setSavingDealValue(false)
+        }
+    }
+
+    const startEditingDealValue = () => {
+        setEditingDealValue(session?.dealValue || '')
+        setIsEditingDealValue(true)
+    }
+
+    const cancelEditingDealValue = () => {
+        setIsEditingDealValue(false)
+        setEditingDealValue('')
+    }
+
+    // ========================================================================
     // SECTION 13: HELPER FUNCTIONS
     // ========================================================================
 
@@ -1277,6 +1332,51 @@ function ClauseBuilderContent() {
                                     <span className="ml-2 text-white">{session.customerCompany}</span>
                                 </div>
                             )}
+
+                            {/* Deal Value - Editable (NEW) */}
+                            <div className="text-sm">
+                                <span className="text-slate-400">Deal Value:</span>
+                                {isEditingDealValue ? (
+                                    <span className="ml-2 inline-flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={editingDealValue}
+                                            onChange={(e) => setEditingDealValue(e.target.value)}
+                                            placeholder="e.g., £500,000"
+                                            className="w-32 px-2 py-1 text-sm bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            autoFocus
+                                        />
+                                        <button
+                                            onClick={saveDealValue}
+                                            disabled={savingDealValue}
+                                            className="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded disabled:opacity-50"
+                                        >
+                                            {savingDealValue ? '...' : '✓'}
+                                        </button>
+                                        <button
+                                            onClick={cancelEditingDealValue}
+                                            className="px-2 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded"
+                                        >
+                                            ✕
+                                        </button>
+                                    </span>
+                                ) : (
+                                    <span
+                                        onClick={startEditingDealValue}
+                                        className="ml-2 text-white cursor-pointer hover:text-emerald-300 transition group"
+                                        title="Click to edit deal value"
+                                    >
+                                        {session?.dealValue || (
+                                            <span className="text-amber-400 group-hover:text-amber-300">
+                                                + Add value
+                                            </span>
+                                        )}
+                                        <svg className="w-3 h-3 inline ml-1 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </span>
+                                )}
+                            </div>
 
                             {/* Mode Badge (NEW) */}
                             {!showModeSelector && builderMode !== 'select' && (
