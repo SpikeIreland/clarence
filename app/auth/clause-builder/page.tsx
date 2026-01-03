@@ -427,7 +427,23 @@ function ClauseBuilderContent() {
                     const text = await response.text()
                     if (text && text.length > 0) {
                         const packsData = JSON.parse(text)
-                        const packs = Array.isArray(packsData) ? packsData : (packsData.packs || [])
+                        const rawPacks = Array.isArray(packsData) ? packsData : (packsData.packs || [])
+
+                        // Transform snake_case to camelCase
+                        const packs = rawPacks.map((p: any) => ({
+                            packId: p.packId || p.pack_id,
+                            packName: p.packName || p.pack_name,
+                            packType: p.packType || p.pack_type,
+                            description: p.description,
+                            serviceCategory: p.serviceCategory || p.service_category,
+                            industry: p.industry,
+                            regulatoryFramework: p.regulatoryFramework || p.regulatory_framework,
+                            ownerType: p.ownerType || p.owner_type,
+                            companyId: p.companyId || p.company_id,
+                            isBasePack: p.isBasePack ?? p.is_base_pack ?? false,
+                            clauseCount: p.clauseCount ?? p.clause_count ?? 0
+                        }))
+
                         console.log('[ClauseBuilder] Packs count:', packs.length)
                         setAvailablePacks(packs)
                     }
