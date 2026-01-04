@@ -884,9 +884,13 @@ function ClauseBuilderContent() {
         }
     }
 
+  // ========================================================================
+    // SECTION 12B: UPLOAD HANDLERS (WITH CLIENT-SIDE PDF EXTRACTION)
     // ========================================================================
-    // SECTION 12B: UPLOAD HANDLERS (UPDATED FOR PDF/DOCX SUPPORT)
-    // ========================================================================
+
+    // Import at top of file
+    // import * as pdfjsLib from 'pdfjs-dist'
+    // import 'pdfjs-dist/build/pdf.worker.entry'
 
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0]
@@ -913,6 +917,79 @@ function ClauseBuilderContent() {
         if (file) processSelectedFile(file)
     }
 
+    // Extract text from PDF using pdf.js
+    const extractTextFromPdf = async (file: File): Promise<string> => {
+        const pdfjsLib = await import('pdfjs-dist')
+        
+        // Set worker source
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+        
+        const arrayBuffer = await file.arrayBuffer()
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        
+        console.log(`[ClauseBuilder] PDF has ${pdf.numPages} pages`)
+        
+        let fullText = ''
+        
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum)
+            const textContent = await page.getTextContent()
+            
+            // Extract text items and preserve structure
+            const pageText = textContent.items
+                .map((item: any) => {
+                    // Handle text items
+                    if ('str' in item) {
+                        return item.str
+                    }
+                    return ''
+                })
+                .join(' ')
+            
+            fullText += pageText + '\n\n'
+            
+            // Update progress
+            setUploadState(prev => ({
+                ...prev,
+                progress: Math.round((pageNum / pdf.numPages) * 25),
+                progressMessage: `Extracting text from page ${pageNum} of ${pdf.numPages}...`
+            }))
+        }
+        
+        return fullText.trim()
+    }
+
+    // Extract text from DOCX (basic implementation)
+    const extractTextFromDocx = async (file: File): Promise<string> => {
+        // For DOCX, we'll use mammoth.js
+        const mammoth = await import('mammoth')
+        const arrayBuffer = await file.arrayBuffer()
+        const result = await mammoth.extractRawText({ arrayBuffer })
+        return result.value
+    }
+
+    const readFileContent = async (file: File, fileType: string): Promise<string> => {
+        console.log(`[ClauseBuilder] Extracting text from ${fileType} file...`)
+        
+        try {
+            if (fileType === 'txt') {
+                // Plain text - read directly
+                return await file.text()
+            } else if (fileType === 'pdf') {
+                // PDF - extract with pdf.js
+                return await extractTextFromPdf(file)
+            } else if (fileType === 'docx' || fileType === 'doc') {
+                // DOCX - extract with mammoth
+                return await extractTextFromDocx(file)
+            } else {
+                throw new Error(`Unsupported file type: ${fileType}`)
+            }
+        } catch (error) {
+            console.error('[ClauseBuilder] Text extraction failed:', error)
+            throw new Error(`Failed to extract text from ${fileType.toUpperCase()} file. The file may be corrupted or password-protected.`)
+        }
+    }
+
     const processSelectedFile = async (file: File) => {
         console.log('[ClauseBuilder] File selected:', file.name, file.type, file.size)
 
@@ -926,11 +1003,11 @@ function ClauseBuilderContent() {
             return
         }
 
-        if (file.size > 10 * 1024 * 1024) {
+        if (file.size > 50 * 1024 * 1024) {  // Increased limit since we extract locally
             setUploadState(prev => ({
                 ...prev,
                 status: 'error',
-                error: 'File too large. Maximum size is 10MB.'
+                error: 'File too large. Maximum size is 50MB.'
             }))
             return
         }
@@ -941,19 +1018,22 @@ function ClauseBuilderContent() {
             fileType,
             fileSize: file.size,
             status: 'reading',
-            progress: 10,
-            progressMessage: 'Reading document...',
+            progress: 5,
+            progressMessage: 'Extracting text from document...',
             error: null
         })
 
         try {
-            // Read file content based on type
-            const fileContent = await readFileContent(file, fileType)
+            // Extract text on the client side
+            const documentText = await readFileContent(file, fileType)
 
-            console.log('[ClauseBuilder] File content prepared:', {
-                fileType,
-                isBase64: fileContent.isBase64,
-                contentLength: fileContent.content.length
+            if (!documentText || documentText.length < 100) {
+                throw new Error('Could not extract text from document. Please ensure the file is not empty or password-protected.')
+            }
+
+            console.log('[ClauseBuilder] Text extracted successfully:', {
+                length: documentText.length,
+                preview: documentText.substring(0, 200)
             })
 
             setUploadState(prev => ({
@@ -963,7 +1043,8 @@ function ClauseBuilderContent() {
                 progressMessage: 'CLARENCE is analyzing your contract...'
             }))
 
-            await parseDocument(fileContent, file.name, fileType)
+            // Send extracted text to backend (not base64 binary)
+            await parseDocument(documentText, file.name, fileType)
 
         } catch (error) {
             console.error('[ClauseBuilder] File processing error:', error)
@@ -975,63 +1056,9 @@ function ClauseBuilderContent() {
         }
     }
 
-    // Updated interface for file content
-    interface FileContent {
-        content: string
-        isBase64: boolean
-    }
-
-    const readFileContent = async (file: File, fileType: string): Promise<FileContent> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader()
-
-            reader.onload = (e) => {
-                try {
-                    const content = e.target?.result
-
-                    if (fileType === 'txt') {
-                        // Plain text files - read as text directly
-                        resolve({
-                            content: content as string,
-                            isBase64: false
-                        })
-                    } else {
-                        // PDF/DOCX - convert to base64 for backend extraction
-                        const arrayBuffer = content as ArrayBuffer
-                        const base64 = arrayBufferToBase64(arrayBuffer)
-                        resolve({
-                            content: base64,
-                            isBase64: true
-                        })
-                    }
-                } catch (err) {
-                    reject(err)
-                }
-            }
-
-            reader.onerror = () => reject(new Error('Failed to read file'))
-
-            if (fileType === 'txt') {
-                reader.readAsText(file)
-            } else {
-                reader.readAsArrayBuffer(file)
-            }
-        })
-    }
-
-    // Helper function to convert ArrayBuffer to base64
-    const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-        const bytes = new Uint8Array(buffer)
-        let binary = ''
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i])
-        }
-        return btoa(binary)
-    }
-
     const parseDocument = async (
-        fileContent: FileContent,
-        fileName: string,
+        documentText: string, 
+        fileName: string, 
         fileType: string
     ) => {
         if (!session?.sessionId) throw new Error('No active session')
@@ -1053,27 +1080,19 @@ function ClauseBuilderContent() {
         }, 800)
 
         try {
-            // Build request body based on content type
-            const requestBody: Record<string, string> = {
+            // Send extracted text directly - no base64 needed!
+            const requestBody = {
                 session_id: session.sessionId,
                 file_name: fileName,
-                file_type: fileType
-            }
-
-            if (fileContent.isBase64) {
-                // Binary file (PDF/DOCX) - send as base64 for backend extraction
-                requestBody.file_data = fileContent.content
-            } else {
-                // Text file - send content directly
-                requestBody.document_text = fileContent.content
+                file_type: fileType,
+                document_text: documentText  // Plain text, already extracted
             }
 
             console.log('[ClauseBuilder] Sending to parser:', {
                 sessionId: session.sessionId,
                 fileName,
                 fileType,
-                isBase64: fileContent.isBase64,
-                contentLength: fileContent.content.length
+                textLength: documentText.length
             })
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
