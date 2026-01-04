@@ -917,12 +917,12 @@ function ClauseBuilderContent() {
         if (file) processSelectedFile(file)
     }
 
-    // Extract text from PDF using pdf.js
     const extractTextFromPdf = async (file: File): Promise<string> => {
-        const pdfjsLib = await import('pdfjs-dist')
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf')
 
-        // Set worker source
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+        // For version 3.x, worker setup is different
+        const pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.entry')
+        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
         const arrayBuffer = await file.arrayBuffer()
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
@@ -935,20 +935,12 @@ function ClauseBuilderContent() {
             const page = await pdf.getPage(pageNum)
             const textContent = await page.getTextContent()
 
-            // Extract text items and preserve structure
             const pageText = textContent.items
-                .map((item: any) => {
-                    // Handle text items
-                    if ('str' in item) {
-                        return item.str
-                    }
-                    return ''
-                })
+                .map((item: any) => ('str' in item ? item.str : ''))
                 .join(' ')
 
             fullText += pageText + '\n\n'
 
-            // Update progress
             setUploadState(prev => ({
                 ...prev,
                 progress: Math.round((pageNum / pdf.numPages) * 25),
