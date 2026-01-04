@@ -918,14 +918,13 @@ function ClauseBuilderContent() {
     }
 
     const extractTextFromPdf = async (file: File): Promise<string> => {
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf')
+        const { pdfjs } = await import('react-pdf')
 
-        // For version 3.x, worker setup is different
-        const pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.entry')
-        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+        // react-pdf handles worker setup automatically
+        pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
 
         const arrayBuffer = await file.arrayBuffer()
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
 
         console.log(`[ClauseBuilder] PDF has ${pdf.numPages} pages`)
 
