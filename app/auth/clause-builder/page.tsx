@@ -885,7 +885,7 @@ function ClauseBuilderContent() {
     }
 
     // ========================================================================
-    // SECTION 12B: UPLOAD HANDLERS (NEW)
+    // SECTION 12B: UPLOAD HANDLERS (UPDATED FOR PDF/DOCX SUPPORT)
     // ========================================================================
 
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -947,13 +947,14 @@ function ClauseBuilderContent() {
         })
 
         try {
-            const documentText = await readFileContent(file, fileType)
+            // Read file content based on type
+            const fileContent = await readFileContent(file, fileType)
 
-            if (!documentText || documentText.length < 100) {
-                throw new Error('Could not extract text from document. Please ensure the file is not empty or password-protected.')
-            }
-
-            console.log('[ClauseBuilder] Document text extracted, length:', documentText.length)
+            console.log('[ClauseBuilder] File content prepared:', {
+                fileType,
+                isBase64: fileContent.isBase64,
+                contentLength: fileContent.content.length
+            })
 
             setUploadState(prev => ({
                 ...prev,
@@ -962,7 +963,7 @@ function ClauseBuilderContent() {
                 progressMessage: 'CLARENCE is analyzing your contract...'
             }))
 
-            await parseDocument(documentText, file.name, fileType)
+            await parseDocument(fileContent, file.name, fileType)
 
         } catch (error) {
             console.error('[ClauseBuilder] File processing error:', error)
@@ -974,20 +975,34 @@ function ClauseBuilderContent() {
         }
     }
 
-    const readFileContent = async (file: File, fileType: string): Promise<string> => {
+    // Updated interface for file content
+    interface FileContent {
+        content: string
+        isBase64: boolean
+    }
+
+    const readFileContent = async (file: File, fileType: string): Promise<FileContent> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader()
 
             reader.onload = (e) => {
                 try {
                     const content = e.target?.result
+
                     if (fileType === 'txt') {
-                        resolve(content as string)
+                        // Plain text files - read as text directly
+                        resolve({
+                            content: content as string,
+                            isBase64: false
+                        })
                     } else {
-                        // For DOCX/PDF, read as text - backend will handle proper extraction
+                        // PDF/DOCX - convert to base64 for backend extraction
                         const arrayBuffer = content as ArrayBuffer
-                        const textDecoder = new TextDecoder('utf-8')
-                        resolve(textDecoder.decode(arrayBuffer))
+                        const base64 = arrayBufferToBase64(arrayBuffer)
+                        resolve({
+                            content: base64,
+                            isBase64: true
+                        })
                     }
                 } catch (err) {
                     reject(err)
@@ -1004,7 +1019,21 @@ function ClauseBuilderContent() {
         })
     }
 
-    const parseDocument = async (documentText: string, fileName: string, fileType: string) => {
+    // Helper function to convert ArrayBuffer to base64
+    const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+        const bytes = new Uint8Array(buffer)
+        let binary = ''
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i])
+        }
+        return btoa(binary)
+    }
+
+    const parseDocument = async (
+        fileContent: FileContent,
+        fileName: string,
+        fileType: string
+    ) => {
         if (!session?.sessionId) throw new Error('No active session')
 
         const progressInterval = setInterval(() => {
@@ -1024,20 +1053,41 @@ function ClauseBuilderContent() {
         }, 800)
 
         try {
+            // Build request body based on content type
+            const requestBody: Record<string, string> = {
+                session_id: session.sessionId,
+                file_name: fileName,
+                file_type: fileType
+            }
+
+            if (fileContent.isBase64) {
+                // Binary file (PDF/DOCX) - send as base64 for backend extraction
+                requestBody.file_data = fileContent.content
+            } else {
+                // Text file - send content directly
+                requestBody.document_text = fileContent.content
+            }
+
+            console.log('[ClauseBuilder] Sending to parser:', {
+                sessionId: session.sessionId,
+                fileName,
+                fileType,
+                isBase64: fileContent.isBase64,
+                contentLength: fileContent.content.length
+            })
+
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: session.sessionId,
-                    file_name: fileName,
-                    file_type: fileType,
-                    document_text: documentText
-                })
+                body: JSON.stringify(requestBody)
             })
 
             clearInterval(progressInterval)
 
-            if (!response.ok) throw new Error('Parsing failed')
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || 'Parsing failed')
+            }
 
             const result = await response.json()
 
@@ -1061,6 +1111,8 @@ function ClauseBuilderContent() {
                 }))
 
                 setBuilderMode('verify')
+            } else {
+                throw new Error(result.error || 'Parsing returned unsuccessful result')
             }
         } catch (error) {
             clearInterval(progressInterval)
@@ -1397,9 +1449,9 @@ function ClauseBuilderContent() {
                             {/* Mode Badge (NEW) */}
                             {!showModeSelector && builderMode !== 'select' && (
                                 <span className={`px-3 py-1 text-xs font-medium rounded-full ${builderMode === 'template' ? 'bg-emerald-500/20 text-emerald-300' :
-                                        builderMode === 'upload' ? 'bg-blue-500/20 text-blue-300' :
-                                            builderMode === 'verify' ? 'bg-purple-500/20 text-purple-300' :
-                                                'bg-slate-500/20 text-slate-300'
+                                    builderMode === 'upload' ? 'bg-blue-500/20 text-blue-300' :
+                                        builderMode === 'verify' ? 'bg-purple-500/20 text-purple-300' :
+                                            'bg-slate-500/20 text-slate-300'
                                     }`}>
                                     {builderMode === 'template' ? '📋 Template' :
                                         builderMode === 'upload' ? '📤 Upload' :
@@ -1667,8 +1719,8 @@ function ClauseBuilderContent() {
                                                 setEditingClauseCategory(clause.verifiedCategory || clause.suggestedCategory)
                                             }}
                                             className={`w-full text-left p-3 rounded-lg border transition-all ${selectedParsedClause?.parsedClauseId === clause.parsedClauseId
-                                                    ? 'border-blue-500 bg-blue-50'
-                                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                                ? 'border-blue-500 bg-blue-50'
+                                                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                                                 }`}
                                         >
                                             <div className="flex items-start justify-between gap-2">
@@ -1682,7 +1734,7 @@ function ClauseBuilderContent() {
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1">
                                                     <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${clause.status === 'verified' ? 'bg-emerald-100 text-emerald-700' :
-                                                            clause.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                                        clause.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                                                         }`}>
                                                         {clause.status}
                                                     </span>
@@ -1714,7 +1766,7 @@ function ClauseBuilderContent() {
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                                     <div className={`p-3 rounded-lg ${selectedParsedClause.confidenceScore >= 0.8 ? 'bg-emerald-50 border border-emerald-200' :
-                                            selectedParsedClause.confidenceScore >= 0.6 ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'
+                                        selectedParsedClause.confidenceScore >= 0.6 ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'
                                         }`}>
                                         <div className="flex items-center justify-between">
                                             <span className="text-sm font-medium">
@@ -1920,10 +1972,10 @@ function ClauseBuilderContent() {
                                                             key={clause.clauseId}
                                                             onClick={() => handleClauseClick(clause)}
                                                             className={`w-full flex items-center gap-2 px-3 py-2 ml-2 rounded-r-lg text-left transition ${activeClause?.clauseId === clause.clauseId
-                                                                    ? 'bg-emerald-50 border-l-2 border-emerald-500 -ml-0.5'
-                                                                    : isClauseSelected(clause.clauseId)
-                                                                        ? 'bg-slate-50 text-slate-500'
-                                                                        : 'hover:bg-slate-50'
+                                                                ? 'bg-emerald-50 border-l-2 border-emerald-500 -ml-0.5'
+                                                                : isClauseSelected(clause.clauseId)
+                                                                    ? 'bg-slate-50 text-slate-500'
+                                                                    : 'hover:bg-slate-50'
                                                                 }`}
                                                         >
                                                             {isClauseSelected(clause.clauseId) && (
@@ -2008,10 +2060,10 @@ function ClauseBuilderContent() {
                                                             setIsNonNegotiable(option.value === 10)
                                                         }}
                                                         className={`p-3 rounded-lg border text-center transition ${clauseWeight === option.value
-                                                                ? option.value === 10
-                                                                    ? 'bg-red-50 border-red-300 text-red-700'
-                                                                    : 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                            ? option.value === 10
+                                                                ? 'bg-red-50 border-red-300 text-red-700'
+                                                                : 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                                             }`}
                                                     >
                                                         <div className="font-medium text-sm">{option.label}</div>
@@ -2155,8 +2207,8 @@ function ClauseBuilderContent() {
                                                                 {/* Weight badge */}
                                                                 <span
                                                                     className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${clause.weight >= 7 ? 'bg-red-100 text-red-700' :
-                                                                            clause.weight >= 4 ? 'bg-amber-100 text-amber-700' :
-                                                                                'bg-slate-100 text-slate-600'
+                                                                        clause.weight >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                                            'bg-slate-100 text-slate-600'
                                                                         }`}
                                                                     title={`Weight: ${clause.weight}`}
                                                                 >
