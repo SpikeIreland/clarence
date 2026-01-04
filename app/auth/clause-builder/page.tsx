@@ -884,7 +884,7 @@ function ClauseBuilderContent() {
         }
     }
 
-  // ========================================================================
+    // ========================================================================
     // SECTION 12B: UPLOAD HANDLERS (WITH CLIENT-SIDE PDF EXTRACTION)
     // ========================================================================
 
@@ -920,21 +920,21 @@ function ClauseBuilderContent() {
     // Extract text from PDF using pdf.js
     const extractTextFromPdf = async (file: File): Promise<string> => {
         const pdfjsLib = await import('pdfjs-dist')
-        
+
         // Set worker source
         pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
-        
+
         const arrayBuffer = await file.arrayBuffer()
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-        
+
         console.log(`[ClauseBuilder] PDF has ${pdf.numPages} pages`)
-        
+
         let fullText = ''
-        
+
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
             const page = await pdf.getPage(pageNum)
             const textContent = await page.getTextContent()
-            
+
             // Extract text items and preserve structure
             const pageText = textContent.items
                 .map((item: any) => {
@@ -945,9 +945,9 @@ function ClauseBuilderContent() {
                     return ''
                 })
                 .join(' ')
-            
+
             fullText += pageText + '\n\n'
-            
+
             // Update progress
             setUploadState(prev => ({
                 ...prev,
@@ -955,7 +955,7 @@ function ClauseBuilderContent() {
                 progressMessage: `Extracting text from page ${pageNum} of ${pdf.numPages}...`
             }))
         }
-        
+
         return fullText.trim()
     }
 
@@ -970,7 +970,7 @@ function ClauseBuilderContent() {
 
     const readFileContent = async (file: File, fileType: string): Promise<string> => {
         console.log(`[ClauseBuilder] Extracting text from ${fileType} file...`)
-        
+
         try {
             if (fileType === 'txt') {
                 // Plain text - read directly
@@ -1057,8 +1057,8 @@ function ClauseBuilderContent() {
     }
 
     const parseDocument = async (
-        documentText: string, 
-        fileName: string, 
+        documentText: string,
+        fileName: string,
         fileType: string
     ) => {
         if (!session?.sessionId) throw new Error('No active session')
