@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter, useParams, useSearchParams } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
@@ -161,7 +161,6 @@ const SAMPLE_SCENARIOS: TrainingScenario[] = [
 export default function TrainingStudioPage() {
     const router = useRouter()
     const params = useParams()
-    const searchParams = useSearchParams()
     const supabase = createClient()
     const chatEndRef = useRef<HTMLDivElement>(null)
 
@@ -629,8 +628,8 @@ export default function TrainingStudioPage() {
                         <button
                             onClick={() => setActiveTab('scenarios')}
                             className={`pb-3 text-sm font-medium transition-colors ${activeTab === 'scenarios'
-                                    ? 'text-amber-600 border-b-2 border-amber-600'
-                                    : 'text-slate-500 hover:text-slate-700'
+                                ? 'text-amber-600 border-b-2 border-amber-600'
+                                : 'text-slate-500 hover:text-slate-700'
                                 }`}
                         >
                             Scenarios
@@ -638,8 +637,8 @@ export default function TrainingStudioPage() {
                         <button
                             onClick={() => setActiveTab('history')}
                             className={`pb-3 text-sm font-medium transition-colors ${activeTab === 'history'
-                                    ? 'text-amber-600 border-b-2 border-amber-600'
-                                    : 'text-slate-500 hover:text-slate-700'
+                                ? 'text-amber-600 border-b-2 border-amber-600'
+                                : 'text-slate-500 hover:text-slate-700'
                                 }`}
                         >
                             Past Sessions
@@ -647,8 +646,8 @@ export default function TrainingStudioPage() {
                         <button
                             onClick={() => setActiveTab('progress')}
                             className={`pb-3 text-sm font-medium transition-colors ${activeTab === 'progress'
-                                    ? 'text-amber-600 border-b-2 border-amber-600'
-                                    : 'text-slate-500 hover:text-slate-700'
+                                ? 'text-amber-600 border-b-2 border-amber-600'
+                                : 'text-slate-500 hover:text-slate-700'
                                 }`}
                         >
                             My Progress
@@ -921,8 +920,8 @@ export default function TrainingStudioPage() {
                                                 key={scenario.scenarioId}
                                                 onClick={() => setSelectedScenario(scenario)}
                                                 className={`text-left p-4 rounded-lg border-2 transition-all ${isSelected
-                                                        ? 'border-amber-500 bg-amber-50'
-                                                        : 'border-slate-200 hover:border-slate-300'
+                                                    ? 'border-amber-500 bg-amber-50'
+                                                    : 'border-slate-200 hover:border-slate-300'
                                                     }`}
                                             >
                                                 <div className="flex items-center justify-between">
@@ -949,8 +948,8 @@ export default function TrainingStudioPage() {
                                     <button
                                         onClick={() => setCounterpartyType('ai')}
                                         className={`p-4 rounded-lg border-2 transition-all ${counterpartyType === 'ai'
-                                                ? 'border-amber-500 bg-amber-50'
-                                                : 'border-slate-200 hover:border-slate-300'
+                                            ? 'border-amber-500 bg-amber-50'
+                                            : 'border-slate-200 hover:border-slate-300'
                                             }`}
                                     >
                                         <div className="text-2xl mb-2">🤖</div>
@@ -960,8 +959,8 @@ export default function TrainingStudioPage() {
                                     <button
                                         onClick={() => setCounterpartyType('partner')}
                                         className={`p-4 rounded-lg border-2 transition-all ${counterpartyType === 'partner'
-                                                ? 'border-amber-500 bg-amber-50'
-                                                : 'border-slate-200 hover:border-slate-300'
+                                            ? 'border-amber-500 bg-amber-50'
+                                            : 'border-slate-200 hover:border-slate-300'
                                             }`}
                                     >
                                         <div className="text-2xl mb-2">👥</div>
@@ -981,8 +980,8 @@ export default function TrainingStudioPage() {
                                                 key={mode.value}
                                                 onClick={() => setSelectedAiMode(mode.value as typeof selectedAiMode)}
                                                 className={`w-full text-left p-4 rounded-lg border-2 transition-all ${selectedAiMode === mode.value
-                                                        ? 'border-amber-500 bg-amber-50'
-                                                        : 'border-slate-200 hover:border-slate-300'
+                                                    ? 'border-amber-500 bg-amber-50'
+                                                    : 'border-slate-200 hover:border-slate-300'
                                                     }`}
                                             >
                                                 <div className="flex items-center gap-3">
@@ -1019,8 +1018,8 @@ export default function TrainingStudioPage() {
                                                     key={partner.id}
                                                     onClick={() => setSelectedPartner(partner)}
                                                     className={`w-full text-left p-4 rounded-lg border-2 transition-all ${selectedPartner?.id === partner.id
-                                                            ? 'border-amber-500 bg-amber-50'
-                                                            : 'border-slate-200 hover:border-slate-300'
+                                                        ? 'border-amber-500 bg-amber-50'
+                                                        : 'border-slate-200 hover:border-slate-300'
                                                         }`}
                                                 >
                                                     <div className="font-medium text-slate-800">{partner.userName}</div>
@@ -1090,8 +1089,8 @@ export default function TrainingStudioPage() {
                         {chatMessages.map(message => (
                             <div key={message.id} className={`mb-4 ${message.type === 'user' ? 'text-right' : ''}`}>
                                 <div className={`inline-block max-w-[85%] ${message.type === 'user'
-                                        ? 'bg-amber-600 text-white rounded-2xl rounded-br-md px-4 py-2'
-                                        : 'bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200'
+                                    ? 'bg-amber-600 text-white rounded-2xl rounded-br-md px-4 py-2'
+                                    : 'bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200'
                                     }`}>
                                     {message.type === 'clarence' && (
                                         <div className="flex items-center gap-2 mb-1">
