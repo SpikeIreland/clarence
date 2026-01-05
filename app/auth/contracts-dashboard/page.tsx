@@ -680,13 +680,13 @@ export default function ContractsDashboard() {
             {/* Center: Navigation Links */}
             <div className="hidden md:flex items-center gap-6">
               <Link
-                href="/dashboard"
+                href="/auth/dashboard"
                 className="text-white font-medium text-sm border-b-2 border-emerald-500 pb-1"
               >
                 Dashboard
               </Link>
               <Link
-                href="/contracts"
+                href="/auth/contracts"
                 className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
               >
                 Contract Studio
