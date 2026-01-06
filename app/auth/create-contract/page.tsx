@@ -569,7 +569,7 @@ export default function ContractCreationAssessment() {
             const result = await response.json()
 
             if (result.success && result.sessionId) {
-                router.push(`/auth/contract-studio?session_id=${result.sessionId}`)
+                router.push(`/auth/contract-prep?session_id=${result.sessionId}`)
             } else {
                 throw new Error(result.error || 'No session ID returned')
             }
