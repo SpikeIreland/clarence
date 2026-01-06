@@ -472,7 +472,7 @@ function ContractPrepContent() {
             <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
+                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
                         ← Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800">Contract Prep</h2>
@@ -642,7 +642,7 @@ function ContractPrepContent() {
                                 <h3 className="text-lg font-medium text-slate-800 mb-2">Something went wrong</h3>
                                 <p className="text-sm text-slate-500 mb-4">{error}</p>
                                 <Link
-                                    href="/auth/dashboard"
+                                    href="/auth/contracts-dashboard"
                                     className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors inline-block"
                                 >
                                     Return to Dashboard
