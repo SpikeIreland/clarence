@@ -446,13 +446,14 @@ function ContractPrepContent() {
     }
 
     const handleToggleLock = (clauseId: string) => {
+        // Update main clauses array
         setClauses(prev => prev.map(c =>
             c.clauseId === clauseId
                 ? { ...c, isLocked: !c.isLocked }
                 : c
         ))
 
-        // Update category groups too
+        // Update category groups
         setCategoryGroups(prev => prev.map(group => ({
             ...group,
             clauses: group.clauses.map(c =>
@@ -461,6 +462,14 @@ function ContractPrepContent() {
                     : c
             )
         })))
+
+        // Update selected clause if it's the one being toggled
+        setSelectedClause(prev => {
+            if (prev && prev.clauseId === clauseId) {
+                return { ...prev, isLocked: !prev.isLocked }
+            }
+            return prev
+        })
     }
 
     // ========================================================================
@@ -552,8 +561,8 @@ function ContractPrepContent() {
                                                     key={clause.clauseId}
                                                     onClick={() => handleClauseSelect(clause)}
                                                     className={`w-full flex items-center gap-2 p-2 rounded-lg text-left text-sm transition-colors ${selectedClause?.clauseId === clause.clauseId
-                                                            ? 'bg-blue-100 text-blue-800'
-                                                            : 'hover:bg-slate-100 text-slate-600'
+                                                        ? 'bg-blue-100 text-blue-800'
+                                                        : 'hover:bg-slate-100 text-slate-600'
                                                         }`}
                                                 >
                                                     {clause.isLocked ? (
@@ -814,8 +823,8 @@ function ContractPrepContent() {
                         <button
                             onClick={() => handleToggleLock(selectedClause.clauseId)}
                             className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 ${selectedClause.isLocked
-                                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                         >
                             {selectedClause.isLocked ? '🔒 Locked' : '🔓 Unlocked'}
@@ -885,8 +894,8 @@ function ContractPrepContent() {
                                 <div
                                     key={option.value}
                                     className={`p-3 rounded-lg border transition-colors ${option.value === selectedClause.defaultCustomerPosition
-                                            ? 'border-blue-300 bg-blue-50'
-                                            : 'border-slate-200 bg-white'
+                                        ? 'border-blue-300 bg-blue-50'
+                                        : 'border-slate-200 bg-white'
                                         }`}
                                 >
                                     <div className="flex items-center gap-3">
@@ -940,8 +949,8 @@ function ContractPrepContent() {
                         chatMessages.map((message) => (
                             <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                        ? 'bg-blue-600 text-white rounded-br-md'
-                                        : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
+                                    ? 'bg-blue-600 text-white rounded-br-md'
+                                    : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
                                     }`}>
                                     <div className="text-sm whitespace-pre-wrap">
                                         {message.content.split('**').map((part, i) =>
