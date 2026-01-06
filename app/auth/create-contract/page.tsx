@@ -362,17 +362,53 @@ export default function ContractCreationAssessment() {
         }])
     }
 
+    // Map user's contract type selection to template contract types
+    const getMatchingContractTypes = (selectedType: ContractType): string[] => {
+        const typeMapping: Record<string, string[]> = {
+            'nda': ['NDA', 'nda', 'Non-Disclosure', 'Confidentiality'],
+            'saas': ['SaaS', 'saas', 'Software', 'Software as a Service'],
+            'bpo': ['BPO', 'bpo', 'Outsourcing', 'Business Process'],
+            'msa': ['MSA', 'msa', 'Master Services', 'Master Service Agreement'],
+            'employment': ['Employment', 'employment', 'Employee', 'Staff'],
+            'custom': [] // Custom matches nothing - show all
+        }
+        return typeMapping[selectedType || ''] || []
+    }
+
     const loadTemplates = async () => {
         setIsLoadingTemplates(true)
         try {
             const response = await fetch(`${API_BASE}/get-contract-templates`)
             if (response.ok) {
                 const data = await response.json()
-                const templateList = data.templates || []
-                setTemplates(templateList)
+                const allTemplates: Template[] = data.templates || []
+
+                // Filter templates based on selected contract type
+                const matchingTypes = getMatchingContractTypes(assessment.contractType)
+
+                let filteredTemplates: Template[]
+                if (matchingTypes.length === 0) {
+                    // Custom type or no mapping - show all templates
+                    filteredTemplates = allTemplates
+                } else {
+                    // Filter to matching contract types (case-insensitive)
+                    filteredTemplates = allTemplates.filter(t =>
+                        matchingTypes.some(type =>
+                            t.contractType.toLowerCase().includes(type.toLowerCase()) ||
+                            t.industry.toLowerCase().includes(type.toLowerCase())
+                        )
+                    )
+                }
+
+                setTemplates(filteredTemplates)
 
                 // Add appropriate Clarence message
-                if (templateList.length === 0) {
+                if (filteredTemplates.length === 0 && allTemplates.length > 0) {
+                    // No matching templates, but other templates exist
+                    addClarenceMessage(`I don't have any **${getContractTypeLabel(assessment.contractType)}** templates yet, but I found ${allTemplates.length} other template${allTemplates.length !== 1 ? 's' : ''} you could adapt.\n\nWould you like to see them, or build from scratch?`)
+                    // Show all templates as fallback
+                    setTemplates(allTemplates)
+                } else if (filteredTemplates.length === 0) {
                     addClarenceMessage(CLARENCE_MESSAGES.no_templates)
                 } else {
                     const message = assessment.templateSource === 'modified_template'
@@ -619,17 +655,17 @@ export default function ContractCreationAssessment() {
                                 <div
                                     key={step.id}
                                     className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isCurrent
-                                            ? 'bg-blue-50 border border-blue-200'
-                                            : isComplete
-                                                ? 'bg-green-50 border border-green-200'
-                                                : 'bg-white border border-slate-200 opacity-50'
+                                        ? 'bg-blue-50 border border-blue-200'
+                                        : isComplete
+                                            ? 'bg-green-50 border border-green-200'
+                                            : 'bg-white border border-slate-200 opacity-50'
                                         }`}
                                 >
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg ${isComplete
-                                            ? 'bg-green-500 text-white'
-                                            : isCurrent
-                                                ? 'bg-blue-500 text-white'
-                                                : 'bg-slate-200 text-slate-500'
+                                        ? 'bg-green-500 text-white'
+                                        : isCurrent
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-slate-200 text-slate-500'
                                         }`}>
                                         {isComplete ? '✓' : step.icon}
                                     </div>
@@ -1029,8 +1065,8 @@ export default function ContractCreationAssessment() {
                     {chatMessages.map((message) => (
                         <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                    ? 'bg-blue-600 text-white rounded-br-md'
-                                    : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
+                                ? 'bg-blue-600 text-white rounded-br-md'
+                                : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
                                 }`}>
                                 <div className="text-sm whitespace-pre-wrap">
                                     {message.content.split('**').map((part, i) =>
