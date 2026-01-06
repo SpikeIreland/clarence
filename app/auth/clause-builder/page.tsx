@@ -1088,7 +1088,7 @@ function ClauseBuilderContent() {
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify(requestBody)
             })
 
