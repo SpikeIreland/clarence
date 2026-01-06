@@ -209,24 +209,28 @@ export default function ContractsDashboard() {
   async function createNewSession() {
     if (isCreatingContract) return
 
+    // For LIVE mode, redirect to the new assessment flow
+    if (activeTab === 'live') {
+      router.push('/auth/create-contract')
+      return
+    }
+
+    // For TRAINING mode, continue with direct session creation
     setIsCreatingContract(true)
 
-    const isTraining = activeTab === 'training'
-    const eventName = isTraining ? 'training_session_creation' : 'contract_session_creation'
-
-    eventLogger.started(eventName, 'create_session_clicked');
+    eventLogger.started('training_session_creation', 'create_session_clicked');
 
     try {
       const auth = localStorage.getItem('clarence_auth')
       if (!auth) {
-        eventLogger.failed(eventName, 'create_session_clicked', 'Not authenticated', 'AUTH_REQUIRED');
+        eventLogger.failed('training_session_creation', 'create_session_clicked', 'Not authenticated', 'AUTH_REQUIRED');
         router.push('/auth/login')
         return
       }
 
       const authData = JSON.parse(auth)
 
-      // Call the session-create API
+      // Call the session-create API for training
       const response = await fetch(`${API_BASE}/session-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -235,42 +239,36 @@ export default function ContractsDashboard() {
           userEmail: authData.userInfo?.email,
           companyName: authData.userInfo?.company,
           userName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim(),
-          isTraining: isTraining // NEW: Pass training flag
+          isTraining: true
         })
       })
 
       if (response.ok) {
         const data = await response.json()
-        console.log('New session created:', data)
+        console.log('New training session created:', data)
 
-        eventLogger.completed(eventName, 'session_record_created', {
+        eventLogger.completed('training_session_creation', 'session_record_created', {
           sessionId: data.sessionId,
           sessionNumber: data.sessionNumber,
-          isTraining: isTraining
+          isTraining: true
         });
 
         localStorage.setItem('currentSessionId', data.sessionId)
         localStorage.setItem('newSessionNumber', data.sessionNumber)
 
-        // Redirect based on mode
-        if (isTraining) {
-          // Training goes to Training Studio
-          router.push(`/training/${data.sessionId}`)
-        } else {
-          // Live goes to customer requirements / clause builder
-          router.push(`/auth/clause-builder?session_id=${data.sessionId}`)
-        }
+        // Training goes to Training Studio
+        router.push(`/auth/training/${data.sessionId}`)
 
       } else {
         const errorData = await response.json()
-        console.error('Failed to create session:', errorData)
-        eventLogger.failed(eventName, 'session_record_created', 'Failed to create session', 'API_ERROR');
-        alert('Failed to create new session. Please try again.')
+        console.error('Failed to create training session:', errorData)
+        eventLogger.failed('training_session_creation', 'session_record_created', 'Failed to create session', 'API_ERROR');
+        alert('Failed to create new training session. Please try again.')
       }
     } catch (error) {
-      console.error('Error creating session:', error)
-      eventLogger.failed(eventName, 'create_session_clicked', error instanceof Error ? error.message : 'Unknown error', 'EXCEPTION');
-      alert('Failed to create new session. Please try again.')
+      console.error('Error creating training session:', error)
+      eventLogger.failed('training_session_creation', 'create_session_clicked', error instanceof Error ? error.message : 'Unknown error', 'EXCEPTION');
+      alert('Failed to create new training session. Please try again.')
     } finally {
       setIsCreatingContract(false)
     }
@@ -793,8 +791,8 @@ export default function ContractsDashboard() {
               <button
                 onClick={() => setActiveTab('live')}
                 className={`px-6 py-4 font-medium text-sm transition-colors ${activeTab === 'live'
-                    ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50'
-                    : 'text-slate-500 hover:text-slate-700'
+                  ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50'
+                  : 'text-slate-500 hover:text-slate-700'
                   }`}
               >
                 Live
@@ -802,8 +800,8 @@ export default function ContractsDashboard() {
               <button
                 onClick={() => setActiveTab('training')}
                 className={`px-6 py-4 font-medium text-sm transition-colors flex items-center gap-2 ${activeTab === 'training'
-                    ? 'text-amber-600 border-b-2 border-amber-600 bg-amber-50'
-                    : 'text-slate-500 hover:text-slate-700'
+                  ? 'text-amber-600 border-b-2 border-amber-600 bg-amber-50'
+                  : 'text-slate-500 hover:text-slate-700'
                   }`}
               >
                 <span>Training</span>
@@ -835,8 +833,8 @@ export default function ContractsDashboard() {
                 onClick={createNewSession}
                 disabled={isCreatingContract}
                 className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${activeTab === 'live'
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    : 'bg-amber-500 hover:bg-amber-600 text-white'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white'
                   }`}
               >
                 {isCreatingContract ? (
@@ -849,7 +847,7 @@ export default function ContractsDashboard() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    {activeTab === 'live' ? '+ New Session' : '+ New Training'}
+                    {activeTab === 'live' ? 'New Session' : 'New Training'}
                   </>
                 )}
               </button>
@@ -955,8 +953,8 @@ export default function ContractsDashboard() {
                     onClick={createNewSession}
                     disabled={isCreatingContract}
                     className={`px-6 py-3 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${activeTab === 'training'
-                        ? 'bg-amber-500 hover:bg-amber-600 text-white'
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                       }`}
                   >
                     {isCreatingContract ? (
@@ -1147,8 +1145,8 @@ export default function ContractsDashboard() {
                                         <button
                                           onClick={() => openMediationStudio(session.sessionId, bid.providerId)}
                                           className={`px-3 py-1.5 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${isTraining
-                                              ? 'bg-amber-500 hover:bg-amber-600'
-                                              : 'bg-blue-600 hover:bg-blue-700'
+                                            ? 'bg-amber-500 hover:bg-amber-600'
+                                            : 'bg-blue-600 hover:bg-blue-700'
                                             }`}
                                         >
                                           {isTraining ? 'Practice' : 'Open Studio'}
@@ -1436,8 +1434,8 @@ export default function ContractsDashboard() {
         <button
           onClick={() => setShowChatOverlay(true)}
           className={`fixed bottom-6 right-6 p-4 rounded-full shadow-lg hover:shadow-xl transition-all ${activeTab === 'training'
-              ? 'bg-amber-500 hover:bg-amber-600 text-white'
-              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+            ? 'bg-amber-500 hover:bg-amber-600 text-white'
+            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
             }`}
           title="Chat with CLARENCE"
         >
