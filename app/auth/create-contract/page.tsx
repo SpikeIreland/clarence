@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'  // Added useCallback
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -11,7 +11,7 @@ import Link from 'next/link'
 type MediationType = 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
 type ContractType = 'nda' | 'saas' | 'bpo' | 'msa' | 'employment' | 'custom' | null
 type TemplateSource = 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
-type AssessmentStep = 'welcome' | 'mediation_type' | 'contract_type' | 'template_source' | 'summary' | 'creating'
+type AssessmentStep = 'welcome' | 'mediation_type' | 'contract_type' | 'template_source' | 'template_selection' | 'summary' | 'creating'
 
 interface UserInfo {
     firstName: string
@@ -30,6 +30,7 @@ interface AssessmentState {
     contractName: string
     contractDescription: string
     selectedTemplateId: string | null
+    selectedTemplateName: string | null
 }
 
 interface ChatMessage {
@@ -49,13 +50,14 @@ interface AssessmentOption {
 }
 
 interface Template {
-    template_id: string
-    template_code: string
-    template_name: string
-    contract_type: string
+    templateId: string
+    templateCode: string
+    templateName: string
+    contractType: string
     industry: string
     description: string
-    is_default: boolean
+    isDefault: boolean
+    clauseCount: number
 }
 
 // ============================================================================
@@ -182,27 +184,27 @@ This helps me understand whether we should use a streamlined process or a more c
     mediation_straight_selected: `**Straight to Contract** - excellent choice for standard agreements.
 
 With this approach:
-- The contract will be generated automatically once provider details are submitted
-- All terms are fixed - no negotiation required
-- Fastest path to a signed agreement
+• The contract will be generated automatically once provider details are submitted
+• All terms are fixed - no negotiation required
+• Fastest path to a signed agreement
 
 Now, what type of contract are you creating?`,
 
     mediation_partial_selected: `**Partial Mediation** - a balanced approach.
 
 With this approach:
-- Most clauses (~85%) will be locked and auto-drafted
-- Specific clauses remain negotiable
-- You'll have control over which terms are open for discussion
+• Most clauses (~85%) will be locked and auto-drafted
+• Specific clauses remain negotiable
+• You'll have control over which terms are open for discussion
 
 Now, what type of contract are you creating?`,
 
     mediation_full_selected: `**Full Mediation** - comprehensive negotiation.
 
 With this approach:
-- All contract terms are open for discussion
-- Both parties work through each clause together
-- Best for complex or high-value agreements
+• All contract terms are open for discussion
+• Both parties work through each clause together
+• Best for complex or high-value agreements
 
 Now, what type of contract are you creating?`,
 
@@ -213,6 +215,19 @@ Select the category that best matches your needs. This helps me suggest the righ
     template_source: `**How would you like to start building your contract?**
 
 You can use an existing template, upload your own document, or build from scratch.`,
+
+    template_selection: `**Select a template to start with:**
+
+These templates contain pre-configured clauses that you can customize. Each includes industry-standard terms and positions.`,
+
+    template_selection_modify: `**Select a template to customize:**
+
+You'll be able to modify any clause, add new ones, or remove those you don't need.`,
+
+    no_templates: `I couldn't find any templates matching your criteria. You can either:
+• Try a different contract type
+• Build your contract from scratch
+• Upload an existing document`,
 
     summary: `**Great! Here's a summary of your contract setup:**
 
@@ -242,17 +257,19 @@ export default function ContractCreationAssessment() {
         templateSource: null,
         contractName: '',
         contractDescription: '',
-        selectedTemplateId: null
+        selectedTemplateId: null,
+        selectedTemplateName: null
     })
 
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [templates, setTemplates] = useState<Template[]>([])
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
     const [isCreating, setIsCreating] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     // ========================================================================
-    // SECTION 4B: LOAD USER INFO (MUST BE BEFORE useEffect THAT USES IT)
+    // SECTION 4B: LOAD USER INFO
     // ========================================================================
 
     const loadUserInfo = useCallback(() => {
@@ -315,12 +332,12 @@ export default function ContractCreationAssessment() {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [chatMessages])
 
-    // Load templates when needed
+    // Load templates when entering template_selection step
     useEffect(() => {
-        if (assessment.step === 'template_source' || assessment.templateSource === 'existing_template') {
+        if (assessment.step === 'template_selection') {
             loadTemplates()
         }
-    }, [assessment.step, assessment.templateSource])
+    }, [assessment.step])
 
     // ========================================================================
     // SECTION 4D: HELPER FUNCTIONS
@@ -346,20 +363,39 @@ export default function ContractCreationAssessment() {
     }
 
     const loadTemplates = async () => {
+        setIsLoadingTemplates(true)
         try {
             const response = await fetch(`${API_BASE}/get-contract-templates`)
             if (response.ok) {
                 const data = await response.json()
-                setTemplates(Array.isArray(data) ? data : [])
+                const templateList = data.templates || []
+                setTemplates(templateList)
+
+                // Add appropriate Clarence message
+                if (templateList.length === 0) {
+                    addClarenceMessage(CLARENCE_MESSAGES.no_templates)
+                } else {
+                    const message = assessment.templateSource === 'modified_template'
+                        ? CLARENCE_MESSAGES.template_selection_modify
+                        : CLARENCE_MESSAGES.template_selection
+                    addClarenceMessage(message)
+                }
+            } else {
+                console.error('Failed to load templates:', response.status)
+                setTemplates([])
+                addClarenceMessage(CLARENCE_MESSAGES.no_templates)
             }
         } catch (err) {
             console.error('Failed to load templates:', err)
+            setTemplates([])
+            addClarenceMessage(CLARENCE_MESSAGES.no_templates)
+        } finally {
+            setIsLoadingTemplates(false)
         }
     }
 
-
     // ========================================================================
-    // SECTION 4D: SELECTION HANDLERS
+    // SECTION 4E: SELECTION HANDLERS
     // ========================================================================
 
     const handleMediationSelect = (option: AssessmentOption) => {
@@ -410,9 +446,35 @@ export default function ContractCreationAssessment() {
 
         addUserMessage(`${option.icon} ${option.label}`)
 
+        // If they want to use or modify a template, show template selection
+        if (templateSource === 'existing_template' || templateSource === 'modified_template') {
+            setAssessment(prev => ({
+                ...prev,
+                templateSource,
+                step: 'template_selection'
+            }))
+            // Templates will be loaded by the useEffect
+        } else {
+            // For upload or from_scratch, go directly to summary
+            setAssessment(prev => ({
+                ...prev,
+                templateSource,
+                step: 'summary'
+            }))
+
+            setTimeout(() => {
+                addClarenceMessage(CLARENCE_MESSAGES.summary)
+            }, 500)
+        }
+    }
+
+    const handleTemplateSelect = (template: Template) => {
+        addUserMessage(`📋 ${template.templateName}`)
+
         setAssessment(prev => ({
             ...prev,
-            templateSource,
+            selectedTemplateId: template.templateId,
+            selectedTemplateName: template.templateName,
             step: 'summary'
         }))
 
@@ -436,7 +498,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 4E: CONTRACT CREATION
+    // SECTION 4F: CONTRACT CREATION
     // ========================================================================
 
     const createContract = async () => {
@@ -459,7 +521,7 @@ export default function ContractCreationAssessment() {
                     userEmail: userInfo.email,
                     companyName: userInfo.company,
                     userName: `${userInfo.firstName} ${userInfo.lastName}`,
-                    // New assessment fields (workflow needs updating to accept these):
+                    // Assessment fields
                     mediation_type: assessment.mediationType,
                     contract_type: assessment.contractType,
                     template_source: assessment.templateSource,
@@ -503,7 +565,6 @@ export default function ContractCreationAssessment() {
         return option?.label || 'Template'
     }
 
-
     // ========================================================================
     // SECTION 5: RENDER - PANEL 1 (PROGRESS)
     // ========================================================================
@@ -513,11 +574,21 @@ export default function ContractCreationAssessment() {
             { id: 'mediation_type', label: 'Mediation Type', icon: '⚖️' },
             { id: 'contract_type', label: 'Contract Type', icon: '📋' },
             { id: 'template_source', label: 'Template Source', icon: '📁' },
+            { id: 'template_selection', label: 'Select Template', icon: '✓', conditional: true },
             { id: 'summary', label: 'Review & Create', icon: '✅' }
         ]
 
+        // Filter out conditional steps if not applicable
+        const visibleSteps = steps.filter(step => {
+            if (step.id === 'template_selection') {
+                return assessment.templateSource === 'existing_template' ||
+                    assessment.templateSource === 'modified_template'
+            }
+            return true
+        })
+
         const getCurrentStepIndex = () => {
-            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'summary', 'creating']
+            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'summary', 'creating']
             return stepOrder.indexOf(assessment.step)
         }
 
@@ -537,8 +608,9 @@ export default function ContractCreationAssessment() {
                 {/* Progress Steps */}
                 <div className="flex-1 p-4">
                     <div className="space-y-2">
-                        {steps.map((step, index) => {
-                            const stepIndex = index + 1 // Offset for 'welcome'
+                        {visibleSteps.map((step) => {
+                            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'summary', 'creating']
+                            const stepIndex = stepOrder.indexOf(step.id)
                             const isComplete = currentIndex > stepIndex
                             const isCurrent = assessment.step === step.id
                             const isUpcoming = currentIndex < stepIndex
@@ -547,17 +619,17 @@ export default function ContractCreationAssessment() {
                                 <div
                                     key={step.id}
                                     className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isCurrent
-                                        ? 'bg-blue-50 border border-blue-200'
-                                        : isComplete
-                                            ? 'bg-green-50 border border-green-200'
-                                            : 'bg-white border border-slate-200 opacity-50'
+                                            ? 'bg-blue-50 border border-blue-200'
+                                            : isComplete
+                                                ? 'bg-green-50 border border-green-200'
+                                                : 'bg-white border border-slate-200 opacity-50'
                                         }`}
                                 >
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg ${isComplete
-                                        ? 'bg-green-500 text-white'
-                                        : isCurrent
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-slate-200 text-slate-500'
+                                            ? 'bg-green-500 text-white'
+                                            : isCurrent
+                                                ? 'bg-blue-500 text-white'
+                                                : 'bg-slate-200 text-slate-500'
                                         }`}>
                                         {isComplete ? '✓' : step.icon}
                                     </div>
@@ -571,6 +643,7 @@ export default function ContractCreationAssessment() {
                                                 {step.id === 'mediation_type' && getMediationTypeLabel(assessment.mediationType)}
                                                 {step.id === 'contract_type' && getContractTypeLabel(assessment.contractType)}
                                                 {step.id === 'template_source' && getTemplateSourceLabel(assessment.templateSource)}
+                                                {step.id === 'template_selection' && assessment.selectedTemplateName}
                                             </p>
                                         )}
                                     </div>
@@ -603,14 +676,21 @@ export default function ContractCreationAssessment() {
                     <p className="text-sm text-slate-500">
                         {assessment.step === 'summary'
                             ? 'Review your selections and create your contract'
-                            : 'Answer a few questions to set up your contract'
+                            : assessment.step === 'template_selection'
+                                ? 'Choose a template to start with'
+                                : 'Answer a few questions to set up your contract'
                         }
                     </p>
                 </div>
 
                 {/* Content Area */}
                 <div className="flex-1 overflow-auto p-6">
-                    {assessment.step === 'summary' ? renderSummary() : renderCurrentOptions()}
+                    {assessment.step === 'summary'
+                        ? renderSummary()
+                        : assessment.step === 'template_selection'
+                            ? renderTemplateSelection()
+                            : renderCurrentOptions()
+                    }
                 </div>
             </div>
         )
@@ -678,6 +758,141 @@ export default function ContractCreationAssessment() {
         )
     }
 
+    // ========================================================================
+    // SECTION 6A: RENDER - TEMPLATE SELECTION
+    // ========================================================================
+
+    const renderTemplateSelection = () => {
+        if (isLoadingTemplates) {
+            return (
+                <div className="flex items-center justify-center h-64">
+                    <div className="text-center">
+                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-600">Loading templates...</p>
+                    </div>
+                </div>
+            )
+        }
+
+        if (templates.length === 0) {
+            return (
+                <div className="max-w-2xl mx-auto">
+                    <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-3xl">📭</span>
+                        </div>
+                        <h3 className="text-lg font-medium text-slate-800 mb-2">No Templates Available</h3>
+                        <p className="text-sm text-slate-500 mb-6">
+                            There are no templates matching your criteria yet.
+                        </p>
+                        <div className="flex gap-4 justify-center">
+                            <button
+                                onClick={() => {
+                                    setAssessment(prev => ({
+                                        ...prev,
+                                        templateSource: 'from_scratch',
+                                        step: 'summary'
+                                    }))
+                                    addUserMessage('🔨 Build from Scratch')
+                                    setTimeout(() => {
+                                        addClarenceMessage(CLARENCE_MESSAGES.summary)
+                                    }, 500)
+                                }}
+                                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                            >
+                                Build from Scratch
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                                }}
+                                className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
+                            >
+                                ← Go Back
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        return (
+            <div className="max-w-3xl mx-auto">
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <h3 className="text-lg font-medium text-slate-800">
+                            {assessment.templateSource === 'modified_template'
+                                ? 'Select a Template to Customize'
+                                : 'Select a Template'
+                            }
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                            {templates.length} template{templates.length !== 1 ? 's' : ''} available
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                        }}
+                        className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                    >
+                        ← Back
+                    </button>
+                </div>
+
+                <div className="grid gap-4">
+                    {templates.map((template) => (
+                        <button
+                            key={template.templateId}
+                            onClick={() => handleTemplateSelect(template)}
+                            className="flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                        >
+                            <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                                <span className="text-white text-2xl">📋</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-semibold text-slate-800 group-hover:text-blue-800">
+                                        {template.templateName}
+                                    </h4>
+                                    {template.isDefault && (
+                                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
+                                            Recommended
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-sm text-slate-500 mb-2">
+                                    {template.description || `Standard ${template.contractType} template for ${template.industry} industry`}
+                                </p>
+                                <div className="flex items-center gap-4 text-xs text-slate-400">
+                                    <span className="flex items-center gap-1">
+                                        <span>📄</span>
+                                        {template.clauseCount} clauses
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <span>🏢</span>
+                                        {template.industry}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <span>📝</span>
+                                        {template.contractType}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="text-slate-400 group-hover:text-blue-500 self-center text-xl">
+                                →
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 6B: RENDER - SUMMARY
+    // ========================================================================
+
     const renderSummary = () => {
         return (
             <div className="max-w-2xl mx-auto">
@@ -714,6 +929,18 @@ export default function ContractCreationAssessment() {
                             </div>
                         </div>
                     </div>
+
+                    {assessment.selectedTemplateName && (
+                        <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">✓</span>
+                                <div>
+                                    <p className="text-sm text-blue-600">Selected Template</p>
+                                    <p className="font-medium text-blue-800">{assessment.selectedTemplateName}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Contract Name Input */}
@@ -741,7 +968,12 @@ export default function ContractCreationAssessment() {
                 <div className="flex gap-4">
                     <button
                         onClick={() => {
-                            setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                            // Go back to appropriate step
+                            if (assessment.selectedTemplateId) {
+                                setAssessment(prev => ({ ...prev, step: 'template_selection' }))
+                            } else {
+                                setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                            }
                         }}
                         className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
                     >
@@ -797,8 +1029,8 @@ export default function ContractCreationAssessment() {
                     {chatMessages.map((message) => (
                         <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                ? 'bg-blue-600 text-white rounded-br-md'
-                                : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
+                                    ? 'bg-blue-600 text-white rounded-br-md'
+                                    : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
                                 }`}>
                                 <div className="text-sm whitespace-pre-wrap">
                                     {message.content.split('**').map((part, i) =>
