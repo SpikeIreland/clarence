@@ -403,13 +403,9 @@ export default function ContractCreationAssessment() {
                 setTemplates(filteredTemplates)
 
                 // Add appropriate Clarence message
-                if (filteredTemplates.length === 0 && allTemplates.length > 0) {
-                    // No matching templates, but other templates exist
-                    addClarenceMessage(`I don't have any **${getContractTypeLabel(assessment.contractType)}** templates yet, but I found ${allTemplates.length} other template${allTemplates.length !== 1 ? 's' : ''} you could adapt.\n\nWould you like to see them, or build from scratch?`)
-                    // Show all templates as fallback
-                    setTemplates(allTemplates)
-                } else if (filteredTemplates.length === 0) {
-                    addClarenceMessage(CLARENCE_MESSAGES.no_templates)
+                if (filteredTemplates.length === 0) {
+                    // No matching templates
+                    addClarenceMessage(`I don't have any **${getContractTypeLabel(assessment.contractType)}** templates available yet.\n\nYou have a few options to proceed:`)
                 } else {
                     const message = assessment.templateSource === 'modified_template'
                         ? CLARENCE_MESSAGES.template_selection_modify
@@ -810,48 +806,154 @@ export default function ContractCreationAssessment() {
             )
         }
 
+        // No matching templates - show options
         if (templates.length === 0) {
             return (
                 <div className="max-w-2xl mx-auto">
-                    <div className="text-center py-12">
+                    <div className="text-center py-8 mb-8">
                         <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <span className="text-3xl">📭</span>
                         </div>
-                        <h3 className="text-lg font-medium text-slate-800 mb-2">No Templates Available</h3>
-                        <p className="text-sm text-slate-500 mb-6">
-                            There are no templates matching your criteria yet.
+                        <h3 className="text-lg font-medium text-slate-800 mb-2">
+                            No {getContractTypeLabel(assessment.contractType)} Templates Available
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                            We don't have a template for this contract type yet, but you have other options.
                         </p>
-                        <div className="flex gap-4 justify-center">
-                            <button
-                                onClick={() => {
-                                    setAssessment(prev => ({
-                                        ...prev,
-                                        templateSource: 'from_scratch',
-                                        step: 'summary'
-                                    }))
-                                    addUserMessage('🔨 Build from Scratch')
-                                    setTimeout(() => {
-                                        addClarenceMessage(CLARENCE_MESSAGES.summary)
-                                    }, 500)
-                                }}
-                                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-                            >
-                                Build from Scratch
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setAssessment(prev => ({ ...prev, step: 'template_source' }))
-                                }}
-                                className="px-6 py-3 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors"
-                            >
-                                ← Go Back
-                            </button>
-                        </div>
+                    </div>
+
+                    <h4 className="text-sm font-medium text-slate-700 mb-4">How would you like to proceed?</h4>
+
+                    <div className="grid gap-4">
+                        {/* Option 1: Build from Scratch */}
+                        <button
+                            onClick={() => {
+                                addUserMessage('🔨 Build from Scratch')
+                                setAssessment(prev => ({
+                                    ...prev,
+                                    templateSource: 'from_scratch',
+                                    selectedTemplateId: null,
+                                    selectedTemplateName: null,
+                                    step: 'summary'
+                                }))
+                                setTimeout(() => {
+                                    addClarenceMessage(CLARENCE_MESSAGES.summary)
+                                }, 500)
+                            }}
+                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                        >
+                            <div className="w-12 h-12 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+                                🔨
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-medium text-slate-800 group-hover:text-blue-800">
+                                    Build from Scratch
+                                </h4>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Start with a blank contract and add clauses one by one
+                                </p>
+                            </div>
+                            <div className="text-slate-400 group-hover:text-blue-500 self-center">
+                                →
+                            </div>
+                        </button>
+
+                        {/* Option 2: Modify Existing Template */}
+                        <button
+                            onClick={async () => {
+                                addUserMessage('✏️ Modify an Existing Template')
+                                // Fetch ALL templates regardless of type
+                                setIsLoadingTemplates(true)
+                                try {
+                                    const response = await fetch(`${API_BASE}/get-contract-templates`)
+                                    if (response.ok) {
+                                        const data = await response.json()
+                                        const allTemplates: Template[] = data.templates || []
+                                        setTemplates(allTemplates)
+                                        if (allTemplates.length > 0) {
+                                            addClarenceMessage(`Here are all available templates. You can select one and customize it for your **${getContractTypeLabel(assessment.contractType)}** needs.`)
+                                        } else {
+                                            addClarenceMessage('Unfortunately, there are no templates available in the system yet.')
+                                        }
+                                    }
+                                } catch (err) {
+                                    console.error('Failed to load templates:', err)
+                                } finally {
+                                    setIsLoadingTemplates(false)
+                                }
+                                setAssessment(prev => ({
+                                    ...prev,
+                                    templateSource: 'modified_template'
+                                }))
+                            }}
+                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                        >
+                            <div className="w-12 h-12 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+                                ✏️
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-medium text-slate-800 group-hover:text-blue-800">
+                                    Modify an Existing Template
+                                </h4>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Start with another template type and adapt it to your needs
+                                </p>
+                            </div>
+                            <div className="text-slate-400 group-hover:text-blue-500 self-center">
+                                →
+                            </div>
+                        </button>
+
+                        {/* Option 3: Upload a Contract */}
+                        <button
+                            onClick={() => {
+                                addUserMessage('📤 Upload a Contract')
+                                setAssessment(prev => ({
+                                    ...prev,
+                                    templateSource: 'uploaded',
+                                    selectedTemplateId: null,
+                                    selectedTemplateName: null,
+                                    step: 'summary'
+                                }))
+                                setTimeout(() => {
+                                    addClarenceMessage(CLARENCE_MESSAGES.summary)
+                                }, 500)
+                            }}
+                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                        >
+                            <div className="w-12 h-12 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+                                📤
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-medium text-slate-800 group-hover:text-blue-800">
+                                    Upload a Contract
+                                </h4>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Upload an existing document (PDF/DOCX) and convert it
+                                </p>
+                            </div>
+                            <div className="text-slate-400 group-hover:text-blue-500 self-center">
+                                →
+                            </div>
+                        </button>
+                    </div>
+
+                    {/* Back button */}
+                    <div className="mt-6 pt-4 border-t border-slate-200">
+                        <button
+                            onClick={() => {
+                                setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                            }}
+                            className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                        >
+                            ← Back to previous step
+                        </button>
                     </div>
                 </div>
             )
         }
 
+        // Templates found - show the list
         return (
             <div className="max-w-3xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
