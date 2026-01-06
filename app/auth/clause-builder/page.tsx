@@ -288,6 +288,7 @@ function ClauseBuilderContent() {
     // Parsed clauses from upload (NEW)
     const [parsedClauses, setParsedClauses] = useState<ParsedClause[]>([])
     const [parsingResult, setParsingResult] = useState<ParsingResult | null>(null)
+    const [pollingAttempts, setPollingAttempts] = useState<number>(0)
 
     // Verification panel state (NEW)
     const [selectedParsedClause, setSelectedParsedClause] = useState<ParsedClause | null>(null)
@@ -1054,22 +1055,6 @@ function ClauseBuilderContent() {
     ) => {
         if (!session?.sessionId) throw new Error('No active session')
 
-        const progressInterval = setInterval(() => {
-            setUploadState(prev => {
-                if (prev.progress < 85) {
-                    const messages = [
-                        'Identifying clause structure...',
-                        'Detecting contract format...',
-                        'Categorizing clauses...',
-                        'Calculating confidence scores...'
-                    ]
-                    const idx = Math.floor((prev.progress - 30) / 15) % messages.length
-                    return { ...prev, progress: prev.progress + 5, progressMessage: messages[idx] }
-                }
-                return prev
-            })
-        }, 800)
-
         try {
             // Send extracted text directly - no base64 needed!
             const requestBody = {
@@ -1092,22 +1077,130 @@ function ClauseBuilderContent() {
                 body: JSON.stringify(requestBody)
             })
 
-            clearInterval(progressInterval)
-
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
                 throw new Error(errorData.error || 'Parsing failed')
             }
 
             const result = await response.json()
+            console.log('[ClauseBuilder] Parser response:', result)
 
-            if (result.success) {
+            // ----------------------------------------------------------------
+            // Handle async processing response
+            // ----------------------------------------------------------------
+            if (result.status === 'processing') {
+                console.log('[ClauseBuilder] Async processing started, beginning to poll...')
+
+                setUploadState(prev => ({
+                    ...prev,
+                    status: 'parsing',
+                    progress: 40,
+                    progressMessage: 'AI is analyzing your contract. This may take 1-2 minutes...'
+                }))
+
+                // Start polling for results
+                const MAX_POLLING_ATTEMPTS = 60  // 5 minutes max (60 * 5 seconds)
+                const POLLING_INTERVAL = 5000    // 5 seconds
+                let attempts = 0
+
+                const pollForResults = async (): Promise<boolean> => {
+                    try {
+                        const pollResponse = await fetch(
+                            `${API_BASE}/get-parsed-clauses?session_id=${session.sessionId}`
+                        )
+
+                        if (!pollResponse.ok) {
+                            console.log('[ClauseBuilder] Polling response not OK:', pollResponse.status)
+                            return false
+                        }
+
+                        const clauses = await pollResponse.json()
+                        const clauseArray = Array.isArray(clauses) ? clauses : (clauses.clauses || [])
+
+                        if (clauseArray.length > 0) {
+                            console.log('[ClauseBuilder] Polling found clauses:', clauseArray.length)
+                            return true
+                        }
+
+                        console.log('[ClauseBuilder] Polling: no clauses yet')
+                        return false
+                    } catch (error) {
+                        console.error('[ClauseBuilder] Polling error:', error)
+                        return false
+                    }
+                }
+
+                // Polling loop using setInterval
+                await new Promise<void>((resolve, reject) => {
+                    const pollInterval = setInterval(async () => {
+                        attempts++
+                        setPollingAttempts(attempts)
+
+                        // Update progress message based on elapsed time
+                        const elapsedSeconds = attempts * 5
+                        let message = 'AI is analyzing your contract...'
+                        let progress = 40 + Math.min(attempts, 40)  // Progress from 40 to 80
+
+                        if (elapsedSeconds >= 30 && elapsedSeconds < 60) {
+                            message = 'Extracting clause structure...'
+                        } else if (elapsedSeconds >= 60 && elapsedSeconds < 90) {
+                            message = 'Categorizing clauses...'
+                        } else if (elapsedSeconds >= 90) {
+                            message = `Processing large document... (${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s)`
+                        }
+
+                        setUploadState(prev => ({
+                            ...prev,
+                            progress,
+                            progressMessage: message
+                        }))
+
+                        console.log(`[ClauseBuilder] Polling attempt ${attempts}...`)
+
+                        const found = await pollForResults()
+
+                        if (found) {
+                            clearInterval(pollInterval)
+                            console.log('[ClauseBuilder] Clauses found!')
+                            resolve()
+                        } else if (attempts >= MAX_POLLING_ATTEMPTS) {
+                            clearInterval(pollInterval)
+                            reject(new Error('Parsing timeout - please try again with a smaller document'))
+                        }
+                    }, POLLING_INTERVAL)
+                })
+
+                // Clauses found - load them
+                await loadParsedClauses()
+
+                setParsingResult({
+                    success: true,
+                    documentName: fileName,
+                    detectedStyle: 'detected',
+                    styleConfidence: 0.9,
+                    totalClausesFound: parsedClauses.length,
+                    clauses: []
+                })
+
+                setUploadState(prev => ({
+                    ...prev,
+                    status: 'completed',
+                    progress: 100,
+                    progressMessage: `Contract parsed successfully!`
+                }))
+
+                setBuilderMode('verify')
+
+            } else if (result.success) {
+                // ----------------------------------------------------------------
+                // Handle immediate success response (legacy/small docs)
+                // ----------------------------------------------------------------
                 setParsingResult({
                     success: true,
                     documentName: result.documentName,
-                    detectedStyle: result.parsing.detectedStyle,
-                    styleConfidence: result.parsing.styleConfidence,
-                    totalClausesFound: result.parsing.totalClausesFound,
+                    detectedStyle: result.parsing?.detectedStyle || 'detected',
+                    styleConfidence: result.parsing?.styleConfidence || 0.9,
+                    totalClausesFound: result.parsing?.totalClausesFound || 0,
                     clauses: []
                 })
 
@@ -1117,7 +1210,7 @@ function ClauseBuilderContent() {
                     ...prev,
                     status: 'completed',
                     progress: 100,
-                    progressMessage: `Found ${result.parsing.totalClausesFound} clauses!`
+                    progressMessage: `Found ${result.parsing?.totalClausesFound || 0} clauses!`
                 }))
 
                 setBuilderMode('verify')
@@ -1125,7 +1218,7 @@ function ClauseBuilderContent() {
                 throw new Error(result.error || 'Parsing returned unsuccessful result')
             }
         } catch (error) {
-            clearInterval(progressInterval)
+            console.error('[ClauseBuilder] Parse error:', error)
             throw error
         }
     }
