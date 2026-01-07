@@ -1,353 +1,714 @@
-import { Metadata } from 'next'
+'use client'
+import { useState, Suspense } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import MainNavigation from './components/MainNavigation'
-import HeroCTA from './components/HeroCTA'
-import ContractStudioPreview from './components/ContractStudioPreview'
+import { createClient } from '@/lib/supabase'
 
-export const metadata: Metadata = {
-  title: 'CLARENCE | AI-Powered Contract Mediation',
-  description: 'The Honest Broker - AI-powered contract negotiation platform that transforms adversarial negotiations into collaborative deal-making.',
+// ============================================================================
+// SECTION 1: LOADING COMPONENT
+// ============================================================================
+
+function LoginLoading() {
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-slate-600">Loading...</p>
+      </div>
+    </div>
+  )
 }
 
 // ============================================================================
-// SECTION 1: MAIN PAGE COMPONENT
+// SECTION 2: MAIN LOGIN/SIGNUP COMPONENT
 // ============================================================================
 
-export default function Home() {
+function LoginSignupContent() {
+  const router = useRouter()
+  const supabase = createClient()
+
+  // ==========================================================================
+  // SECTION 3: STATE
+  // ==========================================================================
+
+  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false)
+
+  // Login form
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+
+  // Signup form
+  const [signupEmail, setSignupEmail] = useState('')
+  const [signupPassword, setSignupPassword] = useState('')
+  const [signupConfirmPassword, setSignupConfirmPassword] = useState('')
+  const [signupFirstName, setSignupFirstName] = useState('')
+  const [signupLastName, setSignupLastName] = useState('')
+  const [signupCompany, setSignupCompany] = useState('')
+  const signupRole = 'customer' // Customers only - providers have separate portal
+
+  // ==========================================================================
+  // SECTION 4: VALIDATION
+  // ==========================================================================
+
+  function validateEmail(email: string): boolean {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return re.test(email)
+  }
+
+  function validateLoginForm(): string | null {
+    if (!loginEmail || !loginPassword) {
+      return 'Please fill in all fields'
+    }
+    if (!validateEmail(loginEmail)) {
+      return 'Please enter a valid email address'
+    }
+    if (loginPassword.length < 6) {
+      return 'Password must be at least 6 characters'
+    }
+    return null
+  }
+
+  function validateSignupForm(): string | null {
+    if (!signupEmail || !signupPassword || !signupConfirmPassword || !signupFirstName || !signupLastName || !signupCompany) {
+      return 'Please fill in all fields'
+    }
+    if (!validateEmail(signupEmail)) {
+      return 'Please enter a valid email address'
+    }
+    if (signupPassword.length < 6) {
+      return 'Password must be at least 6 characters'
+    }
+    if (signupPassword !== signupConfirmPassword) {
+      return 'Passwords do not match'
+    }
+    if (signupFirstName.length < 2) {
+      return 'First name must be at least 2 characters'
+    }
+    if (signupLastName.length < 2) {
+      return 'Last name must be at least 2 characters'
+    }
+    if (signupCompany.length < 2) {
+      return 'Company name must be at least 2 characters'
+    }
+    return null
+  }
+
+  // ==========================================================================
+  // SECTION 5: LOGIN HANDLER
+  // ==========================================================================
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+
+    // Validate
+    const validationError = validateLoginForm()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // Sign in with Supabase Auth
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: loginPassword
+      })
+
+      if (signInError) throw signInError
+
+      if (data.user) {
+        // Get user profile from public.users table
+        // FIXED: Use 'user_id' not 'auth_id' to match our schema
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('user_id', data.user.id)
+          .single()
+
+        if (userError) {
+          console.error('Error fetching user profile:', userError)
+          // User exists in auth but not in public.users - this shouldn't happen
+          // but handle gracefully
+          throw new Error('User profile not found. Please contact support.')
+        }
+
+        // Check role and redirect accordingly
+        if (userData.role === 'provider') {
+          // Provider logged in via customer portal - sign them out and redirect to provider portal
+          await supabase.auth.signOut()
+          setError('This is a provider account. Please use the Provider Portal to sign in.')
+          setLoading(false)
+          return
+        }
+
+        // Customer - store auth and redirect to dashboard
+        // FIXED: Include companyId and use correct user_id field
+        const authData = {
+          userInfo: {
+            userId: userData.user_id,
+            companyId: userData.company_id,
+            email: userData.email,
+            firstName: userData.first_name,
+            lastName: userData.last_name,
+            company: userData.company_name,
+            role: userData.role || 'customer'
+          },
+          timestamp: new Date().toISOString()
+        }
+        localStorage.setItem('clarence_auth', JSON.stringify(authData))
+        router.push('/auth/dashboard')
+      }
+    } catch (err: unknown) {
+      console.error('Login error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to login. Please check your credentials.'
+      setError(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ==========================================================================
+  // SECTION 6: SIGNUP HANDLER
+  // ==========================================================================
+
+  async function handleSignup(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+
+    // Validate
+    const validationError = validateSignupForm()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      // Sign up with Supabase Auth
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: signupEmail,
+        password: signupPassword,
+        options: {
+          emailRedirectTo: 'https://www.clarencelegal.ai/auth/callback',
+          data: {
+            first_name: signupFirstName,
+            last_name: signupLastName,
+            company_name: signupCompany,
+            role: signupRole
+          }
+        }
+      })
+
+      if (signUpError) throw signUpError
+
+      if (data.user) {
+        // Check if user already exists (identities array is empty)
+        if (data.user.identities && data.user.identities.length === 0) {
+          setError('An account with this email already exists. Please sign in instead.')
+          setActiveTab('login')
+          setLoginEmail(signupEmail) // Pre-fill login email
+          setLoading(false)
+          return
+        }
+
+        // Check if email is confirmed (session exists only if confirmed or confirmation disabled)
+        const emailConfirmed = data.user.email_confirmed_at !== null
+
+        if (emailConfirmed && data.session) {
+          // Email already confirmed (confirmation disabled in Supabase)
+          setSuccess('Account created successfully! Redirecting...')
+
+          const authData = {
+            userInfo: {
+              userId: data.user.id,
+              companyId: null, // Will be set after callback creates records
+              email: signupEmail,
+              firstName: signupFirstName,
+              lastName: signupLastName,
+              company: signupCompany,
+              role: signupRole
+            },
+            timestamp: new Date().toISOString()
+          }
+          localStorage.setItem('clarence_auth', JSON.stringify(authData))
+
+          setTimeout(() => {
+            router.push('/auth/dashboard')
+          }, 1500)
+        } else {
+          // Email confirmation required - show confirmation message
+          setShowEmailConfirmation(true)
+        }
+      }
+    } catch (err: unknown) {
+      console.error('Signup error:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.'
+      setError(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ==========================================================================
+  // SECTION 7: RENDER
+  // ==========================================================================
+
+  // Show email confirmation screen after signup
+  if (showEmailConfirmation) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        {/* Header */}
+        <header className="bg-slate-800 text-white">
+          <div className="container mx-auto px-6">
+            <nav className="flex justify-between items-center h-16">
+              <Link href="/" className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">C</span>
+                </div>
+                <div>
+                  <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                  <div className="text-xs text-slate-400">The Honest Broker</div>
+                </div>
+              </Link>
+            </nav>
+          </div>
+        </header>
+
+        {/* Email Confirmation Content */}
+        <main className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-md">
+            <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+              {/* Success Header */}
+              <div className="bg-emerald-50 p-8 text-center border-b border-emerald-100">
+                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-semibold text-slate-800 mb-2">Check Your Email</h2>
+                <p className="text-slate-600 text-sm">We&apos;ve sent a confirmation link to:</p>
+                <p className="text-emerald-700 font-medium mt-1">{signupEmail}</p>
+              </div>
+
+              {/* Instructions */}
+              <div className="p-6">
+                <div className="bg-slate-50 rounded-lg p-4 mb-6">
+                  <h3 className="font-medium text-slate-700 mb-3 text-sm">Next Steps:</h3>
+                  <ol className="space-y-3 text-sm text-slate-600">
+                    <li className="flex items-start gap-3">
+                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">1</span>
+                      <span>Open the email from CLARENCE</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">2</span>
+                      <span>Click &quot;Confirm Email Address&quot;</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">3</span>
+                      <span>Return here to sign in</span>
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-sm text-amber-700">
+                  <strong>Didn&apos;t receive the email?</strong><br />
+                  Check your spam folder. Emails can take up to 5 minutes to arrive.
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowEmailConfirmation(false)
+                    setActiveTab('login')
+                    setLoginEmail(signupEmail)
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-medium transition"
+                >
+                  Go to Sign In
+                </button>
+
+                <button
+                  onClick={() => setShowEmailConfirmation(false)}
+                  className="w-full mt-3 text-sm text-slate-500 hover:text-slate-700"
+                >
+                  ← Use a different email
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="bg-slate-900 text-slate-400 py-6">
+          <div className="container mx-auto px-6 text-center text-sm">
+            <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
+          </div>
+        </footer>
+      </div>
+    )
+  }
+
   return (
-    <main className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* ================================================================== */}
-      {/* SECTION 2: NAVIGATION HEADER (AUTH-AWARE) */}
+      {/* SECTION 8: NAVIGATION HEADER */}
       {/* ================================================================== */}
-      <MainNavigation />
+      <header className="bg-slate-800 text-white">
+        <div className="container mx-auto px-6">
+          <nav className="flex justify-between items-center h-16">
+            {/* Logo & Brand */}
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">C</span>
+              </div>
+              <div>
+                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                <div className="text-xs text-slate-400">The Honest Broker</div>
+              </div>
+            </Link>
+
+            {/* Navigation Links */}
+            <div className="flex items-center gap-6">
+              <Link
+                href="/how-it-works"
+                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+              >
+                How It Works
+              </Link>
+              <Link
+                href="/phases"
+                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+              >
+                The 6 Phases
+              </Link>
+
+              {/* Sign In Buttons */}
+              <div className="flex items-center gap-3 ml-2">
+                <span className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg">
+                  Customer Sign In
+                </span>
+                <a
+                  href="https://www.clarencelegal.ai/provider"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Provider Sign In
+                </a>
+              </div>
+            </div>
+          </nav>
+        </div>
+      </header>
 
       {/* ================================================================== */}
-      {/* SECTION 3: HERO SECTION */}
+      {/* SECTION 9: MAIN CONTENT */}
       {/* ================================================================== */}
-      <section className="relative overflow-hidden">
-        {/* Subtle gradient background accent */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-blue-50"></div>
-
-        {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-emerald-50/50 to-transparent"></div>
-        <div className="absolute bottom-0 left-0 w-1/2 h-32 bg-gradient-to-t from-slate-100/50 to-transparent"></div>
-
-        <div className="relative container mx-auto px-6 py-20">
-          <div className="max-w-4xl mx-auto text-center">
-            {/* Main Headline */}
-            <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-6 tracking-tight">
-              AI-Powered Contract Mediation
+      <main className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          {/* Header Text */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-slate-800 mb-2">
+              {activeTab === 'login' ? 'Welcome Back' : 'Create Your Account'}
             </h1>
-
-            {/* Subheadline */}
-            <p className="text-xl text-slate-600 mb-8 max-w-2xl mx-auto leading-relaxed">
-              CLARENCE leads parties through an intuitive, structured negotiation process—combining
-              AI-powered insights with transparent brokering to efficiently agree optimal contracts.
+            <p className="text-slate-600 text-sm">
+              {activeTab === 'login'
+                ? 'Sign in to your customer account to continue'
+                : 'Get started with CLARENCE contract mediation'
+              }
             </p>
+          </div>
 
-            {/* CTA Buttons (AUTH-AWARE) */}
-            <HeroCTA />
-
-            {/* Trust Indicator */}
-            <div className="mt-12 flex items-center justify-center gap-2 text-sm text-slate-500">
-              <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>Enterprise-grade security • Data-driven mediation • Fair outcomes</span>
+          {/* Main Card */}
+          <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200">
+              <button
+                onClick={() => {
+                  setActiveTab('login')
+                  setError(null)
+                  setSuccess(null)
+                }}
+                className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'login'
+                  ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('signup')
+                  setError(null)
+                  setSuccess(null)
+                }}
+                className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'signup'
+                  ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                  }`}
+              >
+                Create Account
+              </button>
             </div>
-          </div>
-        </div>
-      </section>
 
-      {/* ================================================================== */}
-      {/* SECTION 4: VALUE PROPOSITION CARDS */}
-      {/* ================================================================== */}
-      <section className="py-20 bg-white border-t border-slate-200">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Transform How You Negotiate
-            </h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              Move beyond adversarial red-lining to collaborative, data-driven deal-making.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Card 1: Transparent Leverage */}
-            <div className="bg-slate-50 rounded-xl p-6 border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all group">
-              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
-                <svg className="w-6 h-6 text-emerald-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+            {/* Error/Success Messages */}
+            {error && (
+              <div className="mx-6 mt-6 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
+                {error}
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">Transparent Leverage</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Both parties see the same market data and leverage calculations. No hidden agendas—just facts that drive fair negotiations.
-              </p>
-            </div>
-
-            {/* Card 2: AI-Powered Insights */}
-            <div className="bg-slate-50 rounded-xl p-6 border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all group">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-500 transition-colors">
-                <svg className="w-6 h-6 text-blue-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            )}
+            {success && (
+              <div className="mx-6 mt-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 flex items-start gap-2">
+                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
+                {success}
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">AI-Powered Insights</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                CLARENCE analyzes positions, identifies trade-offs, and suggests compromises that maximize value for both parties.
-              </p>
-            </div>
+            )}
 
-            {/* Card 3: Structured Process */}
-            <div className="bg-slate-50 rounded-xl p-6 border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all group">
-              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-500 transition-colors">
-                <svg className="w-6 h-6 text-amber-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">Structured Process</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Our 6-phase framework guides negotiations from initial positions to signed agreement—efficiently and professionally.
-              </p>
-            </div>
+            {/* ============================================================ */}
+            {/* SECTION 10: LOGIN FORM */}
+            {/* ============================================================ */}
+            {activeTab === 'login' && (
+              <form onSubmit={handleLogin} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="you@company.com"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="••••••••"
+                    disabled={loading}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign In'
+                  )}
+                </button>
+
+                <div className="text-center text-sm text-slate-500">
+                  Forgot password?{' '}
+                  <button type="button" className="text-blue-600 hover:underline">
+                    Reset it
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 11: SIGNUP FORM */}
+            {/* ============================================================ */}
+            {activeTab === 'signup' && (
+              <form onSubmit={handleSignup} className="p-6 space-y-4">
+                {/* Name Fields */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      value={signupFirstName}
+                      onChange={(e) => setSignupFirstName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="John"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      value={signupLastName}
+                      onChange={(e) => setSignupLastName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Smith"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                {/* Company */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Company Name
+                  </label>
+                  <input
+                    type="text"
+                    value={signupCompany}
+                    onChange={(e) => setSignupCompany(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="Acme Corporation"
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="you@company.com"
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={signupPassword}
+                    onChange={(e) => setSignupPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="••••••••"
+                    disabled={loading}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
+                </div>
+
+                {/* Confirm Password */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    value={signupConfirmPassword}
+                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    placeholder="••••••••"
+                    disabled={loading}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Creating account...
+                    </>
+                  ) : (
+                    'Create Account'
+                  )}
+                </button>
+
+                <p className="text-xs text-slate-500 text-center">
+                  By signing up, you agree to our{' '}
+                  <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link>
+                  {' '}and{' '}
+                  <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
+                </p>
+              </form>
+            )}
           </div>
-        </div>
-      </section>
 
-      {/* ================================================================== */}
-      {/* SECTION 5: HOW IT WORKS PREVIEW */}
-      {/* ================================================================== */}
-      <section className="py-20 bg-slate-50 border-t border-slate-200">
-        <div className="container mx-auto px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              The CLARENCE Process
-            </h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              From first contact to signed contract in six structured phases.
+          {/* Provider Portal Link */}
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
+            <p className="text-sm text-slate-700">
+              Are you a service provider?{' '}
+              <a
+                href="https://www.clarencelegal.ai/provider"
+                className="text-blue-600 font-medium hover:underline"
+              >
+                Access the Provider Portal →
+              </a>
             </p>
           </div>
-
-          {/* Phase Timeline */}
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between relative">
-              {/* Connecting Line */}
-              <div className="absolute top-6 left-0 right-0 h-0.5 bg-slate-300"></div>
-              <div className="absolute top-6 left-0 w-1/2 h-0.5 bg-gradient-to-r from-emerald-500 to-blue-500"></div>
-
-              {/* Phase 1 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-emerald-500">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Deal Profile</span>
-              </div>
-
-              {/* Phase 2 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-emerald-500">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Leverage Assessment</span>
-              </div>
-
-              {/* Phase 3 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-blue-500">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Gap Narrowing</span>
-              </div>
-
-              {/* Phase 4 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-slate-300">
-                  4
-                </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Points of Contention</span>
-              </div>
-
-              {/* Phase 5 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-slate-300">
-                  5
-                </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Deal Drivers</span>
-              </div>
-
-              {/* Phase 6 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white bg-slate-300">
-                  6
-                </div>
-                <span className="mt-2 text-xs font-medium text-slate-600">Closure</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Learn More CTA */}
-          <div className="text-center mt-12">
-            <Link
-              href="/phases"
-              className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors"
-            >
-              Learn about each phase
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
         </div>
-      </section>
+      </main>
 
       {/* ================================================================== */}
-      {/* SECTION: THE CONTRACT STUDIO (Consolidated with Gamification) */}
+      {/* SECTION 12: FOOTER */}
       {/* ================================================================== */}
-
-      <section className="py-20 bg-white border-t border-slate-200">
-        <div className="container mx-auto px-6">
-          {/* Section Header */}
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-slate-800 mb-3">
-              The Contract Studio
-            </h2>
-            <p className="text-xl text-emerald-600 font-medium mb-4">
-              Where AI-Powered Negotiation meets Gamification
-            </p>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              A powerful three-panel workspace where parties negotiate clause-by-clause,
-              guided by CLARENCE's real-time leverage tracking and AI-powered insights.
-            </p>
-          </div>
-
-          {/* Screenshot Preview */}
-          <ContractStudioPreview />
-
-          {/* Gamification Features */}
-          <div className="mt-16 max-w-4xl mx-auto">
-            <h3 className="text-2xl font-bold text-slate-800 text-center mb-8">
-              Make Negotiation Fun!
-            </h3>
-
-            <div className="grid md:grid-cols-3 gap-8">
-              {/* Real-Time Progress */}
-              <div className="text-center">
-                <div className="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-7 h-7 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Real-Time Progress</h4>
-                <p className="text-sm text-slate-600">
-                  Watch your negotiation advance with live updates as positions align and agreements form.
-                </p>
-              </div>
-
-              {/* Alignment Scores */}
-              <div className="text-center">
-                <div className="w-14 h-14 bg-indigo-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-7 h-7 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Alignment Scores</h4>
-                <p className="text-sm text-slate-600">
-                  Clear metrics show exactly where you stand, making complex negotiations easy to understand.
-                </p>
-              </div>
-
-              {/* Achievement Milestones */}
-              <div className="text-center">
-                <div className="w-14 h-14 bg-rose-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-7 h-7 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                  </svg>
-                </div>
-                <h4 className="font-semibold text-slate-800 mb-2">Achievement Milestones</h4>
-                <p className="text-sm text-slate-600">
-                  Celebrate progress with milestone markers as you move through each phase toward agreement.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* SECTION 8: CTA SECTION */}
-      {/* ================================================================== */}
-      <section className="py-20 bg-gradient-to-br from-slate-800 to-slate-900">
-        <div className="container mx-auto px-6 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Ready to Transform Your Negotiations?
-          </h2>
-          <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-            Join forward-thinking organizations using CLARENCE to achieve better contract outcomes.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/auth/signup"
-              className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-all shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:shadow-emerald-500/30"
-            >
-              Get Started Free
-            </Link>
-            <Link
-              href="/chat"
-              className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg border border-slate-600 transition-all"
-            >
-              Try the Demo
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ================================================================== */}
-      {/* SECTION 9: FOOTER */}
-      {/* ================================================================== */}
-      <footer className="bg-slate-900 text-slate-400 py-12">
+      <footer className="bg-slate-900 text-slate-400 py-8">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
             {/* Brand */}
-            <div className="flex items-center gap-3 mb-6 md:mb-0">
+            <div className="flex items-center gap-3 mb-4 md:mb-0">
               <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">C</span>
               </div>
-              <div>
-                <span className="text-white font-medium">CLARENCE</span>
-                <span className="text-slate-500 text-sm ml-2">The Honest Broker</span>
-              </div>
+              <span className="text-white font-medium">CLARENCE</span>
             </div>
 
             {/* Links */}
             <div className="flex gap-8 text-sm">
-              <Link href="/how-it-works" className="hover:text-white transition-colors">
-                How It Works
-              </Link>
-              <Link href="/phases" className="hover:text-white transition-colors">
-                The 6 Phases
-              </Link>
-              <Link href="/privacy" className="hover:text-white transition-colors">
-                Privacy
-              </Link>
-              <Link href="/terms" className="hover:text-white transition-colors">
-                Terms
-              </Link>
+              <Link href="/" className="hover:text-white transition-colors">Home</Link>
+              <Link href="/how-it-works" className="hover:text-white transition-colors">How It Works</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
             </div>
           </div>
 
-          <div className="border-t border-slate-800 mt-8 pt-8 text-center text-sm">
+          <div className="border-t border-slate-800 mt-6 pt-6 text-center text-sm">
             <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
           </div>
         </div>
       </footer>
-    </main>
+    </div>
+  )
+}
+
+// ============================================================================
+// SECTION 13: DEFAULT EXPORT WITH SUSPENSE
+// ============================================================================
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginLoading />}>
+      <LoginSignupContent />
+    </Suspense>
   )
 }
