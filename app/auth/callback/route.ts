@@ -2,10 +2,10 @@
 // AUTH CALLBACK ROUTE HANDLER
 // Location: app/auth/callback/route.ts
 // Purpose: Handle Supabase email confirmation and OAuth callbacks
-// Updated: Uses service role client for database writes
+// Updated: Uses @supabase/ssr for Next.js 14+ compatibility
 // ============================================================================
 
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { createServiceRoleClient } from '@/lib/supabase'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
@@ -36,7 +36,37 @@ interface CompanyRecord {
 }
 
 // ============================================================================
-// SECTION 2: HELPER - CREATE USER AND COMPANY RECORDS
+// SECTION 2: CREATE SUPABASE CLIENT FOR ROUTE HANDLER
+// ============================================================================
+
+async function createSupabaseClient() {
+    const cookieStore = await cookies()
+
+    return createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            cookies: {
+                getAll() {
+                    return cookieStore.getAll()
+                },
+                setAll(cookiesToSet) {
+                    try {
+                        cookiesToSet.forEach(({ name, value, options }) => {
+                            cookieStore.set(name, value, options)
+                        })
+                    } catch {
+                        // The `setAll` method was called from a Server Component.
+                        // This can be ignored if you have middleware refreshing sessions.
+                    }
+                },
+            },
+        }
+    )
+}
+
+// ============================================================================
+// SECTION 3: HELPER - CREATE USER AND COMPANY RECORDS
 // Uses service role client for full database access
 // ============================================================================
 
@@ -168,7 +198,7 @@ async function ensureUserAndCompanyRecords(
 }
 
 // ============================================================================
-// SECTION 3: GET HANDLER
+// SECTION 4: GET HANDLER
 // ============================================================================
 
 export async function GET(request: Request) {
@@ -190,18 +220,18 @@ export async function GET(request: Request) {
         )
     }
 
-    const cookieStore = cookies()
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore })
+    // Create Supabase client for auth operations
+    const supabase = await createSupabaseClient()
 
     // ========================================================================
-    // SECTION 4: HANDLE EMAIL CONFIRMATION (token_hash)
+    // SECTION 5: HANDLE EMAIL CONFIRMATION (token_hash)
     // ========================================================================
 
     if (token_hash && type) {
         try {
             console.log('Verifying OTP with token_hash:', token_hash, 'type:', type)
 
-            const { data, error: verifyError } = await supabaseAuth.auth.verifyOtp({
+            const { data, error: verifyError } = await supabase.auth.verifyOtp({
                 token_hash,
                 type: type as 'signup' | 'email' | 'recovery' | 'invite',
             })
@@ -241,12 +271,12 @@ export async function GET(request: Request) {
     }
 
     // ========================================================================
-    // SECTION 5: HANDLE CODE EXCHANGE (OAuth/Magic Link)
+    // SECTION 6: HANDLE CODE EXCHANGE (OAuth/Magic Link)
     // ========================================================================
 
     if (code) {
         try {
-            const { data, error: exchangeError } = await supabaseAuth.auth.exchangeCodeForSession(code)
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
             if (exchangeError) {
                 console.error('Code exchange error:', exchangeError)
@@ -291,7 +321,7 @@ export async function GET(request: Request) {
     }
 
     // ========================================================================
-    // SECTION 6: NO VALID PARAMS - REDIRECT TO LOGIN
+    // SECTION 7: NO VALID PARAMS - REDIRECT TO LOGIN
     // ========================================================================
 
     console.log('No code or token_hash provided, redirecting to login')
