@@ -11,7 +11,7 @@ import Link from 'next/link'
 type MediationType = 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
 type ContractType = 'nda' | 'saas' | 'bpo' | 'msa' | 'employment' | 'custom' | null
 type TemplateSource = 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
-type AssessmentStep = 'welcome' | 'mediation_type' | 'contract_type' | 'template_source' | 'template_selection' | 'summary' | 'creating'
+type AssessmentStep = 'welcome' | 'mediation_type' | 'contract_type' | 'template_source' | 'template_selection' | 'upload_processing' | 'summary' | 'creating'
 
 interface UserInfo {
     firstName: string
@@ -20,6 +20,7 @@ interface UserInfo {
     company: string
     role: string
     userId: string
+    companyId: string | null
 }
 
 interface AssessmentState {
@@ -31,6 +32,9 @@ interface AssessmentState {
     contractDescription: string
     selectedTemplateId: string | null
     selectedTemplateName: string | null
+    uploadedContractId: string | null
+    uploadedContractStatus: 'processing' | 'ready' | 'failed' | null
+    uploadedFileName: string | null
 }
 
 interface ChatMessage {
@@ -58,6 +62,16 @@ interface Template {
     description: string
     isDefault: boolean
     clauseCount: number
+}
+
+interface UploadedContract {
+    contractId: string
+    contractName: string
+    fileName: string
+    status: string
+    clauseCount: number | null
+    detectedContractType: string | null
+    createdAt: string
 }
 
 // ============================================================================
@@ -166,6 +180,9 @@ const TEMPLATE_SOURCE_OPTIONS: AssessmentOption[] = [
     }
 ]
 
+const POLLING_INTERVAL = 5000 // 5 seconds
+const MAX_POLLING_ATTEMPTS = 60 // 5 minutes max
+
 // ============================================================================
 // SECTION 3: CLARENCE MESSAGES
 // ============================================================================
@@ -229,6 +246,24 @@ You'll be able to modify any clause, add new ones, or remove those you don't nee
 • Build your contract from scratch
 • Upload an existing document`,
 
+    upload_started: `**Uploading your contract...**
+
+I'm extracting the text from your document. This will just take a moment.`,
+
+    upload_processing: `**Processing your contract...**
+
+I'm analyzing the document structure and identifying clauses. This typically takes 1-2 minutes for larger contracts.
+
+You can wait here, or I'll let you know when it's ready.`,
+
+    upload_ready: `**Your contract is ready!**
+
+I've successfully parsed your document and identified the clauses. Click on it below to proceed to Contract Prep where you can review and configure the clauses.`,
+
+    upload_failed: `**There was an issue processing your contract.**
+
+Please try uploading again or choose a different source option.`,
+
     summary: `**Great! Here's a summary of your contract setup:**
 
 I'll create your contract with these settings. Once you confirm, you'll enter the Contract Studio where you can review and customize everything before inviting providers.`,
@@ -239,15 +274,75 @@ Setting up your contract workspace. This will just take a moment.`
 }
 
 // ============================================================================
-// SECTION 4: MAIN COMPONENT
+// SECTION 4: TEXT EXTRACTION UTILITIES
+// ============================================================================
+
+// Dynamic import for PDF.js
+const loadPdfJs = async () => {
+    const pdfjsLib = await import('pdfjs-dist')
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+    return pdfjsLib
+}
+
+// Extract text from PDF
+const extractTextFromPdf = async (file: File): Promise<string> => {
+    const pdfjsLib = await loadPdfJs()
+    const arrayBuffer = await file.arrayBuffer()
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+    let fullText = ''
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const textContent = await page.getTextContent()
+        const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ')
+        fullText += pageText + '\n\n'
+    }
+
+    return fullText.trim()
+}
+
+// Extract text from DOCX using Mammoth
+const extractTextFromDocx = async (file: File): Promise<string> => {
+    const mammoth = await import('mammoth')
+    const arrayBuffer = await file.arrayBuffer()
+    const result = await mammoth.extractRawText({ arrayBuffer })
+    return result.value.trim()
+}
+
+// Main extraction function
+const extractTextFromFile = async (file: File): Promise<string> => {
+    const fileType = file.type.toLowerCase()
+    const fileName = file.name.toLowerCase()
+
+    if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+        return extractTextFromPdf(file)
+    } else if (
+        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        fileName.endsWith('.docx')
+    ) {
+        return extractTextFromDocx(file)
+    } else if (fileType === 'text/plain' || fileName.endsWith('.txt')) {
+        return file.text()
+    } else {
+        throw new Error(`Unsupported file type: ${fileType}`)
+    }
+}
+
+// ============================================================================
+// SECTION 5: MAIN COMPONENT
 // ============================================================================
 
 export default function ContractCreationAssessment() {
     const router = useRouter()
     const chatEndRef = useRef<HTMLDivElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const pollingRef = useRef<NodeJS.Timeout | null>(null)
+    const pollingCountRef = useRef<number>(0)
 
     // ========================================================================
-    // SECTION 4A: STATE
+    // SECTION 5A: STATE
     // ========================================================================
 
     const [assessment, setAssessment] = useState<AssessmentState>({
@@ -258,7 +353,10 @@ export default function ContractCreationAssessment() {
         contractName: '',
         contractDescription: '',
         selectedTemplateId: null,
-        selectedTemplateName: null
+        selectedTemplateName: null,
+        uploadedContractId: null,
+        uploadedContractStatus: null,
+        uploadedFileName: null
     })
 
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
@@ -266,10 +364,12 @@ export default function ContractCreationAssessment() {
     const [templates, setTemplates] = useState<Template[]>([])
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
     const [isCreating, setIsCreating] = useState(false)
+    const [isUploading, setIsUploading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState<string>('')
     const [error, setError] = useState<string | null>(null)
 
     // ========================================================================
-    // SECTION 4B: LOAD USER INFO
+    // SECTION 5B: LOAD USER INFO
     // ========================================================================
 
     const loadUserInfo = useCallback(() => {
@@ -287,7 +387,8 @@ export default function ContractCreationAssessment() {
                 email: parsed.userInfo?.email || '',
                 company: parsed.userInfo?.company || '',
                 role: parsed.userInfo?.role || 'customer',
-                userId: parsed.userInfo?.userId || ''
+                userId: parsed.userInfo?.userId || '',
+                companyId: parsed.userInfo?.companyId || null // May be null for now
             } as UserInfo
         } catch {
             router.push('/auth/login')
@@ -296,7 +397,7 @@ export default function ContractCreationAssessment() {
     }, [router])
 
     // ========================================================================
-    // SECTION 4C: EFFECTS
+    // SECTION 5C: EFFECTS
     // ========================================================================
 
     // Load user info on mount
@@ -339,8 +440,17 @@ export default function ContractCreationAssessment() {
         }
     }, [assessment.step])
 
+    // Cleanup polling on unmount
+    useEffect(() => {
+        return () => {
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current)
+            }
+        }
+    }, [])
+
     // ========================================================================
-    // SECTION 4D: HELPER FUNCTIONS
+    // SECTION 5D: HELPER FUNCTIONS
     // ========================================================================
 
     const addClarenceMessage = (content: string, options?: AssessmentOption[]) => {
@@ -427,7 +537,177 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 4E: SELECTION HANDLERS
+    // SECTION 5E: UPLOAD FUNCTIONS
+    // ========================================================================
+
+    const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        // Validate file type
+        const validTypes = [
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ]
+        const validExtensions = ['.pdf', '.docx', '.txt']
+        const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+
+        if (!validTypes.includes(file.type) && !hasValidExtension) {
+            setError('Please upload a PDF, DOCX, or TXT file')
+            return
+        }
+
+        // Validate file size (10MB max)
+        if (file.size > 10 * 1024 * 1024) {
+            setError('File size must be less than 10MB')
+            return
+        }
+
+        await processUpload(file)
+    }
+
+    const processUpload = async (file: File) => {
+        if (!userInfo) {
+            setError('User not authenticated')
+            return
+        }
+
+        setIsUploading(true)
+        setError(null)
+        setUploadProgress('Extracting text from document...')
+        addUserMessage(`📤 Uploading: ${file.name}`)
+        addClarenceMessage(CLARENCE_MESSAGES.upload_started)
+
+        try {
+            // Step 1: Extract text client-side
+            const documentText = await extractTextFromFile(file)
+
+            if (documentText.length < 100) {
+                throw new Error('Document appears to be empty or too short')
+            }
+
+            setUploadProgress('Sending to CLARENCE for analysis...')
+
+            // Step 2: Call the parse workflow
+            const response = await fetch(`${API_BASE}/parse-contract-document`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userInfo.userId,
+                    company_id: userInfo.companyId, // May be null
+                    session_id: null, // Will create session later
+                    file_name: file.name,
+                    file_type: file.type || 'application/octet-stream',
+                    file_size: file.size,
+                    document_text: documentText,
+                    template_name: file.name.replace(/\.[^/.]+$/, '') // Remove extension
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || 'Failed to upload contract')
+            }
+
+            const result = await response.json()
+
+            if (result.success && result.contractId) {
+                // Update state with the contract ID
+                setAssessment(prev => ({
+                    ...prev,
+                    step: 'upload_processing',
+                    uploadedContractId: result.contractId,
+                    uploadedContractStatus: 'processing',
+                    uploadedFileName: file.name
+                }))
+
+                addClarenceMessage(CLARENCE_MESSAGES.upload_processing)
+
+                // Start polling for completion
+                startPolling(result.contractId)
+            } else {
+                throw new Error(result.error || 'No contract ID returned')
+            }
+
+        } catch (err) {
+            console.error('Upload error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to upload contract')
+            addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
+        } finally {
+            setIsUploading(false)
+            setUploadProgress('')
+        }
+    }
+
+    const startPolling = (contractId: string) => {
+        pollingCountRef.current = 0
+
+        // Clear any existing polling
+        if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+        }
+
+        pollingRef.current = setInterval(async () => {
+            pollingCountRef.current += 1
+
+            // Check if we've exceeded max attempts
+            if (pollingCountRef.current >= MAX_POLLING_ATTEMPTS) {
+                clearInterval(pollingRef.current!)
+                pollingRef.current = null
+                setError('Processing is taking longer than expected. Please refresh the page to check status.')
+                return
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/get-uploaded-contract?contract_id=${contractId}`)
+                if (response.ok) {
+                    const contract = await response.json()
+
+                    if (contract.status === 'ready') {
+                        // Stop polling
+                        clearInterval(pollingRef.current!)
+                        pollingRef.current = null
+
+                        // Update state
+                        setAssessment(prev => ({
+                            ...prev,
+                            uploadedContractStatus: 'ready'
+                        }))
+
+                        addClarenceMessage(CLARENCE_MESSAGES.upload_ready)
+                    } else if (contract.status === 'failed') {
+                        // Stop polling
+                        clearInterval(pollingRef.current!)
+                        pollingRef.current = null
+
+                        // Update state
+                        setAssessment(prev => ({
+                            ...prev,
+                            uploadedContractStatus: 'failed'
+                        }))
+
+                        setError(contract.processingError || 'Contract processing failed')
+                        addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
+                    }
+                    // If still 'processing', continue polling
+                }
+            } catch (err) {
+                console.error('Polling error:', err)
+                // Don't stop polling on network errors, just log
+            }
+        }, POLLING_INTERVAL)
+    }
+
+    const handleUploadedContractClick = () => {
+        if (assessment.uploadedContractStatus === 'ready' && assessment.uploadedContractId) {
+            // Navigate to contract-prep with the contract_id
+            router.push(`/auth/contract-prep?contract_id=${assessment.uploadedContractId}`)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 5F: SELECTION HANDLERS
     // ========================================================================
 
     const handleMediationSelect = (option: AssessmentOption) => {
@@ -478,6 +758,20 @@ export default function ContractCreationAssessment() {
 
         addUserMessage(`${option.icon} ${option.label}`)
 
+        // If they want to upload, show the upload UI
+        if (templateSource === 'uploaded') {
+            setAssessment(prev => ({
+                ...prev,
+                templateSource,
+                step: 'upload_processing' // Use this step for upload UI
+            }))
+            // Trigger file input
+            setTimeout(() => {
+                fileInputRef.current?.click()
+            }, 100)
+            return
+        }
+
         // If they want to use or modify a template, show template selection
         if (templateSource === 'existing_template' || templateSource === 'modified_template') {
             setAssessment(prev => ({
@@ -487,7 +781,7 @@ export default function ContractCreationAssessment() {
             }))
             // Templates will be loaded by the useEffect
         } else {
-            // For upload or from_scratch, go directly to summary
+            // For from_scratch, go directly to summary
             setAssessment(prev => ({
                 ...prev,
                 templateSource,
@@ -530,7 +824,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 4F: CONTRACT CREATION
+    // SECTION 5G: CONTRACT CREATION
     // ========================================================================
 
     const createContract = async () => {
@@ -558,6 +852,7 @@ export default function ContractCreationAssessment() {
                     contract_type: assessment.contractType,
                     template_source: assessment.templateSource,
                     source_template_id: assessment.selectedTemplateId,
+                    uploaded_contract_id: assessment.uploadedContractId, // Link uploaded contract if any
                     assessment_completed: true
                 })
             })
@@ -598,7 +893,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 5: RENDER - PANEL 1 (PROGRESS)
+    // SECTION 6: RENDER - PANEL 1 (PROGRESS)
     // ========================================================================
 
     const renderProgressPanel = () => {
@@ -607,6 +902,7 @@ export default function ContractCreationAssessment() {
             { id: 'contract_type', label: 'Contract Type', icon: '📋' },
             { id: 'template_source', label: 'Template Source', icon: '📁' },
             { id: 'template_selection', label: 'Select Template', icon: '✓', conditional: true },
+            { id: 'upload_processing', label: 'Upload Contract', icon: '📤', conditional: true },
             { id: 'summary', label: 'Review & Create', icon: '✅' }
         ]
 
@@ -616,11 +912,14 @@ export default function ContractCreationAssessment() {
                 return assessment.templateSource === 'existing_template' ||
                     assessment.templateSource === 'modified_template'
             }
+            if (step.id === 'upload_processing') {
+                return assessment.templateSource === 'uploaded'
+            }
             return true
         })
 
         const getCurrentStepIndex = () => {
-            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'summary', 'creating']
+            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
             return stepOrder.indexOf(assessment.step)
         }
 
@@ -641,7 +940,7 @@ export default function ContractCreationAssessment() {
                 <div className="flex-1 p-4">
                     <div className="space-y-2">
                         {visibleSteps.map((step) => {
-                            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'summary', 'creating']
+                            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
                             const stepIndex = stepOrder.indexOf(step.id)
                             const isComplete = currentIndex > stepIndex
                             const isCurrent = assessment.step === step.id
@@ -676,6 +975,7 @@ export default function ContractCreationAssessment() {
                                                 {step.id === 'contract_type' && getContractTypeLabel(assessment.contractType)}
                                                 {step.id === 'template_source' && getTemplateSourceLabel(assessment.templateSource)}
                                                 {step.id === 'template_selection' && assessment.selectedTemplateName}
+                                                {step.id === 'upload_processing' && assessment.uploadedFileName}
                                             </p>
                                         )}
                                     </div>
@@ -696,7 +996,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 6: RENDER - PANEL 2 (MAIN CONTENT)
+    // SECTION 7: RENDER - PANEL 2 (MAIN CONTENT)
     // ========================================================================
 
     const renderMainPanel = () => {
@@ -710,10 +1010,21 @@ export default function ContractCreationAssessment() {
                             ? 'Review your selections and create your contract'
                             : assessment.step === 'template_selection'
                                 ? 'Choose a template to start with'
-                                : 'Answer a few questions to set up your contract'
+                                : assessment.step === 'upload_processing'
+                                    ? 'Upload your contract document'
+                                    : 'Answer a few questions to set up your contract'
                         }
                     </p>
                 </div>
+
+                {/* Hidden file input */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                />
 
                 {/* Content Area */}
                 <div className="flex-1 overflow-auto p-6">
@@ -721,7 +1032,9 @@ export default function ContractCreationAssessment() {
                         ? renderSummary()
                         : assessment.step === 'template_selection'
                             ? renderTemplateSelection()
-                            : renderCurrentOptions()
+                            : assessment.step === 'upload_processing'
+                                ? renderUploadProcessing()
+                                : renderCurrentOptions()
                     }
                 </div>
             </div>
@@ -791,7 +1104,181 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 6A: RENDER - TEMPLATE SELECTION
+    // SECTION 7A: RENDER - UPLOAD PROCESSING
+    // ========================================================================
+
+    const renderUploadProcessing = () => {
+        // If no upload started yet, show upload UI
+        if (!assessment.uploadedContractId) {
+            return (
+                <div className="max-w-2xl mx-auto">
+                    <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                    >
+                        {isUploading ? (
+                            <>
+                                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                </div>
+                                <h3 className="text-lg font-medium text-slate-800 mb-2">
+                                    {uploadProgress || 'Processing...'}
+                                </h3>
+                                <p className="text-sm text-slate-500">
+                                    Please wait while we process your document
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-3xl">📤</span>
+                                </div>
+                                <h3 className="text-lg font-medium text-slate-800 mb-2">
+                                    Upload Your Contract
+                                </h3>
+                                <p className="text-sm text-slate-500 mb-4">
+                                    Drag and drop or click to upload a PDF, DOCX, or TXT file
+                                </p>
+                                <span className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium inline-block">
+                                    Choose File
+                                </span>
+                                <p className="text-xs text-slate-400 mt-4">
+                                    Maximum file size: 10MB
+                                </p>
+                            </>
+                        )}
+                    </div>
+
+                    {error && (
+                        <div className="mt-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+                            {error}
+                        </div>
+                    )}
+
+                    {/* Back button */}
+                    <div className="mt-6 pt-4 border-t border-slate-200">
+                        <button
+                            onClick={() => {
+                                setAssessment(prev => ({ ...prev, step: 'template_source', templateSource: null }))
+                            }}
+                            className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                        >
+                            ← Back to previous step
+                        </button>
+                    </div>
+                </div>
+            )
+        }
+
+        // Upload in progress or complete - show status
+        return (
+            <div className="max-w-2xl mx-auto">
+                <h3 className="text-lg font-medium text-slate-800 mb-6">Your Uploaded Contract</h3>
+
+                <div
+                    onClick={handleUploadedContractClick}
+                    className={`p-6 rounded-xl border-2 transition-all ${assessment.uploadedContractStatus === 'ready'
+                        ? 'border-green-300 bg-green-50 cursor-pointer hover:border-green-400'
+                        : assessment.uploadedContractStatus === 'failed'
+                            ? 'border-red-300 bg-red-50'
+                            : 'border-blue-300 bg-blue-50'
+                        }`}
+                >
+                    <div className="flex items-center gap-4">
+                        <div className={`w-14 h-14 rounded-lg flex items-center justify-center ${assessment.uploadedContractStatus === 'ready'
+                            ? 'bg-green-500'
+                            : assessment.uploadedContractStatus === 'failed'
+                                ? 'bg-red-500'
+                                : 'bg-blue-500'
+                            }`}>
+                            {assessment.uploadedContractStatus === 'ready' ? (
+                                <span className="text-white text-2xl">✓</span>
+                            ) : assessment.uploadedContractStatus === 'failed' ? (
+                                <span className="text-white text-2xl">✕</span>
+                            ) : (
+                                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            )}
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-semibold text-slate-800">
+                                {assessment.uploadedFileName}
+                            </h4>
+                            <p className={`text-sm ${assessment.uploadedContractStatus === 'ready'
+                                ? 'text-green-700'
+                                : assessment.uploadedContractStatus === 'failed'
+                                    ? 'text-red-700'
+                                    : 'text-blue-700'
+                                }`}>
+                                {assessment.uploadedContractStatus === 'ready'
+                                    ? 'Ready - Click to proceed to Contract Prep'
+                                    : assessment.uploadedContractStatus === 'failed'
+                                        ? 'Processing failed'
+                                        : 'Processing... This may take 1-2 minutes'
+                                }
+                            </p>
+                        </div>
+                        {assessment.uploadedContractStatus === 'ready' && (
+                            <div className="text-green-600 text-xl">
+                                →
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="mt-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+                        {error}
+                    </div>
+                )}
+
+                {assessment.uploadedContractStatus === 'failed' && (
+                    <div className="mt-4">
+                        <button
+                            onClick={() => {
+                                setAssessment(prev => ({
+                                    ...prev,
+                                    uploadedContractId: null,
+                                    uploadedContractStatus: null,
+                                    uploadedFileName: null
+                                }))
+                                setError(null)
+                            }}
+                            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                        >
+                            Try Again
+                        </button>
+                    </div>
+                )}
+
+                {/* Back button */}
+                <div className="mt-6 pt-4 border-t border-slate-200">
+                    <button
+                        onClick={() => {
+                            // Stop polling if active
+                            if (pollingRef.current) {
+                                clearInterval(pollingRef.current)
+                                pollingRef.current = null
+                            }
+                            setAssessment(prev => ({
+                                ...prev,
+                                step: 'template_source',
+                                templateSource: null,
+                                uploadedContractId: null,
+                                uploadedContractStatus: null,
+                                uploadedFileName: null
+                            }))
+                        }}
+                        className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                    >
+                        ← Back to previous step
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 7B: RENDER - TEMPLATE SELECTION
     // ========================================================================
 
     const renderTemplateSelection = () => {
@@ -911,13 +1398,11 @@ export default function ContractCreationAssessment() {
                                 setAssessment(prev => ({
                                     ...prev,
                                     templateSource: 'uploaded',
-                                    selectedTemplateId: null,
-                                    selectedTemplateName: null,
-                                    step: 'summary'
+                                    step: 'upload_processing'
                                 }))
                                 setTimeout(() => {
-                                    addClarenceMessage(CLARENCE_MESSAGES.summary)
-                                }, 500)
+                                    fileInputRef.current?.click()
+                                }, 100)
                             }}
                             className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
                         >
@@ -1028,7 +1513,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 6B: RENDER - SUMMARY
+    // SECTION 7C: RENDER - SUMMARY
     // ========================================================================
 
     const renderSummary = () => {
@@ -1079,6 +1564,18 @@ export default function ContractCreationAssessment() {
                             </div>
                         </div>
                     )}
+
+                    {assessment.uploadedFileName && (
+                        <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">📤</span>
+                                <div>
+                                    <p className="text-sm text-green-600">Uploaded Contract</p>
+                                    <p className="font-medium text-green-800">{assessment.uploadedFileName}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Contract Name Input */}
@@ -1107,7 +1604,9 @@ export default function ContractCreationAssessment() {
                     <button
                         onClick={() => {
                             // Go back to appropriate step
-                            if (assessment.selectedTemplateId) {
+                            if (assessment.uploadedContractId) {
+                                setAssessment(prev => ({ ...prev, step: 'upload_processing' }))
+                            } else if (assessment.selectedTemplateId) {
                                 setAssessment(prev => ({ ...prev, step: 'template_selection' }))
                             } else {
                                 setAssessment(prev => ({ ...prev, step: 'template_source' }))
@@ -1140,7 +1639,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 7: RENDER - PANEL 3 (CLARENCE CHAT)
+    // SECTION 8: RENDER - PANEL 3 (CLARENCE CHAT)
     // ========================================================================
 
     const renderChatPanel = () => {
@@ -1197,7 +1696,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 8: MAIN RENDER
+    // SECTION 9: MAIN RENDER
     // ========================================================================
 
     return (
