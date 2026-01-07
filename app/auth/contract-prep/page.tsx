@@ -445,7 +445,9 @@ function ContractPrepContent() {
         }
 
         // If we have a contract_id, we're either loading or processing
-        // Keep isLoading true until we have actual data
+        // Clear isUploading since the upload phase is complete
+        setIsUploading(false)
+        setUploadProgress(null)
         setIsLoading(true)
 
         let pollCount = 0
@@ -572,6 +574,14 @@ function ContractPrepContent() {
             }
 
             setUploadProgress('Uploading for analysis...')
+
+            // Debug: Log what we're sending
+            console.log('Upload payload:', {
+                user_id: userInfo.userId,
+                company_id: userInfo.companyId,
+                session_id: sessionId || null,
+                file_name: file.name
+            })
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
