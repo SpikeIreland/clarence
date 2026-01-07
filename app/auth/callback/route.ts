@@ -2,10 +2,11 @@
 // AUTH CALLBACK ROUTE HANDLER
 // Location: app/auth/callback/route.ts
 // Purpose: Handle Supabase email confirmation and OAuth callbacks
-// Updated: Creates user and company records in public schema
+// Updated: Uses service role client for database writes
 // ============================================================================
 
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { createServiceRoleClient } from '@/lib/supabase'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
@@ -36,10 +37,10 @@ interface CompanyRecord {
 
 // ============================================================================
 // SECTION 2: HELPER - CREATE USER AND COMPANY RECORDS
+// Uses service role client for full database access
 // ============================================================================
 
 async function ensureUserAndCompanyRecords(
-    supabase: ReturnType<typeof createRouteHandlerClient>,
     user: {
         id: string
         email?: string
@@ -48,10 +49,13 @@ async function ensureUserAndCompanyRecords(
 ): Promise<{ userId: string; companyId: string | null }> {
     const metadata = user.user_metadata || {}
 
+    // Use service role client for database operations
+    const supabase = createServiceRoleClient()
+
     console.log('Ensuring user and company records for:', user.id, user.email)
+    console.log('Metadata received:', JSON.stringify(metadata))
 
     // Step 1: Check if user already exists in public.users
-    // Using 'as any' to bypass TypeScript strict checking on untyped Supabase client
     const { data: existingUser, error: checkError } = await (supabase
         .from('users') as any)
         .select('user_id, company_id')
@@ -92,7 +96,8 @@ async function ensureUserAndCompanyRecords(
             companyId = (existingCompany as CompanyRecord).company_id
             console.log('Found existing company:', companyId)
         } else {
-            // Create new company (without created_by to avoid circular dependency)
+            // Create new company
+            console.log('Creating new company...')
             const { data: newCompany, error: companyError } = await (supabase
                 .from('companies') as any)
                 .insert({
@@ -114,6 +119,7 @@ async function ensureUserAndCompanyRecords(
     }
 
     // Step 3: Create user record with correct schema
+    console.log('Inserting user with company_id:', companyId)
     const { error: userError } = await (supabase
         .from('users') as any)
         .insert({
@@ -146,12 +152,16 @@ async function ensureUserAndCompanyRecords(
     // Step 4: Update company with created_by now that user exists
     if (companyId && !metadata.company_id) {
         // This was a new company we created - update created_by
-        await (supabase
+        const { error: updateError } = await (supabase
             .from('companies') as any)
             .update({ created_by: user.id })
             .eq('company_id', companyId)
 
-        console.log('Updated company created_by:', companyId)
+        if (updateError) {
+            console.error('Error updating company created_by:', updateError)
+        } else {
+            console.log('Updated company created_by:', companyId)
+        }
     }
 
     return { userId: user.id, companyId }
@@ -181,7 +191,7 @@ export async function GET(request: Request) {
     }
 
     const cookieStore = cookies()
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore })
 
     // ========================================================================
     // SECTION 4: HANDLE EMAIL CONFIRMATION (token_hash)
@@ -191,7 +201,7 @@ export async function GET(request: Request) {
         try {
             console.log('Verifying OTP with token_hash:', token_hash, 'type:', type)
 
-            const { data, error: verifyError } = await supabase.auth.verifyOtp({
+            const { data, error: verifyError } = await supabaseAuth.auth.verifyOtp({
                 token_hash,
                 type: type as 'signup' | 'email' | 'recovery' | 'invite',
             })
@@ -210,12 +220,11 @@ export async function GET(request: Request) {
             // ================================================================
             if (data.user) {
                 try {
-                    const { userId, companyId } = await ensureUserAndCompanyRecords(supabase, data.user)
+                    const { userId, companyId } = await ensureUserAndCompanyRecords(data.user)
                     console.log('User/company records ensured:', { userId, companyId })
                 } catch (recordError) {
                     console.error('Error creating user records:', recordError)
                     // Don't fail the entire flow - user can still login
-                    // Records will be created on next login attempt
                 }
             }
 
@@ -237,7 +246,7 @@ export async function GET(request: Request) {
 
     if (code) {
         try {
-            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+            const { data, error: exchangeError } = await supabaseAuth.auth.exchangeCodeForSession(code)
 
             if (exchangeError) {
                 console.error('Code exchange error:', exchangeError)
@@ -251,7 +260,7 @@ export async function GET(request: Request) {
                 // CREATE USER AND COMPANY RECORDS IF THEY DON'T EXIST
                 // ============================================================
                 try {
-                    const { userId, companyId } = await ensureUserAndCompanyRecords(supabase, data.user)
+                    const { userId, companyId } = await ensureUserAndCompanyRecords(data.user)
                     console.log('User/company records ensured:', { userId, companyId })
                 } catch (recordError) {
                     console.error('Error creating user records:', recordError)
