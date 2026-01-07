@@ -298,36 +298,45 @@ function ContractPrepContent() {
             // Handle both { contract: {...} } and direct {...} response structures
             const contractData = data.contract || data
 
-            if (contractData && contractData.contract_id) {
-                console.log('[loadContract] Found contract data, status:', contractData.status)
+            // Check for contract_id (snake_case) OR contractId (camelCase)
+            const hasContractId = contractData && (contractData.contract_id || contractData.contractId)
+
+            if (hasContractId) {
+                // Helper to get field with either case
+                const get = (snake: string, camel: string) => contractData[snake] ?? contractData[camel]
+
+                const status = get('status', 'status')
+                console.log('[loadContract] Found contract data, status:', status)
+
                 setContract({
-                    contractId: contractData.contract_id,
-                    companyId: contractData.company_id,
-                    uploadedByUserId: contractData.uploaded_by_user_id,
-                    linkedSessionId: contractData.linked_session_id,
-                    contractName: contractData.contract_name,
-                    description: contractData.description,
-                    fileName: contractData.file_name,
-                    fileType: contractData.file_type,
-                    fileSize: contractData.file_size,
-                    status: contractData.status,
-                    processingError: contractData.processing_error,
-                    clauseCount: contractData.clause_count,
-                    detectedStyle: contractData.detected_style,
-                    detectedJurisdiction: contractData.detected_jurisdiction,
-                    detectedContractType: contractData.detected_contract_type,
-                    parsingNotes: contractData.parsing_notes,
-                    usageCount: contractData.usage_count || 0,
-                    lastUsedAt: contractData.last_used_at,
-                    createdAt: contractData.created_at,
-                    updatedAt: contractData.updated_at,
-                    processedAt: contractData.processed_at
+                    contractId: get('contract_id', 'contractId'),
+                    companyId: get('company_id', 'companyId'),
+                    uploadedByUserId: get('uploaded_by_user_id', 'uploadedByUserId'),
+                    linkedSessionId: get('linked_session_id', 'linkedSessionId'),
+                    contractName: get('contract_name', 'contractName'),
+                    description: get('description', 'description'),
+                    fileName: get('file_name', 'fileName'),
+                    fileType: get('file_type', 'fileType'),
+                    fileSize: get('file_size', 'fileSize'),
+                    status: status,
+                    processingError: get('processing_error', 'processingError'),
+                    clauseCount: get('clause_count', 'clauseCount'),
+                    detectedStyle: get('detected_style', 'detectedStyle'),
+                    detectedJurisdiction: get('detected_jurisdiction', 'detectedJurisdiction'),
+                    detectedContractType: get('detected_contract_type', 'detectedContractType'),
+                    parsingNotes: get('parsing_notes', 'parsingNotes'),
+                    usageCount: get('usage_count', 'usageCount') || 0,
+                    lastUsedAt: get('last_used_at', 'lastUsedAt'),
+                    createdAt: get('created_at', 'createdAt'),
+                    updatedAt: get('updated_at', 'updatedAt'),
+                    processedAt: get('processed_at', 'processedAt')
                 })
 
                 // Parse detected entities from parsing_notes if available
-                if (contractData.parsing_notes) {
+                const parsingNotes = get('parsing_notes', 'parsingNotes')
+                if (parsingNotes) {
                     try {
-                        const notes = JSON.parse(contractData.parsing_notes)
+                        const notes = JSON.parse(parsingNotes)
                         if (notes.entities && Array.isArray(notes.entities)) {
                             setDetectedEntities(notes.entities.map((e: any, idx: number) => ({
                                 id: `entity-${idx}`,
@@ -342,7 +351,7 @@ function ContractPrepContent() {
                     }
                 }
 
-                return contractData.status
+                return status
             } else {
                 console.log('[loadContract] No contract data found in response')
             }
@@ -367,32 +376,36 @@ function ContractPrepContent() {
 
             if (clausesArray && Array.isArray(clausesArray)) {
                 console.log('[loadClauses] Found', clausesArray.length, 'clauses')
+
+                // Helper to get field with either snake_case or camelCase
+                const get = (obj: any, snake: string, camel: string) => obj[snake] ?? obj[camel]
+
                 const mappedClauses: ContractClause[] = clausesArray.map((c: any) => ({
-                    clauseId: c.clause_id,
-                    contractId: c.contract_id,
-                    clauseNumber: c.clause_number || '',
-                    clauseName: c.clause_name,
-                    category: c.category || 'Other',
-                    content: c.content,
-                    originalText: c.original_text,
-                    parentClauseId: c.parent_clause_id,
-                    clauseLevel: c.clause_level || 1,
-                    displayOrder: c.display_order || 0,
-                    aiSuggestedName: c.ai_suggested_name,
-                    aiSuggestedCategory: c.ai_suggested_category,
-                    aiConfidence: c.ai_confidence,
-                    aiSuggestion: c.ai_suggestion,
-                    mapsToMasterClauseId: c.maps_to_master_clause_id,
-                    mappingConfidence: c.mapping_confidence,
-                    verified: c.verified || false,
-                    verifiedByUserId: c.verified_by_user_id,
-                    verifiedAt: c.verified_at,
-                    status: c.status || 'pending',
-                    rejectionReason: c.rejection_reason,
-                    committedAt: c.committed_at,
-                    committedPositionId: c.committed_position_id,
-                    createdAt: c.created_at,
-                    updatedAt: c.updated_at
+                    clauseId: get(c, 'clause_id', 'clauseId'),
+                    contractId: get(c, 'contract_id', 'contractId'),
+                    clauseNumber: get(c, 'clause_number', 'clauseNumber') || '',
+                    clauseName: get(c, 'clause_name', 'clauseName'),
+                    category: get(c, 'category', 'category') || 'Other',
+                    content: get(c, 'content', 'content'),
+                    originalText: get(c, 'original_text', 'originalText'),
+                    parentClauseId: get(c, 'parent_clause_id', 'parentClauseId'),
+                    clauseLevel: get(c, 'clause_level', 'clauseLevel') || 1,
+                    displayOrder: get(c, 'display_order', 'displayOrder') || 0,
+                    aiSuggestedName: get(c, 'ai_suggested_name', 'aiSuggestedName'),
+                    aiSuggestedCategory: get(c, 'ai_suggested_category', 'aiSuggestedCategory'),
+                    aiConfidence: get(c, 'ai_confidence', 'aiConfidence'),
+                    aiSuggestion: get(c, 'ai_suggestion', 'aiSuggestion'),
+                    mapsToMasterClauseId: get(c, 'maps_to_master_clause_id', 'mapsToMasterClauseId'),
+                    mappingConfidence: get(c, 'mapping_confidence', 'mappingConfidence'),
+                    verified: get(c, 'verified', 'verified') || false,
+                    verifiedByUserId: get(c, 'verified_by_user_id', 'verifiedByUserId'),
+                    verifiedAt: get(c, 'verified_at', 'verifiedAt'),
+                    status: get(c, 'status', 'status') || 'pending',
+                    rejectionReason: get(c, 'rejection_reason', 'rejectionReason'),
+                    committedAt: get(c, 'committed_at', 'committedAt'),
+                    committedPositionId: get(c, 'committed_position_id', 'committedPositionId'),
+                    createdAt: get(c, 'created_at', 'createdAt'),
+                    updatedAt: get(c, 'updated_at', 'updatedAt')
                 }))
 
                 setClauses(mappedClauses)
