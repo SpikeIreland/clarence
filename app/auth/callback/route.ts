@@ -2,6 +2,7 @@
 // AUTH CALLBACK ROUTE HANDLER
 // Location: app/auth/callback/route.ts
 // Purpose: Handle Supabase email confirmation and OAuth callbacks
+// Updated: Creates user and company records in public schema
 // ============================================================================
 
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
@@ -9,7 +10,155 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 // ============================================================================
-// SECTION 1: GET HANDLER
+// SECTION 1: TYPES
+// ============================================================================
+
+interface UserMetadata {
+    first_name?: string
+    last_name?: string
+    phone?: string
+    company_name?: string
+    company_id?: string
+    job_title?: string
+    department?: string
+    user_type?: string
+    session_id?: string
+}
+
+interface UserRecord {
+    user_id: string
+    company_id: string | null
+}
+
+interface CompanyRecord {
+    company_id: string
+}
+
+// ============================================================================
+// SECTION 2: HELPER - CREATE USER AND COMPANY RECORDS
+// ============================================================================
+
+async function ensureUserAndCompanyRecords(
+    supabase: ReturnType<typeof createRouteHandlerClient>,
+    user: {
+        id: string
+        email?: string
+        user_metadata?: UserMetadata
+    }
+): Promise<{ userId: string; companyId: string | null }> {
+    const metadata = user.user_metadata || {}
+
+    console.log('Ensuring user and company records for:', user.id, user.email)
+
+    // Step 1: Check if user already exists in public.users
+    // Using 'as any' to bypass TypeScript strict checking on untyped Supabase client
+    const { data: existingUser, error: checkError } = await (supabase
+        .from('users') as any)
+        .select('user_id, company_id')
+        .eq('user_id', user.id)
+        .single()
+
+    if (!checkError && existingUser) {
+        console.log('User already exists in public.users:', existingUser)
+        return {
+            userId: (existingUser as UserRecord).user_id,
+            companyId: (existingUser as UserRecord).company_id
+        }
+    }
+
+    // User doesn't exist - create records
+    console.log('Creating new user record...')
+
+    // Build contact_person from first + last name
+    const firstName = metadata.first_name || ''
+    const lastName = metadata.last_name || ''
+    const contactPerson = `${firstName} ${lastName}`.trim() || 'Unknown'
+    const companyName = metadata.company_name || 'Unknown Company'
+
+    let companyId: string | null = metadata.company_id || null
+
+    // Step 2: Create company if needed
+    if (!companyId && companyName && companyName !== 'Unknown Company') {
+        console.log('Looking for or creating company:', companyName)
+
+        // First check if company with this name already exists
+        const { data: existingCompany, error: companyCheckError } = await (supabase
+            .from('companies') as any)
+            .select('company_id')
+            .eq('company_name', companyName)
+            .single()
+
+        if (!companyCheckError && existingCompany) {
+            companyId = (existingCompany as CompanyRecord).company_id
+            console.log('Found existing company:', companyId)
+        } else {
+            // Create new company (without created_by to avoid circular dependency)
+            const { data: newCompany, error: companyError } = await (supabase
+                .from('companies') as any)
+                .insert({
+                    company_name: companyName,
+                    company_type: 'customer',
+                    created_at: new Date().toISOString()
+                })
+                .select('company_id')
+                .single()
+
+            if (companyError) {
+                console.error('Error creating company:', companyError)
+                // Continue without company - don't block user creation
+            } else if (newCompany) {
+                companyId = (newCompany as CompanyRecord).company_id
+                console.log('Created new company:', companyId)
+            }
+        }
+    }
+
+    // Step 3: Create user record with correct schema
+    const { error: userError } = await (supabase
+        .from('users') as any)
+        .insert({
+            user_id: user.id,
+            email: user.email || 'unknown@email.com',
+            company_name: companyName,
+            contact_person: contactPerson,
+            role: metadata.user_type || 'customer',
+            phone: metadata.phone || null,
+            first_name: firstName || null,
+            last_name: lastName || null,
+            company_id: companyId,
+            user_type: metadata.user_type || 'customer',
+            is_active: true,
+            email_verified: true,
+            registration_date: new Date().toISOString(),
+            created_at: new Date().toISOString()
+        })
+
+    if (userError) {
+        console.error('Error creating user record:', userError)
+        // If it's a duplicate key error, user was created by another request
+        if (!userError.message.includes('duplicate')) {
+            throw userError
+        }
+    } else {
+        console.log('Successfully created user record')
+    }
+
+    // Step 4: Update company with created_by now that user exists
+    if (companyId && !metadata.company_id) {
+        // This was a new company we created - update created_by
+        await (supabase
+            .from('companies') as any)
+            .update({ created_by: user.id })
+            .eq('company_id', companyId)
+
+        console.log('Updated company created_by:', companyId)
+    }
+
+    return { userId: user.id, companyId }
+}
+
+// ============================================================================
+// SECTION 3: GET HANDLER
 // ============================================================================
 
 export async function GET(request: Request) {
@@ -35,7 +184,7 @@ export async function GET(request: Request) {
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
 
     // ========================================================================
-    // SECTION 2: HANDLE EMAIL CONFIRMATION (token_hash)
+    // SECTION 4: HANDLE EMAIL CONFIRMATION (token_hash)
     // ========================================================================
 
     if (token_hash && type) {
@@ -56,6 +205,20 @@ export async function GET(request: Request) {
 
             console.log('OTP verification successful:', data)
 
+            // ================================================================
+            // CREATE USER AND COMPANY RECORDS AFTER EMAIL CONFIRMATION
+            // ================================================================
+            if (data.user) {
+                try {
+                    const { userId, companyId } = await ensureUserAndCompanyRecords(supabase, data.user)
+                    console.log('User/company records ensured:', { userId, companyId })
+                } catch (recordError) {
+                    console.error('Error creating user records:', recordError)
+                    // Don't fail the entire flow - user can still login
+                    // Records will be created on next login attempt
+                }
+            }
+
             // Email confirmed successfully - redirect to login with success message
             return NextResponse.redirect(
                 `${origin}/auth/login?message=${encodeURIComponent('Email confirmed successfully! Please sign in.')}`
@@ -69,7 +232,7 @@ export async function GET(request: Request) {
     }
 
     // ========================================================================
-    // SECTION 3: HANDLE CODE EXCHANGE (OAuth/Magic Link)
+    // SECTION 5: HANDLE CODE EXCHANGE (OAuth/Magic Link)
     // ========================================================================
 
     if (code) {
@@ -84,6 +247,17 @@ export async function GET(request: Request) {
             }
 
             if (data.user) {
+                // ============================================================
+                // CREATE USER AND COMPANY RECORDS IF THEY DON'T EXIST
+                // ============================================================
+                try {
+                    const { userId, companyId } = await ensureUserAndCompanyRecords(supabase, data.user)
+                    console.log('User/company records ensured:', { userId, companyId })
+                } catch (recordError) {
+                    console.error('Error creating user records:', recordError)
+                    // Don't fail - continue with redirect
+                }
+
                 // Check user type from metadata to route appropriately
                 const userType = data.user.user_metadata?.user_type || 'customer'
 
@@ -108,7 +282,7 @@ export async function GET(request: Request) {
     }
 
     // ========================================================================
-    // SECTION 4: NO VALID PARAMS - REDIRECT TO LOGIN
+    // SECTION 6: NO VALID PARAMS - REDIRECT TO LOGIN
     // ========================================================================
 
     console.log('No code or token_hash provided, redirecting to login')
