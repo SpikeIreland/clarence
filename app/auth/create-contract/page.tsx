@@ -252,7 +252,7 @@ I'm extracting the text from your document. This will just take a moment.`,
 
     upload_processing: `**Processing your contract...**
 
-I'm analyzing the document structure and identifying clauses. This typically takes 1-2 minutes for larger contracts.
+I'm analyzing the document structure and identifying clauses. This typically takes up to 5 minutes for larger contracts.
 
 You can wait here, or I'll let you know when it's ready.`,
 
@@ -934,7 +934,7 @@ export default function ContractCreationAssessment() {
             <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
                         ← Back to Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800 mt-2">New Contract</h2>
@@ -1218,7 +1218,7 @@ export default function ContractCreationAssessment() {
                                     ? 'Ready - Click to proceed to Contract Prep'
                                     : assessment.uploadedContractStatus === 'failed'
                                         ? 'Processing failed'
-                                        : 'Processing... This may take 1-2 minutes'
+                                        : 'Processing... This may take up to 5 minutes'
                                 }
                             </p>
                         </div>

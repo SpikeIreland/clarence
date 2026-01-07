@@ -293,35 +293,41 @@ function ContractPrepContent() {
             if (!response.ok) throw new Error('Failed to load contract')
 
             const data = await response.json()
-            if (data.contract) {
+            console.log('[loadContract] Raw API response:', data)
+
+            // Handle both { contract: {...} } and direct {...} response structures
+            const contractData = data.contract || data
+
+            if (contractData && contractData.contract_id) {
+                console.log('[loadContract] Found contract data, status:', contractData.status)
                 setContract({
-                    contractId: data.contract.contract_id,
-                    companyId: data.contract.company_id,
-                    uploadedByUserId: data.contract.uploaded_by_user_id,
-                    linkedSessionId: data.contract.linked_session_id,
-                    contractName: data.contract.contract_name,
-                    description: data.contract.description,
-                    fileName: data.contract.file_name,
-                    fileType: data.contract.file_type,
-                    fileSize: data.contract.file_size,
-                    status: data.contract.status,
-                    processingError: data.contract.processing_error,
-                    clauseCount: data.contract.clause_count,
-                    detectedStyle: data.contract.detected_style,
-                    detectedJurisdiction: data.contract.detected_jurisdiction,
-                    detectedContractType: data.contract.detected_contract_type,
-                    parsingNotes: data.contract.parsing_notes,
-                    usageCount: data.contract.usage_count || 0,
-                    lastUsedAt: data.contract.last_used_at,
-                    createdAt: data.contract.created_at,
-                    updatedAt: data.contract.updated_at,
-                    processedAt: data.contract.processed_at
+                    contractId: contractData.contract_id,
+                    companyId: contractData.company_id,
+                    uploadedByUserId: contractData.uploaded_by_user_id,
+                    linkedSessionId: contractData.linked_session_id,
+                    contractName: contractData.contract_name,
+                    description: contractData.description,
+                    fileName: contractData.file_name,
+                    fileType: contractData.file_type,
+                    fileSize: contractData.file_size,
+                    status: contractData.status,
+                    processingError: contractData.processing_error,
+                    clauseCount: contractData.clause_count,
+                    detectedStyle: contractData.detected_style,
+                    detectedJurisdiction: contractData.detected_jurisdiction,
+                    detectedContractType: contractData.detected_contract_type,
+                    parsingNotes: contractData.parsing_notes,
+                    usageCount: contractData.usage_count || 0,
+                    lastUsedAt: contractData.last_used_at,
+                    createdAt: contractData.created_at,
+                    updatedAt: contractData.updated_at,
+                    processedAt: contractData.processed_at
                 })
 
                 // Parse detected entities from parsing_notes if available
-                if (data.contract.parsing_notes) {
+                if (contractData.parsing_notes) {
                     try {
-                        const notes = JSON.parse(data.contract.parsing_notes)
+                        const notes = JSON.parse(contractData.parsing_notes)
                         if (notes.entities && Array.isArray(notes.entities)) {
                             setDetectedEntities(notes.entities.map((e: any, idx: number) => ({
                                 id: `entity-${idx}`,
@@ -336,7 +342,9 @@ function ContractPrepContent() {
                     }
                 }
 
-                return data.contract.status
+                return contractData.status
+            } else {
+                console.log('[loadContract] No contract data found in response')
             }
         } catch (err) {
             console.error('Error loading contract:', err)
@@ -352,8 +360,14 @@ function ContractPrepContent() {
             if (!response.ok) throw new Error('Failed to load clauses')
 
             const data = await response.json()
-            if (data.clauses && Array.isArray(data.clauses)) {
-                const mappedClauses: ContractClause[] = data.clauses.map((c: any) => ({
+            console.log('[loadClauses] Raw API response:', data)
+
+            // Handle both { clauses: [...] } and direct [...] response structures
+            const clausesArray = data.clauses || (Array.isArray(data) ? data : null)
+
+            if (clausesArray && Array.isArray(clausesArray)) {
+                console.log('[loadClauses] Found', clausesArray.length, 'clauses')
+                const mappedClauses: ContractClause[] = clausesArray.map((c: any) => ({
                     clauseId: c.clause_id,
                     contractId: c.contract_id,
                     clauseNumber: c.clause_number || '',
@@ -388,6 +402,8 @@ function ContractPrepContent() {
                 if (mappedClauses.length > 0 && !selectedClause) {
                     setSelectedClause(mappedClauses[0])
                 }
+            } else {
+                console.log('[loadClauses] No clauses array found in response')
             }
         } catch (err) {
             console.error('Error loading clauses:', err)
@@ -514,6 +530,11 @@ function ContractPrepContent() {
                 }
             } else if (status === null) {
                 console.log('[Polling] Status is null (error loading)')
+                // Stop polling on null - something is wrong
+                if (pollInterval) {
+                    clearInterval(pollInterval)
+                    pollInterval = null
+                }
                 setIsLoading(false)
             } else {
                 console.log('[Polling] Unknown status:', status)
