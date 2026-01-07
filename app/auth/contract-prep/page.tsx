@@ -444,6 +444,10 @@ function ContractPrepContent() {
             return
         }
 
+        // If we have a contract_id, we're either loading or processing
+        // Keep isLoading true until we have actual data
+        setIsLoading(true)
+
         let pollCount = 0
         let pollInterval: NodeJS.Timeout | null = null
 
@@ -459,12 +463,18 @@ function ContractPrepContent() {
                 setIsLoading(false)
                 setError('Contract processing failed')
             } else if (status === 'processing') {
+                // Contract is processing - keep polling
+                // isLoading will be set to false once we have the contract object
+                // but the processing overlay will show based on contract.status
+                setIsLoading(false) // Allow the processing overlay to show
                 pollCount++
                 if (pollCount >= MAX_POLLING_ATTEMPTS) {
                     if (pollInterval) clearInterval(pollInterval)
-                    setIsLoading(false)
                     setError('Processing timeout - please try again')
                 }
+            } else if (status === null) {
+                // Error loading contract
+                setIsLoading(false)
             } else {
                 setIsLoading(false)
             }
@@ -583,20 +593,31 @@ function ContractPrepContent() {
             const result = await response.json()
 
             if (result.contractId) {
-                // Update URL with contract_id
+                // Update progress to show we're transitioning
+                setUploadProgress('Contract uploaded! Starting analysis...')
+
+                // Update URL with contract_id - DON'T reset isUploading here
+                // The page will reload and pick up the processing state
                 const newUrl = sessionId
                     ? `/auth/contract-prep?contract_id=${result.contractId}&session_id=${sessionId}`
                     : `/auth/contract-prep?contract_id=${result.contractId}`
                 router.push(newUrl)
+
+                // Keep the overlay showing - the new page load will handle the transition
+                // Don't call setIsUploading(false) on success
+                return
+            } else {
+                throw new Error('No contract ID returned from upload')
             }
 
         } catch (err) {
             console.error('Upload error:', err)
             setError(err instanceof Error ? err.message : 'Upload failed')
-        } finally {
+            // Only reset on error
             setIsUploading(false)
             setUploadProgress(null)
         }
+        // Removed the finally block - we handle cleanup explicitly above
     }
 
     // ========================================================================
@@ -1537,6 +1558,23 @@ function ContractPrepContent() {
                         </div>
                         <p className="text-xs text-slate-400 mt-4">
                             This may take 1-2 minutes for larger documents
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Initial Loading Overlay (when page loads with contract_id) */}
+            {isLoading && contractId && !isUploading && (
+                <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 text-center shadow-2xl">
+                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                            Loading Contract
+                        </h3>
+                        <p className="text-slate-600">
+                            Fetching contract details...
                         </p>
                     </div>
                 </div>
