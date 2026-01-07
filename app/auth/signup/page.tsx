@@ -314,12 +314,9 @@ export default function SignupPage() {
     }
 
     localStorage.setItem('clarence_auth', JSON.stringify(authData))
-    setTimeout(() => router.push('/auth/dashboard'), 2000)
+    setTimeout(() => router.push('/auth/contracts-dashboard'), 2000)
   }
 
-  // ==========================================================================
-  // SECTION 11: RENDER
-  // ==========================================================================
   // ==========================================================================
   // SECTION 11: RENDER
   // ==========================================================================
