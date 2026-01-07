@@ -439,10 +439,18 @@ function ContractPrepContent() {
     // SECTION 5D: POLLING FOR PROCESSING STATUS
     // ========================================================================
 
+    // Track if we've already loaded this contract to prevent re-polling
+    const hasLoadedRef = useRef<string | null>(null)
+
     useEffect(() => {
         if (!contractId) {
             setIsLoading(false)
             addChatMessage('clarence', CLARENCE_MESSAGES.welcome_new)
+            return
+        }
+
+        // If we've already loaded this contract, don't poll again
+        if (hasLoadedRef.current === contractId) {
             return
         }
 
@@ -454,26 +462,39 @@ function ContractPrepContent() {
 
         let pollCount = 0
         let pollInterval: NodeJS.Timeout | null = null
+        let isActive = true // Track if this effect is still active
 
         const poll = async () => {
+            if (!isActive) return // Don't poll if effect was cleaned up
+
             const status = await loadContract(contractId)
 
+            if (!isActive) return // Check again after async operation
+
             if (status === 'ready') {
-                if (pollInterval) clearInterval(pollInterval)
+                if (pollInterval) {
+                    clearInterval(pollInterval)
+                    pollInterval = null
+                }
+                hasLoadedRef.current = contractId // Mark as loaded
                 await loadClauses(contractId)
                 setIsLoading(false)
             } else if (status === 'failed') {
-                if (pollInterval) clearInterval(pollInterval)
+                if (pollInterval) {
+                    clearInterval(pollInterval)
+                    pollInterval = null
+                }
                 setIsLoading(false)
                 setError('Contract processing failed')
             } else if (status === 'processing') {
                 // Contract is processing - keep polling
-                // isLoading will be set to false once we have the contract object
-                // but the processing overlay will show based on contract.status
                 setIsLoading(false) // Allow the processing overlay to show
                 pollCount++
                 if (pollCount >= MAX_POLLING_ATTEMPTS) {
-                    if (pollInterval) clearInterval(pollInterval)
+                    if (pollInterval) {
+                        clearInterval(pollInterval)
+                        pollInterval = null
+                    }
                     setError('Processing timeout - please try again')
                 }
             } else if (status === null) {
@@ -488,9 +509,14 @@ function ContractPrepContent() {
         pollInterval = setInterval(poll, POLLING_INTERVAL)
 
         return () => {
-            if (pollInterval) clearInterval(pollInterval)
+            isActive = false
+            if (pollInterval) {
+                clearInterval(pollInterval)
+                pollInterval = null
+            }
         }
-    }, [contractId, loadContract, loadClauses])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [contractId]) // Only depend on contractId, not the callbacks
 
     // ========================================================================
     // SECTION 5E: CHAT MESSAGE MANAGEMENT
