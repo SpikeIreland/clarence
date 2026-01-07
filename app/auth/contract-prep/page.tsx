@@ -144,7 +144,12 @@ This typically takes 1-2 minutes for larger documents.`,
 
 const loadPdfJs = async () => {
     const pdfjsLib = await import('pdfjs-dist')
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+    // Use local worker file for better performance with large PDFs
+    // Worker file must be copied to public folder:
+    // cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.js
+    if (typeof window !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+    }
     return pdfjsLib
 }
 
