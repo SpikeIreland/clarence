@@ -183,7 +183,13 @@ const extractTextFromPdf = async (file: File): Promise<string> => {
         const page = await pdf.getPage(i)
         const textContent = await page.getTextContent()
         const pageText = textContent.items
-            .map((item: { str?: string }) => item.str || '')
+            .map((item) => {
+                // TextItem has 'str' property, TextMarkedContent does not
+                if ('str' in item) {
+                    return (item as { str: string }).str
+                }
+                return ''
+            })
             .join(' ')
         fullText += pageText + '\n\n'
     }
