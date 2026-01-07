@@ -68,6 +68,10 @@ interface ContractClause {
     committedPositionId: string | null
     createdAt: string
     updatedAt: string
+    // Position scales for negotiation stance (1-10)
+    customerPosition?: number  // Customer's initial stance (Green)
+    providerPosition?: number  // Expected provider stance (Blue)
+    importance?: 'low' | 'medium' | 'high' | 'critical'  // How important this clause is
 }
 
 interface DetectedEntity {
@@ -262,6 +266,17 @@ function ContractPrepContent() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [searchQuery, setSearchQuery] = useState('')
     const [showEntitiesPanel, setShowEntitiesPanel] = useState(false)
+
+    // Bulk Selection State
+    const [selectedClauseIds, setSelectedClauseIds] = useState<Set<string>>(new Set())
+    const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+
+    // Position Scales State (local state, saved when clause is verified/committed)
+    const [clausePositions, setClausePositions] = useState<Record<string, {
+        customerPosition: number
+        providerPosition: number
+        importance: 'low' | 'medium' | 'high' | 'critical'
+    }>>({})
 
     // ========================================================================
     // SECTION 5B: INITIALIZE & LOAD USER
@@ -864,6 +879,164 @@ function ContractPrepContent() {
         }
     }
 
+    // ========================================================================
+    // BULK ACTION HANDLERS
+    // ========================================================================
+
+    const toggleClauseSelection = (clauseId: string, event: React.MouseEvent) => {
+        event.stopPropagation() // Don't select the clause for viewing
+        setSelectedClauseIds(prev => {
+            const newSet = new Set(prev)
+            if (newSet.has(clauseId)) {
+                newSet.delete(clauseId)
+            } else {
+                newSet.add(clauseId)
+            }
+            return newSet
+        })
+    }
+
+    const selectAllPendingClauses = () => {
+        const pendingIds = clauses
+            .filter(c => c.status === 'pending')
+            .map(c => c.clauseId)
+        setSelectedClauseIds(new Set(pendingIds))
+    }
+
+    const selectAllInCategory = (category: string) => {
+        const categoryClauseIds = clauses
+            .filter(c => c.category === category && c.status === 'pending')
+            .map(c => c.clauseId)
+        setSelectedClauseIds(prev => {
+            const newSet = new Set(prev)
+            categoryClauseIds.forEach(id => newSet.add(id))
+            return newSet
+        })
+    }
+
+    const clearSelection = () => {
+        setSelectedClauseIds(new Set())
+    }
+
+    const handleBulkVerify = async () => {
+        if (!userInfo || selectedClauseIds.size === 0) return
+
+        setIsBulkProcessing(true)
+        const clausesToVerify = clauses.filter(c => selectedClauseIds.has(c.clauseId) && c.status === 'pending')
+
+        try {
+            // Process each clause (could batch this in a single API call if N8N supports it)
+            for (const clause of clausesToVerify) {
+                await fetch(`${API_BASE}/update-parsed-clause`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contract_id: clause.contractId,
+                        clause_id: clause.clauseId,
+                        user_id: userInfo.userId,
+                        status: 'verified',
+                        // Include positions if set
+                        customer_position: clausePositions[clause.clauseId]?.customerPosition,
+                        provider_position: clausePositions[clause.clauseId]?.providerPosition,
+                        importance: clausePositions[clause.clauseId]?.importance
+                    })
+                })
+            }
+
+            // Update local state
+            setClauses(prev => prev.map(c =>
+                selectedClauseIds.has(c.clauseId) && c.status === 'pending'
+                    ? { ...c, status: 'verified', verified: true }
+                    : c
+            ))
+
+            const updatedClauses = clauses.map(c =>
+                selectedClauseIds.has(c.clauseId) && c.status === 'pending'
+                    ? { ...c, status: 'verified' as const, verified: true }
+                    : c
+            )
+            buildCategoryGroups(updatedClauses)
+
+            addChatMessage('system', `✅ Verified ${clausesToVerify.length} clauses`)
+            clearSelection()
+
+        } catch (err) {
+            console.error('Error bulk verifying:', err)
+            setError('Failed to verify some clauses')
+        } finally {
+            setIsBulkProcessing(false)
+        }
+    }
+
+    const handleBulkReject = async () => {
+        if (!userInfo || selectedClauseIds.size === 0) return
+
+        setIsBulkProcessing(true)
+        const clausesToReject = clauses.filter(c => selectedClauseIds.has(c.clauseId) && c.status === 'pending')
+
+        try {
+            for (const clause of clausesToReject) {
+                await fetch(`${API_BASE}/update-parsed-clause`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contract_id: clause.contractId,
+                        clause_id: clause.clauseId,
+                        user_id: userInfo.userId,
+                        status: 'rejected',
+                        rejection_reason: 'Bulk rejected'
+                    })
+                })
+            }
+
+            setClauses(prev => prev.map(c =>
+                selectedClauseIds.has(c.clauseId) && c.status === 'pending'
+                    ? { ...c, status: 'rejected', rejectionReason: 'Bulk rejected' }
+                    : c
+            ))
+
+            const updatedClauses = clauses.map(c =>
+                selectedClauseIds.has(c.clauseId) && c.status === 'pending'
+                    ? { ...c, status: 'rejected' as const, rejectionReason: 'Bulk rejected' }
+                    : c
+            )
+            buildCategoryGroups(updatedClauses)
+
+            addChatMessage('system', `❌ Rejected ${clausesToReject.length} clauses`)
+            clearSelection()
+
+        } catch (err) {
+            console.error('Error bulk rejecting:', err)
+            setError('Failed to reject some clauses')
+        } finally {
+            setIsBulkProcessing(false)
+        }
+    }
+
+    // ========================================================================
+    // POSITION SCALE HANDLERS
+    // ========================================================================
+
+    const updateClausePosition = (clauseId: string, field: 'customerPosition' | 'providerPosition' | 'importance', value: number | string) => {
+        setClausePositions(prev => ({
+            ...prev,
+            [clauseId]: {
+                customerPosition: prev[clauseId]?.customerPosition ?? 5,
+                providerPosition: prev[clauseId]?.providerPosition ?? 5,
+                importance: prev[clauseId]?.importance ?? 'medium',
+                [field]: value
+            }
+        }))
+    }
+
+    const getPositionLabel = (value: number): string => {
+        if (value <= 2) return 'Very Flexible'
+        if (value <= 4) return 'Flexible'
+        if (value <= 6) return 'Moderate'
+        if (value <= 8) return 'Firm'
+        return 'Non-Negotiable'
+    }
+
     const handleCommitClauses = async () => {
         if (!userInfo || !contract) return
 
@@ -1023,6 +1196,53 @@ function ContractPrepContent() {
                     </div>
                 )}
 
+                {/* Bulk Action Toolbar - Shows when clauses are selected */}
+                {selectedClauseIds.size > 0 && (
+                    <div className="px-3 py-2 border-b border-slate-200 bg-blue-50">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-blue-800">
+                                {selectedClauseIds.size} selected
+                            </span>
+                            <button
+                                onClick={clearSelection}
+                                className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleBulkVerify}
+                                disabled={isBulkProcessing}
+                                className="flex-1 px-3 py-1.5 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                            >
+                                {isBulkProcessing ? (
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <>✓ Verify All</>
+                                )}
+                            </button>
+                            <button
+                                onClick={handleBulkReject}
+                                disabled={isBulkProcessing}
+                                className="flex-1 px-3 py-1.5 rounded bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                            >
+                                {isBulkProcessing ? (
+                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <>✕ Reject All</>
+                                )}
+                            </button>
+                        </div>
+                        <button
+                            onClick={selectAllPendingClauses}
+                            className="mt-2 w-full text-xs text-blue-600 hover:text-blue-800"
+                        >
+                            Select all {stats.pending} pending clauses
+                        </button>
+                    </div>
+                )}
+
                 {/* Category Navigation */}
                 <div className="flex-1 overflow-auto">
                     {filteredCategories.length === 0 ? (
@@ -1059,43 +1279,71 @@ function ContractPrepContent() {
                                     {group.isExpanded && (
                                         <div className="bg-white">
                                             {groupFilteredClauses.map(clause => (
-                                                <button
+                                                <div
                                                     key={clause.clauseId}
-                                                    onClick={() => setSelectedClause(clause)}
-                                                    className={`w-full px-4 py-2 pl-8 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === clause.clauseId
+                                                    className={`flex items-center gap-1 hover:bg-blue-50 transition-colors ${selectedClause?.clauseId === clause.clauseId
                                                         ? 'bg-blue-100 border-l-2 border-blue-500'
                                                         : ''
                                                         }`}
                                                 >
-                                                    {/* Status Indicator */}
-                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
-                                                        ? 'bg-green-500'
-                                                        : clause.status === 'rejected'
-                                                            ? 'bg-red-500'
-                                                            : 'bg-amber-400'
-                                                        }`} />
-
-                                                    {/* Clause Info */}
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-1">
-                                                            {clause.clauseNumber && (
-                                                                <span className="text-slate-400 text-xs">
-                                                                    {clause.clauseNumber}
-                                                                </span>
-                                                            )}
-                                                            <span className="truncate text-slate-700">
-                                                                {clause.clauseName}
-                                                            </span>
+                                                    {/* Checkbox for pending clauses */}
+                                                    {clause.status === 'pending' && (
+                                                        <div
+                                                            onClick={(e) => toggleClauseSelection(clause.clauseId, e)}
+                                                            className="pl-2 pr-1 py-2 cursor-pointer"
+                                                        >
+                                                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedClauseIds.has(clause.clauseId)
+                                                                ? 'bg-blue-600 border-blue-600'
+                                                                : 'border-slate-300 hover:border-blue-400'
+                                                                }`}>
+                                                                {selectedClauseIds.has(clause.clauseId) && (
+                                                                    <span className="text-white text-xs">✓</span>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    </div>
-
-                                                    {/* Confidence indicator */}
-                                                    {clause.aiConfidence && clause.aiConfidence < 0.8 && (
-                                                        <span className="text-amber-500 text-xs" title="Low AI confidence">
-                                                            ⚠
-                                                        </span>
                                                     )}
-                                                </button>
+
+                                                    <button
+                                                        onClick={() => setSelectedClause(clause)}
+                                                        className={`flex-1 px-2 py-2 ${clause.status !== 'pending' ? 'pl-8' : ''} text-left text-sm flex items-center gap-2`}
+                                                    >
+                                                        {/* Status Indicator */}
+                                                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
+                                                            ? 'bg-green-500'
+                                                            : clause.status === 'rejected'
+                                                                ? 'bg-red-500'
+                                                                : 'bg-amber-400'
+                                                            }`} />
+
+                                                        {/* Clause Info */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-1">
+                                                                {clause.clauseNumber && (
+                                                                    <span className="text-slate-400 text-xs">
+                                                                        {clause.clauseNumber}
+                                                                    </span>
+                                                                )}
+                                                                <span className="truncate text-slate-700">
+                                                                    {clause.clauseName}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Position indicator (if set) */}
+                                                        {clausePositions[clause.clauseId]?.customerPosition && (
+                                                            <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700" title="Customer position set">
+                                                                {clausePositions[clause.clauseId].customerPosition}
+                                                            </span>
+                                                        )}
+
+                                                        {/* Confidence indicator */}
+                                                        {clause.aiConfidence && clause.aiConfidence < 0.8 && (
+                                                            <span className="text-amber-500 text-xs" title="Low AI confidence">
+                                                                ⚠
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                </div>
                                             ))}
                                         </div>
                                     )}
@@ -1350,6 +1598,120 @@ function ContractPrepContent() {
                                 <span>🤖</span> AI Suggestion
                             </h3>
                             <p className="text-sm text-blue-700">{selectedClause.aiSuggestion}</p>
+                        </div>
+                    )}
+
+                    {/* Position Scales - Set initial negotiation stance */}
+                    {selectedClause.status === 'pending' && (
+                        <div className="mt-6 p-5 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border border-slate-200">
+                            <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                ⚖️ Initial Negotiation Stance
+                            </h3>
+
+                            {/* Customer Position (Green) */}
+                            <div className="mb-5">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-sm font-medium text-emerald-700 flex items-center gap-2">
+                                        <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                        Your Position (Customer)
+                                    </label>
+                                    <span className="text-sm text-emerald-600 font-medium">
+                                        {clausePositions[selectedClause.clauseId]?.customerPosition ?? 5} - {getPositionLabel(clausePositions[selectedClause.clauseId]?.customerPosition ?? 5)}
+                                    </span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    value={clausePositions[selectedClause.clauseId]?.customerPosition ?? 5}
+                                    onChange={(e) => updateClausePosition(selectedClause.clauseId, 'customerPosition', parseInt(e.target.value))}
+                                    className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                                    style={{
+                                        background: `linear-gradient(to right, #10b981 0%, #10b981 ${((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - 1) * 11.1}%, #d1fae5 ${((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - 1) * 11.1}%, #d1fae5 100%)`
+                                    }}
+                                />
+                                <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                    <span>Very Flexible</span>
+                                    <span>Non-Negotiable</span>
+                                </div>
+                            </div>
+
+                            {/* Provider Position (Blue) */}
+                            <div className="mb-5">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-sm font-medium text-blue-700 flex items-center gap-2">
+                                        <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                                        Expected Provider Position
+                                    </label>
+                                    <span className="text-sm text-blue-600 font-medium">
+                                        {clausePositions[selectedClause.clauseId]?.providerPosition ?? 5} - {getPositionLabel(clausePositions[selectedClause.clauseId]?.providerPosition ?? 5)}
+                                    </span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    value={clausePositions[selectedClause.clauseId]?.providerPosition ?? 5}
+                                    onChange={(e) => updateClausePosition(selectedClause.clauseId, 'providerPosition', parseInt(e.target.value))}
+                                    className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                    style={{
+                                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((clausePositions[selectedClause.clauseId]?.providerPosition ?? 5) - 1) * 11.1}%, #dbeafe ${((clausePositions[selectedClause.clauseId]?.providerPosition ?? 5) - 1) * 11.1}%, #dbeafe 100%)`
+                                    }}
+                                />
+                                <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                    <span>Very Flexible</span>
+                                    <span>Non-Negotiable</span>
+                                </div>
+                            </div>
+
+                            {/* Importance Level */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Clause Importance
+                                </label>
+                                <div className="flex gap-2">
+                                    {(['low', 'medium', 'high', 'critical'] as const).map((level) => (
+                                        <button
+                                            key={level}
+                                            onClick={() => updateClausePosition(selectedClause.clauseId, 'importance', level)}
+                                            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${(clausePositions[selectedClause.clauseId]?.importance ?? 'medium') === level
+                                                ? level === 'critical'
+                                                    ? 'bg-red-600 text-white'
+                                                    : level === 'high'
+                                                        ? 'bg-amber-500 text-white'
+                                                        : level === 'medium'
+                                                            ? 'bg-blue-500 text-white'
+                                                            : 'bg-slate-500 text-white'
+                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                }`}
+                                        >
+                                            {level.charAt(0).toUpperCase() + level.slice(1)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Gap Analysis Preview */}
+                            {clausePositions[selectedClause.clauseId] && (
+                                <div className="mt-4 pt-4 border-t border-slate-200">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-slate-600">Potential Gap:</span>
+                                        <span className={`font-medium ${Math.abs((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - (clausePositions[selectedClause.clauseId]?.providerPosition ?? 5)) >= 4
+                                            ? 'text-red-600'
+                                            : Math.abs((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - (clausePositions[selectedClause.clauseId]?.providerPosition ?? 5)) >= 2
+                                                ? 'text-amber-600'
+                                                : 'text-green-600'
+                                            }`}>
+                                            {Math.abs((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - (clausePositions[selectedClause.clauseId]?.providerPosition ?? 5))} points
+                                            {Math.abs((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - (clausePositions[selectedClause.clauseId]?.providerPosition ?? 5)) >= 4
+                                                ? ' (High gap - expect negotiation)'
+                                                : Math.abs((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - (clausePositions[selectedClause.clauseId]?.providerPosition ?? 5)) >= 2
+                                                    ? ' (Moderate gap)'
+                                                    : ' (Aligned)'}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

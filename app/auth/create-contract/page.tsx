@@ -11,7 +11,14 @@ import Link from 'next/link'
 type MediationType = 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
 type ContractType = 'nda' | 'saas' | 'bpo' | 'msa' | 'employment' | 'custom' | null
 type TemplateSource = 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
-type AssessmentStep = 'welcome' | 'mediation_type' | 'contract_type' | 'template_source' | 'template_selection' | 'upload_processing' | 'summary' | 'creating'
+type AssessmentStep = 'welcome' | 'mediation_type' | 'contract_type' | 'quick_intake' | 'template_source' | 'template_selection' | 'upload_processing' | 'summary' | 'creating'
+
+// Quick Intake types for deal context
+type DealValueRange = 'under_50k' | '50k_250k' | '250k_1m' | 'over_1m' | null
+type ServiceCriticality = 'low' | 'medium' | 'high' | 'critical' | null
+type TimelinePressure = 'flexible' | 'normal' | 'tight' | 'urgent' | null
+type BidderCount = 'single' | 'few' | 'many' | null
+type BatnaStatus = 'strong' | 'weak' | 'uncertain' | null
 
 interface UserInfo {
     firstName: string
@@ -35,6 +42,15 @@ interface AssessmentState {
     uploadedContractId: string | null
     uploadedContractStatus: 'processing' | 'ready' | 'failed' | null
     uploadedFileName: string | null
+    // Quick Intake fields for deal context
+    quickIntake: {
+        dealValue: DealValueRange
+        serviceCriticality: ServiceCriticality
+        timelinePressure: TimelinePressure
+        bidderCount: BidderCount
+        batnaStatus: BatnaStatus
+        topPriorities: string[]
+    }
 }
 
 interface ChatMessage {
@@ -229,6 +245,14 @@ Now, what type of contract are you creating?`,
 
 Select the category that best matches your needs. This helps me suggest the right template and structure.`,
 
+    quick_intake: `**Let me understand your deal context.**
+
+A few quick questions will help me provide better guidance during clause review and negotiation. This only takes about 30 seconds.`,
+
+    quick_intake_complete: `**Thanks! I now have a clearer picture of your deal.**
+
+This context will help me provide relevant suggestions during contract preparation and negotiation. Now let's choose how you'd like to build your contract.`,
+
     template_source: `**How would you like to start building your contract?**
 
 You can use an existing template, upload your own document, or build from scratch.`,
@@ -252,7 +276,7 @@ I'm extracting the text from your document. This will just take a moment.`,
 
     upload_processing: `**Processing your contract...**
 
-I'm analyzing the document structure and identifying clauses. This typically takes up to 5 minutes for larger contracts.
+I'm analyzing the document structure and identifying clauses. This typically takes 1-2 minutes for larger contracts.
 
 You can wait here, or I'll let you know when it's ready.`,
 
@@ -361,7 +385,15 @@ export default function ContractCreationAssessment() {
         selectedTemplateName: null,
         uploadedContractId: null,
         uploadedContractStatus: null,
-        uploadedFileName: null
+        uploadedFileName: null,
+        quickIntake: {
+            dealValue: null,
+            serviceCriticality: null,
+            timelinePressure: null,
+            bidderCount: null,
+            batnaStatus: null,
+            topPriorities: []
+        }
     })
 
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
@@ -750,6 +782,77 @@ export default function ContractCreationAssessment() {
         setAssessment(prev => ({
             ...prev,
             contractType,
+            step: 'quick_intake'  // Go to quick intake instead of template_source
+        }))
+
+        setTimeout(() => {
+            addClarenceMessage(CLARENCE_MESSAGES.quick_intake)
+        }, 500)
+    }
+
+    // ========================================================================
+    // QUICK INTAKE HANDLERS
+    // ========================================================================
+
+    const updateQuickIntake = (field: keyof AssessmentState['quickIntake'], value: any) => {
+        setAssessment(prev => ({
+            ...prev,
+            quickIntake: {
+                ...prev.quickIntake,
+                [field]: value
+            }
+        }))
+    }
+
+    const togglePriority = (priority: string) => {
+        setAssessment(prev => {
+            const currentPriorities = prev.quickIntake.topPriorities
+            const newPriorities = currentPriorities.includes(priority)
+                ? currentPriorities.filter(p => p !== priority)
+                : [...currentPriorities, priority].slice(0, 3) // Max 3 priorities
+            return {
+                ...prev,
+                quickIntake: {
+                    ...prev.quickIntake,
+                    topPriorities: newPriorities
+                }
+            }
+        })
+    }
+
+    const handleQuickIntakeComplete = () => {
+        // Summarize what they entered
+        const dealValueLabels: Record<string, string> = {
+            'under_50k': 'Under £50k',
+            '50k_250k': '£50k - £250k',
+            '250k_1m': '£250k - £1M',
+            'over_1m': 'Over £1M'
+        }
+
+        const summary = assessment.quickIntake.dealValue
+            ? `📊 Deal context saved: ${dealValueLabels[assessment.quickIntake.dealValue] || 'Not specified'}`
+            : '📊 Deal context saved'
+
+        addUserMessage(summary)
+
+        setAssessment(prev => ({
+            ...prev,
+            step: 'template_source'
+        }))
+
+        setTimeout(() => {
+            addClarenceMessage(CLARENCE_MESSAGES.quick_intake_complete)
+            setTimeout(() => {
+                addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS)
+            }, 800)
+        }, 500)
+    }
+
+    const handleSkipQuickIntake = () => {
+        addUserMessage('⏭️ Skip for now')
+
+        setAssessment(prev => ({
+            ...prev,
             step: 'template_source'
         }))
 
@@ -858,7 +961,16 @@ export default function ContractCreationAssessment() {
                     template_source: assessment.templateSource,
                     source_template_id: assessment.selectedTemplateId,
                     uploaded_contract_id: assessment.uploadedContractId, // Link uploaded contract if any
-                    assessment_completed: true
+                    assessment_completed: true,
+                    // Quick Intake context for CLARENCE guidance
+                    deal_context: {
+                        deal_value: assessment.quickIntake.dealValue,
+                        service_criticality: assessment.quickIntake.serviceCriticality,
+                        timeline_pressure: assessment.quickIntake.timelinePressure,
+                        bidder_count: assessment.quickIntake.bidderCount,
+                        batna_status: assessment.quickIntake.batnaStatus,
+                        top_priorities: assessment.quickIntake.topPriorities
+                    }
                 })
             })
 
@@ -905,6 +1017,7 @@ export default function ContractCreationAssessment() {
         const steps = [
             { id: 'mediation_type', label: 'Mediation Type', icon: '⚖️' },
             { id: 'contract_type', label: 'Contract Type', icon: '📋' },
+            { id: 'quick_intake', label: 'Deal Context', icon: '📊' },
             { id: 'template_source', label: 'Template Source', icon: '📁' },
             { id: 'template_selection', label: 'Select Template', icon: '✓', conditional: true },
             { id: 'upload_processing', label: 'Upload Contract', icon: '📤', conditional: true },
@@ -924,7 +1037,7 @@ export default function ContractCreationAssessment() {
         })
 
         const getCurrentStepIndex = () => {
-            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
+            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
             return stepOrder.indexOf(assessment.step)
         }
 
@@ -945,7 +1058,7 @@ export default function ContractCreationAssessment() {
                 <div className="flex-1 p-4">
                     <div className="space-y-2">
                         {visibleSteps.map((step) => {
-                            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
+                            const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
                             const stepIndex = stepOrder.indexOf(step.id)
                             const isComplete = currentIndex > stepIndex
                             const isCurrent = assessment.step === step.id
@@ -1063,6 +1176,8 @@ export default function ContractCreationAssessment() {
                 options = TEMPLATE_SOURCE_OPTIONS
                 title = 'Choose How to Start'
                 break
+            case 'quick_intake':
+                return renderQuickIntakeForm()
             default:
                 return (
                     <div className="flex items-center justify-center h-full">
@@ -1103,6 +1218,218 @@ export default function ContractCreationAssessment() {
                             </div>
                         </button>
                     ))}
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 7-QI: RENDER - QUICK INTAKE FORM
+    // ========================================================================
+
+    const renderQuickIntakeForm = () => {
+        const dealValueOptions = [
+            { value: 'under_50k', label: 'Under £50,000', icon: '💷' },
+            { value: '50k_250k', label: '£50,000 - £250,000', icon: '💰' },
+            { value: '250k_1m', label: '£250,000 - £1 million', icon: '🏦' },
+            { value: 'over_1m', label: 'Over £1 million', icon: '🏆' }
+        ]
+
+        const criticalityOptions = [
+            { value: 'low', label: 'Low', desc: 'Nice to have, not critical', color: 'bg-slate-500' },
+            { value: 'medium', label: 'Medium', desc: 'Important but flexible', color: 'bg-blue-500' },
+            { value: 'high', label: 'High', desc: 'Business critical', color: 'bg-amber-500' },
+            { value: 'critical', label: 'Critical', desc: 'Must have, no alternatives', color: 'bg-red-500' }
+        ]
+
+        const timelineOptions = [
+            { value: 'flexible', label: 'Flexible', desc: '3+ months' },
+            { value: 'normal', label: 'Normal', desc: '1-3 months' },
+            { value: 'tight', label: 'Tight', desc: '2-4 weeks' },
+            { value: 'urgent', label: 'Urgent', desc: 'Under 2 weeks' }
+        ]
+
+        const bidderOptions = [
+            { value: 'single', label: 'Single provider', desc: 'Sole source' },
+            { value: 'few', label: '2-3 providers', desc: 'Limited competition' },
+            { value: 'many', label: '4+ providers', desc: 'Competitive tender' }
+        ]
+
+        const batnaOptions = [
+            { value: 'strong', label: 'Yes, strong alternatives', icon: '💪' },
+            { value: 'weak', label: 'Limited options', icon: '🤔' },
+            { value: 'uncertain', label: 'Not sure yet', icon: '❓' }
+        ]
+
+        const priorityOptions = [
+            'Price / Cost',
+            'Quality of Service',
+            'Speed of Delivery',
+            'Flexibility',
+            'Risk Mitigation',
+            'Long-term Partnership',
+            'Innovation',
+            'Compliance'
+        ]
+
+        return (
+            <div className="max-w-2xl mx-auto space-y-6">
+                <h3 className="text-lg font-medium text-slate-800 mb-2">Quick Deal Context</h3>
+                <p className="text-sm text-slate-500 mb-6">Help me understand your position better. All fields are optional.</p>
+
+                {/* Deal Value */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Estimated Deal Value
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {dealValueOptions.map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => updateQuickIntake('dealValue', opt.value as DealValueRange)}
+                                className={`px-4 py-3 rounded-lg border-2 text-left transition-all ${assessment.quickIntake.dealValue === opt.value
+                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                        : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                    }`}
+                            >
+                                <span className="mr-2">{opt.icon}</span>
+                                <span className="font-medium">{opt.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Service Criticality */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        How critical is this service to your business?
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                        {criticalityOptions.map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => updateQuickIntake('serviceCriticality', opt.value as ServiceCriticality)}
+                                className={`px-3 py-2 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.serviceCriticality === opt.value
+                                        ? `border-current ${opt.color} text-white`
+                                        : 'border-slate-200 hover:border-slate-300'
+                                    }`}
+                            >
+                                <span className="font-medium text-sm">{opt.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Timeline Pressure */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Timeline to close this deal
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                        {timelineOptions.map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => updateQuickIntake('timelinePressure', opt.value as TimelinePressure)}
+                                className={`px-3 py-2 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.timelinePressure === opt.value
+                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                        : 'border-slate-200 hover:border-blue-300'
+                                    }`}
+                            >
+                                <span className="font-medium text-sm block">{opt.label}</span>
+                                <span className="text-xs text-slate-400">{opt.desc}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Number of Bidders */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        How many providers are you considering?
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {bidderOptions.map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => updateQuickIntake('bidderCount', opt.value as BidderCount)}
+                                className={`px-4 py-3 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.bidderCount === opt.value
+                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                        : 'border-slate-200 hover:border-blue-300'
+                                    }`}
+                            >
+                                <span className="font-medium text-sm block">{opt.label}</span>
+                                <span className="text-xs text-slate-400">{opt.desc}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* BATNA Status */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Do you have alternatives if this negotiation fails?
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {batnaOptions.map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => updateQuickIntake('batnaStatus', opt.value as BatnaStatus)}
+                                className={`px-4 py-3 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.batnaStatus === opt.value
+                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                        : 'border-slate-200 hover:border-emerald-300'
+                                    }`}
+                            >
+                                <span className="text-xl block mb-1">{opt.icon}</span>
+                                <span className="font-medium text-sm">{opt.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Top Priorities */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Top 3 priorities for this deal (select up to 3)
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                        {priorityOptions.map((priority) => (
+                            <button
+                                key={priority}
+                                onClick={() => togglePriority(priority)}
+                                disabled={!assessment.quickIntake.topPriorities.includes(priority) && assessment.quickIntake.topPriorities.length >= 3}
+                                className={`px-3 py-1.5 rounded-full text-sm transition-all ${assessment.quickIntake.topPriorities.includes(priority)
+                                        ? 'bg-emerald-500 text-white'
+                                        : assessment.quickIntake.topPriorities.length >= 3
+                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700'
+                                    }`}
+                            >
+                                {assessment.quickIntake.topPriorities.includes(priority) && '✓ '}
+                                {priority}
+                            </button>
+                        ))}
+                    </div>
+                    {assessment.quickIntake.topPriorities.length > 0 && (
+                        <p className="text-xs text-slate-400 mt-2">
+                            Selected: {assessment.quickIntake.topPriorities.join(', ')}
+                        </p>
+                    )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4 border-t border-slate-200">
+                    <button
+                        onClick={handleQuickIntakeComplete}
+                        className="flex-1 px-6 py-3 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
+                    >
+                        Continue →
+                    </button>
+                    <button
+                        onClick={handleSkipQuickIntake}
+                        className="px-6 py-3 rounded-lg border border-slate-300 text-slate-600 font-medium hover:bg-slate-50 transition-colors"
+                    >
+                        Skip for now
+                    </button>
                 </div>
             </div>
         )
@@ -1218,7 +1545,7 @@ export default function ContractCreationAssessment() {
                                     ? 'Ready - Click to proceed to Contract Prep'
                                     : assessment.uploadedContractStatus === 'failed'
                                         ? 'Processing failed'
-                                        : 'Processing... This may take up to 5 minutes'
+                                        : 'Processing... This may take 1-2 minutes'
                                 }
                             </p>
                         </div>
@@ -1577,6 +1904,59 @@ export default function ContractCreationAssessment() {
                                 <div>
                                     <p className="text-sm text-green-600">Uploaded Contract</p>
                                     <p className="font-medium text-green-800">{assessment.uploadedFileName}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Quick Intake Summary */}
+                    {(assessment.quickIntake.dealValue || assessment.quickIntake.serviceCriticality || assessment.quickIntake.topPriorities.length > 0) && (
+                        <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+                            <div className="flex items-start gap-3">
+                                <span className="text-2xl">📊</span>
+                                <div className="flex-1">
+                                    <p className="text-sm text-emerald-600 font-medium mb-2">Deal Context</p>
+                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                        {assessment.quickIntake.dealValue && (
+                                            <div>
+                                                <span className="text-emerald-600">Value: </span>
+                                                <span className="text-emerald-800">
+                                                    {assessment.quickIntake.dealValue === 'under_50k' && 'Under £50k'}
+                                                    {assessment.quickIntake.dealValue === '50k_250k' && '£50k - £250k'}
+                                                    {assessment.quickIntake.dealValue === '250k_1m' && '£250k - £1M'}
+                                                    {assessment.quickIntake.dealValue === 'over_1m' && 'Over £1M'}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {assessment.quickIntake.serviceCriticality && (
+                                            <div>
+                                                <span className="text-emerald-600">Criticality: </span>
+                                                <span className="text-emerald-800 capitalize">{assessment.quickIntake.serviceCriticality}</span>
+                                            </div>
+                                        )}
+                                        {assessment.quickIntake.timelinePressure && (
+                                            <div>
+                                                <span className="text-emerald-600">Timeline: </span>
+                                                <span className="text-emerald-800 capitalize">{assessment.quickIntake.timelinePressure}</span>
+                                            </div>
+                                        )}
+                                        {assessment.quickIntake.bidderCount && (
+                                            <div>
+                                                <span className="text-emerald-600">Providers: </span>
+                                                <span className="text-emerald-800">
+                                                    {assessment.quickIntake.bidderCount === 'single' && 'Single'}
+                                                    {assessment.quickIntake.bidderCount === 'few' && '2-3'}
+                                                    {assessment.quickIntake.bidderCount === 'many' && '4+'}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {assessment.quickIntake.topPriorities.length > 0 && (
+                                        <div className="mt-2">
+                                            <span className="text-emerald-600 text-sm">Priorities: </span>
+                                            <span className="text-emerald-800 text-sm">{assessment.quickIntake.topPriorities.join(', ')}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
