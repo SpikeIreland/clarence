@@ -288,7 +288,8 @@ function ContractPrepContent() {
 
     const loadContract = useCallback(async (id: string) => {
         try {
-            const response = await fetch(`${API_BASE}/get-uploaded-contract?contract_id=${id}`)
+            // Use local API proxy to avoid CORS issues
+            const response = await fetch(`/api/contracts/${id}`)
             if (!response.ok) throw new Error('Failed to load contract')
 
             const data = await response.json()
@@ -346,7 +347,8 @@ function ContractPrepContent() {
 
     const loadClauses = useCallback(async (id: string) => {
         try {
-            const response = await fetch(`${API_BASE}/get-uploaded-contract-clauses?contract_id=${id}`)
+            // Use local API proxy to avoid CORS issues
+            const response = await fetch(`/api/contracts/${id}/clauses`)
             if (!response.ok) throw new Error('Failed to load clauses')
 
             const data = await response.json()
@@ -602,15 +604,18 @@ function ContractPrepContent() {
 
             const result = await response.json()
 
-            if (result.contractId) {
+            if (result.contractId || result.contract_id) {
+                // Handle both camelCase and snake_case responses
+                const newContractId = result.contractId || result.contract_id
+
                 // Update progress to show we're transitioning
                 setUploadProgress('Contract uploaded! Starting analysis...')
 
                 // Update URL with contract_id - DON'T reset isUploading here
                 // The page will reload and pick up the processing state
                 const newUrl = sessionId
-                    ? `/auth/contract-prep?contract_id=${result.contractId}&session_id=${sessionId}`
-                    : `/auth/contract-prep?contract_id=${result.contractId}`
+                    ? `/auth/contract-prep?contract_id=${newContractId}&session_id=${sessionId}`
+                    : `/auth/contract-prep?contract_id=${newContractId}`
                 router.push(newUrl)
 
                 // Keep the overlay showing - the new page load will handle the transition
@@ -908,7 +913,7 @@ function ContractPrepContent() {
             <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
+                    <Link href="/auth/dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
                         ← Back to Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800">Contract Studio</h2>
