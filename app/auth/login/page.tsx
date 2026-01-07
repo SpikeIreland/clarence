@@ -146,12 +146,13 @@ function LoginSignupContent() {
         // Customer - store auth and redirect to dashboard
         const authData = {
           userInfo: {
-            userId: userData.auth_id,
+            userId: userData.user_id,           // Changed from auth_id
+            companyId: userData.company_id,     // ADDED
             email: userData.email,
             firstName: userData.first_name,
             lastName: userData.last_name,
             company: userData.company_name,
-            role: userData.role
+            role: userData.role || 'customer'
           },
           timestamp: new Date().toISOString()
         }
