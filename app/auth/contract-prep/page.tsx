@@ -443,6 +443,8 @@ function ContractPrepContent() {
     const hasLoadedRef = useRef<string | null>(null)
 
     useEffect(() => {
+        console.log('[Polling] useEffect triggered, contractId:', contractId, 'hasLoadedRef:', hasLoadedRef.current)
+
         if (!contractId) {
             setIsLoading(false)
             addChatMessage('clarence', CLARENCE_MESSAGES.welcome_new)
@@ -451,6 +453,7 @@ function ContractPrepContent() {
 
         // If we've already loaded this contract, don't poll again
         if (hasLoadedRef.current === contractId) {
+            console.log('[Polling] Already loaded this contract, skipping')
             return
         }
 
@@ -465,13 +468,22 @@ function ContractPrepContent() {
         let isActive = true // Track if this effect is still active
 
         const poll = async () => {
-            if (!isActive) return // Don't poll if effect was cleaned up
+            if (!isActive) {
+                console.log('[Polling] Effect no longer active, stopping')
+                return
+            }
 
+            console.log('[Polling] Fetching contract status, pollCount:', pollCount)
             const status = await loadContract(contractId)
+            console.log('[Polling] Got status:', status, 'type:', typeof status)
 
-            if (!isActive) return // Check again after async operation
+            if (!isActive) {
+                console.log('[Polling] Effect cleaned up during fetch, stopping')
+                return
+            }
 
             if (status === 'ready') {
+                console.log('[Polling] Status is ready, clearing interval and loading clauses')
                 if (pollInterval) {
                     clearInterval(pollInterval)
                     pollInterval = null
@@ -479,7 +491,9 @@ function ContractPrepContent() {
                 hasLoadedRef.current = contractId // Mark as loaded
                 await loadClauses(contractId)
                 setIsLoading(false)
+                console.log('[Polling] Clauses loaded, polling complete')
             } else if (status === 'failed') {
+                console.log('[Polling] Status is failed')
                 if (pollInterval) {
                     clearInterval(pollInterval)
                     pollInterval = null
@@ -488,6 +502,7 @@ function ContractPrepContent() {
                 setError('Contract processing failed')
             } else if (status === 'processing') {
                 // Contract is processing - keep polling
+                console.log('[Polling] Status is processing, continuing to poll')
                 setIsLoading(false) // Allow the processing overlay to show
                 pollCount++
                 if (pollCount >= MAX_POLLING_ATTEMPTS) {
@@ -498,17 +513,20 @@ function ContractPrepContent() {
                     setError('Processing timeout - please try again')
                 }
             } else if (status === null) {
-                // Error loading contract
+                console.log('[Polling] Status is null (error loading)')
                 setIsLoading(false)
             } else {
+                console.log('[Polling] Unknown status:', status)
                 setIsLoading(false)
             }
         }
 
         poll()
         pollInterval = setInterval(poll, POLLING_INTERVAL)
+        console.log('[Polling] Started interval')
 
         return () => {
+            console.log('[Polling] Cleanup called')
             isActive = false
             if (pollInterval) {
                 clearInterval(pollInterval)
