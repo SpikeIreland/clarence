@@ -1519,6 +1519,57 @@ function ContractPrepContent() {
 
     return (
         <div className="h-screen flex flex-col bg-slate-100">
+            {/* Upload Loading Overlay */}
+            {isUploading && (
+                <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 text-center shadow-2xl">
+                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                            Processing Your Contract
+                        </h3>
+                        <p className="text-slate-600 mb-4">
+                            {uploadProgress || 'Preparing document...'}
+                        </p>
+                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                            <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '60%' }} />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-4">
+                            This may take 1-2 minutes for larger documents
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Contract Processing Overlay (when polling) */}
+            {contract?.status === 'processing' && !isUploading && (
+                <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 text-center shadow-2xl">
+                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-slate-800 mb-2">
+                            Analyzing Contract
+                        </h3>
+                        <p className="text-slate-600 mb-2">
+                            CLARENCE is identifying clauses, categories, and entities...
+                        </p>
+                        <p className="text-sm text-slate-500 mb-4">
+                            {contract.fileName}
+                        </p>
+                        <div className="flex items-center justify-center gap-2 text-blue-600">
+                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-4">
+                            This typically takes 1-2 minutes
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <header className="h-14 bg-slate-800 flex items-center justify-between px-6 flex-shrink-0">
                 <div className="flex items-center gap-3">
