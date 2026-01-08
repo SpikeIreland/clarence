@@ -96,6 +96,19 @@ interface CategoryGroup {
     isExpanded: boolean
 }
 
+// Master clause from contract_clauses table (clause library)
+interface MasterClause {
+    clauseId: string
+    clauseName: string
+    category: string
+    description: string
+    legalContext: string | null
+    defaultCustomerPosition: number
+    defaultProviderPosition: number
+    isRequired: boolean
+    applicableContractTypes: string[]
+}
+
 // ============================================================================
 // SECTION 2: CONSTANTS
 // ============================================================================
@@ -277,6 +290,15 @@ function ContractPrepContent() {
         providerPosition: number
         importance: 'low' | 'medium' | 'high' | 'critical'
     }>>({})
+
+    // Clause Library State (Build from Scratch)
+    const [showClauseLibrary, setShowClauseLibrary] = useState(false)
+    const [masterClauses, setMasterClauses] = useState<MasterClause[]>([])
+    const [selectedMasterClauseIds, setSelectedMasterClauseIds] = useState<Set<string>>(new Set())
+    const [libraryLoading, setLibraryLoading] = useState(false)
+    const [librarySearchQuery, setLibrarySearchQuery] = useState('')
+    const [libraryExpandedCategories, setLibraryExpandedCategories] = useState<Set<string>>(new Set())
+    const [isAddingClauses, setIsAddingClauses] = useState(false)
 
     // ========================================================================
     // SECTION 5B: INITIALIZE & LOAD USER
@@ -1037,6 +1059,154 @@ function ContractPrepContent() {
         return 'Non-Negotiable'
     }
 
+    // ========================================================================
+    // CLAUSE LIBRARY FUNCTIONS (Build from Scratch)
+    // ========================================================================
+
+    const loadMasterClauses = async () => {
+        setLibraryLoading(true)
+        try {
+            const response = await fetch(`${API_BASE}/get-master-clauses`)
+            if (!response.ok) throw new Error('Failed to load clause library')
+
+            const data = await response.json()
+            const clausesArray = data.clauses || data
+
+            if (Array.isArray(clausesArray)) {
+                const mapped: MasterClause[] = clausesArray.map((c: any) => ({
+                    clauseId: c.clause_id || c.clauseId,
+                    clauseName: c.clause_name || c.clauseName,
+                    category: c.category || c.clause_category || 'Other',
+                    description: c.description || '',
+                    legalContext: c.legal_context || c.legalContext || null,
+                    defaultCustomerPosition: c.default_customer_position || c.defaultCustomerPosition || 5,
+                    defaultProviderPosition: c.default_provider_position || c.defaultProviderPosition || 5,
+                    isRequired: c.is_required || c.isRequired || false,
+                    applicableContractTypes: c.applicable_contract_types || c.applicableContractTypes || []
+                }))
+                setMasterClauses(mapped)
+
+                // Expand all categories by default
+                const categories = new Set(mapped.map(c => c.category))
+                setLibraryExpandedCategories(categories)
+            }
+        } catch (err) {
+            console.error('Error loading master clauses:', err)
+            setError('Failed to load clause library')
+        } finally {
+            setLibraryLoading(false)
+        }
+    }
+
+    const toggleMasterClauseSelection = (clauseId: string) => {
+        setSelectedMasterClauseIds(prev => {
+            const newSet = new Set(prev)
+            if (newSet.has(clauseId)) {
+                newSet.delete(clauseId)
+            } else {
+                newSet.add(clauseId)
+            }
+            return newSet
+        })
+    }
+
+    const toggleLibraryCategory = (category: string) => {
+        setLibraryExpandedCategories(prev => {
+            const newSet = new Set(prev)
+            if (newSet.has(category)) {
+                newSet.delete(category)
+            } else {
+                newSet.add(category)
+            }
+            return newSet
+        })
+    }
+
+    const addSelectedClausesToContract = async () => {
+        if (selectedMasterClauseIds.size === 0 || !contract || !userInfo) return
+
+        setIsAddingClauses(true)
+        try {
+            const selectedClauses = masterClauses.filter(c => selectedMasterClauseIds.has(c.clauseId))
+
+            const response = await fetch(`${API_BASE}/add-clauses-to-contract`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contract.contractId,
+                    user_id: userInfo.userId,
+                    clauses: selectedClauses.map((c, idx) => ({
+                        master_clause_id: c.clauseId,
+                        clause_name: c.clauseName,
+                        category: c.category,
+                        content: c.description,
+                        display_order: clauses.length + idx + 1,
+                        default_customer_position: c.defaultCustomerPosition,
+                        default_provider_position: c.defaultProviderPosition
+                    }))
+                })
+            })
+
+            if (!response.ok) throw new Error('Failed to add clauses')
+
+            const result = await response.json()
+
+            // Refresh clauses list
+            await loadClauses(contract.contractId)
+
+            // Update contract clause count
+            setContract(prev => prev ? {
+                ...prev,
+                clauseCount: (prev.clauseCount || 0) + selectedMasterClauseIds.size
+            } : null)
+
+            // Clear selection and close modal
+            setSelectedMasterClauseIds(new Set())
+            setShowClauseLibrary(false)
+
+            addChatMessage('clarence', `I've added ${selectedMasterClauseIds.size} clause${selectedMasterClauseIds.size > 1 ? 's' : ''} to your contract. You can now review and verify each one, or adjust positions as needed.`)
+
+        } catch (err) {
+            console.error('Error adding clauses:', err)
+            setError('Failed to add clauses to contract')
+        } finally {
+            setIsAddingClauses(false)
+        }
+    }
+
+    const openClauseLibrary = () => {
+        setShowClauseLibrary(true)
+        if (masterClauses.length === 0) {
+            loadMasterClauses()
+        }
+    }
+
+    // Filter and group master clauses for display
+    const getFilteredLibraryClauses = () => {
+        let filtered = masterClauses
+
+        if (librarySearchQuery.trim()) {
+            const query = librarySearchQuery.toLowerCase()
+            filtered = masterClauses.filter(c =>
+                c.clauseName.toLowerCase().includes(query) ||
+                c.category.toLowerCase().includes(query) ||
+                c.description.toLowerCase().includes(query)
+            )
+        }
+
+        // Group by category
+        const groups: { [key: string]: MasterClause[] } = {}
+        filtered.forEach(clause => {
+            const cat = clause.category || 'Other'
+            if (!groups[cat]) {
+                groups[cat] = []
+            }
+            groups[cat].push(clause)
+        })
+
+        return groups
+    }
+
     const handleCommitClauses = async () => {
         if (!userInfo || !contract) return
 
@@ -1259,8 +1429,34 @@ function ContractPrepContent() {
                 {/* Category Navigation */}
                 <div className="flex-1 overflow-auto">
                     {filteredCategories.length === 0 ? (
-                        <div className="p-4 text-center text-slate-500 text-sm">
-                            {searchQuery ? 'No clauses match your search' : 'No clauses found'}
+                        <div className="p-6 text-center">
+                            {searchQuery ? (
+                                <div className="text-slate-500 text-sm">
+                                    No clauses match your search
+                                </div>
+                            ) : clauses.length === 0 ? (
+                                /* Build from Scratch Empty State */
+                                <div className="space-y-4">
+                                    <div className="text-4xl">📋</div>
+                                    <div>
+                                        <h3 className="font-medium text-slate-800">No clauses yet</h3>
+                                        <p className="text-sm text-slate-500 mt-1">
+                                            Start building your contract by adding clauses from our library
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={openClauseLibrary}
+                                        className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                                    >
+                                        <span>📚</span>
+                                        Browse Clause Library
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-slate-500 text-sm">
+                                    No clauses found
+                                </div>
+                            )}
                         </div>
                     ) : (
                         filteredCategories.map(group => {
@@ -1368,6 +1564,15 @@ function ContractPrepContent() {
 
                 {/* Actions */}
                 <div className="p-4 border-t border-slate-200 bg-white space-y-2">
+                    {/* Add from Library Button - Always visible */}
+                    <button
+                        onClick={openClauseLibrary}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+                    >
+                        <span>📚</span>
+                        Add from Clause Library
+                    </button>
+
                     {detectedEntities.length > 0 && (
                         <button
                             onClick={() => setShowEntitiesPanel(!showEntitiesPanel)}
@@ -1999,6 +2204,198 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
+    // SECTION 9B: CLAUSE LIBRARY MODAL
+    // ========================================================================
+
+    const renderClauseLibraryModal = () => {
+        if (!showClauseLibrary) return null
+
+        const groupedClauses = getFilteredLibraryClauses()
+        const categoryOrder = ['Liability', 'Payment', 'Service Levels', 'Termination', 'Data Protection',
+            'Intellectual Property', 'Confidentiality', 'Governance', 'General', 'Other']
+        const sortedCategories = Object.keys(groupedClauses).sort((a, b) => {
+            const aIdx = categoryOrder.indexOf(a)
+            const bIdx = categoryOrder.indexOf(b)
+            return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx)
+        })
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                    {/* Header */}
+                    <div className="p-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
+                        <div>
+                            <h3 className="text-lg font-semibold text-slate-800">CLARENCE Clause Library</h3>
+                            <p className="text-sm text-slate-500">Select clauses to add to your contract</p>
+                        </div>
+                        <button
+                            onClick={() => setShowClauseLibrary(false)}
+                            className="text-slate-400 hover:text-slate-600 p-1"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {/* Search */}
+                    <div className="p-4 border-b border-slate-200 flex-shrink-0">
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={librarySearchQuery}
+                                onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                                placeholder="Search clauses by name, category, or description..."
+                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            />
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+                        </div>
+                    </div>
+
+                    {/* Clause List */}
+                    <div className="flex-1 overflow-auto p-4">
+                        {libraryLoading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                                <span className="ml-3 text-slate-600">Loading clause library...</span>
+                            </div>
+                        ) : sortedCategories.length === 0 ? (
+                            <div className="text-center py-12 text-slate-500">
+                                <p className="text-4xl mb-2">📋</p>
+                                <p>No clauses found matching your search</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {sortedCategories.map(category => (
+                                    <div key={category} className="border border-slate-200 rounded-lg overflow-hidden">
+                                        {/* Category Header */}
+                                        <button
+                                            onClick={() => toggleLibraryCategory(category)}
+                                            className="w-full px-4 py-3 bg-slate-50 flex items-center justify-between hover:bg-slate-100 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <span className={`transform transition-transform ${libraryExpandedCategories.has(category) ? 'rotate-90' : ''}`}>
+                                                    ▶
+                                                </span>
+                                                <span className="font-medium text-slate-700">{category}</span>
+                                                <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                                                    {groupedClauses[category].length}
+                                                </span>
+                                            </div>
+                                            <span className="text-xs text-slate-400">
+                                                {groupedClauses[category].filter(c => selectedMasterClauseIds.has(c.clauseId)).length} selected
+                                            </span>
+                                        </button>
+
+                                        {/* Clauses in Category */}
+                                        {libraryExpandedCategories.has(category) && (
+                                            <div className="divide-y divide-slate-100">
+                                                {groupedClauses[category].map(clause => {
+                                                    const isSelected = selectedMasterClauseIds.has(clause.clauseId)
+                                                    const isAlreadyInContract = clauses.some(c => c.mapsToMasterClauseId === clause.clauseId)
+
+                                                    return (
+                                                        <div
+                                                            key={clause.clauseId}
+                                                            className={`px-4 py-3 flex items-start gap-3 ${isAlreadyInContract
+                                                                    ? 'bg-slate-50 opacity-60'
+                                                                    : isSelected
+                                                                        ? 'bg-blue-50'
+                                                                        : 'hover:bg-slate-50'
+                                                                }`}
+                                                        >
+                                                            {/* Checkbox */}
+                                                            <button
+                                                                onClick={() => !isAlreadyInContract && toggleMasterClauseSelection(clause.clauseId)}
+                                                                disabled={isAlreadyInContract}
+                                                                className={`mt-0.5 w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isAlreadyInContract
+                                                                        ? 'bg-slate-200 border-slate-300 cursor-not-allowed'
+                                                                        : isSelected
+                                                                            ? 'bg-blue-600 border-blue-600'
+                                                                            : 'border-slate-300 hover:border-blue-400'
+                                                                    }`}
+                                                            >
+                                                                {(isSelected || isAlreadyInContract) && (
+                                                                    <span className="text-white text-xs">✓</span>
+                                                                )}
+                                                            </button>
+
+                                                            {/* Clause Info */}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-medium text-slate-800">{clause.clauseName}</span>
+                                                                    {clause.isRequired && (
+                                                                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Required</span>
+                                                                    )}
+                                                                    {isAlreadyInContract && (
+                                                                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Already added</span>
+                                                                    )}
+                                                                </div>
+                                                                {clause.description && (
+                                                                    <p className="text-sm text-slate-500 mt-1 line-clamp-2">{clause.description}</p>
+                                                                )}
+                                                                <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
+                                                                    <span title="Default customer position">
+                                                                        Customer: {clause.defaultCustomerPosition}/10
+                                                                    </span>
+                                                                    <span title="Default provider position">
+                                                                        Provider: {clause.defaultProviderPosition}/10
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-4 border-t border-slate-200 flex items-center justify-between flex-shrink-0 bg-slate-50">
+                        <div className="text-sm text-slate-600">
+                            {selectedMasterClauseIds.size > 0 ? (
+                                <span className="font-medium text-blue-600">
+                                    {selectedMasterClauseIds.size} clause{selectedMasterClauseIds.size > 1 ? 's' : ''} selected
+                                </span>
+                            ) : (
+                                <span>Select clauses to add</span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setShowClauseLibrary(false)}
+                                className="px-4 py-2 text-slate-600 hover:text-slate-800"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={addSelectedClausesToContract}
+                                disabled={selectedMasterClauseIds.size === 0 || isAddingClauses}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {isAddingClauses ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Adding...
+                                    </>
+                                ) : (
+                                    <>
+                                        Add {selectedMasterClauseIds.size > 0 ? selectedMasterClauseIds.size : ''} Clause{selectedMasterClauseIds.size !== 1 ? 's' : ''}
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
     // SECTION 10: MAIN RENDER
     // ========================================================================
 
@@ -2117,6 +2514,9 @@ function ContractPrepContent() {
 
             {/* Edit Modal */}
             {renderEditModal()}
+
+            {/* Clause Library Modal */}
+            {renderClauseLibraryModal()}
         </div>
     )
 }
