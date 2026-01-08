@@ -488,6 +488,13 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
     addClarenceMessage("Thank you. I now have a complete picture of your strategic position and priorities.")
     await new Promise(resolve => setTimeout(resolve, 1500))
     const customerFactors = calculateCustomerFactors()
+
+    // Calculate preliminary leverage based on customer factors
+    const avgScore = (customerFactors.marketDynamicsScore + customerFactors.economicFactorsScore +
+      customerFactors.strategicPositionScore + customerFactors.batnaScore) / 4
+    const customerLeverage = Math.round(avgScore)
+    const providerLeverage = 100 - customerLeverage
+
     addClarenceMessage(`**Strategic Assessment Complete**
 
 I've captured your position on:
@@ -507,7 +514,13 @@ I've captured your position on:
 4. **Negotiate** - I'll generate draft positions and guide the mediation
 
 Your data is saved and ready. Click below to invite providers.`)
-    setLeverageAssessment({ customerLeverage: 0, providerLeverage: 0, breakdown: customerFactors, reasoning: "Full leverage calculation pending provider intake." })
+
+    setLeverageAssessment({
+      customerLeverage,
+      providerLeverage,
+      breakdown: customerFactors,
+      reasoning: "Preliminary assessment based on customer data. Final leverage will be calculated after provider intake."
+    })
     setIsTyping(false)
     setConversationComplete(true)
   }
@@ -545,15 +558,31 @@ Your data is saved and ready. Click below to invite providers.`)
   const handleProceedToInviteProviders = async () => {
     if (!sessionId) return
     try {
+      // Build leverage_assessment object matching N8N schema
+      const leveragePayload = {
+        customerLeverage: leverageAssessment?.customerLeverage || 50,
+        providerLeverage: leverageAssessment?.providerLeverage || 50,
+        breakdown: leverageAssessment?.breakdown || {
+          marketDynamicsScore: 50,
+          economicFactorsScore: 50,
+          strategicPositionScore: 50,
+          batnaScore: 50
+        },
+        reasoning: leverageAssessment?.reasoning || 'Preliminary assessment based on customer data'
+      }
+
       await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: sessionId,
           session_number: sessionNumber,
-          strategic_answers: strategicAnswers,
-          customer_factors: leverageAssessment?.breakdown,
-          status: 'customer_assessment_complete',
+          strategic_answers: {
+            ...strategicAnswers,
+            providerConcerns: '',  // Optional field expected by N8N
+            trustLevel: ''         // Optional field expected by N8N
+          },
+          leverage_assessment: leveragePayload,
           completed_at: new Date().toISOString()
         })
       })
@@ -567,6 +596,7 @@ Your data is saved and ready. Click below to invite providers.`)
     if (!sessionId) return
     setIsSkipping(true)
     try {
+      // Send empty assessment with default leverage values
       await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -574,8 +604,18 @@ Your data is saved and ready. Click below to invite providers.`)
           session_id: sessionId,
           session_number: sessionNumber,
           strategic_answers: {},
-          status: 'assessment_skipped',
-          skipped_at: new Date().toISOString()
+          leverage_assessment: {
+            customerLeverage: 50,
+            providerLeverage: 50,
+            breakdown: {
+              marketDynamicsScore: 50,
+              economicFactorsScore: 50,
+              strategicPositionScore: 50,
+              batnaScore: 50
+            },
+            reasoning: 'Assessment skipped - using default values'
+          },
+          completed_at: new Date().toISOString()
         })
       })
     } catch (error) { console.error('Error saving skip status:', error) }
