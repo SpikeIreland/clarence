@@ -176,7 +176,7 @@ function InviteProvidersContent() {
 
     const loadSessionData = async (sessionId: string) => {
         try {
-            const response = await fetch(`${API_BASE}/get-session-details?session_id=${sessionId}`)
+            const response = await fetch(`${API_BASE}/get-session?session_id=${sessionId}`)
             if (response.ok) {
                 const data = await response.json()
                 setSession({
@@ -190,6 +190,8 @@ function InviteProvidersContent() {
                 })
 
                 // Extract deal context if available
+                // Note: Full quick intake data requires adding deal_context column to sessions table
+                // For now, use dealValue from customer_requirements
                 if (data.deal_context || data.dealContext) {
                     const ctx = data.deal_context || data.dealContext
                     setDealContext({
@@ -199,6 +201,16 @@ function InviteProvidersContent() {
                         bidderCount: ctx.bidder_count || ctx.bidderCount || null,
                         batnaStatus: ctx.batna_status || ctx.batnaStatus || null,
                         topPriorities: ctx.top_priorities || ctx.topPriorities || []
+                    })
+                } else if (data.dealValue || data.deal_value) {
+                    // Fallback: use dealValue from customer_requirements
+                    setDealContext({
+                        dealValue: data.dealValue || data.deal_value || null,
+                        serviceCriticality: null,
+                        timelinePressure: null,
+                        bidderCount: null,
+                        batnaStatus: null,
+                        topPriorities: []
                     })
                 }
             } else {
