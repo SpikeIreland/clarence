@@ -981,7 +981,20 @@ export default function ContractCreationAssessment() {
             const result = await response.json()
 
             if (result.success && result.sessionId) {
-                router.push(`/auth/contract-prep?session_id=${result.sessionId}`)
+                // Build redirect URL with both session_id and contract_id (if available)
+                let redirectUrl = `/auth/contract-prep?session_id=${result.sessionId}`
+
+                // If a contractId was returned (from template or uploaded), include it
+                if (result.contractId || result.contract_id) {
+                    const contractId = result.contractId || result.contract_id
+                    redirectUrl = `/auth/contract-prep?contract_id=${contractId}&session_id=${result.sessionId}`
+                }
+                // If we had an uploaded contract already, include that
+                else if (assessment.uploadedContractId) {
+                    redirectUrl = `/auth/contract-prep?contract_id=${assessment.uploadedContractId}&session_id=${result.sessionId}`
+                }
+
+                router.push(redirectUrl)
             } else {
                 throw new Error(result.error || 'No session ID returned')
             }
@@ -1047,7 +1060,7 @@ export default function ContractCreationAssessment() {
             <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                    <Link href="/auth/dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
                         ← Back to Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800 mt-2">New Contract</h2>
