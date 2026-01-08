@@ -1053,7 +1053,14 @@ function ContractPrepContent() {
                     contract_id: contract.contractId,
                     session_id: sessionId,
                     user_id: userInfo.userId,
-                    clause_ids: verifiedClauses.map(c => c.clauseId)
+                    clause_ids: verifiedClauses.map(c => c.clauseId),
+                    // Include position data for committed clauses
+                    clause_positions: verifiedClauses.map(c => ({
+                        clause_id: c.clauseId,
+                        customer_position: clausePositions[c.clauseId]?.customerPosition || null,
+                        provider_position: clausePositions[c.clauseId]?.providerPosition || null,
+                        importance: clausePositions[c.clauseId]?.importance || null
+                    }))
                 })
             })
 
@@ -1063,12 +1070,18 @@ function ContractPrepContent() {
 
             addChatMessage('clarence', CLARENCE_MESSAGES.committed(verifiedClauses.length))
 
-            // Navigate to appropriate next step
-            if (result.sessionId || sessionId) {
-                setTimeout(() => {
-                    router.push(`/auth/contract-studio?session_id=${result.sessionId || sessionId}`)
-                }, 2000)
-            }
+            // Navigate to invite providers page
+            const targetSessionId = result.sessionId || sessionId
+            const contractId = contract.contractId
+
+            setTimeout(() => {
+                // Build URL with both session_id and contract_id
+                let nextUrl = `/auth/invite-providers?session_id=${targetSessionId}`
+                if (contractId) {
+                    nextUrl += `&contract_id=${contractId}`
+                }
+                router.push(nextUrl)
+            }, 2000)
 
         } catch (err) {
             console.error('Error committing clauses:', err)
