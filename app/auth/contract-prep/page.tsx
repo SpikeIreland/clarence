@@ -109,6 +109,15 @@ interface MasterClause {
     applicableContractTypes: string[]
 }
 
+// Session data for routing decisions
+interface SessionData {
+    sessionId: string
+    sessionNumber: string | null
+    mediationType: 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
+    contractType: string | null
+    status: string | null
+}
+
 // ============================================================================
 // SECTION 2: CONSTANTS
 // ============================================================================
@@ -299,6 +308,9 @@ function ContractPrepContent() {
     const [librarySearchQuery, setLibrarySearchQuery] = useState('')
     const [libraryExpandedCategories, setLibraryExpandedCategories] = useState<Set<string>>(new Set())
     const [isAddingClauses, setIsAddingClauses] = useState(false)
+
+    // Session Data State (for routing decisions)
+    const [sessionData, setSessionData] = useState<SessionData | null>(null)
 
     // ========================================================================
     // SECTION 5B: INITIALIZE & LOAD USER
@@ -501,6 +513,38 @@ function ContractPrepContent() {
         setCategoryGroups(categoryList)
     }
 
+    // Load session data for routing decisions
+    const loadSession = useCallback(async (sid: string) => {
+        try {
+            const response = await fetch(`${API_BASE}/get-session?session_id=${sid}`)
+            if (!response.ok) {
+                console.log('[loadSession] Failed to load session')
+                return
+            }
+
+            const data = await response.json()
+            console.log('[loadSession] Raw API response:', data)
+
+            // Handle both nested and flat response structures
+            const session = data.session || data
+
+            if (session) {
+                const get = (snake: string, camel: string) => session[snake] ?? session[camel]
+
+                setSessionData({
+                    sessionId: get('session_id', 'sessionId') || sid,
+                    sessionNumber: get('session_number', 'sessionNumber'),
+                    mediationType: get('mediation_type', 'mediationType'),
+                    contractType: get('contract_type', 'contractType'),
+                    status: get('status', 'status')
+                })
+                console.log('[loadSession] Session loaded, mediation_type:', get('mediation_type', 'mediationType'))
+            }
+        } catch (err) {
+            console.error('Error loading session:', err)
+        }
+    }, [])
+
     // ========================================================================
     // SECTION 5D: POLLING FOR PROCESSING STATUS
     // ========================================================================
@@ -606,6 +650,13 @@ function ContractPrepContent() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [contractId]) // Only depend on contractId, not the callbacks
+
+    // Load session data when sessionId is available
+    useEffect(() => {
+        if (sessionId) {
+            loadSession(sessionId)
+        }
+    }, [sessionId, loadSession])
 
     // ========================================================================
     // SECTION 5E: CHAT MESSAGE MANAGEMENT
@@ -1240,17 +1291,26 @@ function ContractPrepContent() {
 
             addChatMessage('clarence', CLARENCE_MESSAGES.committed(verifiedClauses.length))
 
-            // Navigate to invite providers page
+            // Get routing parameters
             const targetSessionId = result.sessionId || sessionId
-            const contractId = contract.contractId
+            const targetContractId = contract.contractId
+            const mediationType = sessionData?.mediationType
 
             setTimeout(() => {
-                // Build URL with both session_id and contract_id
-                let nextUrl = `/auth/invite-providers?session_id=${targetSessionId}`
-                if (contractId) {
-                    nextUrl += `&contract_id=${contractId}`
+                // Route based on mediation type
+                if (mediationType === 'straight_to_contract') {
+                    // No negotiation needed - go to party details form
+                    // TODO: Build party details form, for now go to dashboard
+                    addChatMessage('clarence', 'Your clauses are committed. Next step: complete party details to generate your contract.')
+                    router.push(`/auth/dashboard?session_id=${targetSessionId}&next=party-details`)
+                } else {
+                    // partial_mediation or full_mediation - go to strategic assessment
+                    let nextUrl = `/auth/strategic-assessment?session_id=${targetSessionId}`
+                    if (targetContractId) {
+                        nextUrl += `&contract_id=${targetContractId}`
+                    }
+                    router.push(nextUrl)
                 }
-                router.push(nextUrl)
             }, 2000)
 
         } catch (err) {

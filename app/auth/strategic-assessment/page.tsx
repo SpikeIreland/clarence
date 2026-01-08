@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { eventLogger } from '@/lib/eventLogger';
 
 // ========== SECTION 1: INTERFACES ==========
 interface ConversationMessage {
@@ -14,36 +13,30 @@ interface ConversationMessage {
 }
 
 interface ExistingRequirements {
-  // From customer requirements form
   companyName: string
   companySize: string
   annualRevenue: string
   industry: string
   contactName: string
   contactEmail: string
-  // Market context
   numberOfBidders: string
   marketPosition: string
   dealValue: string
   decisionTimeline: string
   incumbentStatus: string
   switchingCosts: string
-  // Service
   serviceRequired: string
   serviceCriticality: string
   businessChallenge: string
   desiredOutcome: string
-  // BATNA (may be partial from form)
   alternativeOptions: string
   inHouseCapability: string
   walkAwayPoint: string
   budgetFlexibility: string
-  // Contract positions - individual fields (legacy)
   liabilityCap?: number
   paymentTerms?: number
   slaTarget?: number
   terminationNotice?: number
-  // Contract positions - nested object (from API)
   contractPositions?: {
     liabilityCap?: number
     paymentTerms?: number
@@ -51,7 +44,6 @@ interface ExistingRequirements {
     dataRetention?: number
     terminationNotice?: number
   } | string
-  // Priorities - can be object or JSON string from API
   priorities?: {
     cost: number
     quality: number
@@ -62,20 +54,15 @@ interface ExistingRequirements {
 }
 
 interface StrategicAnswers {
-  // Deep BATNA probing
   batnaSpecifics: string
   batnaTimeline: string
   batnaRealismScore: string
-  // Red lines
   absoluteRedLines: string
   flexibleAreas: string
-  // Risk tolerance
   riskAppetite: string
   worstCaseScenario: string
-  // Internal dynamics
   stakeholderPressure: string
   internalPolitics: string
-  // Relationship priorities
   relationshipVsTerms: string
   longTermVision: string
 }
@@ -103,11 +90,7 @@ interface LeverageAssessment {
   reasoning: string
 }
 
-// ========================================================================
-// SECTION 1.5: DISPLAY FORMATTING HELPERS
-// ========================================================================
-
-// Format incumbent status for display
+// ========== SECTION 2: DISPLAY HELPERS ==========
 const getIncumbentDisplay = (status: string): string => {
   const statusMap: Record<string, string> = {
     'no-incumbent': 'New engagement (no current provider)',
@@ -119,7 +102,6 @@ const getIncumbentDisplay = (status: string): string => {
   return statusMap[status] || status.replace(/-/g, ' ')
 }
 
-// Format timeline for display
 const getTimelineDisplay = (timeline: string): string => {
   const timelineMap: Record<string, string> = {
     'Urgent': 'Urgent - under 2 weeks',
@@ -131,7 +113,6 @@ const getTimelineDisplay = (timeline: string): string => {
   return timelineMap[timeline] || timeline
 }
 
-// Format criticality for display
 const getCriticalityDisplay = (criticality: string): string => {
   const criticalityMap: Record<string, string> = {
     'mission-critical': 'Mission-critical (business stops without it)',
@@ -143,7 +124,6 @@ const getCriticalityDisplay = (criticality: string): string => {
   return criticalityMap[criticality] || criticality.replace(/-/g, ' ')
 }
 
-// Format switching costs for display
 const getSwitchingCostsDisplay = (costs: string): string => {
   const costsMap: Record<string, string> = {
     'minimal': 'Minimal (< £10k)',
@@ -155,7 +135,6 @@ const getSwitchingCostsDisplay = (costs: string): string => {
   return costsMap[costs] || costs
 }
 
-// Format currency value
 const formatCurrency = (value: string | number): string => {
   if (!value) return 'Not specified'
   const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.]/g, '')) : value
@@ -165,13 +144,8 @@ const formatCurrency = (value: string | number): string => {
   return `£${num.toLocaleString()}`
 }
 
-// Format priorities for display (sorted by points)
-const formatPrioritiesDisplay = (
-  priorities: Record<string, number> | string | null | undefined
-): string => {
+const formatPrioritiesDisplay = (priorities: Record<string, number> | string | null | undefined): string => {
   if (!priorities) return 'Not specified'
-
-  // Parse if string
   let prioritiesObj: Record<string, number>
   if (typeof priorities === 'string') {
     try {
@@ -182,11 +156,9 @@ const formatPrioritiesDisplay = (
   } else {
     prioritiesObj = priorities as Record<string, number>
   }
-
   if (!prioritiesObj || typeof prioritiesObj !== 'object' || Object.keys(prioritiesObj).length === 0) {
     return 'Not specified'
   }
-
   const labels: Record<string, string> = {
     'cost': 'Cost Optimization',
     'quality': 'Quality Standards',
@@ -194,16 +166,13 @@ const formatPrioritiesDisplay = (
     'innovation': 'Innovation & Technology',
     'riskMitigation': 'Risk Mitigation'
   }
-
   const sorted = Object.entries(prioritiesObj)
     .filter(([, value]) => typeof value === 'number' && value > 0)
     .sort(([, a], [, b]) => b - a)
     .map(([key, value], index) => `${index + 1}. ${labels[key] || key} (${value} points)`)
-
   return sorted.length > 0 ? sorted.join('\n') : 'Not specified'
 }
 
-// Format number of bidders for display
 const getBiddersDisplay = (bidders: string): string => {
   if (!bidders) return 'Not specified'
   if (bidders === '1') return 'Sole source (1 provider)'
@@ -211,8 +180,7 @@ const getBiddersDisplay = (bidders: string): string => {
   return `${bidders} providers in consideration`
 }
 
-// ========== SECTION 2: STRATEGIC QUESTIONS ==========
-// These are the INTELLIGENT questions that go beyond the form
+// ========== SECTION 3: STRATEGIC QUESTIONS ==========
 const STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   {
     key: 'batnaSpecifics',
@@ -261,67 +229,44 @@ const STRATEGIC_QUESTIONS: StrategicQuestion[] = [
   }
 ]
 
-// ========== SECTION 3: MAIN COMPONENT ==========
+// ========== SECTION 4: MAIN COMPONENT ==========
 function IntelligentQuestionnaireContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // ========================================================================
-  // SECTION 3A: PROGRESS TRACKING FOR QUESTIONNAIRE
-  // ========================================================================
+  // URL Parameters
+  const sessionId = searchParams.get('session_id')
+  const contractId = searchParams.get('contract_id')
 
-  // Define questionnaire sections matching STRATEGIC_QUESTIONS
+  // Questionnaire sections
   const questionnaireSections = [
-    {
-      id: 'summary',
-      name: 'Requirements Summary',
-      icon: '📋',
-      questionIndices: [] as number[],
-    },
-    {
-      id: 'batna',
-      name: 'BATNA Deep Dive',
-      icon: '⚖️',
-      questionIndices: [0, 1, 2],
-    },
-    {
-      id: 'redlines',
-      name: 'Red Lines & Flexibility',
-      icon: '🚫',
-      questionIndices: [3, 4],
-    },
-    {
-      id: 'risk',
-      name: 'Risk Tolerance',
-      icon: '⚠️',
-      questionIndices: [5, 6],
-    },
-    {
-      id: 'internal',
-      name: 'Internal Dynamics',
-      icon: '🏢',
-      questionIndices: [7, 8],
-    },
-    {
-      id: 'relationship',
-      name: 'Relationship Priorities',
-      icon: '🤝',
-      questionIndices: [9, 10],
-    },
-    {
-      id: 'complete',
-      name: 'Review Clauses',
-      icon: '📝',
-      questionIndices: [] as number[],
-    }
+    { id: 'summary', name: 'Requirements Summary', icon: '📋', questionIndices: [] as number[] },
+    { id: 'batna', name: 'BATNA Deep Dive', icon: '⚖️', questionIndices: [0, 1, 2] },
+    { id: 'redlines', name: 'Red Lines & Flexibility', icon: '🚫', questionIndices: [3, 4] },
+    { id: 'risk', name: 'Risk Tolerance', icon: '⚠️', questionIndices: [5, 6] },
+    { id: 'internal', name: 'Internal Dynamics', icon: '🏢', questionIndices: [7, 8] },
+    { id: 'relationship', name: 'Relationship Priorities', icon: '🤝', questionIndices: [9, 10] },
+    { id: 'complete', name: 'Invite Providers', icon: '📧', questionIndices: [] as number[] }
   ]
 
-  // Calculate which section the current question belongs to
+  // ========== SECTION 5: STATE ==========
+  const [loading, setLoading] = useState(true)
+  const [existingData, setExistingData] = useState<ExistingRequirements | null>(null)
+  const [messages, setMessages] = useState<ConversationMessage[]>([])
+  const [userInput, setUserInput] = useState('')
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [strategicAnswers, setStrategicAnswers] = useState<Partial<StrategicAnswers>>({})
+  const [isTyping, setIsTyping] = useState(false)
+  const [sessionNumber, setSessionNumber] = useState<string | null>(null)
+  const [conversationComplete, setConversationComplete] = useState(false)
+  const [leverageAssessment, setLeverageAssessment] = useState<LeverageAssessment | null>(null)
+  const [isSkipping, setIsSkipping] = useState(false)
+
+  // ========== SECTION 6: PROGRESS HELPERS ==========
   const getCurrentSectionId = (): string => {
     if (conversationComplete) return 'complete'
     if (currentQuestionIndex === 0 && messages.length <= 2) return 'summary'
-
     for (const section of questionnaireSections) {
       if (section.questionIndices.includes(currentQuestionIndex)) {
         return section.id
@@ -330,354 +275,147 @@ function IntelligentQuestionnaireContent() {
     return 'summary'
   }
 
-  // Calculate section completion status
   const getSectionStatus = (sectionId: string): 'complete' | 'current' | 'pending' => {
     const section = questionnaireSections.find(s => s.id === sectionId)
     if (!section) return 'pending'
-
     if (sectionId === 'summary') return 'complete'
     if (sectionId === 'complete') return conversationComplete ? 'complete' : 'pending'
-
     if (section.questionIndices.length === 0) return 'pending'
-
     const maxIndex = Math.max(...section.questionIndices)
     const minIndex = Math.min(...section.questionIndices)
-
     if (currentQuestionIndex > maxIndex) return 'complete'
     if (currentQuestionIndex >= minIndex && currentQuestionIndex <= maxIndex) return 'current'
     return 'pending'
   }
 
-  // Calculate section progress (answered/total)
   const getSectionProgress = (sectionId: string): { answered: number; total: number } => {
     const section = questionnaireSections.find(s => s.id === sectionId)
     if (!section || section.questionIndices.length === 0) return { answered: 0, total: 0 }
-
     const answered = section.questionIndices.filter(idx => {
       const questionKey = STRATEGIC_QUESTIONS[idx]?.key
       return questionKey && strategicAnswers[questionKey]
     }).length
-
     return { answered, total: section.questionIndices.length }
   }
 
-  // Calculate overall progress percentage
   const getOverallProgress = (): number => {
     const totalQuestions = STRATEGIC_QUESTIONS.length
     const answeredQuestions = Object.keys(strategicAnswers).length
     return Math.round((answeredQuestions / totalQuestions) * 100)
   }
 
-  // ========== SECTION 4: STATE ==========
-  const [loading, setLoading] = useState(true)
-  const [existingData, setExistingData] = useState<ExistingRequirements | null>(null)
-  const [messages, setMessages] = useState<ConversationMessage[]>([])
-  const [userInput, setUserInput] = useState('')
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [strategicAnswers, setStrategicAnswers] = useState<Partial<StrategicAnswers>>({})
-  const [isTyping, setIsTyping] = useState(false)
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [sessionNumber, setSessionNumber] = useState<string | null>(null)
-  const [conversationComplete, setConversationComplete] = useState(false)
-  const [leverageAssessment, setLeverageAssessment] = useState<LeverageAssessment | null>(null)
-
-  // ========== SECTION 5: LOAD EXISTING DATA ==========
+  // ========== SECTION 7: LOAD DATA ==========
   useEffect(() => {
     const loadExistingRequirements = async () => {
-      const sid = searchParams.get('session_id')
-      if (!sid) {
+      if (!sessionId) {
         setLoading(false)
         return
       }
-
-      setSessionId(sid)
-
-      // LOG: Set session context
-      eventLogger.setSession(sid)
-
       try {
-        // FIXED: Use correct API endpoint
-        const response = await fetch(`https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sid}`)
-
+        const response = await fetch(`https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sessionId}`)
         if (response.ok) {
           const data = await response.json()
-
-          // Store session number for later
           setSessionNumber(data.sessionNumber || null)
-
-          // FIXED: Map nested API response to our flat interface
           const requirements: ExistingRequirements = mapApiResponseToRequirements(data)
-
           setExistingData(requirements)
-
-          // LOG: Page loaded with data
-          eventLogger.completed('customer_questionnaire', 'questionnaire_page_loaded', {
-            sessionId: sid,
-            sessionNumber: data.sessionNumber,
-            hasExistingData: true
-          })
-
-          // Start intelligent conversation
           startIntelligentConversation(requirements)
         } else {
-          // No existing data - shouldn't happen in normal flow
-          // LOG: Failed to load data
-          eventLogger.failed('customer_questionnaire', 'questionnaire_page_loaded', 'No requirements data found', 'DATA_NOT_FOUND')
           addClarenceMessage("I don't have your requirements data yet. Please complete the Customer Requirements form first.")
         }
       } catch (error) {
         console.error('Error loading requirements:', error)
-        // LOG: Error loading data
-        eventLogger.failed('customer_questionnaire', 'questionnaire_page_loaded', error instanceof Error ? error.message : 'Failed to load requirements', 'LOAD_ERROR')
         addClarenceMessage("I had trouble loading your requirements. Let me try a different approach...")
       }
-
       setLoading(false)
     }
-
     loadExistingRequirements()
-  }, [searchParams])
+  }, [sessionId])
 
-  // ========== SECTION 6: MAP API RESPONSE ==========
-  interface ApiResponseData {
-    requirements?: {
-      serviceRequired?: string
-      serviceCriticality?: string
-      businessChallenge?: string
-      desiredOutcome?: string
-      budget?: { dealValue?: string }
-      commercial?: { paymentTermsRequired?: number }
-      riskCompliance?: {
-        minimumLiabilityCap?: number
-        minimumAvailabilityGuarantee?: number
-        terminationNoticeDays?: number
-      }
-    }
-    customer?: { company?: string }
-    metadata?: { industry?: string }
-    sessionNumber?: string
-    company_name?: string
-    companyName?: string
-    company_size?: string
-    companySize?: string
-    annual_revenue?: string
-    annualRevenue?: string
-    industry?: string
-    contact_name?: string
-    contactName?: string
-    contact_email?: string
-    contactEmail?: string
-    number_of_bidders?: string
-    numberOfBidders?: string
-    market_position?: string
-    marketPosition?: string
-    deal_value?: string
-    dealValue?: string
-    decision_timeline?: string
-    decisionTimeline?: string
-    incumbent_status?: string
-    incumbentStatus?: string
-    switching_costs?: string
-    switchingCosts?: string
-    service_required?: string
-    serviceRequired?: string
-    service_criticality?: string
-    service_criticality_text?: string
-    serviceCriticality?: string
-    business_challenge?: string
-    businessChallenge?: string
-    desired_outcome?: string
-    desiredOutcome?: string
-    alternative_options?: string
-    alternativeOptions?: string
-    in_house_capability?: string
-    inHouseCapability?: string
-    walk_away_point?: string
-    walkAwayPoint?: string
-    budget_flexibility?: string
-    budget_flexibility_text?: string
-    budgetFlexibility?: string
-    contractPositions?: string | {
-      liabilityCap?: number
-      paymentTerms?: number
-      slaTarget?: number
-      terminationNotice?: number
-    }
-    priorities?: string | {
-      cost?: number
-      quality?: number
-      speed?: number
-      innovation?: number
-      riskMitigation?: number
-    }
-  }
-
-  const mapApiResponseToRequirements = (data: ApiResponseData): ExistingRequirements => {
-    // Handle both flat and nested response structures
+  // ========== SECTION 8: MAP API RESPONSE ==========
+  const mapApiResponseToRequirements = (data: any): ExistingRequirements => {
     const requirements = data.requirements || {}
     const customer = data.customer || {}
     const metadata = data.metadata || {}
-
-    // Try to get contract positions from JSON field
     let contractPositions = { liabilityCap: 0, paymentTerms: 0, slaTarget: 0, terminationNotice: 0 }
     try {
       if (data.contractPositions) {
-        contractPositions = typeof data.contractPositions === 'string'
-          ? JSON.parse(data.contractPositions)
-          : data.contractPositions
-      } else if (requirements.commercial) {
-        contractPositions = {
-          liabilityCap: requirements.riskCompliance?.minimumLiabilityCap || 0,
-          paymentTerms: requirements.commercial?.paymentTermsRequired || 0,
-          slaTarget: requirements.riskCompliance?.minimumAvailabilityGuarantee || 0,
-          terminationNotice: requirements.riskCompliance?.terminationNoticeDays || 0
-        }
+        contractPositions = typeof data.contractPositions === 'string' ? JSON.parse(data.contractPositions) : data.contractPositions
       }
-    } catch (e) {
-      console.error('Error parsing contract positions:', e)
-    }
-
-    // Try to get priorities from JSON field
+    } catch (e) { console.error('Error parsing contract positions:', e) }
     let priorities = { cost: 0, quality: 0, speed: 0, innovation: 0, riskMitigation: 0 }
     try {
       if (data.priorities) {
-        priorities = typeof data.priorities === 'string'
-          ? JSON.parse(data.priorities)
-          : data.priorities
+        priorities = typeof data.priorities === 'string' ? JSON.parse(data.priorities) : data.priorities
       }
-    } catch (e) {
-      console.error('Error parsing priorities:', e)
-    }
-
+    } catch (e) { console.error('Error parsing priorities:', e) }
     return {
-      // Company info - check both flat and nested
       companyName: data.company_name || customer.company || data.companyName || '',
       companySize: data.company_size || data.companySize || '',
       annualRevenue: data.annual_revenue || data.annualRevenue || '',
       industry: data.industry || metadata.industry || '',
       contactName: data.contact_name || data.contactName || '',
       contactEmail: data.contact_email || data.contactEmail || '',
-
-      // Market context
       numberOfBidders: data.number_of_bidders || data.numberOfBidders || '',
       marketPosition: data.market_position || data.marketPosition || '',
       dealValue: data.deal_value || requirements.budget?.dealValue || data.dealValue || '',
       decisionTimeline: data.decision_timeline || data.decisionTimeline || '',
       incumbentStatus: data.incumbent_status || data.incumbentStatus || '',
       switchingCosts: data.switching_costs || data.switchingCosts || '',
-
-      // Service
       serviceRequired: data.service_required || requirements.serviceRequired || data.serviceRequired || '',
       serviceCriticality: data.service_criticality || data.service_criticality_text || requirements.serviceCriticality || data.serviceCriticality || '',
       businessChallenge: data.business_challenge || requirements.businessChallenge || data.businessChallenge || '',
       desiredOutcome: data.desired_outcome || requirements.desiredOutcome || data.desiredOutcome || '',
-
-      // BATNA
       alternativeOptions: data.alternative_options || data.alternativeOptions || '',
       inHouseCapability: data.in_house_capability || data.inHouseCapability || '',
       walkAwayPoint: data.walk_away_point || data.walkAwayPoint || '',
       budgetFlexibility: data.budget_flexibility || data.budget_flexibility_text || data.budgetFlexibility || '',
-
-      // Contract positions
       liabilityCap: contractPositions.liabilityCap || 0,
       paymentTerms: contractPositions.paymentTerms || 0,
       slaTarget: contractPositions.slaTarget || 0,
       terminationNotice: contractPositions.terminationNotice || 0,
-
-      // Priorities
       priorities
     }
   }
 
-  // ========== SECTION 7: SCROLL TO BOTTOM ==========
+  // ========== SECTION 9: SCROLL & MESSAGE HELPERS ==========
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ========== SECTION 8: MESSAGE HELPERS ==========
   const addClarenceMessage = (content: string, questionKey?: QuestionKey) => {
-    const message: ConversationMessage = {
-      id: Date.now().toString(),
-      type: 'clarence',
-      content,
-      timestamp: new Date(),
-      questionKey
-    }
-    setMessages(prev => [...prev, message])
+    setMessages(prev => [...prev, { id: Date.now().toString(), type: 'clarence', content, timestamp: new Date(), questionKey }])
   }
 
   const addUserMessage = (content: string) => {
-    const message: ConversationMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content,
-      timestamp: new Date()
-    }
-    setMessages(prev => [...prev, message])
+    setMessages(prev => [...prev, { id: Date.now().toString(), type: 'user', content, timestamp: new Date() }])
   }
 
-  // ========== SECTION 9: INTELLIGENT OPENING ==========
+  // ========== SECTION 10: CONVERSATION FLOW ==========
   const startIntelligentConversation = async (data: ExistingRequirements) => {
     setIsTyping(true)
-
-    // Brief pause for natural feel
     await new Promise(resolve => setTimeout(resolve, 800))
-
-    // INTELLIGENT OPENING - Shows we already know the basics
     const openingMessage = generateIntelligentOpening(data)
     addClarenceMessage(openingMessage)
-
     await new Promise(resolve => setTimeout(resolve, 1500))
-
-    // Transition to strategic questions
-    const transitionMessage = `These questions will help me objectively calculate your leverage and recommend first-draft positions.
-
-Let's start with your alternatives...`
-
-    addClarenceMessage(transitionMessage)
-
+    addClarenceMessage(`These questions will help me objectively calculate your leverage and recommend first-draft positions.\n\nLet's start with your alternatives...`)
     await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // Ask first strategic question
     askStrategicQuestion(0, data)
-
     setIsTyping(false)
   }
 
-  // ========================================================================
-  // SECTION 10: GENERATE INTELLIGENT OPENING
-  // ========================================================================
   const generateIntelligentOpening = (data: ExistingRequirements): string => {
     const priorityRanking = formatPrioritiesDisplay(data.priorities)
     const timeline = getTimelineDisplay(data.decisionTimeline)
-
-    // Parse contract positions if needed
-    let positions: {
-      liabilityCap?: number
-      paymentTerms?: number
-      slaTarget?: number
-      dataRetention?: number
-      terminationNotice?: number
-    } = {}
-
+    let positions: any = {}
     if (data.contractPositions) {
       if (typeof data.contractPositions === 'string') {
-        try {
-          positions = JSON.parse(data.contractPositions)
-        } catch {
-          positions = {}
-        }
-      } else {
-        positions = data.contractPositions
-      }
+        try { positions = JSON.parse(data.contractPositions) } catch { positions = {} }
+      } else { positions = data.contractPositions }
     }
-
-    // Get position values with defaults
     const liabilityCap = positions.liabilityCap ?? data.liabilityCap ?? 0
     const paymentTerms = positions.paymentTerms ?? data.paymentTerms ?? 0
     const slaTarget = positions.slaTarget ?? data.slaTarget ?? 0
     const terminationNotice = positions.terminationNotice ?? data.terminationNotice ?? 0
-
     return `Good to meet you, ${data.contactName || data.companyName || 'there'}. I've reviewed your requirements submission for **${data.companyName}**.
 
 Here's what I understand:
@@ -704,106 +442,53 @@ ${priorityRanking}
 I have the facts. Now I need to understand the *dynamics* that will determine your leverage.`
   }
 
-  // ========== SECTION 11: ASK STRATEGIC QUESTION ==========
   const askStrategicQuestion = async (index: number, data: ExistingRequirements) => {
     if (index >= STRATEGIC_QUESTIONS.length) {
-      // All questions answered - proceed to assessment
       await completeAssessment()
       return
     }
-
     const question = STRATEGIC_QUESTIONS[index]
     let questionText = question.question
-
-    // Replace placeholders with actual data
-    questionText = questionText.replace('{providerName}', 'this provider')
-    questionText = questionText.replace('{companyName}', data.companyName || 'your company')
-
-    // Add context if available
+    questionText = questionText.replace('{providerName}', 'this provider').replace('{companyName}', data.companyName || 'your company')
     if (question.context) {
       const context = question.context(data)
-      if (context) {
-        questionText = `${context}\n\n${questionText}`
-      }
+      if (context) questionText = `${context}\n\n${questionText}`
     }
-
     setIsTyping(true)
     await new Promise(resolve => setTimeout(resolve, 600))
     addClarenceMessage(questionText, question.key)
     setIsTyping(false)
   }
 
-  // ========== SECTION 12: HANDLE USER RESPONSE ==========
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!userInput.trim() || isTyping) return
-
     const input = userInput.trim()
     setUserInput('')
     addUserMessage(input)
-
-    // Store the answer
     const currentQuestion = STRATEGIC_QUESTIONS[currentQuestionIndex]
     if (currentQuestion) {
-      setStrategicAnswers(prev => ({
-        ...prev,
-        [currentQuestion.key]: input
-      }))
-
-      // LOG: Question answered
-      eventLogger.completed('customer_questionnaire', `questionnaire_q${currentQuestionIndex + 1}_answered`, {
-        questionKey: currentQuestion.key,
-        questionIndex: currentQuestionIndex + 1,
-        totalQuestions: STRATEGIC_QUESTIONS.length,
-        sessionId: sessionId
-      })
+      setStrategicAnswers(prev => ({ ...prev, [currentQuestion.key]: input }))
     }
-
-    // Move to next question
     const nextIndex = currentQuestionIndex + 1
     setCurrentQuestionIndex(nextIndex)
-
-    // Small acknowledgment before next question
     setIsTyping(true)
     await new Promise(resolve => setTimeout(resolve, 500))
-
-    const acknowledgments = [
-      "Got it.",
-      "Understood.",
-      "That's helpful context.",
-      "Clear.",
-      "Noted.",
-      "Important to know.",
-      "That tells me a lot."
-    ]
-
-    // Don't acknowledge on every question - feels more natural
+    const acknowledgments = ["Got it.", "Understood.", "That's helpful context.", "Clear.", "Noted.", "Important to know.", "That tells me a lot."]
     if (Math.random() > 0.5 && nextIndex < STRATEGIC_QUESTIONS.length) {
       addClarenceMessage(acknowledgments[Math.floor(Math.random() * acknowledgments.length)])
       await new Promise(resolve => setTimeout(resolve, 400))
     }
-
-    // Ask next question or complete
-    if (existingData) {
-      askStrategicQuestion(nextIndex, existingData)
-    }
+    if (existingData) askStrategicQuestion(nextIndex, existingData)
   }
 
-  // ========== SECTION 13: COMPLETE ASSESSMENT ==========
   const completeAssessment = async () => {
     setIsTyping(true)
-
     await new Promise(resolve => setTimeout(resolve, 1000))
-
     addClarenceMessage("Thank you. I now have a complete picture of your strategic position and priorities.")
-
     await new Promise(resolve => setTimeout(resolve, 1500))
-
-    // Calculate PRELIMINARY customer-side factors only
-    // Full leverage calculation happens AFTER provider intake
     const customerFactors = calculateCustomerFactors()
-
-    const summaryMessage = `**Strategic Assessment Complete**
+    addClarenceMessage(`**Strategic Assessment Complete**
 
 I've captured your position on:
 
@@ -816,71 +501,27 @@ I've captured your position on:
 
 **What happens next:**
 
-1. **Review your contract clauses** - Confirm or customize the clauses in your contract template
-2. **Invite your provider** - Once clauses are confirmed, you can send the invitation
-3. **Negotiate** - I'll calculate leverage and generate draft positions once the provider responds
+1. **Invite your provider(s)** - Send invitations to start the negotiation
+2. **Provider intake** - They'll complete their own assessment
+3. **Leverage calculation** - I'll calculate leverage once both sides are ready
+4. **Negotiate** - I'll generate draft positions and guide the mediation
 
-Your data is saved and ready. Click below to review and confirm your contract clauses.`
-
-    addClarenceMessage(summaryMessage)
-
-    // Store preliminary assessment (not full leverage yet)
-    setLeverageAssessment({
-      customerLeverage: 0, // Placeholder - calculated after provider intake
-      providerLeverage: 0,
-      breakdown: customerFactors,
-      reasoning: "Full leverage calculation pending provider intake."
-    })
-
-    // LOG: Questionnaire completed
-    eventLogger.completed('customer_questionnaire', 'questionnaire_form_submitted', {
-      sessionId: sessionId,
-      totalQuestionsAnswered: Object.keys(strategicAnswers).length,
-      totalQuestions: STRATEGIC_QUESTIONS.length
-    })
-
+Your data is saved and ready. Click below to invite providers.`)
+    setLeverageAssessment({ customerLeverage: 0, providerLeverage: 0, breakdown: customerFactors, reasoning: "Full leverage calculation pending provider intake." })
     setIsTyping(false)
     setConversationComplete(true)
   }
 
-  // ========== SECTION 14: CALCULATE CUSTOMER-SIDE FACTORS ONLY ==========
   const calculateCustomerFactors = (): LeverageBreakdown => {
-    // These are preliminary scores based on customer data only
-    // Full leverage calculation requires provider data too
-
-    let marketScore = 50
-    let economicScore = 50
-    let strategicScore = 50
-    let batnaScore = 50
-
-    // Market factors from customer perspective
-    if (existingData?.numberOfBidders === '4+' || existingData?.numberOfBidders === '4-plus') {
-      marketScore += 15
-    } else if (existingData?.numberOfBidders === 'Single Source' || existingData?.numberOfBidders === 'single') {
-      marketScore -= 20
-    }
-
-    if (existingData?.decisionTimeline === 'Urgent' || existingData?.decisionTimeline === 'urgent') {
-      marketScore -= 10
-    } else if (existingData?.decisionTimeline === 'Flexible' || existingData?.decisionTimeline === 'flexible') {
-      marketScore += 10
-    }
-
-    // Economic factors
-    if (existingData?.switchingCosts === 'High' || existingData?.switchingCosts === 'high') {
-      economicScore -= 15
-    } else if (existingData?.switchingCosts === 'Low' || existingData?.switchingCosts === 'low') {
-      economicScore += 10
-    }
-
-    // Strategic factors
-    if (existingData?.serviceCriticality === 'mission-critical') {
-      strategicScore -= 10
-    } else if (existingData?.serviceCriticality === 'non-core') {
-      strategicScore += 10
-    }
-
-    // BATNA from questionnaire answers
+    let marketScore = 50, economicScore = 50, strategicScore = 50, batnaScore = 50
+    if (existingData?.numberOfBidders === '4+' || existingData?.numberOfBidders === '4-plus') marketScore += 15
+    else if (existingData?.numberOfBidders === 'Single Source' || existingData?.numberOfBidders === 'single') marketScore -= 20
+    if (existingData?.decisionTimeline === 'Urgent' || existingData?.decisionTimeline === 'urgent') marketScore -= 10
+    else if (existingData?.decisionTimeline === 'Flexible' || existingData?.decisionTimeline === 'flexible') marketScore += 10
+    if (existingData?.switchingCosts === 'High' || existingData?.switchingCosts === 'high') economicScore -= 15
+    else if (existingData?.switchingCosts === 'Low' || existingData?.switchingCosts === 'low') economicScore += 10
+    if (existingData?.serviceCriticality === 'mission-critical') strategicScore -= 10
+    else if (existingData?.serviceCriticality === 'non-core') strategicScore += 10
     const batnaRealism = strategicAnswers.batnaRealismScore
     if (batnaRealism) {
       const score = parseInt(batnaRealism)
@@ -890,13 +531,8 @@ Your data is saved and ready. Click below to review and confirm your contract cl
         else if (score <= 4) batnaScore -= 15
       }
     }
-
-    if (existingData?.alternativeOptions === 'many-alternatives' || existingData?.alternativeOptions === 'strong') {
-      batnaScore += 10
-    } else if (existingData?.alternativeOptions === 'no-alternatives' || existingData?.alternativeOptions === 'none') {
-      batnaScore -= 15
-    }
-
+    if (existingData?.alternativeOptions === 'many-alternatives' || existingData?.alternativeOptions === 'strong') batnaScore += 10
+    else if (existingData?.alternativeOptions === 'no-alternatives' || existingData?.alternativeOptions === 'none') batnaScore -= 15
     return {
       marketDynamicsScore: Math.max(0, Math.min(100, marketScore)),
       economicFactorsScore: Math.max(0, Math.min(100, economicScore)),
@@ -905,67 +541,55 @@ Your data is saved and ready. Click below to review and confirm your contract cl
     }
   }
 
-  // ========================================================================
-  // SECTION 15: PROCEED TO CLAUSE BUILDER (UPDATED)
-  // ========================================================================
-  const handleProceedToClauseBuilder = async () => {
+  // ========== SECTION 11: NAVIGATION HANDLERS ==========
+  const handleProceedToInviteProviders = async () => {
     if (!sessionId) return
-
-    // LOG: Saving assessment data
-    eventLogger.started('customer_questionnaire', 'questionnaire_data_saved')
-
-    // Save strategic answers (NOT leverage - that comes later)
     try {
-      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
+      await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           session_id: sessionId,
           session_number: sessionNumber,
           strategic_answers: strategicAnswers,
-          customer_factors: leverageAssessment?.breakdown, // Preliminary factors only
-          status: 'customer_assessment_complete', // Not 'leverage_calculated'
+          customer_factors: leverageAssessment?.breakdown,
+          status: 'customer_assessment_complete',
           completed_at: new Date().toISOString()
         })
       })
-
-      if (!response.ok) {
-        console.error('Failed to save strategic assessment:', await response.text())
-        // LOG: Save failed
-        eventLogger.failed('customer_questionnaire', 'questionnaire_data_saved', 'Failed to save assessment', 'SAVE_ERROR')
-      } else {
-        // LOG: Save succeeded
-        eventLogger.completed('customer_questionnaire', 'questionnaire_data_saved', {
-          sessionId: sessionId,
-          status: 'customer_assessment_complete'
-        })
-      }
-    } catch (error) {
-      console.error('Error saving assessment:', error)
-      // LOG: Save exception
-      eventLogger.failed('customer_questionnaire', 'questionnaire_data_saved', error instanceof Error ? error.message : 'Save error', 'SAVE_EXCEPTION')
-    }
-
-    // LOG: Redirect to clause builder
-    eventLogger.completed('customer_questionnaire', 'redirect_to_clause_builder', {
-      sessionId: sessionId,
-      sessionNumber: sessionNumber
-    })
-
-    // Navigate to Clause Builder with auto_load flag to load template from session
-    router.push(`/auth/clause-builder?session_id=${sessionId}&session_number=${sessionNumber}&auto_load=true`)
+    } catch (error) { console.error('Error saving assessment:', error) }
+    let nextUrl = `/auth/invite-providers?session_id=${sessionId}`
+    if (contractId) nextUrl += `&contract_id=${contractId}`
+    router.push(nextUrl)
   }
 
-  // ========================================================================
-  // SECTION 16: PROGRESS MENU COMPONENT
-  // ========================================================================
+  const handleSkipAssessment = async () => {
+    if (!sessionId) return
+    setIsSkipping(true)
+    try {
+      await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          session_number: sessionNumber,
+          strategic_answers: {},
+          status: 'assessment_skipped',
+          skipped_at: new Date().toISOString()
+        })
+      })
+    } catch (error) { console.error('Error saving skip status:', error) }
+    let nextUrl = `/auth/invite-providers?session_id=${sessionId}`
+    if (contractId) nextUrl += `&contract_id=${contractId}`
+    router.push(nextUrl)
+  }
+
+  // ========== SECTION 12: PROGRESS MENU COMPONENT ==========
   const ProgressMenu = () => {
     const overallProgress = getOverallProgress()
     const currentSectionId = getCurrentSectionId()
-
     return (
       <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
-        {/* Header */}
         <div className="p-4 border-b border-slate-200">
           <h3 className="font-semibold text-slate-800">Strategic Assessment</h3>
           <div className="mt-3">
@@ -974,67 +598,30 @@ Your data is saved and ready. Click below to review and confirm your contract cl
               <span>{overallProgress}%</span>
             </div>
             <div className="w-full bg-slate-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${overallProgress}%` }}
-              />
+              <div className="bg-blue-600 h-2 rounded-full transition-all duration-500" style={{ width: `${overallProgress}%` }} />
             </div>
           </div>
         </div>
-
-        {/* Section List */}
         <div className="flex-1 overflow-y-auto p-3">
           {questionnaireSections.map((section) => {
             const status = getSectionStatus(section.id)
             const progress = getSectionProgress(section.id)
             const isActive = currentSectionId === section.id
-
             return (
-              <div
-                key={section.id}
-                className={`p-3 rounded-lg mb-2 transition-all ${isActive
-                  ? 'bg-blue-50 border border-blue-200'
-                  : status === 'complete'
-                    ? 'bg-green-50 border border-green-100'
-                    : 'bg-slate-50 border border-transparent'
-                  }`}
-              >
+              <div key={section.id} className={`p-3 rounded-lg mb-2 transition-all ${isActive ? 'bg-blue-50 border border-blue-200' : status === 'complete' ? 'bg-green-50 border border-green-100' : 'bg-slate-50 border border-transparent'}`}>
                 <div className="flex items-center">
-                  {/* Status indicator */}
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-3 ${status === 'complete'
-                    ? 'bg-green-100 text-green-600'
-                    : isActive
-                      ? 'bg-blue-100 text-blue-600'
-                      : 'bg-slate-200 text-slate-400'
-                    }`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm mr-3 ${status === 'complete' ? 'bg-green-100 text-green-600' : isActive ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'}`}>
                     {status === 'complete' ? '✓' : section.icon}
                   </div>
-
-                  {/* Section info */}
                   <div className="flex-1 min-w-0">
-                    <div className={`font-medium text-sm ${isActive ? 'text-blue-700' :
-                      status === 'complete' ? 'text-green-700' : 'text-slate-600'
-                      }`}>
-                      {section.name}
-                    </div>
-
-                    {progress.total > 0 && (
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        {progress.answered}/{progress.total} questions
-                      </div>
-                    )}
+                    <div className={`font-medium text-sm ${isActive ? 'text-blue-700' : status === 'complete' ? 'text-green-700' : 'text-slate-600'}`}>{section.name}</div>
+                    {progress.total > 0 && <div className="text-xs text-slate-500 mt-0.5">{progress.answered}/{progress.total} questions</div>}
                   </div>
                 </div>
-
-                {/* Progress bar for sections with questions */}
                 {progress.total > 0 && (
                   <div className="mt-2 ml-11">
                     <div className="w-full bg-slate-200 rounded-full h-1.5">
-                      <div
-                        className={`h-1.5 rounded-full transition-all duration-300 ${status === 'complete' ? 'bg-green-500' : 'bg-blue-500'
-                          }`}
-                        style={{ width: `${(progress.answered / progress.total) * 100}%` }}
-                      />
+                      <div className={`h-1.5 rounded-full transition-all duration-300 ${status === 'complete' ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${(progress.answered / progress.total) * 100}%` }} />
                     </div>
                   </div>
                 )}
@@ -1042,21 +629,22 @@ Your data is saved and ready. Click below to review and confirm your contract cl
             )
           })}
         </div>
-
-        {/* Footer with session info */}
+        <div className="p-4 border-t border-slate-200">
+          <button onClick={handleSkipAssessment} disabled={isSkipping} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">
+            {isSkipping ? 'Skipping...' : 'Skip → Invite Providers'}
+          </button>
+        </div>
         <div className="p-4 border-t border-slate-200 bg-slate-50">
           <div className="text-xs text-slate-500">
             {sessionNumber && <div className="font-mono">{sessionNumber}</div>}
-            {existingData?.companyName && (
-              <div className="truncate mt-1">{existingData.companyName}</div>
-            )}
+            {existingData?.companyName && <div className="truncate mt-1">{existingData.companyName}</div>}
           </div>
         </div>
       </div>
     )
   }
 
-  // ========== SECTION 17: LOADING STATE ==========
+  // ========== SECTION 13: LOADING STATE ==========
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -1068,15 +656,11 @@ Your data is saved and ready. Click below to review and confirm your contract cl
     )
   }
 
-  // ========== SECTION 18: RENDER ==========
+  // ========== SECTION 14: MAIN RENDER ==========
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {/* Left Progress Menu */}
       <ProgressMenu />
-
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <header className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -1088,59 +672,41 @@ Your data is saved and ready. Click below to review and confirm your contract cl
                 <p className="text-sm text-slate-500">Strategic Assessment</p>
               </div>
             </div>
-
-            {existingData && (
-              <div className="text-right text-sm">
-                <p className="font-medium text-slate-700">{existingData.companyName}</p>
-                <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
-              </div>
-            )}
+            <div className="flex items-center gap-4">
+              <button onClick={handleSkipAssessment} disabled={isSkipping} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">
+                {isSkipping ? 'Skipping...' : 'Skip Assessment →'}
+              </button>
+              {existingData && (
+                <div className="text-right text-sm">
+                  <p className="font-medium text-slate-700">{existingData.companyName}</p>
+                  <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
+                </div>
+              )}
+            </div>
           </div>
         </header>
-
-        {/* Progress Bar (Mobile/Compact) */}
         <div className="bg-white border-b border-slate-200 px-6 py-3 lg:hidden">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-slate-400">Question {Math.min(currentQuestionIndex + 1, STRATEGIC_QUESTIONS.length)} of {STRATEGIC_QUESTIONS.length}</span>
             <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                style={{ width: `${(currentQuestionIndex / STRATEGIC_QUESTIONS.length) * 100}%` }}
-              />
+              <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${(currentQuestionIndex / STRATEGIC_QUESTIONS.length) * 100}%` }} />
             </div>
-            {conversationComplete && (
-              <span className="text-green-600 font-medium">Complete ✓</span>
-            )}
+            {conversationComplete && <span className="text-green-600 font-medium">Complete ✓</span>}
           </div>
         </div>
-
-        {/* Chat Container */}
         <div className="flex-1 p-6 overflow-hidden">
           <div className="max-w-3xl mx-auto h-full">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
-
-              {/* Messages Area */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-lg p-4 ${message.type === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-100 text-slate-800'
-                        }`}
-                    >
+                  <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg p-4 ${message.type === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'}`}>
                       <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {message.content.split('**').map((part, i) =>
-                          i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-                        )}
+                        {message.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i}>{part}</strong> : part)}
                       </div>
                     </div>
                   </div>
                 ))}
-
                 {isTyping && (
                   <div className="flex justify-start">
                     <div className="bg-slate-100 rounded-lg p-4">
@@ -1152,45 +718,22 @@ Your data is saved and ready. Click below to review and confirm your contract cl
                     </div>
                   </div>
                 )}
-
                 <div ref={messagesEndRef} />
               </div>
-
-              {/* Input Area */}
               {!conversationComplete ? (
                 <div className="border-t border-slate-200 p-4">
                   <form onSubmit={handleSubmit} className="flex gap-3">
-                    <input
-                      type="text"
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      placeholder="Type your response..."
-                      className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={isTyping}
-                    />
-                    <button
-                      type="submit"
-                      disabled={!userInput.trim() || isTyping}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Send
-                    </button>
+                    <input type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)} placeholder="Type your response..." className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" disabled={isTyping} />
+                    <button type="submit" disabled={!userInput.trim() || isTyping} className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors">Send</button>
                   </form>
                 </div>
               ) : (
                 <div className="border-t border-slate-200 p-4">
-                  <button
-                    onClick={handleProceedToClauseBuilder}
-                    className="w-full py-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
-                  >
-                    Review & Confirm Clauses
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                  <button onClick={handleProceedToInviteProviders} className="w-full py-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+                    Invite Providers
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                   </button>
-                  <p className="text-center text-sm text-slate-500 mt-3">
-                    You&apos;ll review your contract clauses before inviting providers
-                  </p>
+                  <p className="text-center text-sm text-slate-500 mt-3">Send invitations to your providers to begin the negotiation</p>
                 </div>
               )}
             </div>
@@ -1201,14 +744,10 @@ Your data is saved and ready. Click below to review and confirm your contract cl
   )
 }
 
-// ========== SECTION 19: EXPORT WITH SUSPENSE ==========
+// ========== SECTION 15: EXPORT ==========
 export default function StrategicAssessmentPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    }>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>}>
       <IntelligentQuestionnaireContent />
     </Suspense>
   )
