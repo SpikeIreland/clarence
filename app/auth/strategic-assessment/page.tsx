@@ -312,15 +312,66 @@ function IntelligentQuestionnaireContent() {
         return
       }
       try {
+        // First, try to load from customer-requirements-api
         const response = await fetch(`https://spikeislandstudios.app.n8n.cloud/webhook/customer-requirements-api?session_id=${sessionId}`)
+
         if (response.ok) {
           const data = await response.json()
-          setSessionNumber(data.sessionNumber || null)
-          const requirements: ExistingRequirements = mapApiResponseToRequirements(data)
-          setExistingData(requirements)
-          startIntelligentConversation(requirements)
+
+          // Check if we got actual data
+          if (data && (data.company_name || data.companyName || data.session_id || data.sessionId)) {
+            setSessionNumber(data.sessionNumber || data.session_number || null)
+            const requirements: ExistingRequirements = mapApiResponseToRequirements(data)
+            setExistingData(requirements)
+            startIntelligentConversation(requirements)
+            setLoading(false)
+            return
+          }
+        }
+
+        // Fallback: Load from get-session if customer-requirements returned nothing
+        console.log('[Strategic Assessment] No requirements found, falling back to get-session')
+        const sessionResponse = await fetch(`https://spikeislandstudios.app.n8n.cloud/webhook/get-session?session_id=${sessionId}`)
+
+        if (sessionResponse.ok) {
+          const sessionData = await sessionResponse.json()
+          const session = sessionData.session || sessionData
+
+          if (session) {
+            setSessionNumber(session.session_number || session.sessionNumber || null)
+
+            // Build minimal requirements from session data
+            const minimalRequirements: ExistingRequirements = {
+              companyName: session.customer_company || session.customerCompany || '',
+              companySize: '',
+              annualRevenue: '',
+              industry: '',
+              contactName: '',
+              contactEmail: '',
+              numberOfBidders: '',
+              marketPosition: '',
+              dealValue: '',
+              decisionTimeline: '',
+              incumbentStatus: '',
+              switchingCosts: '',
+              serviceRequired: session.contract_type || session.contractType || '',
+              serviceCriticality: '',
+              businessChallenge: '',
+              desiredOutcome: '',
+              alternativeOptions: '',
+              inHouseCapability: '',
+              walkAwayPoint: '',
+              budgetFlexibility: '',
+              priorities: undefined
+            }
+
+            setExistingData(minimalRequirements)
+            startIntelligentConversation(minimalRequirements)
+          } else {
+            addClarenceMessage("I couldn't load your session data. Please try refreshing the page or go back to the contract preparation step.")
+          }
         } else {
-          addClarenceMessage("I don't have your requirements data yet. Please complete the Customer Requirements form first.")
+          addClarenceMessage("I had trouble loading your session. Please try refreshing the page.")
         }
       } catch (error) {
         console.error('Error loading requirements:', error)
@@ -404,6 +455,21 @@ function IntelligentQuestionnaireContent() {
   }
 
   const generateIntelligentOpening = (data: ExistingRequirements): string => {
+    // Check if we have full data or minimal data
+    const hasFullData = data.dealValue || data.serviceCriticality || data.numberOfBidders
+
+    if (!hasFullData) {
+      // Minimal data path - Contract Studio flow without Quick Intake
+      return `Good to meet you, ${data.contactName || data.companyName || 'there'}. I see you've started a new negotiation session for **${data.companyName || 'your company'}**.
+
+I don't have all the details about this deal yet, but that's fine - I'll gather what I need through our conversation.
+
+${data.serviceRequired ? `**Contract Type:** ${data.serviceRequired}` : ''}
+
+Let me ask you some strategic questions to understand your position and calculate your leverage.`
+    }
+
+    // Full data path - we have deal context
     const priorityRanking = formatPrioritiesDisplay(data.priorities)
     const timeline = getTimelineDisplay(data.decisionTimeline)
     let positions: any = {}
@@ -416,30 +482,47 @@ function IntelligentQuestionnaireContent() {
     const paymentTerms = positions.paymentTerms ?? data.paymentTerms ?? 0
     const slaTarget = positions.slaTarget ?? data.slaTarget ?? 0
     const terminationNotice = positions.terminationNotice ?? data.terminationNotice ?? 0
-    return `Good to meet you, ${data.contactName || data.companyName || 'there'}. I've reviewed your requirements submission for **${data.companyName}**.
+
+    let opening = `Good to meet you, ${data.contactName || data.companyName || 'there'}. I've reviewed your requirements submission for **${data.companyName}**.
 
 Here's what I understand:
 
 **The Deal:**
-- ${data.serviceRequired || 'Service'} contract worth ${formatCurrency(data.dealValue)}
+- ${data.serviceRequired || 'Service'} contract${data.dealValue ? ` worth ${formatCurrency(data.dealValue)}` : ''}
 - ${getCriticalityDisplay(data.serviceCriticality)}
-- ${getBiddersDisplay(data.numberOfBidders)}
+- ${getBiddersDisplay(data.numberOfBidders)}`
+
+    if (data.incumbentStatus || data.decisionTimeline || data.switchingCosts) {
+      opening += `
 
 **Your Position:**
 - ${getIncumbentDisplay(data.incumbentStatus)}
 - Timeline: ${timeline}
-- Switching costs: ${getSwitchingCostsDisplay(data.switchingCosts)}
+- Switching costs: ${getSwitchingCostsDisplay(data.switchingCosts)}`
+    }
+
+    if (priorityRanking !== 'Not specified') {
+      opening += `
 
 **Your Priorities (from highest):**
-${priorityRanking}
+${priorityRanking}`
+    }
+
+    if (liabilityCap || paymentTerms || slaTarget || terminationNotice) {
+      opening += `
 
 **Your Key Starting Positions:**
 - Liability cap: ${liabilityCap}% of annual value
 - Payment terms: ${paymentTerms} days
 - SLA target: ${slaTarget}% uptime
-- Termination notice: ${terminationNotice} days
+- Termination notice: ${terminationNotice} days`
+    }
+
+    opening += `
 
 I have the facts. Now I need to understand the *dynamics* that will determine your leverage.`
+
+    return opening
   }
 
   const askStrategicQuestion = async (index: number, data: ExistingRequirements) => {
