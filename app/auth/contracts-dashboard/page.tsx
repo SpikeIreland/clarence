@@ -149,7 +149,7 @@ export default function ContractsDashboard() {
       if (!auth) return
 
       const authData = JSON.parse(auth)
-      const apiUrl = `${API_BASE}/sessions-api?role=${authData.userInfo?.role || 'customer'}&email=${authData.userInfo?.email}&includeProviderBids=true`
+      const apiUrl = `${API_BASE}/sessions-api?role=${authData.userInfo?.role || 'customer'}&email=${authData.userInfo?.email}&customer_id=${authData.userInfo?.userId}`
 
       console.log('Loading sessions from:', apiUrl)
 
