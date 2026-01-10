@@ -1299,10 +1299,9 @@ function ContractPrepContent() {
             setTimeout(() => {
                 // Route based on mediation type
                 if (mediationType === 'straight_to_contract') {
-                    // No negotiation needed - go to party details form
-                    // TODO: Build party details form, for now go to dashboard
-                    addChatMessage('clarence', 'Your clauses are committed. Next step: complete party details to generate your contract.')
-                    router.push(`/auth/contracts-dashboard?session_id=${targetSessionId}&next=party-details`)
+                    // No negotiation needed - go directly to invite providers
+                    addChatMessage('clarence', 'Your clauses are committed. Next step: invite providers to begin the contract process.')
+                    router.push(`/auth/invite-providers?session_id=${targetSessionId}&contract_id=${targetContractId}`)
                 } else {
                     // partial_mediation or full_mediation - go to strategic assessment
                     let nextUrl = `/auth/strategic-assessment?session_id=${targetSessionId}`
@@ -2358,10 +2357,10 @@ function ContractPrepContent() {
                                                         <div
                                                             key={clause.clauseId}
                                                             className={`px-4 py-3 flex items-start gap-3 ${isAlreadyInContract
-                                                                    ? 'bg-slate-50 opacity-60'
-                                                                    : isSelected
-                                                                        ? 'bg-blue-50'
-                                                                        : 'hover:bg-slate-50'
+                                                                ? 'bg-slate-50 opacity-60'
+                                                                : isSelected
+                                                                    ? 'bg-blue-50'
+                                                                    : 'hover:bg-slate-50'
                                                                 }`}
                                                         >
                                                             {/* Checkbox */}
@@ -2369,10 +2368,10 @@ function ContractPrepContent() {
                                                                 onClick={() => !isAlreadyInContract && toggleMasterClauseSelection(clause.clauseId)}
                                                                 disabled={isAlreadyInContract}
                                                                 className={`mt-0.5 w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isAlreadyInContract
-                                                                        ? 'bg-slate-200 border-slate-300 cursor-not-allowed'
-                                                                        : isSelected
-                                                                            ? 'bg-blue-600 border-blue-600'
-                                                                            : 'border-slate-300 hover:border-blue-400'
+                                                                    ? 'bg-slate-200 border-slate-300 cursor-not-allowed'
+                                                                    : isSelected
+                                                                        ? 'bg-blue-600 border-blue-600'
+                                                                        : 'border-slate-300 hover:border-blue-400'
                                                                     }`}
                                                             >
                                                                 {(isSelected || isAlreadyInContract) && (
