@@ -1060,7 +1060,7 @@ export default function ContractCreationAssessment() {
             <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
+                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
                         ← Back to Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800 mt-2">New Contract</h2>
