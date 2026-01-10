@@ -88,6 +88,55 @@ const contractTypes: Record<string, string> = {
   'Other': 'Other'
 }
 
+// ============================================================================
+// DEAL VALUE MAPPING
+// ============================================================================
+
+const dealValueMap: Record<string, number> = {
+  'under_100k': 50000,
+  '100k_250k': 175000,
+  '250k_500k': 375000,
+  '500k_1m': 750000,
+  'over_1m': 1500000,
+  // Handle numeric strings too
+}
+
+function parseDealValue(dealValue: string | number | null | undefined): number {
+  if (!dealValue) return 0
+
+  // If it's already a number, return it
+  if (typeof dealValue === 'number') return dealValue
+
+  // If it's a category string, map it
+  if (dealValueMap[dealValue]) return dealValueMap[dealValue]
+
+  // Try parsing as number (for numeric strings like "500000")
+  const parsed = parseInt(dealValue)
+  return isNaN(parsed) ? 0 : parsed
+}
+
+function formatDealValueDisplay(dealValue: string | number | null | undefined, currency: string = 'GBP'): string {
+  const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : 'A$'
+
+  // Category labels for display
+  const categoryLabels: Record<string, string> = {
+    'under_100k': `Under ${symbol}100k`,
+    '100k_250k': `${symbol}100k - ${symbol}250k`,
+    '250k_500k': `${symbol}250k - ${symbol}500k`,
+    '500k_1m': `${symbol}500k - ${symbol}1m`,
+    'over_1m': `Over ${symbol}1m`,
+  }
+
+  if (typeof dealValue === 'string' && categoryLabels[dealValue]) {
+    return categoryLabels[dealValue]
+  }
+
+  const numValue = parseDealValue(dealValue)
+  if (numValue === 0) return 'Not specified'
+
+  return `${symbol}${numValue.toLocaleString()}`
+}
+
 const dealSizeCategories = [
   { min: 0, max: 250000, label: '0-250k', color: '#94a3b8' },
   { min: 250000, max: 500000, label: '250-500k', color: '#64748b' },
@@ -304,7 +353,7 @@ export default function ContractsDashboard() {
 
     const sizeDistribution: Record<string, number> = {}
     sessionsToAnalyze.forEach(session => {
-      const dealValue = parseInt(session.dealValue || '0')
+      const dealValue = parseDealValue(session.dealValue)
       const category = dealSizeCategories.find(cat => dealValue >= cat.min && dealValue < cat.max)
       if (category) {
         sizeDistribution[category.label] = (sizeDistribution[category.label] || 0) + 1
@@ -319,7 +368,7 @@ export default function ContractsDashboard() {
         color: cat.color
       }))
 
-    const totalValue = sessionsToAnalyze.reduce((sum, s) => sum + parseInt(s.dealValue || '0'), 0)
+    const totalValue = sessionsToAnalyze.reduce((sum, s) => sum + parseDealValue(s.dealValue), 0)
 
     return {
       statusData: [
@@ -533,7 +582,7 @@ export default function ContractsDashboard() {
         totalContracts: filteredSessions.length,
         activeContracts: filteredSessions.filter(s => s.status !== 'completed').length,
         completedContracts: filteredSessions.filter(s => s.status === 'completed').length,
-        totalValue: filteredSessions.reduce((sum, s) => sum + parseInt(s.dealValue || '0'), 0),
+        totalValue: filteredSessions.reduce((sum, s) => sum + parseDealValue(s.dealValue), 0),
         contractTypes: [...new Set(filteredSessions.map(s => s.serviceRequired))],
         isTrainingMode: activeTab === 'training'
       }
