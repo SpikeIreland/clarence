@@ -1302,7 +1302,7 @@ function ContractPrepContent() {
                     // No negotiation needed - go to party details form
                     // TODO: Build party details form, for now go to dashboard
                     addChatMessage('clarence', 'Your clauses are committed. Next step: complete party details to generate your contract.')
-                    router.push(`/auth/dashboard?session_id=${targetSessionId}&next=party-details`)
+                    router.push(`/auth/contracts-dashboard?session_id=${targetSessionId}&next=party-details`)
                 } else {
                     // partial_mediation or full_mediation - go to strategic assessment
                     let nextUrl = `/auth/strategic-assessment?session_id=${targetSessionId}`
@@ -1407,7 +1407,7 @@ function ContractPrepContent() {
             <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
+                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
                         ← Back to Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800">Contract Studio</h2>
