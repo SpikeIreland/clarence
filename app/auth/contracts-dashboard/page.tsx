@@ -1084,7 +1084,7 @@ export default function ContractsDashboard() {
                             <div>
                               <span className="text-xs text-slate-400">Deal Value</span>
                               <p className="font-medium text-slate-700">
-                                {session.dealValue ? formatCurrency(session.dealValue, session.currency) : 'TBD'}
+                                {session.dealValue ? formatDealValueDisplay(session.dealValue, session.currency || 'GBP') : 'TBD'}
                               </p>
                             </div>
                             <div>
