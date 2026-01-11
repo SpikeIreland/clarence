@@ -288,6 +288,7 @@ function ContractPrepContent() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [searchQuery, setSearchQuery] = useState('')
     const [showEntitiesPanel, setShowEntitiesPanel] = useState(false)
+    const [viewMode, setViewMode] = useState<'category' | 'document'>('document') // Default to document order
 
     // Bulk Selection State
     const [selectedClauseIds, setSelectedClauseIds] = useState<Set<string>>(new Set())
@@ -1398,6 +1399,11 @@ function ContractPrepContent() {
 
     const renderLeftPanel = () => {
         const filteredClauses = getFilteredClauses()
+
+        // For document order view, sort by displayOrder
+        const documentOrderClauses = [...filteredClauses].sort((a, b) => a.displayOrder - b.displayOrder)
+
+        // For category view, filter categories that have matching clauses
         const filteredCategories = categoryGroups.filter(g =>
             g.clauses.some(c => filteredClauses.find(fc => fc.clauseId === c.clauseId))
         )
@@ -1428,6 +1434,30 @@ function ContractPrepContent() {
                     />
                 </div>
 
+                {/* View Mode Toggle */}
+                <div className="px-4 py-2 border-b border-slate-200 bg-slate-100">
+                    <div className="flex items-center gap-1 p-1 bg-slate-200 rounded-lg">
+                        <button
+                            onClick={() => setViewMode('document')}
+                            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode === 'document'
+                                    ? 'bg-white text-slate-800 shadow-sm'
+                                    : 'text-slate-600 hover:text-slate-800'
+                                }`}
+                        >
+                            📄 Document Order
+                        </button>
+                        <button
+                            onClick={() => setViewMode('category')}
+                            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode === 'category'
+                                    ? 'bg-white text-slate-800 shadow-sm'
+                                    : 'text-slate-600 hover:text-slate-800'
+                                }`}
+                        >
+                            📁 By Category
+                        </button>
+                    </div>
+                </div>
+
                 {/* Stats Bar */}
                 {clauses.length > 0 && (
                     <div className="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center gap-3 text-xs">
@@ -1438,149 +1468,119 @@ function ContractPrepContent() {
                     </div>
                 )}
 
-                {/* Bulk Action Toolbar - Shows when clauses are selected */}
-                {selectedClauseIds.size > 0 && (
-                    <div className="px-3 py-2 border-b border-slate-200 bg-blue-50">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-blue-800">
-                                {selectedClauseIds.size} selected
-                            </span>
-                            <button
-                                onClick={clearSelection}
-                                className="text-xs text-blue-600 hover:text-blue-800"
-                            >
-                                Clear
-                            </button>
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleBulkVerify}
-                                disabled={isBulkProcessing}
-                                className="flex-1 px-3 py-1.5 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-1"
-                            >
-                                {isBulkProcessing ? (
-                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                    <>✓ Verify All</>
-                                )}
-                            </button>
-                            <button
-                                onClick={handleBulkReject}
-                                disabled={isBulkProcessing}
-                                className="flex-1 px-3 py-1.5 rounded bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-1"
-                            >
-                                {isBulkProcessing ? (
-                                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                    <>✕ Reject All</>
-                                )}
-                            </button>
-                        </div>
-                        <button
-                            onClick={selectAllPendingClauses}
-                            className="mt-2 w-full text-xs text-blue-600 hover:text-blue-800"
-                        >
-                            Select all {stats.pending} pending clauses
-                        </button>
-                    </div>
-                )}
-
-                {/* Category Navigation */}
+                {/* Clause Navigation */}
                 <div className="flex-1 overflow-auto">
-                    {filteredCategories.length === 0 ? (
-                        <div className="p-6 text-center">
-                            {searchQuery ? (
-                                <div className="text-slate-500 text-sm">
-                                    No clauses match your search
-                                </div>
-                            ) : clauses.length === 0 ? (
-                                /* Build from Scratch Empty State */
-                                <div className="space-y-4">
-                                    <div className="text-4xl">📋</div>
-                                    <div>
-                                        <h3 className="font-medium text-slate-800">No clauses yet</h3>
-                                        <p className="text-sm text-slate-500 mt-1">
-                                            Start building your contract by adding clauses from our library
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={openClauseLibrary}
-                                        className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
-                                    >
-                                        <span>📚</span>
-                                        Browse Clause Library
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="text-slate-500 text-sm">
-                                    No clauses found
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        filteredCategories.map(group => {
-                            const groupFilteredClauses = group.clauses.filter(c =>
-                                filteredClauses.find(fc => fc.clauseId === c.clauseId)
-                            )
+                    {viewMode === 'document' ? (
+                        /* Document Order View - Flat list sorted by display_order */
+                        documentOrderClauses.length === 0 ? (
+                            <div className="p-4 text-center text-slate-500 text-sm">
+                                {searchQuery ? 'No clauses match your search' : 'No clauses found'}
+                            </div>
+                        ) : (
+                            <div className="bg-white">
+                                {documentOrderClauses.map((clause, index) => {
+                                    // Calculate indent based on clause level
+                                    const indentClass = clause.clauseLevel === 1 ? 'pl-4'
+                                        : clause.clauseLevel === 2 ? 'pl-8'
+                                            : clause.clauseLevel === 3 ? 'pl-12'
+                                                : 'pl-16'
 
-                            return (
-                                <div key={group.category} className="border-b border-slate-200">
-                                    {/* Category Header */}
-                                    <button
-                                        onClick={() => toggleCategoryExpansion(group.category)}
-                                        className="w-full px-4 py-2 flex items-center justify-between text-left hover:bg-slate-100 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <span className={`transform transition-transform ${group.isExpanded ? 'rotate-90' : ''}`}>
-                                                ▶
-                                            </span>
-                                            <span className="font-medium text-sm text-slate-700">
-                                                {group.category}
-                                            </span>
-                                        </div>
-                                        <span className="text-xs text-slate-400">
-                                            {groupFilteredClauses.length}
-                                        </span>
-                                    </button>
+                                    return (
+                                        <button
+                                            key={clause.clauseId}
+                                            onClick={() => setSelectedClause(clause)}
+                                            className={`w-full px-4 py-2 ${indentClass} text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 border-b border-slate-100 ${selectedClause?.clauseId === clause.clauseId
+                                                    ? 'bg-blue-100 border-l-2 border-l-blue-500'
+                                                    : ''
+                                                }`}
+                                        >
+                                            {/* Status Indicator */}
+                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
+                                                    ? 'bg-green-500'
+                                                    : clause.status === 'rejected'
+                                                        ? 'bg-red-500'
+                                                        : 'bg-amber-400'
+                                                }`} />
 
-                                    {/* Clauses in Category */}
-                                    {group.isExpanded && (
-                                        <div className="bg-white">
-                                            {groupFilteredClauses.map(clause => (
-                                                <div
-                                                    key={clause.clauseId}
-                                                    className={`flex items-center gap-1 hover:bg-blue-50 transition-colors ${selectedClause?.clauseId === clause.clauseId
-                                                        ? 'bg-blue-100 border-l-2 border-blue-500'
-                                                        : ''
-                                                        }`}
-                                                >
-                                                    {/* Checkbox for pending clauses */}
-                                                    {clause.status === 'pending' && (
-                                                        <div
-                                                            onClick={(e) => toggleClauseSelection(clause.clauseId, e)}
-                                                            className="pl-2 pr-1 py-2 cursor-pointer"
-                                                        >
-                                                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedClauseIds.has(clause.clauseId)
-                                                                ? 'bg-blue-600 border-blue-600'
-                                                                : 'border-slate-300 hover:border-blue-400'
-                                                                }`}>
-                                                                {selectedClauseIds.has(clause.clauseId) && (
-                                                                    <span className="text-white text-xs">✓</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                            {/* Clause Info */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1">
+                                                    {clause.clauseNumber && (
+                                                        <span className="text-slate-400 text-xs font-mono min-w-[40px]">
+                                                            {clause.clauseNumber}
+                                                        </span>
                                                     )}
+                                                    <span className="truncate text-slate-700">
+                                                        {clause.clauseName}
+                                                    </span>
+                                                </div>
+                                                {/* Show category as small badge */}
+                                                <span className="text-[10px] text-slate-400">
+                                                    {clause.category}
+                                                </span>
+                                            </div>
 
+                                            {/* Confidence indicator */}
+                                            {clause.aiConfidence && clause.aiConfidence < 0.8 && (
+                                                <span className="text-amber-500 text-xs" title="Low AI confidence">
+                                                    ⚠
+                                                </span>
+                                            )}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        )
+                    ) : (
+                        /* Category View - Grouped by category */
+                        filteredCategories.length === 0 ? (
+                            <div className="p-4 text-center text-slate-500 text-sm">
+                                {searchQuery ? 'No clauses match your search' : 'No clauses found'}
+                            </div>
+                        ) : (
+                            filteredCategories.map(group => {
+                                const groupFilteredClauses = group.clauses.filter(c =>
+                                    filteredClauses.find(fc => fc.clauseId === c.clauseId)
+                                )
+
+                                return (
+                                    <div key={group.category} className="border-b border-slate-200">
+                                        {/* Category Header */}
+                                        <button
+                                            onClick={() => toggleCategoryExpansion(group.category)}
+                                            className="w-full px-4 py-2 flex items-center justify-between text-left hover:bg-slate-100 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <span className={`transform transition-transform ${group.isExpanded ? 'rotate-90' : ''}`}>
+                                                    ▶
+                                                </span>
+                                                <span className="font-medium text-sm text-slate-700">
+                                                    {group.category}
+                                                </span>
+                                            </div>
+                                            <span className="text-xs text-slate-400">
+                                                {groupFilteredClauses.length}
+                                            </span>
+                                        </button>
+
+                                        {/* Clauses in Category */}
+                                        {group.isExpanded && (
+                                            <div className="bg-white">
+                                                {groupFilteredClauses.map(clause => (
                                                     <button
+                                                        key={clause.clauseId}
                                                         onClick={() => setSelectedClause(clause)}
-                                                        className={`flex-1 px-2 py-2 ${clause.status !== 'pending' ? 'pl-8' : ''} text-left text-sm flex items-center gap-2`}
+                                                        className={`w-full px-4 py-2 pl-8 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === clause.clauseId
+                                                                ? 'bg-blue-100 border-l-2 border-blue-500'
+                                                                : ''
+                                                            }`}
                                                     >
                                                         {/* Status Indicator */}
                                                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
-                                                            ? 'bg-green-500'
-                                                            : clause.status === 'rejected'
-                                                                ? 'bg-red-500'
-                                                                : 'bg-amber-400'
+                                                                ? 'bg-green-500'
+                                                                : clause.status === 'rejected'
+                                                                    ? 'bg-red-500'
+                                                                    : 'bg-amber-400'
                                                             }`} />
 
                                                         {/* Clause Info */}
@@ -1597,13 +1597,6 @@ function ContractPrepContent() {
                                                             </div>
                                                         </div>
 
-                                                        {/* Position indicator (if set) */}
-                                                        {clausePositions[clause.clauseId]?.customerPosition && (
-                                                            <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700" title="Customer position set">
-                                                                {clausePositions[clause.clauseId].customerPosition}
-                                                            </span>
-                                                        )}
-
                                                         {/* Confidence indicator */}
                                                         {clause.aiConfidence && clause.aiConfidence < 0.8 && (
                                                             <span className="text-amber-500 text-xs" title="Low AI confidence">
@@ -1611,27 +1604,18 @@ function ContractPrepContent() {
                                                             </span>
                                                         )}
                                                     </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })
+                        )
                     )}
                 </div>
 
                 {/* Actions */}
                 <div className="p-4 border-t border-slate-200 bg-white space-y-2">
-                    {/* Add from Library Button - Always visible */}
-                    <button
-                        onClick={openClauseLibrary}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
-                    >
-                        <span>📚</span>
-                        Add from Clause Library
-                    </button>
-
                     {detectedEntities.length > 0 && (
                         <button
                             onClick={() => setShowEntitiesPanel(!showEntitiesPanel)}
