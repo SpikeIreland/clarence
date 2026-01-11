@@ -289,6 +289,7 @@ function ContractPrepContent() {
     const [searchQuery, setSearchQuery] = useState('')
     const [showEntitiesPanel, setShowEntitiesPanel] = useState(false)
     const [viewMode, setViewMode] = useState<'category' | 'document'>('document') // Default to document order
+    const [expandedParentClauses, setExpandedParentClauses] = useState<Set<string>>(new Set())
 
     // Bulk Selection State
     const [selectedClauseIds, setSelectedClauseIds] = useState<Set<string>>(new Set())
@@ -513,6 +514,29 @@ function ContractPrepContent() {
 
         setCategoryGroups(categoryList)
     }
+
+    // Toggle parent clause expansion in document order view
+    const toggleParentClauseExpansion = (clauseNumber: string) => {
+        setExpandedParentClauses(prev => {
+            const newSet = new Set(prev)
+            if (newSet.has(clauseNumber)) {
+                newSet.delete(clauseNumber)
+            } else {
+                newSet.add(clauseNumber)
+            }
+            return newSet
+        })
+    }
+
+    // Initialize all parent clauses as expanded when clauses load
+    useEffect(() => {
+        if (clauses.length > 0 && expandedParentClauses.size === 0) {
+            const parentNumbers = clauses
+                .filter(c => c.clauseLevel === 1)
+                .map(c => c.clauseNumber)
+            setExpandedParentClauses(new Set(parentNumbers))
+        }
+    }, [clauses])
 
     // Load session data for routing decisions
     const loadSession = useCallback(async (sid: string) => {
@@ -1393,6 +1417,7 @@ function ContractPrepContent() {
         rejected: clauses.filter(c => c.status === 'rejected').length
     }
 
+
     // ========================================================================
     // SECTION 6: RENDER - LEFT PANEL (Clause Navigation)
     // ========================================================================
@@ -1440,8 +1465,8 @@ function ContractPrepContent() {
                         <button
                             onClick={() => setViewMode('document')}
                             className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode === 'document'
-                                    ? 'bg-white text-slate-800 shadow-sm'
-                                    : 'text-slate-600 hover:text-slate-800'
+                                ? 'bg-white text-slate-800 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-800'
                                 }`}
                         >
                             📄 Document Order
@@ -1449,8 +1474,8 @@ function ContractPrepContent() {
                         <button
                             onClick={() => setViewMode('category')}
                             className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode === 'category'
-                                    ? 'bg-white text-slate-800 shadow-sm'
-                                    : 'text-slate-600 hover:text-slate-800'
+                                ? 'bg-white text-slate-800 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-800'
                                 }`}
                         >
                             📁 By Category
@@ -1471,64 +1496,149 @@ function ContractPrepContent() {
                 {/* Clause Navigation */}
                 <div className="flex-1 overflow-auto">
                     {viewMode === 'document' ? (
-                        /* Document Order View - Flat list sorted by display_order */
+                        /* Document Order View - Hierarchical with collapsible parents */
                         documentOrderClauses.length === 0 ? (
                             <div className="p-4 text-center text-slate-500 text-sm">
                                 {searchQuery ? 'No clauses match your search' : 'No clauses found'}
                             </div>
                         ) : (
                             <div className="bg-white">
-                                {documentOrderClauses.map((clause, index) => {
-                                    // Calculate indent based on clause level
-                                    const indentClass = clause.clauseLevel === 1 ? 'pl-4'
-                                        : clause.clauseLevel === 2 ? 'pl-8'
-                                            : clause.clauseLevel === 3 ? 'pl-12'
-                                                : 'pl-16'
+                                {(() => {
+                                    // Build hierarchical structure
+                                    const parentClauses = documentOrderClauses.filter(c => c.clauseLevel === 1)
 
-                                    return (
-                                        <button
-                                            key={clause.clauseId}
-                                            onClick={() => setSelectedClause(clause)}
-                                            className={`w-full px-4 py-2 ${indentClass} text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 border-b border-slate-100 ${selectedClause?.clauseId === clause.clauseId
-                                                    ? 'bg-blue-100 border-l-2 border-l-blue-500'
-                                                    : ''
-                                                }`}
-                                        >
-                                            {/* Status Indicator */}
-                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
-                                                    ? 'bg-green-500'
-                                                    : clause.status === 'rejected'
-                                                        ? 'bg-red-500'
-                                                        : 'bg-amber-400'
-                                                }`} />
+                                    // Helper to get children of a parent clause
+                                    const getChildClauses = (parentNumber: string) => {
+                                        return documentOrderClauses.filter(c => {
+                                            if (c.clauseLevel === 1) return false
+                                            // Check if clause number starts with parent number followed by a dot
+                                            return c.clauseNumber.startsWith(parentNumber + '.')
+                                        })
+                                    }
 
-                                            {/* Clause Info */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-1">
-                                                    {clause.clauseNumber && (
-                                                        <span className="text-slate-400 text-xs font-mono min-w-[40px]">
-                                                            {clause.clauseNumber}
+                                    return parentClauses.map(parent => {
+                                        const children = getChildClauses(parent.clauseNumber)
+                                        const isExpanded = expandedParentClauses.has(parent.clauseNumber)
+                                        const hasChildren = children.length > 0
+
+                                        return (
+                                            <div key={parent.clauseId} className="border-b border-slate-200">
+                                                {/* Parent Clause Header */}
+                                                <button
+                                                    onClick={() => {
+                                                        if (hasChildren) {
+                                                            toggleParentClauseExpansion(parent.clauseNumber)
+                                                        }
+                                                        setSelectedClause(parent)
+                                                    }}
+                                                    className={`w-full px-4 py-2 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === parent.clauseId
+                                                        ? 'bg-blue-100 border-l-2 border-l-blue-500'
+                                                        : ''
+                                                        }`}
+                                                >
+                                                    {/* Expand/Collapse Arrow */}
+                                                    {hasChildren ? (
+                                                        <span
+                                                            className={`transform transition-transform text-slate-400 ${isExpanded ? 'rotate-90' : ''}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                toggleParentClauseExpansion(parent.clauseNumber)
+                                                            }}
+                                                        >
+                                                            ▶
+                                                        </span>
+                                                    ) : (
+                                                        <span className="w-3" /> // Spacer for alignment
+                                                    )}
+
+                                                    {/* Status Indicator */}
+                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${parent.status === 'verified'
+                                                        ? 'bg-green-500'
+                                                        : parent.status === 'rejected'
+                                                            ? 'bg-red-500'
+                                                            : 'bg-amber-400'
+                                                        }`} />
+
+                                                    {/* Clause Info */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-slate-500 text-xs font-mono font-medium">
+                                                                {parent.clauseNumber}
+                                                            </span>
+                                                            <span className="font-medium text-slate-700 truncate">
+                                                                {parent.clauseName}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Child count badge */}
+                                                    {hasChildren && (
+                                                        <span className="text-xs text-slate-400">
+                                                            {children.length}
                                                         </span>
                                                     )}
-                                                    <span className="truncate text-slate-700">
-                                                        {clause.clauseName}
-                                                    </span>
-                                                </div>
-                                                {/* Show category as small badge */}
-                                                <span className="text-[10px] text-slate-400">
-                                                    {clause.category}
-                                                </span>
-                                            </div>
 
-                                            {/* Confidence indicator */}
-                                            {clause.aiConfidence && clause.aiConfidence < 0.8 && (
-                                                <span className="text-amber-500 text-xs" title="Low AI confidence">
-                                                    ⚠
-                                                </span>
-                                            )}
-                                        </button>
-                                    )
-                                })}
+                                                    {/* Confidence indicator */}
+                                                    {parent.aiConfidence && parent.aiConfidence < 0.8 && (
+                                                        <span className="text-amber-500 text-xs" title="Low AI confidence">
+                                                            ⚠
+                                                        </span>
+                                                    )}
+                                                </button>
+
+                                                {/* Child Clauses */}
+                                                {isExpanded && hasChildren && (
+                                                    <div className="bg-slate-50">
+                                                        {children.map(child => {
+                                                            // Calculate indent based on clause level
+                                                            const indentClass = child.clauseLevel === 2 ? 'pl-10'
+                                                                : child.clauseLevel === 3 ? 'pl-14'
+                                                                    : 'pl-18'
+
+                                                            return (
+                                                                <button
+                                                                    key={child.clauseId}
+                                                                    onClick={() => setSelectedClause(child)}
+                                                                    className={`w-full px-4 py-2 ${indentClass} text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 border-t border-slate-100 ${selectedClause?.clauseId === child.clauseId
+                                                                        ? 'bg-blue-100 border-l-2 border-l-blue-500'
+                                                                        : ''
+                                                                        }`}
+                                                                >
+                                                                    {/* Status Indicator */}
+                                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${child.status === 'verified'
+                                                                        ? 'bg-green-500'
+                                                                        : child.status === 'rejected'
+                                                                            ? 'bg-red-500'
+                                                                            : 'bg-amber-400'
+                                                                        }`} />
+
+                                                                    {/* Clause Info */}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-slate-400 text-xs font-mono">
+                                                                                {child.clauseNumber}
+                                                                            </span>
+                                                                            <span className="truncate text-slate-600">
+                                                                                {child.clauseName}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Confidence indicator */}
+                                                                    {child.aiConfidence && child.aiConfidence < 0.8 && (
+                                                                        <span className="text-amber-500 text-xs" title="Low AI confidence">
+                                                                            ⚠
+                                                                        </span>
+                                                                    )}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })
+                                })()}
                             </div>
                         )
                     ) : (
@@ -1571,16 +1681,16 @@ function ContractPrepContent() {
                                                         key={clause.clauseId}
                                                         onClick={() => setSelectedClause(clause)}
                                                         className={`w-full px-4 py-2 pl-8 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === clause.clauseId
-                                                                ? 'bg-blue-100 border-l-2 border-blue-500'
-                                                                : ''
+                                                            ? 'bg-blue-100 border-l-2 border-blue-500'
+                                                            : ''
                                                             }`}
                                                     >
                                                         {/* Status Indicator */}
                                                         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
-                                                                ? 'bg-green-500'
-                                                                : clause.status === 'rejected'
-                                                                    ? 'bg-red-500'
-                                                                    : 'bg-amber-400'
+                                                            ? 'bg-green-500'
+                                                            : clause.status === 'rejected'
+                                                                ? 'bg-red-500'
+                                                                : 'bg-amber-400'
                                                             }`} />
 
                                                         {/* Clause Info */}
