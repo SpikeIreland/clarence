@@ -307,7 +307,7 @@ export default function ContractsDashboard() {
         localStorage.setItem('newSessionNumber', data.sessionNumber)
 
         // Training goes to Training Studio
-        router.push(`/auth/training/${data.sessionId}`)
+        router.push('/auth/training')
 
       } else {
         const errorData = await response.json()
@@ -728,7 +728,7 @@ export default function ContractsDashboard() {
             {/* Center: Navigation Links */}
             <div className="hidden md:flex items-center gap-6">
               <Link
-                href="/auth/dashboard"
+                href="/auth/contracts-dashboard"
                 className="text-white font-medium text-sm border-b-2 border-emerald-500 pb-1"
               >
                 Dashboard
