@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
 import { PartyChatPanel } from './components/party-chat-component'
-
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -7155,6 +7155,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             <AddClauseModal />
             {/* FOCUS-12: Mark as N/A Modal */}
             <MarkAsNaModal />
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }

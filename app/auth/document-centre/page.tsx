@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -1397,6 +1398,9 @@ function DocumentCentreContent() {
                     />
                 </div>
             </div>
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }

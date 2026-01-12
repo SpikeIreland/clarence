@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 1: INTERFACES
@@ -570,8 +571,8 @@ function InviteProvidersContent() {
                                         </div>
                                     </div>
                                     <span className={`text-xs px-2 py-1 rounded ${bid.status === 'submitted' || bid.intake_complete
-                                            ? 'bg-emerald-100 text-emerald-700'
-                                            : 'bg-amber-100 text-amber-700'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-amber-100 text-amber-700'
                                         }`}>
                                         {bid.status === 'submitted' || bid.intake_complete ? 'Submitted' : 'Awaiting Response'}
                                     </span>
@@ -654,22 +655,22 @@ function InviteProvidersContent() {
                                 <div
                                     key={provider.id}
                                     className={`flex items-center justify-between p-4 rounded-lg border ${provider.status === 'sent'
-                                            ? 'bg-emerald-50 border-emerald-200'
-                                            : provider.status === 'error'
-                                                ? 'bg-red-50 border-red-200'
-                                                : provider.status === 'sending'
-                                                    ? 'bg-blue-50 border-blue-200'
-                                                    : 'bg-slate-50 border-slate-200'
+                                        ? 'bg-emerald-50 border-emerald-200'
+                                        : provider.status === 'error'
+                                            ? 'bg-red-50 border-red-200'
+                                            : provider.status === 'sending'
+                                                ? 'bg-blue-50 border-blue-200'
+                                                : 'bg-slate-50 border-slate-200'
                                         }`}
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${provider.status === 'sent'
-                                                ? 'bg-emerald-500'
-                                                : provider.status === 'error'
-                                                    ? 'bg-red-500'
-                                                    : provider.status === 'sending'
-                                                        ? 'bg-blue-500'
-                                                        : 'bg-slate-400'
+                                            ? 'bg-emerald-500'
+                                            : provider.status === 'error'
+                                                ? 'bg-red-500'
+                                                : provider.status === 'sending'
+                                                    ? 'bg-blue-500'
+                                                    : 'bg-slate-400'
                                             }`}>
                                             {provider.status === 'sent' ? '✓' :
                                                 provider.status === 'error' ? '!' :
@@ -688,12 +689,12 @@ function InviteProvidersContent() {
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <span className={`text-xs px-2 py-1 rounded ${provider.status === 'sent'
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : provider.status === 'error'
-                                                    ? 'bg-red-100 text-red-700'
-                                                    : provider.status === 'sending'
-                                                        ? 'bg-blue-100 text-blue-700'
-                                                        : 'bg-slate-100 text-slate-600'
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : provider.status === 'error'
+                                                ? 'bg-red-100 text-red-700'
+                                                : provider.status === 'sending'
+                                                    ? 'bg-blue-100 text-blue-700'
+                                                    : 'bg-slate-100 text-slate-600'
                                             }`}>
                                             {provider.status === 'sent' ? 'Invitation Sent' :
                                                 provider.status === 'error' ? 'Failed' :
@@ -815,6 +816,9 @@ function InviteProvidersContent() {
                     </ul>
                 </div>
             </div>
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
