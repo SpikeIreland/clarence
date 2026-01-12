@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -70,9 +69,9 @@ interface ContractClause {
     createdAt: string
     updatedAt: string
     // Position scales for negotiation stance (1-10)
-    customerPosition?: number  // Customer's initial stance (Green)
-    providerPosition?: number  // Expected provider stance (Blue)
-    importance?: 'low' | 'medium' | 'high' | 'critical'  // How important this clause is
+    customerPosition?: number
+    providerPosition?: number
+    importance?: 'low' | 'medium' | 'high' | 'critical'
 }
 
 interface DetectedEntity {
@@ -97,7 +96,6 @@ interface CategoryGroup {
     isExpanded: boolean
 }
 
-// Master clause from contract_clauses table (clause library)
 interface MasterClause {
     clauseId: string
     clauseName: string
@@ -110,7 +108,6 @@ interface MasterClause {
     applicableContractTypes: string[]
 }
 
-// Session data for routing decisions
 interface SessionData {
     sessionId: string
     sessionNumber: string | null
@@ -164,7 +161,7 @@ Upload a contract and I'll analyze it to identify clauses, categories, and any e
 
 ${entityCount > 0 ? `I've also detected **${entityCount} entities** (company names, people, etc.) that you may want to redact before sharing.` : ''}
 
-Click on any clause in the left panel to review its details. Use the checkboxes to verify clauses as you go.`,
+Click on any clause in the left panel to review its details. Use the checkboxes to select multiple clauses for bulk actions.`,
 
     processing: `Your contract is being analyzed. I'm identifying clause boundaries, categories, and extracting entities.
 
@@ -182,6 +179,12 @@ Review and confirm the redactions in the Entities panel.`,
     clause_verified: (name: string) => `✓ Verified: **${name}**`,
 
     clause_rejected: (name: string) => `✕ Rejected: **${name}**`,
+
+    clause_deleted: (name: string) => `🗑️ Deleted: **${name}**`,
+
+    clauses_deleted: (count: number) => `🗑️ Deleted **${count} clauses**`,
+
+    clauses_reordered: `↕️ Clauses reordered successfully`,
 
     all_verified: `Excellent! All clauses have been verified. You can now commit them to use in negotiations.`,
 
@@ -211,7 +214,6 @@ const extractTextFromPdf = async (file: File): Promise<string> => {
         const textContent = await page.getTextContent()
         const pageText = textContent.items
             .map((item) => {
-                // TextItem has 'str' property, TextMarkedContent does not
                 if ('str' in item) {
                     return (item as { str: string }).str
                 }
@@ -289,21 +291,23 @@ function ContractPrepContent() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [searchQuery, setSearchQuery] = useState('')
     const [showEntitiesPanel, setShowEntitiesPanel] = useState(false)
-    const [viewMode, setViewMode] = useState<'category' | 'document'>('document') // Default to document order
+    const [viewMode, setViewMode] = useState<'category' | 'document'>('document')
     const [expandedParentClauses, setExpandedParentClauses] = useState<Set<string>>(new Set())
 
     // Bulk Selection State
     const [selectedClauseIds, setSelectedClauseIds] = useState<Set<string>>(new Set())
     const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [isReordering, setIsReordering] = useState(false)
 
-    // Position Scales State (local state, saved when clause is verified/committed)
+    // Position Scales State
     const [clausePositions, setClausePositions] = useState<Record<string, {
         customerPosition: number
         providerPosition: number
         importance: 'low' | 'medium' | 'high' | 'critical'
     }>>({})
 
-    // Clause Library State (Build from Scratch)
+    // Clause Library State
     const [showClauseLibrary, setShowClauseLibrary] = useState(false)
     const [masterClauses, setMasterClauses] = useState<MasterClause[]>([])
     const [selectedMasterClauseIds, setSelectedMasterClauseIds] = useState<Set<string>>(new Set())
@@ -312,8 +316,13 @@ function ContractPrepContent() {
     const [libraryExpandedCategories, setLibraryExpandedCategories] = useState<Set<string>>(new Set())
     const [isAddingClauses, setIsAddingClauses] = useState(false)
 
-    // Session Data State (for routing decisions)
+    // Session Data State
     const [sessionData, setSessionData] = useState<SessionData | null>(null)
+
+    // Delete Confirmation Modal
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [deleteTarget, setDeleteTarget] = useState<'single' | 'bulk' | null>(null)
+    const [clauseToDelete, setClauseToDelete] = useState<ContractClause | null>(null)
 
     // ========================================================================
     // SECTION 5B: INITIALIZE & LOAD USER
@@ -340,23 +349,17 @@ function ContractPrepContent() {
 
     const loadContract = useCallback(async (id: string) => {
         try {
-            // Use local API proxy to avoid CORS issues
             const response = await fetch(`/api/contracts/${id}`)
             if (!response.ok) throw new Error('Failed to load contract')
 
             const data = await response.json()
             console.log('[loadContract] Raw API response:', data)
 
-            // Handle both { contract: {...} } and direct {...} response structures
             const contractData = data.contract || data
-
-            // Check for contract_id (snake_case) OR contractId (camelCase)
             const hasContractId = contractData && (contractData.contract_id || contractData.contractId)
 
             if (hasContractId) {
-                // Helper to get field with either case
                 const get = (snake: string, camel: string) => contractData[snake] ?? contractData[camel]
-
                 const status = get('status', 'status')
                 console.log('[loadContract] Found contract data, status:', status)
 
@@ -384,7 +387,6 @@ function ContractPrepContent() {
                     processedAt: get('processed_at', 'processedAt')
                 })
 
-                // Parse detected entities from parsing_notes if available
                 const parsingNotes = get('parsing_notes', 'parsingNotes')
                 if (parsingNotes) {
                     try {
@@ -416,20 +418,17 @@ function ContractPrepContent() {
 
     const loadClauses = useCallback(async (id: string) => {
         try {
-            // Use local API proxy to avoid CORS issues
             const response = await fetch(`/api/contracts/${id}/clauses`)
             if (!response.ok) throw new Error('Failed to load clauses')
 
             const data = await response.json()
             console.log('[loadClauses] Raw API response:', data)
 
-            // Handle both { clauses: [...] } and direct [...] response structures
             const clausesArray = data.clauses || (Array.isArray(data) ? data : null)
 
             if (clausesArray && Array.isArray(clausesArray)) {
                 console.log('[loadClauses] Found', clausesArray.length, 'clauses')
 
-                // Helper to get field with either snake_case or camelCase
                 const get = (obj: any, snake: string, camel: string) => obj[snake] ?? obj[camel]
 
                 const mappedClauses: ContractClause[] = clausesArray.map((c: any) => ({
@@ -463,7 +462,6 @@ function ContractPrepContent() {
                 setClauses(mappedClauses)
                 buildCategoryGroups(mappedClauses)
 
-                // Auto-select first clause
                 if (mappedClauses.length > 0 && !selectedClause) {
                     setSelectedClause(mappedClauses[0])
                 }
@@ -475,11 +473,9 @@ function ContractPrepContent() {
         }
     }, [selectedClause])
 
-    // Build category groups for nested navigation
     const buildCategoryGroups = (clauseList: ContractClause[]) => {
         const groups: { [key: string]: ContractClause[] } = {}
 
-        // Group clauses by category
         clauseList.forEach(clause => {
             const cat = clause.category || 'Other'
             if (!groups[cat]) {
@@ -488,21 +484,18 @@ function ContractPrepContent() {
             groups[cat].push(clause)
         })
 
-        // Sort clauses within each group by display order
         Object.keys(groups).forEach(cat => {
             groups[cat].sort((a, b) => a.displayOrder - b.displayOrder)
         })
 
-        // Convert to array with expansion state
         const categoryList: CategoryGroup[] = CLAUSE_CATEGORIES
             .filter(cat => groups[cat] && groups[cat].length > 0)
             .map(cat => ({
                 category: cat,
                 clauses: groups[cat],
-                isExpanded: true // Start expanded
+                isExpanded: true
             }))
 
-        // Add any categories not in our predefined list
         Object.keys(groups).forEach(cat => {
             if (!CLAUSE_CATEGORIES.includes(cat)) {
                 categoryList.push({
@@ -516,7 +509,6 @@ function ContractPrepContent() {
         setCategoryGroups(categoryList)
     }
 
-    // Toggle parent clause expansion in document order view
     const toggleParentClauseExpansion = (clauseNumber: string) => {
         setExpandedParentClauses(prev => {
             const newSet = new Set(prev)
@@ -529,7 +521,6 @@ function ContractPrepContent() {
         })
     }
 
-    // Initialize all parent clauses as expanded when clauses load
     useEffect(() => {
         if (clauses.length > 0 && expandedParentClauses.size === 0) {
             const parentNumbers = clauses
@@ -539,7 +530,6 @@ function ContractPrepContent() {
         }
     }, [clauses])
 
-    // Load session data for routing decisions
     const loadSession = useCallback(async (sid: string) => {
         try {
             const response = await fetch(`${API_BASE}/get-session?session_id=${sid}`)
@@ -551,7 +541,6 @@ function ContractPrepContent() {
             const data = await response.json()
             console.log('[loadSession] Raw API response:', data)
 
-            // Handle both nested and flat response structures
             const session = data.session || data
 
             if (session) {
@@ -575,7 +564,6 @@ function ContractPrepContent() {
     // SECTION 5D: POLLING FOR PROCESSING STATUS
     // ========================================================================
 
-    // Track if we've already loaded this contract to prevent re-polling
     const hasLoadedRef = useRef<string | null>(null)
 
     useEffect(() => {
@@ -587,21 +575,18 @@ function ContractPrepContent() {
             return
         }
 
-        // If we've already loaded this contract, don't poll again
         if (hasLoadedRef.current === contractId) {
             console.log('[Polling] Already loaded this contract, skipping')
             return
         }
 
-        // If we have a contract_id, we're either loading or processing
-        // Clear isUploading since the upload phase is complete
         setIsUploading(false)
         setUploadProgress(null)
         setIsLoading(true)
 
         let pollCount = 0
         let pollInterval: NodeJS.Timeout | null = null
-        let isActive = true // Track if this effect is still active
+        let isActive = true
 
         const poll = async () => {
             if (!isActive) {
@@ -624,7 +609,7 @@ function ContractPrepContent() {
                     clearInterval(pollInterval)
                     pollInterval = null
                 }
-                hasLoadedRef.current = contractId // Mark as loaded
+                hasLoadedRef.current = contractId
                 await loadClauses(contractId)
                 setIsLoading(false)
                 console.log('[Polling] Clauses loaded, polling complete')
@@ -637,9 +622,8 @@ function ContractPrepContent() {
                 setIsLoading(false)
                 setError('Contract processing failed')
             } else if (status === 'processing') {
-                // Contract is processing - keep polling
                 console.log('[Polling] Status is processing, continuing to poll')
-                setIsLoading(false) // Allow the processing overlay to show
+                setIsLoading(false)
                 pollCount++
                 if (pollCount >= MAX_POLLING_ATTEMPTS) {
                     if (pollInterval) {
@@ -650,7 +634,6 @@ function ContractPrepContent() {
                 }
             } else if (status === null) {
                 console.log('[Polling] Status is null (error loading)')
-                // Stop polling on null - something is wrong
                 if (pollInterval) {
                     clearInterval(pollInterval)
                     pollInterval = null
@@ -674,10 +657,8 @@ function ContractPrepContent() {
                 pollInterval = null
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [contractId]) // Only depend on contractId, not the callbacks
+    }, [contractId])
 
-    // Load session data when sessionId is available
     useEffect(() => {
         if (sessionId) {
             loadSession(sessionId)
@@ -703,7 +684,6 @@ function ContractPrepContent() {
         }
     }, [chatMessages])
 
-    // Update chat when contract loads
     useEffect(() => {
         if (contract && contract.status === 'ready' && clauses.length > 0 && chatMessages.length <= 1) {
             addChatMessage('clarence', CLARENCE_MESSAGES.contract_loaded(
@@ -728,7 +708,6 @@ function ContractPrepContent() {
         const file = e.target.files?.[0]
         if (!file || !userInfo) return
 
-        // Validate file
         const validTypes = [
             'application/pdf',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -769,7 +748,6 @@ function ContractPrepContent() {
 
             setUploadProgress('Uploading for analysis...')
 
-            // Debug: Log what we're sending
             console.log('Upload payload:', {
                 user_id: userInfo.userId,
                 company_id: userInfo.companyId,
@@ -797,21 +775,13 @@ function ContractPrepContent() {
             const result = await response.json()
 
             if (result.contractId || result.contract_id) {
-                // Handle both camelCase and snake_case responses
                 const newContractId = result.contractId || result.contract_id
-
-                // Update progress to show we're transitioning
                 setUploadProgress('Contract uploaded! Starting analysis...')
 
-                // Update URL with contract_id - DON'T reset isUploading here
-                // The page will reload and pick up the processing state
                 const newUrl = sessionId
                     ? `/auth/contract-prep?contract_id=${newContractId}&session_id=${sessionId}`
                     : `/auth/contract-prep?contract_id=${newContractId}`
                 router.push(newUrl)
-
-                // Keep the overlay showing - the new page load will handle the transition
-                // Don't call setIsUploading(false) on success
                 return
             } else {
                 throw new Error('No contract ID returned from upload')
@@ -820,11 +790,9 @@ function ContractPrepContent() {
         } catch (err) {
             console.error('Upload error:', err)
             setError(err instanceof Error ? err.message : 'Upload failed')
-            // Only reset on error
             setIsUploading(false)
             setUploadProgress(null)
         }
-        // Removed the finally block - we handle cleanup explicitly above
     }
 
     // ========================================================================
@@ -848,14 +816,12 @@ function ContractPrepContent() {
 
             if (!response.ok) throw new Error('Failed to verify clause')
 
-            // Update local state
             setClauses(prev => prev.map(c =>
                 c.clauseId === clause.clauseId
                     ? { ...c, status: 'verified', verified: true }
                     : c
             ))
 
-            // Rebuild category groups
             const updatedClauses = clauses.map(c =>
                 c.clauseId === clause.clauseId
                     ? { ...c, status: 'verified' as const, verified: true }
@@ -943,7 +909,6 @@ function ContractPrepContent() {
                     : c
             ))
 
-            // Update selected clause if it was the one being edited
             if (selectedClause?.clauseId === editingClause.clauseId) {
                 setSelectedClause({
                     ...selectedClause,
@@ -979,11 +944,13 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // BULK ACTION HANDLERS
+    // SECTION 5H: BULK SELECTION HANDLERS
     // ========================================================================
 
-    const toggleClauseSelection = (clauseId: string, event: React.MouseEvent) => {
-        event.stopPropagation() // Don't select the clause for viewing
+    const toggleClauseSelection = (clauseId: string, event?: React.MouseEvent) => {
+        if (event) {
+            event.stopPropagation()
+        }
         setSelectedClauseIds(prev => {
             const newSet = new Set(prev)
             if (newSet.has(clauseId)) {
@@ -995,6 +962,11 @@ function ContractPrepContent() {
         })
     }
 
+    const selectAllClauses = () => {
+        const allIds = clauses.map(c => c.clauseId)
+        setSelectedClauseIds(new Set(allIds))
+    }
+
     const selectAllPendingClauses = () => {
         const pendingIds = clauses
             .filter(c => c.status === 'pending')
@@ -1004,7 +976,7 @@ function ContractPrepContent() {
 
     const selectAllInCategory = (category: string) => {
         const categoryClauseIds = clauses
-            .filter(c => c.category === category && c.status === 'pending')
+            .filter(c => c.category === category)
             .map(c => c.clauseId)
         setSelectedClauseIds(prev => {
             const newSet = new Set(prev)
@@ -1024,7 +996,6 @@ function ContractPrepContent() {
         const clausesToVerify = clauses.filter(c => selectedClauseIds.has(c.clauseId) && c.status === 'pending')
 
         try {
-            // Process each clause (could batch this in a single API call if N8N supports it)
             for (const clause of clausesToVerify) {
                 await fetch(`${API_BASE}/update-parsed-clause`, {
                     method: 'POST',
@@ -1034,7 +1005,6 @@ function ContractPrepContent() {
                         clause_id: clause.clauseId,
                         user_id: userInfo.userId,
                         status: 'verified',
-                        // Include positions if set
                         customer_position: clausePositions[clause.clauseId]?.customerPosition,
                         provider_position: clausePositions[clause.clauseId]?.providerPosition,
                         importance: clausePositions[clause.clauseId]?.importance
@@ -1042,7 +1012,6 @@ function ContractPrepContent() {
                 })
             }
 
-            // Update local state
             setClauses(prev => prev.map(c =>
                 selectedClauseIds.has(c.clauseId) && c.status === 'pending'
                     ? { ...c, status: 'verified', verified: true }
@@ -1113,7 +1082,184 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // POSITION SCALE HANDLERS
+    // SECTION 5I: DELETE CLAUSE HANDLERS
+    // ========================================================================
+
+    const confirmDeleteClause = (clause: ContractClause) => {
+        setClauseToDelete(clause)
+        setDeleteTarget('single')
+        setShowDeleteConfirm(true)
+    }
+
+    const confirmBulkDelete = () => {
+        setDeleteTarget('bulk')
+        setShowDeleteConfirm(true)
+    }
+
+    const handleDeleteClause = async (clause: ContractClause) => {
+        if (!userInfo || !contract) return
+
+        setIsDeleting(true)
+        try {
+            const response = await fetch(`${API_BASE}/delete-parsed-clause`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contract.contractId,
+                    clause_id: clause.clauseId,
+                    user_id: userInfo.userId
+                })
+            })
+
+            if (!response.ok) throw new Error('Failed to delete clause')
+
+            // Remove from local state
+            const updatedClauses = clauses.filter(c => c.clauseId !== clause.clauseId)
+            setClauses(updatedClauses)
+            buildCategoryGroups(updatedClauses)
+
+            // Clear selection if deleted clause was selected
+            if (selectedClause?.clauseId === clause.clauseId) {
+                setSelectedClause(updatedClauses.length > 0 ? updatedClauses[0] : null)
+            }
+
+            // Remove from bulk selection
+            setSelectedClauseIds(prev => {
+                const newSet = new Set(prev)
+                newSet.delete(clause.clauseId)
+                return newSet
+            })
+
+            // Update contract clause count
+            setContract(prev => prev ? { ...prev, clauseCount: (prev.clauseCount || 1) - 1 } : null)
+
+            addChatMessage('system', CLARENCE_MESSAGES.clause_deleted(clause.clauseName))
+
+        } catch (err) {
+            console.error('Error deleting clause:', err)
+            setError('Failed to delete clause')
+        } finally {
+            setIsDeleting(false)
+            setShowDeleteConfirm(false)
+            setClauseToDelete(null)
+        }
+    }
+
+    const handleBulkDelete = async () => {
+        if (!userInfo || !contract || selectedClauseIds.size === 0) return
+
+        setIsDeleting(true)
+        const clausesToDelete = clauses.filter(c => selectedClauseIds.has(c.clauseId))
+
+        try {
+            for (const clause of clausesToDelete) {
+                await fetch(`${API_BASE}/delete-parsed-clause`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contract_id: contract.contractId,
+                        clause_id: clause.clauseId,
+                        user_id: userInfo.userId
+                    })
+                })
+            }
+
+            // Remove from local state
+            const updatedClauses = clauses.filter(c => !selectedClauseIds.has(c.clauseId))
+            setClauses(updatedClauses)
+            buildCategoryGroups(updatedClauses)
+
+            // Clear selection if deleted clause was selected
+            if (selectedClause && selectedClauseIds.has(selectedClause.clauseId)) {
+                setSelectedClause(updatedClauses.length > 0 ? updatedClauses[0] : null)
+            }
+
+            // Update contract clause count
+            setContract(prev => prev ? { ...prev, clauseCount: (prev.clauseCount || clausesToDelete.length) - clausesToDelete.length } : null)
+
+            addChatMessage('system', CLARENCE_MESSAGES.clauses_deleted(clausesToDelete.length))
+            clearSelection()
+
+        } catch (err) {
+            console.error('Error bulk deleting:', err)
+            setError('Failed to delete some clauses')
+        } finally {
+            setIsDeleting(false)
+            setShowDeleteConfirm(false)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 5J: REORDER CLAUSE HANDLERS
+    // ========================================================================
+
+    const handleMoveClause = async (clause: ContractClause, direction: 'up' | 'down') => {
+        if (!userInfo || !contract) return
+
+        const sortedClauses = [...clauses].sort((a, b) => a.displayOrder - b.displayOrder)
+        const currentIndex = sortedClauses.findIndex(c => c.clauseId === clause.clauseId)
+
+        if (currentIndex === -1) return
+        if (direction === 'up' && currentIndex === 0) return
+        if (direction === 'down' && currentIndex === sortedClauses.length - 1) return
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+        const targetClause = sortedClauses[targetIndex]
+
+        // Swap display orders
+        const newOrder1 = targetClause.displayOrder
+        const newOrder2 = clause.displayOrder
+
+        setIsReordering(true)
+        try {
+            // Update first clause
+            await fetch(`${API_BASE}/update-clause-order`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contract.contractId,
+                    clause_id: clause.clauseId,
+                    display_order: newOrder1,
+                    user_id: userInfo.userId
+                })
+            })
+
+            // Update second clause
+            await fetch(`${API_BASE}/update-clause-order`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contract.contractId,
+                    clause_id: targetClause.clauseId,
+                    display_order: newOrder2,
+                    user_id: userInfo.userId
+                })
+            })
+
+            // Update local state
+            const updatedClauses = clauses.map(c => {
+                if (c.clauseId === clause.clauseId) {
+                    return { ...c, displayOrder: newOrder1 }
+                }
+                if (c.clauseId === targetClause.clauseId) {
+                    return { ...c, displayOrder: newOrder2 }
+                }
+                return c
+            })
+
+            setClauses(updatedClauses)
+            buildCategoryGroups(updatedClauses)
+
+        } catch (err) {
+            console.error('Error reordering clause:', err)
+            setError('Failed to reorder clause')
+        } finally {
+            setIsReordering(false)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 5K: POSITION SCALE HANDLERS
     // ========================================================================
 
     const updateClausePosition = (clauseId: string, field: 'customerPosition' | 'providerPosition' | 'importance', value: number | string) => {
@@ -1137,7 +1283,7 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // CLAUSE LIBRARY FUNCTIONS (Build from Scratch)
+    // SECTION 5L: CLAUSE LIBRARY FUNCTIONS
     // ========================================================================
 
     const loadMasterClauses = async () => {
@@ -1163,7 +1309,6 @@ function ContractPrepContent() {
                 }))
                 setMasterClauses(mapped)
 
-                // Expand all categories by default
                 const categories = new Set(mapped.map(c => c.category))
                 setLibraryExpandedCategories(categories)
             }
@@ -1226,18 +1371,13 @@ function ContractPrepContent() {
 
             if (!response.ok) throw new Error('Failed to add clauses')
 
-            const result = await response.json()
-
-            // Refresh clauses list
             await loadClauses(contract.contractId)
 
-            // Update contract clause count
             setContract(prev => prev ? {
                 ...prev,
                 clauseCount: (prev.clauseCount || 0) + selectedMasterClauseIds.size
             } : null)
 
-            // Clear selection and close modal
             setSelectedMasterClauseIds(new Set())
             setShowClauseLibrary(false)
 
@@ -1258,7 +1398,6 @@ function ContractPrepContent() {
         }
     }
 
-    // Filter and group master clauses for display
     const getFilteredLibraryClauses = () => {
         let filtered = masterClauses
 
@@ -1271,7 +1410,6 @@ function ContractPrepContent() {
             )
         }
 
-        // Group by category
         const groups: { [key: string]: MasterClause[] } = {}
         filtered.forEach(clause => {
             const cat = clause.category || 'Other'
@@ -1301,7 +1439,6 @@ function ContractPrepContent() {
                     session_id: sessionId,
                     user_id: userInfo.userId,
                     clause_ids: verifiedClauses.map(c => c.clauseId),
-                    // Include position data for committed clauses
                     clause_positions: verifiedClauses.map(c => ({
                         clause_id: c.clauseId,
                         customer_position: clausePositions[c.clauseId]?.customerPosition || null,
@@ -1317,19 +1454,15 @@ function ContractPrepContent() {
 
             addChatMessage('clarence', CLARENCE_MESSAGES.committed(verifiedClauses.length))
 
-            // Get routing parameters
             const targetSessionId = result.sessionId || sessionId
             const targetContractId = contract.contractId
             const mediationType = sessionData?.mediationType
 
             setTimeout(() => {
-                // Route based on mediation type
                 if (mediationType === 'straight_to_contract') {
-                    // No negotiation needed - go directly to invite providers
                     addChatMessage('clarence', 'Your clauses are committed. Next step: invite providers to begin the contract process.')
                     router.push(`/auth/invite-providers?session_id=${targetSessionId}&contract_id=${targetContractId}`)
                 } else {
-                    // partial_mediation or full_mediation - go to strategic assessment
                     let nextUrl = `/auth/strategic-assessment?session_id=${targetSessionId}`
                     if (targetContractId) {
                         nextUrl += `&contract_id=${targetContractId}`
@@ -1347,7 +1480,7 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // SECTION 5H: ENTITY HANDLERS
+    // SECTION 5M: ENTITY HANDLERS
     // ========================================================================
 
     const handleConfirmEntity = (entityId: string, placeholder: string) => {
@@ -1362,7 +1495,6 @@ function ContractPrepContent() {
         const confirmedEntities = detectedEntities.filter(e => e.confirmed)
         if (confirmedEntities.length === 0) return
 
-        // Apply redactions to all clause content
         setClauses(prev => prev.map(clause => {
             let redactedContent = clause.content
             confirmedEntities.forEach(entity => {
@@ -1380,7 +1512,7 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // SECTION 5I: TOGGLE CATEGORY EXPANSION
+    // SECTION 5N: UTILITY FUNCTIONS
     // ========================================================================
 
     const toggleCategoryExpansion = (category: string) => {
@@ -1390,10 +1522,6 @@ function ContractPrepContent() {
                 : g
         ))
     }
-
-    // ========================================================================
-    // SECTION 5J: FILTERED CLAUSES
-    // ========================================================================
 
     const getFilteredClauses = () => {
         if (!searchQuery) return clauses
@@ -1407,10 +1535,6 @@ function ContractPrepContent() {
         )
     }
 
-    // ========================================================================
-    // SECTION 5K: STATS
-    // ========================================================================
-
     const stats = {
         total: clauses.length,
         pending: clauses.filter(c => c.status === 'pending').length,
@@ -1418,18 +1542,73 @@ function ContractPrepContent() {
         rejected: clauses.filter(c => c.status === 'rejected').length
     }
 
+    // ========================================================================
+    // SECTION 6: RENDER - BULK ACTION TOOLBAR
+    // ========================================================================
+
+    const renderBulkActionToolbar = () => {
+        if (selectedClauseIds.size === 0) return null
+
+        const selectedCount = selectedClauseIds.size
+        const pendingSelectedCount = clauses.filter(c => selectedClauseIds.has(c.clauseId) && c.status === 'pending').length
+
+        return (
+            <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+                <div className="bg-slate-800 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
+                    <span className="text-sm font-medium">
+                        {selectedCount} clause{selectedCount !== 1 ? 's' : ''} selected
+                    </span>
+
+                    <div className="w-px h-6 bg-slate-600" />
+
+                    <div className="flex items-center gap-2">
+                        {pendingSelectedCount > 0 && (
+                            <>
+                                <button
+                                    onClick={handleBulkVerify}
+                                    disabled={isBulkProcessing}
+                                    className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                    <span>✓</span> Verify ({pendingSelectedCount})
+                                </button>
+                                <button
+                                    onClick={handleBulkReject}
+                                    disabled={isBulkProcessing}
+                                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                    <span>✕</span> Reject
+                                </button>
+                            </>
+                        )}
+                        <button
+                            onClick={confirmBulkDelete}
+                            disabled={isDeleting}
+                            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                        >
+                            <span>🗑️</span> Delete
+                        </button>
+                    </div>
+
+                    <div className="w-px h-6 bg-slate-600" />
+
+                    <button
+                        onClick={clearSelection}
+                        className="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-sm transition-colors"
+                    >
+                        Clear
+                    </button>
+                </div>
+            </div>
+        )
+    }
 
     // ========================================================================
-    // SECTION 6: RENDER - LEFT PANEL (Clause Navigation)
+    // SECTION 7: RENDER - LEFT PANEL (Clause Navigation)
     // ========================================================================
 
     const renderLeftPanel = () => {
         const filteredClauses = getFilteredClauses()
-
-        // For document order view, sort by displayOrder
         const documentOrderClauses = [...filteredClauses].sort((a, b) => a.displayOrder - b.displayOrder)
-
-        // For category view, filter categories that have matching clauses
         const filteredCategories = categoryGroups.filter(g =>
             g.clauses.some(c => filteredClauses.find(fc => fc.clauseId === c.clauseId))
         )
@@ -1484,20 +1663,46 @@ function ContractPrepContent() {
                     </div>
                 </div>
 
-                {/* Stats Bar */}
+                {/* Selection Controls */}
                 {clauses.length > 0 && (
-                    <div className="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center gap-3 text-xs">
-                        <span className="text-slate-600">{stats.total} clauses</span>
-                        <span className="text-amber-600">⏳ {stats.pending}</span>
-                        <span className="text-green-600">✓ {stats.verified}</span>
-                        <span className="text-red-600">✕ {stats.rejected}</span>
+                    <div className="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="text-slate-600">{stats.total} clauses</span>
+                            <span className="text-amber-600">⏳ {stats.pending}</span>
+                            <span className="text-green-600">✓ {stats.verified}</span>
+                            <span className="text-red-600">✕ {stats.rejected}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={selectAllClauses}
+                                className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50"
+                                title="Select all"
+                            >
+                                All
+                            </button>
+                            <button
+                                onClick={selectAllPendingClauses}
+                                className="text-xs text-amber-600 hover:text-amber-800 px-2 py-1 rounded hover:bg-amber-50"
+                                title="Select pending"
+                            >
+                                Pending
+                            </button>
+                            {selectedClauseIds.size > 0 && (
+                                <button
+                                    onClick={clearSelection}
+                                    className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded hover:bg-slate-200"
+                                    title="Clear selection"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
 
                 {/* Clause Navigation */}
                 <div className="flex-1 overflow-auto">
                     {viewMode === 'document' ? (
-                        /* Document Order View - Hierarchical with collapsible parents */
                         documentOrderClauses.length === 0 ? (
                             <div className="p-4 text-center text-slate-500 text-sm">
                                 {searchQuery ? 'No clauses match your search' : 'No clauses found'}
@@ -1505,14 +1710,11 @@ function ContractPrepContent() {
                         ) : (
                             <div className="bg-white">
                                 {(() => {
-                                    // Build hierarchical structure
                                     const parentClauses = documentOrderClauses.filter(c => c.clauseLevel === 1)
 
-                                    // Helper to get children of a parent clause
                                     const getChildClauses = (parentNumber: string) => {
                                         return documentOrderClauses.filter(c => {
                                             if (c.clauseLevel === 1) return false
-                                            // Check if clause number starts with parent number followed by a dot
                                             return c.clauseNumber.startsWith(parentNumber + '.')
                                         })
                                     }
@@ -1521,35 +1723,43 @@ function ContractPrepContent() {
                                         const children = getChildClauses(parent.clauseNumber)
                                         const isExpanded = expandedParentClauses.has(parent.clauseNumber)
                                         const hasChildren = children.length > 0
+                                        const isSelected = selectedClauseIds.has(parent.clauseId)
 
                                         return (
                                             <div key={parent.clauseId} className="border-b border-slate-200">
                                                 {/* Parent Clause Header */}
-                                                <button
-                                                    onClick={() => {
-                                                        if (hasChildren) {
-                                                            toggleParentClauseExpansion(parent.clauseNumber)
-                                                        }
-                                                        setSelectedClause(parent)
-                                                    }}
-                                                    className={`w-full px-4 py-2 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === parent.clauseId
+                                                <div
+                                                    className={`w-full px-2 py-2 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === parent.clauseId
                                                         ? 'bg-blue-100 border-l-2 border-l-blue-500'
                                                         : ''
                                                         }`}
                                                 >
+                                                    {/* Checkbox */}
+                                                    <button
+                                                        onClick={(e) => toggleClauseSelection(parent.clauseId, e)}
+                                                        className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isSelected
+                                                            ? 'bg-blue-600 border-blue-600'
+                                                            : 'border-slate-300 hover:border-blue-400'
+                                                            }`}
+                                                    >
+                                                        {isSelected && (
+                                                            <span className="text-white text-xs">✓</span>
+                                                        )}
+                                                    </button>
+
                                                     {/* Expand/Collapse Arrow */}
                                                     {hasChildren ? (
-                                                        <span
-                                                            className={`transform transition-transform text-slate-400 ${isExpanded ? 'rotate-90' : ''}`}
+                                                        <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation()
                                                                 toggleParentClauseExpansion(parent.clauseNumber)
                                                             }}
+                                                            className={`transform transition-transform text-slate-400 hover:text-slate-600 ${isExpanded ? 'rotate-90' : ''}`}
                                                         >
                                                             ▶
-                                                        </span>
+                                                        </button>
                                                     ) : (
-                                                        <span className="w-3" /> // Spacer for alignment
+                                                        <span className="w-3" />
                                                     )}
 
                                                     {/* Status Indicator */}
@@ -1560,8 +1770,11 @@ function ContractPrepContent() {
                                                             : 'bg-amber-400'
                                                         }`} />
 
-                                                    {/* Clause Info */}
-                                                    <div className="flex-1 min-w-0">
+                                                    {/* Clause Info - Clickable */}
+                                                    <button
+                                                        onClick={() => setSelectedClause(parent)}
+                                                        className="flex-1 min-w-0 text-left"
+                                                    >
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-slate-500 text-xs font-mono font-medium">
                                                                 {parent.clauseNumber}
@@ -1570,7 +1783,7 @@ function ContractPrepContent() {
                                                                 {parent.clauseName}
                                                             </span>
                                                         </div>
-                                                    </div>
+                                                    </button>
 
                                                     {/* Child count badge */}
                                                     {hasChildren && (
@@ -1585,26 +1798,38 @@ function ContractPrepContent() {
                                                             ⚠
                                                         </span>
                                                     )}
-                                                </button>
+                                                </div>
 
                                                 {/* Child Clauses */}
                                                 {isExpanded && hasChildren && (
                                                     <div className="bg-slate-50">
                                                         {children.map(child => {
-                                                            // Calculate indent based on clause level
                                                             const indentClass = child.clauseLevel === 2 ? 'pl-10'
                                                                 : child.clauseLevel === 3 ? 'pl-14'
                                                                     : 'pl-18'
+                                                            const isChildSelected = selectedClauseIds.has(child.clauseId)
 
                                                             return (
-                                                                <button
+                                                                <div
                                                                     key={child.clauseId}
-                                                                    onClick={() => setSelectedClause(child)}
-                                                                    className={`w-full px-4 py-2 ${indentClass} text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 border-t border-slate-100 ${selectedClause?.clauseId === child.clauseId
+                                                                    className={`w-full px-2 py-2 ${indentClass} text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 border-t border-slate-100 ${selectedClause?.clauseId === child.clauseId
                                                                         ? 'bg-blue-100 border-l-2 border-l-blue-500'
                                                                         : ''
                                                                         }`}
                                                                 >
+                                                                    {/* Checkbox */}
+                                                                    <button
+                                                                        onClick={(e) => toggleClauseSelection(child.clauseId, e)}
+                                                                        className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isChildSelected
+                                                                            ? 'bg-blue-600 border-blue-600'
+                                                                            : 'border-slate-300 hover:border-blue-400'
+                                                                            }`}
+                                                                    >
+                                                                        {isChildSelected && (
+                                                                            <span className="text-white text-xs">✓</span>
+                                                                        )}
+                                                                    </button>
+
                                                                     {/* Status Indicator */}
                                                                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${child.status === 'verified'
                                                                         ? 'bg-green-500'
@@ -1613,8 +1838,11 @@ function ContractPrepContent() {
                                                                             : 'bg-amber-400'
                                                                         }`} />
 
-                                                                    {/* Clause Info */}
-                                                                    <div className="flex-1 min-w-0">
+                                                                    {/* Clause Info - Clickable */}
+                                                                    <button
+                                                                        onClick={() => setSelectedClause(child)}
+                                                                        className="flex-1 min-w-0 text-left"
+                                                                    >
                                                                         <div className="flex items-center gap-2">
                                                                             <span className="text-slate-400 text-xs font-mono">
                                                                                 {child.clauseNumber}
@@ -1623,7 +1851,7 @@ function ContractPrepContent() {
                                                                                 {child.clauseName}
                                                                             </span>
                                                                         </div>
-                                                                    </div>
+                                                                    </button>
 
                                                                     {/* Confidence indicator */}
                                                                     {child.aiConfidence && child.aiConfidence < 0.8 && (
@@ -1631,7 +1859,7 @@ function ContractPrepContent() {
                                                                             ⚠
                                                                         </span>
                                                                     )}
-                                                                </button>
+                                                                </div>
                                                             )
                                                         })}
                                                     </div>
@@ -1643,7 +1871,7 @@ function ContractPrepContent() {
                             </div>
                         )
                     ) : (
-                        /* Category View - Grouped by category */
+                        /* Category View */
                         filteredCategories.length === 0 ? (
                             <div className="p-4 text-center text-slate-500 text-sm">
                                 {searchQuery ? 'No clauses match your search' : 'No clauses found'}
@@ -1668,6 +1896,16 @@ function ContractPrepContent() {
                                                 <span className="font-medium text-sm text-slate-700">
                                                     {group.category}
                                                 </span>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        selectAllInCategory(group.category)
+                                                    }}
+                                                    className="text-xs text-blue-500 hover:text-blue-700 ml-2"
+                                                    title="Select all in category"
+                                                >
+                                                    +
+                                                </button>
                                             </div>
                                             <span className="text-xs text-slate-400">
                                                 {groupFilteredClauses.length}
@@ -1677,45 +1915,64 @@ function ContractPrepContent() {
                                         {/* Clauses in Category */}
                                         {group.isExpanded && (
                                             <div className="bg-white">
-                                                {groupFilteredClauses.map(clause => (
-                                                    <button
-                                                        key={clause.clauseId}
-                                                        onClick={() => setSelectedClause(clause)}
-                                                        className={`w-full px-4 py-2 pl-8 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === clause.clauseId
-                                                            ? 'bg-blue-100 border-l-2 border-blue-500'
-                                                            : ''
-                                                            }`}
-                                                    >
-                                                        {/* Status Indicator */}
-                                                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
-                                                            ? 'bg-green-500'
-                                                            : clause.status === 'rejected'
-                                                                ? 'bg-red-500'
-                                                                : 'bg-amber-400'
-                                                            }`} />
+                                                {groupFilteredClauses.map(clause => {
+                                                    const isSelected = selectedClauseIds.has(clause.clauseId)
 
-                                                        {/* Clause Info */}
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-1">
-                                                                {clause.clauseNumber && (
-                                                                    <span className="text-slate-400 text-xs">
-                                                                        {clause.clauseNumber}
-                                                                    </span>
+                                                    return (
+                                                        <div
+                                                            key={clause.clauseId}
+                                                            className={`w-full px-4 py-2 pl-6 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === clause.clauseId
+                                                                ? 'bg-blue-100 border-l-2 border-blue-500'
+                                                                : ''
+                                                                }`}
+                                                        >
+                                                            {/* Checkbox */}
+                                                            <button
+                                                                onClick={(e) => toggleClauseSelection(clause.clauseId, e)}
+                                                                className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isSelected
+                                                                    ? 'bg-blue-600 border-blue-600'
+                                                                    : 'border-slate-300 hover:border-blue-400'
+                                                                    }`}
+                                                            >
+                                                                {isSelected && (
+                                                                    <span className="text-white text-xs">✓</span>
                                                                 )}
-                                                                <span className="truncate text-slate-700">
-                                                                    {clause.clauseName}
-                                                                </span>
-                                                            </div>
-                                                        </div>
+                                                            </button>
 
-                                                        {/* Confidence indicator */}
-                                                        {clause.aiConfidence && clause.aiConfidence < 0.8 && (
-                                                            <span className="text-amber-500 text-xs" title="Low AI confidence">
-                                                                ⚠
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                ))}
+                                                            {/* Status Indicator */}
+                                                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${clause.status === 'verified'
+                                                                ? 'bg-green-500'
+                                                                : clause.status === 'rejected'
+                                                                    ? 'bg-red-500'
+                                                                    : 'bg-amber-400'
+                                                                }`} />
+
+                                                            {/* Clause Info */}
+                                                            <button
+                                                                onClick={() => setSelectedClause(clause)}
+                                                                className="flex-1 min-w-0 text-left"
+                                                            >
+                                                                <div className="flex items-center gap-1">
+                                                                    {clause.clauseNumber && (
+                                                                        <span className="text-slate-400 text-xs">
+                                                                            {clause.clauseNumber}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="truncate text-slate-700">
+                                                                        {clause.clauseName}
+                                                                    </span>
+                                                                </div>
+                                                            </button>
+
+                                                            {/* Confidence indicator */}
+                                                            {clause.aiConfidence && clause.aiConfidence < 0.8 && (
+                                                                <span className="text-amber-500 text-xs" title="Low AI confidence">
+                                                                    ⚠
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )
+                                                })}
                                             </div>
                                         )}
                                     </div>
@@ -1727,6 +1984,14 @@ function ContractPrepContent() {
 
                 {/* Actions */}
                 <div className="p-4 border-t border-slate-200 bg-white space-y-2">
+                    {/* Add Clause Button */}
+                    <button
+                        onClick={openClauseLibrary}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+                    >
+                        ➕ Add Clause from Library
+                    </button>
+
                     {detectedEntities.length > 0 && (
                         <button
                             onClick={() => setShowEntitiesPanel(!showEntitiesPanel)}
@@ -1761,7 +2026,7 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // SECTION 7: RENDER - CENTER PANEL (Clause Details)
+    // SECTION 8: RENDER - CENTER PANEL (Clause Details)
     // ========================================================================
 
     const renderCenterPanel = () => {
@@ -1878,6 +2143,12 @@ function ContractPrepContent() {
             )
         }
 
+        // Find clause index for move buttons
+        const sortedClauses = [...clauses].sort((a, b) => a.displayOrder - b.displayOrder)
+        const currentIndex = sortedClauses.findIndex(c => c.clauseId === selectedClause.clauseId)
+        const canMoveUp = currentIndex > 0
+        const canMoveDown = currentIndex < sortedClauses.length - 1
+
         // Clause details
         return (
             <div className="h-full flex flex-col bg-white">
@@ -1923,33 +2194,65 @@ function ContractPrepContent() {
                         </div>
 
                         {/* Action Buttons */}
-                        {selectedClause.status === 'pending' && (
-                            <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                            {/* Move Buttons */}
+                            <div className="flex flex-col gap-1 mr-2">
                                 <button
-                                    onClick={() => handleVerifyClause(selectedClause)}
-                                    className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                                    onClick={() => handleMoveClause(selectedClause, 'up')}
+                                    disabled={!canMoveUp || isReordering}
+                                    className="px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                                    title="Move up"
                                 >
-                                    ✓ Verify
+                                    ↑
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        setEditingClause(selectedClause)
-                                        setEditName(selectedClause.clauseName)
-                                        setEditCategory(selectedClause.category)
-                                        setEditContent(selectedClause.content)
-                                    }}
-                                    className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
+                                    onClick={() => handleMoveClause(selectedClause, 'down')}
+                                    disabled={!canMoveDown || isReordering}
+                                    className="px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                                    title="Move down"
                                 >
-                                    ✏️ Edit
-                                </button>
-                                <button
-                                    onClick={() => handleRejectClause(selectedClause, 'User rejected')}
-                                    className="px-4 py-2 rounded-lg bg-red-100 text-red-700 font-medium hover:bg-red-200 transition-colors flex items-center gap-2"
-                                >
-                                    ✕ Reject
+                                    ↓
                                 </button>
                             </div>
-                        )}
+
+                            {selectedClause.status === 'pending' && (
+                                <>
+                                    <button
+                                        onClick={() => handleVerifyClause(selectedClause)}
+                                        className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors flex items-center gap-2"
+                                    >
+                                        ✓ Verify
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setEditingClause(selectedClause)
+                                            setEditName(selectedClause.clauseName)
+                                            setEditCategory(selectedClause.category)
+                                            setEditContent(selectedClause.content)
+                                        }}
+                                        className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
+                                    >
+                                        ✏️ Edit
+                                    </button>
+                                    <button
+                                        onClick={() => handleRejectClause(selectedClause, 'User rejected')}
+                                        className="px-4 py-2 rounded-lg bg-amber-100 text-amber-700 font-medium hover:bg-amber-200 transition-colors flex items-center gap-2"
+                                    >
+                                        ✕ Reject
+                                    </button>
+                                </>
+                            )}
+
+                            {/* Delete Button - Always shown */}
+                            <button
+                                onClick={() => confirmDeleteClause(selectedClause)}
+                                disabled={isDeleting}
+                                className="px-4 py-2 rounded-lg bg-red-100 text-red-700 font-medium hover:bg-red-200 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                title="Delete clause"
+                            >
+                                🗑️
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1973,14 +2276,14 @@ function ContractPrepContent() {
                         </div>
                     )}
 
-                    {/* Position Scales - Set initial negotiation stance */}
+                    {/* Position Scales */}
                     {selectedClause.status === 'pending' && (
                         <div className="mt-6 p-5 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border border-slate-200">
                             <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
                                 ⚖️ Initial Negotiation Stance
                             </h3>
 
-                            {/* Customer Position (Green) */}
+                            {/* Customer Position */}
                             <div className="mb-5">
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="text-sm font-medium text-emerald-700 flex items-center gap-2">
@@ -1998,9 +2301,6 @@ function ContractPrepContent() {
                                     value={clausePositions[selectedClause.clauseId]?.customerPosition ?? 5}
                                     onChange={(e) => updateClausePosition(selectedClause.clauseId, 'customerPosition', parseInt(e.target.value))}
                                     className="w-full h-2 bg-emerald-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                                    style={{
-                                        background: `linear-gradient(to right, #10b981 0%, #10b981 ${((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - 1) * 11.1}%, #d1fae5 ${((clausePositions[selectedClause.clauseId]?.customerPosition ?? 5) - 1) * 11.1}%, #d1fae5 100%)`
-                                    }}
                                 />
                                 <div className="flex justify-between text-xs text-slate-400 mt-1">
                                     <span>Very Flexible</span>
@@ -2008,7 +2308,7 @@ function ContractPrepContent() {
                                 </div>
                             </div>
 
-                            {/* Provider Position (Blue) */}
+                            {/* Provider Position */}
                             <div className="mb-5">
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="text-sm font-medium text-blue-700 flex items-center gap-2">
@@ -2026,9 +2326,6 @@ function ContractPrepContent() {
                                     value={clausePositions[selectedClause.clauseId]?.providerPosition ?? 5}
                                     onChange={(e) => updateClausePosition(selectedClause.clauseId, 'providerPosition', parseInt(e.target.value))}
                                     className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                                    style={{
-                                        background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((clausePositions[selectedClause.clauseId]?.providerPosition ?? 5) - 1) * 11.1}%, #dbeafe ${((clausePositions[selectedClause.clauseId]?.providerPosition ?? 5) - 1) * 11.1}%, #dbeafe 100%)`
-                                    }}
                                 />
                                 <div className="flex justify-between text-xs text-slate-400 mt-1">
                                     <span>Very Flexible</span>
@@ -2114,7 +2411,7 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // SECTION 8: RENDER - RIGHT PANEL (Chat + Entities)
+    // SECTION 9: RENDER - RIGHT PANEL (Chat + Entities)
     // ========================================================================
 
     const renderRightPanel = () => {
@@ -2143,7 +2440,6 @@ function ContractPrepContent() {
                 </div>
 
                 {showEntitiesPanel ? (
-                    // Entities Panel
                     <div className="flex-1 overflow-auto p-4">
                         {detectedEntities.length === 0 ? (
                             <div className="text-center py-8">
@@ -2214,7 +2510,6 @@ function ContractPrepContent() {
                         )}
                     </div>
                 ) : (
-                    // Chat Panel
                     <>
                         <div className="p-4 border-b border-slate-200 bg-white">
                             <div className="flex items-center gap-3">
@@ -2273,7 +2568,7 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // SECTION 9: RENDER - EDIT MODAL
+    // SECTION 10: RENDER - MODALS
     // ========================================================================
 
     const renderEditModal = () => {
@@ -2357,9 +2652,67 @@ function ContractPrepContent() {
         )
     }
 
-    // ========================================================================
-    // SECTION 9B: CLAUSE LIBRARY MODAL
-    // ========================================================================
+    const renderDeleteConfirmModal = () => {
+        if (!showDeleteConfirm) return null
+
+        const isBulk = deleteTarget === 'bulk'
+        const deleteCount = isBulk ? selectedClauseIds.size : 1
+        const clauseName = clauseToDelete?.clauseName || ''
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+                    <div className="p-6">
+                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <span className="text-2xl">🗑️</span>
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-800 text-center mb-2">
+                            Delete {isBulk ? `${deleteCount} Clauses` : 'Clause'}?
+                        </h3>
+                        <p className="text-sm text-slate-600 text-center">
+                            {isBulk
+                                ? `Are you sure you want to delete ${deleteCount} selected clauses? This action cannot be undone.`
+                                : `Are you sure you want to delete "${clauseName}"? This action cannot be undone.`
+                            }
+                        </p>
+                    </div>
+
+                    <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+                        <button
+                            onClick={() => {
+                                setShowDeleteConfirm(false)
+                                setClauseToDelete(null)
+                                setDeleteTarget(null)
+                            }}
+                            className="px-4 py-2 text-slate-600 hover:text-slate-800"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (isBulk) {
+                                    handleBulkDelete()
+                                } else if (clauseToDelete) {
+                                    handleDeleteClause(clauseToDelete)
+                                }
+                            }}
+                            disabled={isDeleting}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    Deleting...
+                                </>
+                            ) : (
+                                'Delete'
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     const renderClauseLibraryModal = () => {
         if (!showClauseLibrary) return null
@@ -2376,7 +2729,6 @@ function ContractPrepContent() {
         return (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                 <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-                    {/* Header */}
                     <div className="p-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
                         <div>
                             <h3 className="text-lg font-semibold text-slate-800">CLARENCE Clause Library</h3>
@@ -2392,7 +2744,6 @@ function ContractPrepContent() {
                         </button>
                     </div>
 
-                    {/* Search */}
                     <div className="p-4 border-b border-slate-200 flex-shrink-0">
                         <div className="relative">
                             <input
@@ -2406,7 +2757,6 @@ function ContractPrepContent() {
                         </div>
                     </div>
 
-                    {/* Clause List */}
                     <div className="flex-1 overflow-auto p-4">
                         {libraryLoading ? (
                             <div className="flex items-center justify-center py-12">
@@ -2422,7 +2772,6 @@ function ContractPrepContent() {
                             <div className="space-y-2">
                                 {sortedCategories.map(category => (
                                     <div key={category} className="border border-slate-200 rounded-lg overflow-hidden">
-                                        {/* Category Header */}
                                         <button
                                             onClick={() => toggleLibraryCategory(category)}
                                             className="w-full px-4 py-3 bg-slate-50 flex items-center justify-between hover:bg-slate-100 transition-colors"
@@ -2441,7 +2790,6 @@ function ContractPrepContent() {
                                             </span>
                                         </button>
 
-                                        {/* Clauses in Category */}
                                         {libraryExpandedCategories.has(category) && (
                                             <div className="divide-y divide-slate-100">
                                                 {groupedClauses[category].map(clause => {
@@ -2458,7 +2806,6 @@ function ContractPrepContent() {
                                                                     : 'hover:bg-slate-50'
                                                                 }`}
                                                         >
-                                                            {/* Checkbox */}
                                                             <button
                                                                 onClick={() => !isAlreadyInContract && toggleMasterClauseSelection(clause.clauseId)}
                                                                 disabled={isAlreadyInContract}
@@ -2474,7 +2821,6 @@ function ContractPrepContent() {
                                                                 )}
                                                             </button>
 
-                                                            {/* Clause Info */}
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="font-medium text-slate-800">{clause.clauseName}</span>
@@ -2508,7 +2854,6 @@ function ContractPrepContent() {
                         )}
                     </div>
 
-                    {/* Footer */}
                     <div className="p-4 border-t border-slate-200 flex items-center justify-between flex-shrink-0 bg-slate-50">
                         <div className="text-sm text-slate-600">
                             {selectedMasterClauseIds.size > 0 ? (
@@ -2550,7 +2895,7 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
-    // SECTION 10: MAIN RENDER
+    // SECTION 11: MAIN RENDER
     // ========================================================================
 
     if (!userInfo) {
@@ -2582,7 +2927,7 @@ function ContractPrepContent() {
                 </div>
             )}
 
-            {/* Initial Loading Overlay (when page loads with contract_id) */}
+            {/* Initial Loading Overlay */}
             {isLoading && contractId && !isUploading && (
                 <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50">
                     <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 text-center shadow-2xl">
@@ -2599,7 +2944,7 @@ function ContractPrepContent() {
                 </div>
             )}
 
-            {/* Contract Processing Overlay (when polling) */}
+            {/* Contract Processing Overlay */}
             {contract?.status === 'processing' && !isUploading && (
                 <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50">
                     <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4 text-center shadow-2xl">
@@ -2650,36 +2995,32 @@ function ContractPrepContent() {
 
             {/* Three-Panel Layout */}
             <div className="flex-1 flex overflow-hidden">
-                {/* Left Panel - Clause Navigation */}
                 <div className="w-72 flex-shrink-0">
                     {renderLeftPanel()}
                 </div>
 
-                {/* Center Panel - Clause Details */}
                 <div className="flex-1 min-w-0">
                     {renderCenterPanel()}
                 </div>
 
-                {/* Right Panel - Chat + Entities */}
                 <div className="w-80 flex-shrink-0">
                     {renderRightPanel()}
                 </div>
             </div>
 
-            {/* Edit Modal */}
+            {/* Bulk Action Toolbar */}
+            {renderBulkActionToolbar()}
+
+            {/* Modals */}
             {renderEditModal()}
-
-            {/* Clause Library Modal */}
+            {renderDeleteConfirmModal()}
             {renderClauseLibraryModal()}
-
-            {/* Beta Feedback Button */}
-            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
 
 // ============================================================================
-// SECTION 11: DEFAULT EXPORT WITH SUSPENSE
+// SECTION 12: DEFAULT EXPORT WITH SUSPENSE
 // ============================================================================
 
 export default function ContractPrepPage() {
