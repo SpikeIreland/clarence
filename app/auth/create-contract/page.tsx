@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -1301,8 +1302,8 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('dealValue', opt.value as DealValueRange)}
                                 className={`px-4 py-3 rounded-lg border-2 text-left transition-all ${assessment.quickIntake.dealValue === opt.value
-                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                                        : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                    : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
                                     }`}
                             >
                                 <span className="mr-2">{opt.icon}</span>
@@ -1323,8 +1324,8 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('serviceCriticality', opt.value as ServiceCriticality)}
                                 className={`px-3 py-2 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.serviceCriticality === opt.value
-                                        ? `border-current ${opt.color} text-white`
-                                        : 'border-slate-200 hover:border-slate-300'
+                                    ? `border-current ${opt.color} text-white`
+                                    : 'border-slate-200 hover:border-slate-300'
                                     }`}
                             >
                                 <span className="font-medium text-sm">{opt.label}</span>
@@ -1344,8 +1345,8 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('timelinePressure', opt.value as TimelinePressure)}
                                 className={`px-3 py-2 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.timelinePressure === opt.value
-                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                        : 'border-slate-200 hover:border-blue-300'
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : 'border-slate-200 hover:border-blue-300'
                                     }`}
                             >
                                 <span className="font-medium text-sm block">{opt.label}</span>
@@ -1366,8 +1367,8 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('bidderCount', opt.value as BidderCount)}
                                 className={`px-4 py-3 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.bidderCount === opt.value
-                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                        : 'border-slate-200 hover:border-blue-300'
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : 'border-slate-200 hover:border-blue-300'
                                     }`}
                             >
                                 <span className="font-medium text-sm block">{opt.label}</span>
@@ -1388,8 +1389,8 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('batnaStatus', opt.value as BatnaStatus)}
                                 className={`px-4 py-3 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.batnaStatus === opt.value
-                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                                        : 'border-slate-200 hover:border-emerald-300'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                    : 'border-slate-200 hover:border-emerald-300'
                                     }`}
                             >
                                 <span className="text-xl block mb-1">{opt.icon}</span>
@@ -1411,10 +1412,10 @@ export default function ContractCreationAssessment() {
                                 onClick={() => togglePriority(priority)}
                                 disabled={!assessment.quickIntake.topPriorities.includes(priority) && assessment.quickIntake.topPriorities.length >= 3}
                                 className={`px-3 py-1.5 rounded-full text-sm transition-all ${assessment.quickIntake.topPriorities.includes(priority)
-                                        ? 'bg-emerald-500 text-white'
-                                        : assessment.quickIntake.topPriorities.length >= 3
-                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                            : 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700'
+                                    ? 'bg-emerald-500 text-white'
+                                    : assessment.quickIntake.topPriorities.length >= 3
+                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700'
                                     }`}
                             >
                                 {assessment.quickIntake.topPriorities.includes(priority) && '✓ '}
@@ -1558,7 +1559,7 @@ export default function ContractCreationAssessment() {
                                     ? 'Ready - Click to proceed to Contract Prep'
                                     : assessment.uploadedContractStatus === 'failed'
                                         ? 'Processing failed'
-                                        : 'Processing... This may take 1-2 minutes'
+                                        : 'Processing... This may take up to 5 minutes'
                                 }
                             </p>
                         </div>
@@ -2113,6 +2114,9 @@ export default function ContractCreationAssessment() {
             <div className="w-96 flex-shrink-0">
                 {renderChatPanel()}
             </div>
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }

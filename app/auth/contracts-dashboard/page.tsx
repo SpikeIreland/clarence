@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -1493,6 +1494,10 @@ export default function ContractsDashboard() {
           </svg>
         </button>
       )}
+      {/* ================================================================== */}
+      {/* SECTION 26: BETA FEEDBACK BUTTON */}
+      {/* ================================================================== */}
+      <FeedbackButton position="bottom-left" />
     </div>
   )
 }
