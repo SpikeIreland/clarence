@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -660,10 +661,12 @@ function ContractPrepContent() {
     }, [contractId])
 
     useEffect(() => {
-        if (sessionId) {
-            loadSession(sessionId)
+        // Load session data from URL param or from contract's linked session
+        const effectiveSessionId = sessionId || contract?.linkedSessionId
+        if (effectiveSessionId) {
+            loadSession(effectiveSessionId)
         }
-    }, [sessionId, loadSession])
+    }, [sessionId, contract?.linkedSessionId, loadSession])
 
     // ========================================================================
     // SECTION 5E: CHAT MESSAGE MANAGEMENT
@@ -1430,13 +1433,22 @@ function ContractPrepContent() {
 
         setIsCommitting(true)
 
+        // Use session_id from URL params, or fall back to contract's linked session
+        const effectiveSessionId = sessionId || contract.linkedSessionId
+
+        if (!effectiveSessionId) {
+            setError('No session associated with this contract. Please start from the session creation flow.')
+            setIsCommitting(false)
+            return
+        }
+
         try {
             const response = await fetch(`${API_BASE}/commit-parsed-clauses`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contract_id: contract.contractId,
-                    session_id: sessionId,
+                    session_id: effectiveSessionId,
                     user_id: userInfo.userId,
                     clause_ids: verifiedClauses.map(c => c.clauseId),
                     clause_positions: verifiedClauses.map(c => ({
@@ -1454,7 +1466,7 @@ function ContractPrepContent() {
 
             addChatMessage('clarence', CLARENCE_MESSAGES.committed(verifiedClauses.length))
 
-            const targetSessionId = result.sessionId || sessionId
+            const targetSessionId = result.sessionId || effectiveSessionId
             const targetContractId = contract.contractId
             const mediationType = sessionData?.mediationType
 
@@ -3011,14 +3023,21 @@ function ContractPrepContent() {
             {/* Bulk Action Toolbar */}
             {renderBulkActionToolbar()}
 
-            {/* Modals */}
+
+            {/* Edit Modal */}
             {renderEditModal()}
-            {renderDeleteConfirmModal()}
+
+            {/* Clause Library Modal */}
             {renderClauseLibraryModal()}
+
+            {/* Delete Confirmation Modal */}
+            {renderDeleteConfirmModal()}
+            
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
-
 // ============================================================================
 // SECTION 12: DEFAULT EXPORT WITH SUSPENSE
 // ============================================================================
