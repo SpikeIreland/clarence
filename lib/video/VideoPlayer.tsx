@@ -1,83 +1,120 @@
 'use client'
 
 // ============================================================================
-// CLARENCE VIDEO PLAYER COMPONENT
+// CLARENCE Video Player Component (Database-Backed)
 // ============================================================================
-// Reusable video component for embedding YouTube videos throughout CLARENCE.
-// Supports placeholder state, inline embeds, and modal playback.
+// File: /lib/video/VideoPlayer.tsx
+// Purpose: Display training videos from the database
+// 
+// All videos are managed via Admin Panel → Videos tab
+// John can add YouTube IDs there and they appear automatically
 // ============================================================================
 
 import { useState, useEffect } from 'react'
-import { VideoMetadata, getVideoById, CATEGORY_ICONS } from './videoLibrary'
+import { createClient } from '@/lib/supabase'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
 // ============================================================================
 
+export interface TrainingVideo {
+    video_id: string
+    video_code: string
+    youtube_id: string | null
+    title: string
+    description: string | null
+    duration: string | null
+    thumbnail_url: string | null
+    category: string
+    placement: string[]
+    priority: 'high' | 'medium' | 'low'
+    status: 'placeholder' | 'scripted' | 'recorded' | 'published'
+    script_notes: string | null
+    is_active: boolean
+    is_featured: boolean
+    display_order: number
+    created_at: string
+    updated_at: string
+    published_at: string | null
+}
+
+export type VideoCategory =
+    | 'onboarding'
+    | 'contract_creation'
+    | 'contract_prep'
+    | 'assessment'
+    | 'provider'
+    | 'negotiation'
+    | 'document_centre'
+    | 'training'
+
 interface VideoPlayerProps {
-    /** Video ID from the video library */
-    videoId: string
+    /** Video code from database (e.g., 'training-intro') */
+    videoCode: string
     /** Display variant */
-    variant?: 'inline' | 'card' | 'thumbnail' | 'help-button'
+    variant?: 'inline' | 'card' | 'thumbnail' | 'help-button' | 'help-icon'
     /** Size preset */
     size?: 'small' | 'medium' | 'large' | 'full'
-    /** Show title below video */
+    /** Show title */
     showTitle?: boolean
-    /** Show description below video */
+    /** Show description */
     showDescription?: boolean
     /** Custom class names */
     className?: string
-    /** Callback when video starts playing */
+    /** Custom label for help button */
+    label?: string
+    /** Callback when video plays */
     onPlay?: () => void
-    /** Callback when video ends */
-    onEnd?: () => void
-    /** Auto-play when component mounts (use sparingly) */
-    autoPlay?: boolean
+}
+
+interface VideoGridProps {
+    /** Filter by category */
+    category?: VideoCategory | string
+    /** Only show featured videos */
+    featuredOnly?: boolean
+    /** Maximum number of videos */
+    limit?: number
+    /** Custom class names */
+    className?: string
 }
 
 interface VideoModalProps {
-    video: VideoMetadata
+    video: TrainingVideo
     isOpen: boolean
     onClose: () => void
 }
 
-interface VideoHelpButtonProps {
-    videoId: string
-    label?: string
-    className?: string
+// ============================================================================
+// SECTION 2: CONSTANTS
+// ============================================================================
+
+export const CATEGORY_LABELS: Record<VideoCategory, string> = {
+    onboarding: 'Getting Started',
+    contract_creation: 'Contract Creation',
+    contract_prep: 'Contract Preparation',
+    assessment: 'Strategic Assessment',
+    provider: 'Provider Management',
+    negotiation: 'Negotiation Studio',
+    document_centre: 'Document Centre',
+    training: 'Training Mode'
 }
 
-interface VideoCardProps {
-    video: VideoMetadata
-    onClick?: () => void
-    className?: string
+export const CATEGORY_ICONS: Record<VideoCategory, string> = {
+    onboarding: '👋',
+    contract_creation: '📝',
+    contract_prep: '📋',
+    assessment: '📊',
+    provider: '🏢',
+    negotiation: '⚖️',
+    document_centre: '📁',
+    training: '🎓'
 }
-
-// ============================================================================
-// SECTION 2: SIZE CONFIGURATIONS
-// ============================================================================
 
 const SIZE_CONFIG = {
-    small: {
-        width: 280,
-        height: 158,
-        thumbnailClass: 'w-[280px] h-[158px]'
-    },
-    medium: {
-        width: 480,
-        height: 270,
-        thumbnailClass: 'w-[480px] h-[270px]'
-    },
-    large: {
-        width: 720,
-        height: 405,
-        thumbnailClass: 'w-[720px] h-[405px]'
-    },
-    full: {
-        width: 1280,
-        height: 720,
-        thumbnailClass: 'w-full aspect-video'
-    }
+    small: { width: 'w-[280px]', height: 'h-[158px]', aspect: 'aspect-video' },
+    medium: { width: 'w-[480px]', height: 'h-[270px]', aspect: 'aspect-video' },
+    large: { width: 'w-[720px]', height: 'h-[405px]', aspect: 'aspect-video' },
+    full: { width: 'w-full', height: 'h-auto', aspect: 'aspect-video' }
 }
 
 // ============================================================================
@@ -85,7 +122,6 @@ const SIZE_CONFIG = {
 // ============================================================================
 
 export function VideoModal({ video, isOpen, onClose }: VideoModalProps) {
-    // Close on escape key
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose()
@@ -125,10 +161,10 @@ export function VideoModal({ video, isOpen, onClose }: VideoModalProps) {
 
                 {/* Video Container */}
                 <div className="bg-black rounded-xl overflow-hidden shadow-2xl">
-                    {video.youtubeId ? (
+                    {video.youtube_id ? (
                         <div className="aspect-video">
                             <iframe
-                                src={`https://www.youtube.com/embed/${video.youtubeId}?autoplay=1&rel=0`}
+                                src={`https://www.youtube.com/embed/${video.youtube_id}?autoplay=1&rel=0`}
                                 title={video.title}
                                 className="w-full h-full"
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -136,14 +172,16 @@ export function VideoModal({ video, isOpen, onClose }: VideoModalProps) {
                             />
                         </div>
                     ) : (
-                        <VideoPlaceholder video={video} size="full" inModal />
+                        <VideoPlaceholderContent video={video} size="full" />
                     )}
                 </div>
 
                 {/* Video Info */}
                 <div className="mt-4 text-white">
                     <h3 className="text-lg font-semibold">{video.title}</h3>
-                    <p className="text-white/70 text-sm mt-1">{video.description}</p>
+                    {video.description && (
+                        <p className="text-white/70 text-sm mt-1">{video.description}</p>
+                    )}
                 </div>
             </div>
         </div>
@@ -151,25 +189,20 @@ export function VideoModal({ video, isOpen, onClose }: VideoModalProps) {
 }
 
 // ============================================================================
-// SECTION 4: VIDEO PLACEHOLDER (NO YOUTUBE ID YET)
+// SECTION 4: VIDEO PLACEHOLDER (No YouTube ID Yet)
 // ============================================================================
 
 interface VideoPlaceholderProps {
-    video: VideoMetadata
-    size: 'small' | 'medium' | 'large' | 'full'
-    inModal?: boolean
+    video: TrainingVideo
+    size: keyof typeof SIZE_CONFIG
     onClick?: () => void
 }
 
-function VideoPlaceholder({ video, size, inModal = false, onClick }: VideoPlaceholderProps) {
-    const sizeConfig = SIZE_CONFIG[size]
-    const categoryIcon = CATEGORY_ICONS[video.category]
+function VideoPlaceholderContent({ video, size }: { video: TrainingVideo; size: keyof typeof SIZE_CONFIG }) {
+    const categoryIcon = CATEGORY_ICONS[video.category as VideoCategory] || '🎬'
 
     return (
-        <div
-            className={`relative bg-gradient-to-br from-slate-800 to-slate-900 ${sizeConfig.thumbnailClass} flex items-center justify-center ${onClick ? 'cursor-pointer group' : ''}`}
-            onClick={onClick}
-        >
+        <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 aspect-video flex items-center justify-center">
             {/* Background Pattern */}
             <div className="absolute inset-0 opacity-10">
                 <div className="absolute inset-0" style={{
@@ -179,36 +212,21 @@ function VideoPlaceholder({ video, size, inModal = false, onClick }: VideoPlaceh
 
             {/* Content */}
             <div className="relative text-center px-4">
-                {/* Icon */}
                 <div className={`mx-auto mb-3 rounded-full bg-white/10 flex items-center justify-center ${size === 'small' ? 'w-12 h-12 text-2xl' : 'w-16 h-16 text-3xl'}`}>
                     {categoryIcon}
                 </div>
 
-                {/* Coming Soon Badge */}
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-xs font-medium mb-2">
                     <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
                     Coming Soon
                 </div>
 
-                {/* Title */}
                 <h4 className={`text-white font-medium ${size === 'small' ? 'text-sm' : 'text-base'}`}>
                     {video.title}
                 </h4>
 
-                {/* Duration */}
-                <p className="text-white/50 text-xs mt-1">
-                    {video.duration}
-                </p>
-
-                {/* Play indicator on hover */}
-                {onClick && (
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
-                        <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
-                            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M8 5v14l11-7z" />
-                            </svg>
-                        </div>
-                    </div>
+                {video.duration && (
+                    <p className="text-white/50 text-xs mt-1">{video.duration}</p>
                 )}
             </div>
 
@@ -220,55 +238,74 @@ function VideoPlaceholder({ video, size, inModal = false, onClick }: VideoPlaceh
     )
 }
 
+function VideoPlaceholder({ video, size, onClick }: VideoPlaceholderProps) {
+    const sizeConfig = SIZE_CONFIG[size]
+
+    return (
+        <div
+            className={`relative ${size === 'full' ? sizeConfig.width : `${sizeConfig.width} ${sizeConfig.height}`} rounded-lg overflow-hidden ${onClick ? 'cursor-pointer group' : ''}`}
+            onClick={onClick}
+        >
+            <VideoPlaceholderContent video={video} size={size} />
+
+            {/* Play indicator on hover */}
+            {onClick && (
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                    <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                        </svg>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // ============================================================================
 // SECTION 5: VIDEO THUMBNAIL
 // ============================================================================
 
 interface VideoThumbnailProps {
-    video: VideoMetadata
-    size: 'small' | 'medium' | 'large' | 'full'
+    video: TrainingVideo
+    size: keyof typeof SIZE_CONFIG
     onClick?: () => void
 }
 
 function VideoThumbnail({ video, size, onClick }: VideoThumbnailProps) {
     const sizeConfig = SIZE_CONFIG[size]
 
-    // If no YouTube ID, show placeholder
-    if (!video.youtubeId) {
+    if (!video.youtube_id) {
         return <VideoPlaceholder video={video} size={size} onClick={onClick} />
     }
 
-    // YouTube thumbnail URL
-    const thumbnailUrl = `https://img.youtube.com/vi/${video.youtubeId}/maxresdefault.jpg`
-
     return (
         <div
-            className={`relative ${sizeConfig.thumbnailClass} bg-slate-900 rounded-lg overflow-hidden cursor-pointer group`}
+            className={`relative ${sizeConfig.aspect} ${size === 'full' ? sizeConfig.width : `${sizeConfig.width} ${sizeConfig.height}`} bg-slate-900 rounded-lg overflow-hidden cursor-pointer group`}
             onClick={onClick}
         >
-            {/* Thumbnail Image */}
             <img
-                src={thumbnailUrl}
+                src={`https://img.youtube.com/vi/${video.youtube_id}/maxresdefault.jpg`}
                 alt={video.title}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                    // Fallback to mqdefault if maxresdefault doesn't exist
+                    (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`
+                }}
             />
-
-            {/* Overlay */}
             <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors" />
-
-            {/* Play Button */}
             <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-16 h-16 rounded-full bg-red-600 group-hover:bg-red-500 transition-colors flex items-center justify-center shadow-lg">
-                    <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                <div className="w-14 h-14 rounded-full bg-red-600 group-hover:bg-red-500 transition-colors flex items-center justify-center shadow-lg">
+                    <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M8 5v14l11-7z" />
                     </svg>
                 </div>
             </div>
-
-            {/* Duration Badge */}
-            <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/80 text-white text-xs rounded">
-                {video.duration}
-            </div>
+            {video.duration && (
+                <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/80 text-white text-xs rounded">
+                    {video.duration}
+                </div>
+            )}
         </div>
     )
 }
@@ -277,9 +314,15 @@ function VideoThumbnail({ video, size, onClick }: VideoThumbnailProps) {
 // SECTION 6: VIDEO CARD COMPONENT
 // ============================================================================
 
-export function VideoCard({ video, onClick, className = '' }: VideoCardProps) {
+interface VideoCardProps {
+    video: TrainingVideo
+    className?: string
+    onClick?: () => void
+}
+
+export function VideoCard({ video, className = '', onClick }: VideoCardProps) {
     const [showModal, setShowModal] = useState(false)
-    const categoryIcon = CATEGORY_ICONS[video.category]
+    const categoryIcon = CATEGORY_ICONS[video.category as VideoCategory] || '🎬'
 
     const handleClick = () => {
         if (onClick) {
@@ -295,10 +338,7 @@ export function VideoCard({ video, onClick, className = '' }: VideoCardProps) {
                 className={`bg-white rounded-xl border border-slate-200 overflow-hidden hover:border-slate-300 hover:shadow-md transition-all cursor-pointer ${className}`}
                 onClick={handleClick}
             >
-                {/* Thumbnail */}
                 <VideoThumbnail video={video} size="medium" />
-
-                {/* Info */}
                 <div className="p-4">
                     <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-xl flex-shrink-0">
@@ -308,21 +348,23 @@ export function VideoCard({ video, onClick, className = '' }: VideoCardProps) {
                             <h4 className="font-medium text-slate-800 text-sm line-clamp-2">
                                 {video.title}
                             </h4>
-                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                                {video.description}
-                            </p>
+                            {video.description && (
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                    {video.description}
+                                </p>
+                            )}
                         </div>
                     </div>
-
-                    {/* Meta */}
                     <div className="flex items-center gap-3 mt-3 text-xs text-slate-400">
-                        <span className="flex items-center gap-1">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {video.duration}
-                        </span>
-                        {!video.youtubeId && (
+                        {video.duration && (
+                            <span className="flex items-center gap-1">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                {video.duration}
+                            </span>
+                        )}
+                        {!video.youtube_id && (
                             <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full font-medium">
                                 Coming Soon
                             </span>
@@ -330,25 +372,23 @@ export function VideoCard({ video, onClick, className = '' }: VideoCardProps) {
                     </div>
                 </div>
             </div>
-
-            {/* Modal */}
             <VideoModal video={video} isOpen={showModal} onClose={() => setShowModal(false)} />
         </>
     )
 }
 
 // ============================================================================
-// SECTION 7: VIDEO HELP BUTTON (INLINE TRIGGER)
+// SECTION 7: VIDEO HELP BUTTON
 // ============================================================================
 
-export function VideoHelpButton({ videoId, label, className = '' }: VideoHelpButtonProps) {
-    const [showModal, setShowModal] = useState(false)
-    const video = getVideoById(videoId)
+interface VideoHelpButtonProps {
+    video: TrainingVideo
+    label?: string
+    className?: string
+}
 
-    if (!video) {
-        console.warn(`Video not found: ${videoId}`)
-        return null
-    }
+export function VideoHelpButton({ video, label, className = '' }: VideoHelpButtonProps) {
+    const [showModal, setShowModal] = useState(false)
 
     return (
         <>
@@ -362,26 +402,22 @@ export function VideoHelpButton({ videoId, label, className = '' }: VideoHelpBut
                 </svg>
                 {label || 'Watch Video'}
             </button>
-
             <VideoModal video={video} isOpen={showModal} onClose={() => setShowModal(false)} />
         </>
     )
 }
 
 // ============================================================================
-// SECTION 8: FLOATING HELP ICON
+// SECTION 8: VIDEO HELP ICON
 // ============================================================================
 
 interface VideoHelpIconProps {
-    videoId: string
+    video: TrainingVideo
     className?: string
 }
 
-export function VideoHelpIcon({ videoId, className = '' }: VideoHelpIconProps) {
+export function VideoHelpIcon({ video, className = '' }: VideoHelpIconProps) {
     const [showModal, setShowModal] = useState(false)
-    const video = getVideoById(videoId)
-
-    if (!video) return null
 
     return (
         <>
@@ -395,7 +431,6 @@ export function VideoHelpIcon({ videoId, className = '' }: VideoHelpIconProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
             </button>
-
             <VideoModal video={video} isOpen={showModal} onClose={() => setShowModal(false)} />
         </>
     )
@@ -406,30 +441,65 @@ export function VideoHelpIcon({ videoId, className = '' }: VideoHelpIconProps) {
 // ============================================================================
 
 export default function VideoPlayer({
-    videoId,
+    videoCode,
     variant = 'inline',
     size = 'medium',
     showTitle = false,
     showDescription = false,
     className = '',
-    onPlay,
-    onEnd,
-    autoPlay = false
+    label,
+    onPlay
 }: VideoPlayerProps) {
+    const [video, setVideo] = useState<TrainingVideo | null>(null)
+    const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
-    const [isPlaying, setIsPlaying] = useState(autoPlay)
-    const video = getVideoById(videoId)
+    const [isPlaying, setIsPlaying] = useState(false)
 
+    const supabase = createClient()
+
+    // Fetch video from database
+    useEffect(() => {
+        async function fetchVideo() {
+            try {
+                const { data, error } = await supabase
+                    .from('training_videos')
+                    .select('*')
+                    .eq('video_code', videoCode)
+                    .eq('is_active', true)
+                    .single()
+
+                if (error) throw error
+                setVideo(data)
+            } catch (err) {
+                console.warn(`Video not found: ${videoCode}`)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchVideo()
+    }, [videoCode])
+
+    // Loading state
+    if (loading) {
+        return (
+            <div className={`animate-pulse bg-slate-200 rounded-lg ${SIZE_CONFIG[size].aspect} ${className}`} />
+        )
+    }
+
+    // Video not found
     if (!video) {
-        console.warn(`Video not found: ${videoId}`)
         return null
     }
 
-    const sizeConfig = SIZE_CONFIG[size]
-
     // Help button variant
     if (variant === 'help-button') {
-        return <VideoHelpButton videoId={videoId} className={className} />
+        return <VideoHelpButton video={video} label={label} className={className} />
+    }
+
+    // Help icon variant
+    if (variant === 'help-icon') {
+        return <VideoHelpIcon video={video} className={className} />
     }
 
     // Card variant
@@ -446,7 +516,7 @@ export default function VideoPlayer({
                     {showTitle && (
                         <h4 className="font-medium text-slate-800 mt-2 text-sm">{video.title}</h4>
                     )}
-                    {showDescription && (
+                    {showDescription && video.description && (
                         <p className="text-xs text-slate-500 mt-1">{video.description}</p>
                     )}
                 </div>
@@ -456,13 +526,15 @@ export default function VideoPlayer({
     }
 
     // Inline variant (embedded player)
+    const sizeConfig = SIZE_CONFIG[size]
+
     return (
-        <div className={`${className}`}>
-            {video.youtubeId ? (
-                <div className={`${sizeConfig.thumbnailClass} rounded-lg overflow-hidden bg-black`}>
+        <div className={className}>
+            {video.youtube_id ? (
+                <div className={`${sizeConfig.aspect} ${size === 'full' ? sizeConfig.width : `${sizeConfig.width} ${sizeConfig.height}`} rounded-lg overflow-hidden bg-black`}>
                     {isPlaying ? (
                         <iframe
-                            src={`https://www.youtube.com/embed/${video.youtubeId}?autoplay=1&rel=0`}
+                            src={`https://www.youtube.com/embed/${video.youtube_id}?autoplay=1&rel=0`}
                             title={video.title}
                             className="w-full h-full"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -483,11 +555,10 @@ export default function VideoPlayer({
             ) : (
                 <VideoPlaceholder video={video} size={size} />
             )}
-
             {showTitle && (
                 <h4 className="font-medium text-slate-800 mt-3">{video.title}</h4>
             )}
-            {showDescription && (
+            {showDescription && video.description && (
                 <p className="text-sm text-slate-500 mt-1">{video.description}</p>
             )}
         </div>
@@ -495,121 +566,176 @@ export default function VideoPlayer({
 }
 
 // ============================================================================
-// SECTION 10: VIDEO LIBRARY BROWSER (FOR ADMIN/DEBUG)
+// SECTION 10: VIDEO GRID COMPONENT
 // ============================================================================
 
-interface VideoLibraryBrowserProps {
-    onSelectVideo?: (video: VideoMetadata) => void
-    filterCategory?: string
-    showPlaceholdersOnly?: boolean
-}
+export function VideoGrid({ category, featuredOnly = false, limit, className = '' }: VideoGridProps) {
+    const [videos, setVideos] = useState<TrainingVideo[]>([])
+    const [loading, setLoading] = useState(true)
 
-export function VideoLibraryBrowser({
-    onSelectVideo,
-    filterCategory,
-    showPlaceholdersOnly = false
-}: VideoLibraryBrowserProps) {
-    const [searchTerm, setSearchTerm] = useState('')
-    const [selectedCategory, setSelectedCategory] = useState<string>(filterCategory || 'all')
+    const supabase = createClient()
 
-    // Import the full library
-    const { VIDEO_LIBRARY, CATEGORY_LABELS, getVideoStats } = require('./videoLibrary')
+    useEffect(() => {
+        async function fetchVideos() {
+            try {
+                let query = supabase
+                    .from('training_videos')
+                    .select('*')
+                    .eq('is_active', true)
+                    .order('display_order', { ascending: true })
 
-    const stats = getVideoStats()
+                if (category) {
+                    query = query.eq('category', category)
+                }
+                if (featuredOnly) {
+                    query = query.eq('is_featured', true)
+                }
+                if (limit) {
+                    query = query.limit(limit)
+                }
 
-    // Filter videos
-    let filteredVideos = VIDEO_LIBRARY as VideoMetadata[]
+                const { data, error } = await query
 
-    if (selectedCategory !== 'all') {
-        filteredVideos = filteredVideos.filter((v: VideoMetadata) => v.category === selectedCategory)
-    }
+                if (error) throw error
+                setVideos(data || [])
+            } catch (err) {
+                console.error('Error loading videos:', err)
+            } finally {
+                setLoading(false)
+            }
+        }
 
-    if (showPlaceholdersOnly) {
-        filteredVideos = filteredVideos.filter((v: VideoMetadata) => !v.youtubeId)
-    }
+        fetchVideos()
+    }, [category, featuredOnly, limit])
 
-    if (searchTerm) {
-        const term = searchTerm.toLowerCase()
-        filteredVideos = filteredVideos.filter((v: VideoMetadata) =>
-            v.title.toLowerCase().includes(term) ||
-            v.description.toLowerCase().includes(term)
+    if (loading) {
+        return (
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${className}`}>
+                {[1, 2, 3].map(i => (
+                    <div key={i} className="animate-pulse bg-slate-200 rounded-xl h-64" />
+                ))}
+            </div>
         )
     }
 
+    if (videos.length === 0) {
+        return null
+    }
+
     return (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-slate-200 bg-slate-50">
-                <h3 className="font-semibold text-slate-800">Video Library</h3>
-                <p className="text-sm text-slate-500">
-                    {stats.published} published • {stats.placeholder} placeholders • {stats.total} total
-                </p>
-            </div>
-
-            {/* Filters */}
-            <div className="p-4 border-b border-slate-200 flex gap-4">
-                <input
-                    type="text"
-                    placeholder="Search videos..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                />
-                <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                >
-                    <option value="all">All Categories</option>
-                    {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label as string}</option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Video List */}
-            <div className="max-h-[500px] overflow-auto">
-                {filteredVideos.length === 0 ? (
-                    <div className="p-8 text-center text-slate-500">
-                        No videos found
-                    </div>
-                ) : (
-                    <div className="divide-y divide-slate-100">
-                        {filteredVideos.map((video: VideoMetadata) => (
-                            <div
-                                key={video.id}
-                                className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
-                                onClick={() => onSelectVideo?.(video)}
-                            >
-                                <div className="flex items-start gap-3">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${video.youtubeId ? 'bg-green-100' : 'bg-amber-100'
-                                        }`}>
-                                        {CATEGORY_ICONS[video.category]}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <h4 className="font-medium text-slate-800 text-sm">{video.title}</h4>
-                                            {!video.youtubeId && (
-                                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-600 text-xs rounded">
-                                                    Placeholder
-                                                </span>
-                                            )}
-                                            <span className={`px-1.5 py-0.5 text-xs rounded ${video.priority === 'high' ? 'bg-red-100 text-red-600' :
-                                                    video.priority === 'medium' ? 'bg-blue-100 text-blue-600' :
-                                                        'bg-slate-100 text-slate-600'
-                                                }`}>
-                                                {video.priority}
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-0.5">{video.description}</p>
-                                        <p className="text-xs text-slate-400 mt-1">{video.duration}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${className}`}>
+            {videos.map(video => (
+                <VideoCard key={video.video_id} video={video} />
+            ))}
         </div>
     )
+}
+
+// ============================================================================
+// SECTION 11: REACT HOOKS FOR CUSTOM USE
+// ============================================================================
+
+/**
+ * Hook to fetch a single video by code
+ */
+export function useVideo(videoCode: string) {
+    const [video, setVideo] = useState<TrainingVideo | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<Error | null>(null)
+
+    const supabase = createClient()
+
+    useEffect(() => {
+        async function fetchVideo() {
+            try {
+                const { data, error } = await supabase
+                    .from('training_videos')
+                    .select('*')
+                    .eq('video_code', videoCode)
+                    .eq('is_active', true)
+                    .single()
+
+                if (error) throw error
+                setVideo(data)
+            } catch (err) {
+                setError(err as Error)
+                console.warn(`Video not found: ${videoCode}`)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchVideo()
+    }, [videoCode])
+
+    return { video, loading, error }
+}
+
+/**
+ * Hook to fetch multiple videos with filters
+ */
+export function useVideos(options?: {
+    category?: VideoCategory | string
+    featuredOnly?: boolean
+    limit?: number
+}) {
+    const [videos, setVideos] = useState<TrainingVideo[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<Error | null>(null)
+
+    const supabase = createClient()
+
+    useEffect(() => {
+        async function fetchVideos() {
+            try {
+                let query = supabase
+                    .from('training_videos')
+                    .select('*')
+                    .eq('is_active', true)
+                    .order('display_order', { ascending: true })
+
+                if (options?.category) {
+                    query = query.eq('category', options.category)
+                }
+                if (options?.featuredOnly) {
+                    query = query.eq('is_featured', true)
+                }
+                if (options?.limit) {
+                    query = query.limit(options.limit)
+                }
+
+                const { data, error } = await query
+
+                if (error) throw error
+                setVideos(data || [])
+            } catch (err) {
+                setError(err as Error)
+                console.error('Error loading videos:', err)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchVideos()
+    }, [options?.category, options?.featuredOnly, options?.limit])
+
+    return { videos, loading, error }
+}
+
+// ============================================================================
+// SECTION 12: HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get category label from category code
+ */
+export function getCategoryLabel(category: string): string {
+    return CATEGORY_LABELS[category as VideoCategory] || category
+}
+
+/**
+ * Get category icon from category code
+ */
+export function getCategoryIcon(category: string): string {
+    return CATEGORY_ICONS[category as VideoCategory] || '🎬'
 }
