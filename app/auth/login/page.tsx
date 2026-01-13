@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import MainNavigation from '../../components/MainNavigation'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -100,42 +101,11 @@ export default function LoginPage() {
   // ========================================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800">
+    <main className="min-h-screen bg-slate-50">
       {/* ================================================================== */}
       {/* SECTION 5: NAVIGATION */}
       {/* ================================================================== */}
-      <nav className="bg-slate-900/50 backdrop-blur border-b border-slate-700/50">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
-            {/* Back to Home */}
-            <Link
-              href="/"
-              className="text-slate-300 hover:text-white text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Home
-            </Link>
-
-            {/* Nav Links */}
-            <div className="flex gap-6 items-center">
-              <Link
-                href="/how-it-works"
-                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
-              >
-                How It Works
-              </Link>
-              <Link
-                href="/pricing"
-                className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
-              >
-                Pricing
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <MainNavigation />
 
       {/* ================================================================== */}
       {/* SECTION 6: MAIN CONTENT */}
@@ -150,17 +120,17 @@ export default function LoginPage() {
             <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/25">
               <span className="text-white font-bold text-2xl">C</span>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-1">Welcome to CLARENCE</h1>
-            <p className="text-slate-400 text-sm">The Honest Broker</p>
+            <h1 className="text-2xl font-bold text-slate-800 mb-1">Welcome to CLARENCE</h1>
+            <p className="text-slate-500 text-sm">The Honest Broker</p>
           </div>
 
           {/* ============================================================ */}
           {/* SECTION 8: LOGIN CARD */}
           {/* ============================================================ */}
-          <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {/* Role Selection Header */}
-            <div className="p-6 border-b border-slate-700/50">
-              <h2 className="text-lg font-semibold text-white mb-4">Select Your Role</h2>
+            <div className="p-6 border-b border-slate-100 bg-slate-50">
+              <h2 className="text-lg font-semibold text-slate-800 mb-4">Select Your Role</h2>
 
               <div className="grid grid-cols-2 gap-3">
                 {/* Contract Initiator */}
@@ -168,18 +138,20 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => handleRoleSelect('initiator')}
                   className={`p-4 rounded-xl border-2 transition-all text-left ${selectedRole === 'initiator'
-                      ? 'border-emerald-500 bg-emerald-500/10'
-                      : 'border-slate-600 hover:border-slate-500 bg-slate-700/30'
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                 >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${selectedRole === 'initiator' ? 'bg-emerald-500' : 'bg-slate-600'
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${selectedRole === 'initiator' ? 'bg-emerald-500' : 'bg-slate-100'
                     }`}>
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className={`w-5 h-5 ${selectedRole === 'initiator' ? 'text-white' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                   </div>
-                  <div className="font-medium text-white text-sm mb-1">Contract Initiator</div>
-                  <div className="text-xs text-slate-400">Start & manage contracts</div>
+                  <div className={`font-medium text-sm mb-1 ${selectedRole === 'initiator' ? 'text-emerald-700' : 'text-slate-800'}`}>
+                    Contract Initiator
+                  </div>
+                  <div className="text-xs text-slate-500">Start & manage contracts</div>
                 </button>
 
                 {/* Contract Respondent */}
@@ -187,18 +159,20 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => handleRoleSelect('respondent')}
                   className={`p-4 rounded-xl border-2 transition-all text-left ${selectedRole === 'respondent'
-                      ? 'border-blue-500 bg-blue-500/10'
-                      : 'border-slate-600 hover:border-slate-500 bg-slate-700/30'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:border-slate-300 bg-white'
                     }`}
                 >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${selectedRole === 'respondent' ? 'bg-blue-500' : 'bg-slate-600'
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${selectedRole === 'respondent' ? 'bg-blue-500' : 'bg-slate-100'
                     }`}>
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className={`w-5 h-5 ${selectedRole === 'respondent' ? 'text-white' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <div className="font-medium text-white text-sm mb-1">Contract Respondent</div>
-                  <div className="text-xs text-slate-400">Respond to invitations</div>
+                  <div className={`font-medium text-sm mb-1 ${selectedRole === 'respondent' ? 'text-blue-700' : 'text-slate-800'}`}>
+                    Contract Respondent
+                  </div>
+                  <div className="text-xs text-slate-500">Respond to invitations</div>
                 </button>
               </div>
             </div>
@@ -207,11 +181,11 @@ export default function LoginPage() {
             {/* SECTION 9: LOGIN FORM */}
             {/* ============================================================ */}
             <form onSubmit={handleSubmit} className="p-6">
-              <h3 className="text-sm font-medium text-slate-300 mb-4">Sign in to your account</h3>
+              <h3 className="text-sm font-medium text-slate-600 mb-4">Sign in to your account</h3>
 
               {/* Email Field */}
               <div className="mb-4">
-                <label htmlFor="email" className="block text-sm text-slate-400 mb-1.5">
+                <label htmlFor="email" className="block text-sm text-slate-600 mb-1.5">
                   Email Address
                 </label>
                 <input
@@ -220,14 +194,14 @@ export default function LoginPage() {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                   placeholder="you@company.com"
                 />
               </div>
 
               {/* Password Field */}
               <div className="mb-6">
-                <label htmlFor="password" className="block text-sm text-slate-400 mb-1.5">
+                <label htmlFor="password" className="block text-sm text-slate-600 mb-1.5">
                   Password
                 </label>
                 <div className="relative">
@@ -237,13 +211,13 @@ export default function LoginPage() {
                     name="password"
                     value={formData.password}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all pr-10"
+                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all pr-10"
                     placeholder="••••••••"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                   >
                     {showPassword ? (
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -258,7 +232,7 @@ export default function LoginPage() {
                   </button>
                 </div>
                 <div className="mt-2 text-right">
-                  <Link href="/auth/forgot-password" className="text-xs text-slate-400 hover:text-emerald-400 transition-colors">
+                  <Link href="/auth/forgot-password" className="text-xs text-slate-500 hover:text-emerald-600 transition-colors">
                     Forgot password?
                   </Link>
                 </div>
@@ -266,7 +240,7 @@ export default function LoginPage() {
 
               {/* Error Message */}
               {error && (
-                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
                   {error}
                 </div>
               )}
@@ -279,7 +253,7 @@ export default function LoginPage() {
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/25'
                     : selectedRole === 'respondent'
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/25'
-                      : 'bg-slate-600 hover:bg-slate-500 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-white'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isLoading ? (
@@ -306,17 +280,17 @@ export default function LoginPage() {
             <div className="px-6 pb-6">
               {/* Divider */}
               <div className="flex items-center gap-4 mb-4">
-                <div className="flex-1 h-px bg-slate-700"></div>
-                <span className="text-xs text-slate-500">or</span>
-                <div className="flex-1 h-px bg-slate-700"></div>
+                <div className="flex-1 h-px bg-slate-200"></div>
+                <span className="text-xs text-slate-400">or</span>
+                <div className="flex-1 h-px bg-slate-200"></div>
               </div>
 
               {/* Request Trial Link */}
               <div className="text-center">
-                <p className="text-sm text-slate-400 mb-2">Don't have an account?</p>
+                <p className="text-sm text-slate-500 mb-2">Don't have an account?</p>
                 <Link
                   href="/request-trial"
-                  className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-medium text-sm transition-colors"
+                  className="inline-flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-medium text-sm transition-colors"
                 >
                   Request a Free Trial
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -333,7 +307,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-xs text-slate-500">
               Need help? Contact{' '}
-              <a href="mailto:support@clarencelegal.ai" className="text-slate-400 hover:text-white transition-colors">
+              <a href="mailto:support@clarencelegal.ai" className="text-emerald-600 hover:text-emerald-700 transition-colors">
                 support@clarencelegal.ai
               </a>
             </p>
@@ -344,29 +318,45 @@ export default function LoginPage() {
       {/* ================================================================== */}
       {/* SECTION 12: FOOTER */}
       {/* ================================================================== */}
-      <footer className="border-t border-slate-700/50 mt-auto">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+      <footer className="bg-slate-900 text-slate-400 py-12 mt-auto">
+        <div className="container mx-auto px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center">
             {/* Brand */}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">C</span>
+            <div className="flex items-center gap-3 mb-6 md:mb-0">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold">C</span>
               </div>
-              <span className="text-slate-400 text-sm">CLARENCE - The Honest Broker</span>
+              <div>
+                <span className="text-white font-semibold">CLARENCE</span>
+                <span className="text-slate-500 text-sm ml-2">The Honest Broker</span>
+              </div>
             </div>
 
             {/* Links */}
-            <div className="flex gap-6 text-sm">
-              <Link href="/privacy" className="text-slate-500 hover:text-slate-300 transition-colors">
+            <div className="flex gap-8 text-sm">
+              <Link href="/" className="hover:text-white transition-colors">
+                Home
+              </Link>
+              <Link href="/how-it-works" className="hover:text-white transition-colors">
+                How It Works
+              </Link>
+              <Link href="/pricing" className="hover:text-white transition-colors">
+                Pricing
+              </Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">
                 Privacy
               </Link>
-              <Link href="/terms" className="text-slate-500 hover:text-slate-300 transition-colors">
+              <Link href="/terms" className="hover:text-white transition-colors">
                 Terms
               </Link>
             </div>
           </div>
+
+          <div className="border-t border-slate-800 mt-8 pt-8 text-center text-sm">
+            <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
+          </div>
         </div>
       </footer>
-    </div>
+    </main>
   )
 }
