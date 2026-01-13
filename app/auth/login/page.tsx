@@ -1,379 +1,125 @@
 'use client'
-import { useState, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 // ============================================================================
-// SECTION 1: LOADING COMPONENT
+// SECTION 1: TYPE DEFINITIONS
+// Location: app/auth/login/page.tsx
 // ============================================================================
 
-function LoginLoading() {
-  return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-slate-600">Loading...</p>
-      </div>
-    </div>
-  )
+type UserRole = 'initiator' | 'respondent' | null
+
+interface LoginFormData {
+  email: string
+  password: string
 }
 
 // ============================================================================
-// SECTION 2: MAIN LOGIN/SIGNUP COMPONENT
+// SECTION 2: MAIN COMPONENT
 // ============================================================================
 
-function LoginSignupContent() {
+export default function LoginPage() {
   const router = useRouter()
-  const supabase = createClient()
-
-  // ==========================================================================
-  // SECTION 3: STATE
-  // ==========================================================================
-
-  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login')
-  const [loading, setLoading] = useState(false)
+  const [selectedRole, setSelectedRole] = useState<UserRole>(null)
+  const [formData, setFormData] = useState<LoginFormData>({
+    email: '',
+    password: ''
+  })
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
-  // Login form
-  const [loginEmail, setLoginEmail] = useState('')
-  const [loginPassword, setLoginPassword] = useState('')
+  // ========================================================================
+  // SECTION 3: HANDLERS
+  // ========================================================================
 
-  // Signup form
-  const [signupEmail, setSignupEmail] = useState('')
-  const [signupPassword, setSignupPassword] = useState('')
-  const [signupConfirmPassword, setSignupConfirmPassword] = useState('')
-  const [signupFirstName, setSignupFirstName] = useState('')
-  const [signupLastName, setSignupLastName] = useState('')
-  const [signupCompany, setSignupCompany] = useState('')
-  const signupRole = 'customer' // Customers only - providers have separate portal
-
-  // ==========================================================================
-  // SECTION 4: VALIDATION
-  // ==========================================================================
-
-  function validateEmail(email: string): boolean {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return re.test(email)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    if (error) setError(null)
   }
 
-  function validateLoginForm(): string | null {
-    if (!loginEmail || !loginPassword) {
-      return 'Please fill in all fields'
-    }
-    if (!validateEmail(loginEmail)) {
-      return 'Please enter a valid email address'
-    }
-    if (loginPassword.length < 6) {
-      return 'Password must be at least 6 characters'
-    }
-    return null
-  }
-
-  function validateSignupForm(): string | null {
-    if (!signupEmail || !signupPassword || !signupConfirmPassword || !signupFirstName || !signupLastName || !signupCompany) {
-      return 'Please fill in all fields'
-    }
-    if (!validateEmail(signupEmail)) {
-      return 'Please enter a valid email address'
-    }
-    if (signupPassword.length < 6) {
-      return 'Password must be at least 6 characters'
-    }
-    if (signupPassword !== signupConfirmPassword) {
-      return 'Passwords do not match'
-    }
-    if (signupFirstName.length < 2) {
-      return 'First name must be at least 2 characters'
-    }
-    if (signupLastName.length < 2) {
-      return 'Last name must be at least 2 characters'
-    }
-    if (signupCompany.length < 2) {
-      return 'Company name must be at least 2 characters'
-    }
-    return null
-  }
-
-  // ==========================================================================
-  // SECTION 5: LOGIN HANDLER
-  // ==========================================================================
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
+  const handleRoleSelect = (role: UserRole) => {
+    setSelectedRole(role)
     setError(null)
-    setSuccess(null)
+  }
 
-    // Validate
-    const validationError = validateLoginForm()
-    if (validationError) {
-      setError(validationError)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!selectedRole) {
+      setError('Please select your role to continue')
       return
     }
 
-    setLoading(true)
+    if (!formData.email || !formData.password) {
+      setError('Please enter your email and password')
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
 
     try {
-      // Sign in with Supabase Auth
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword
-      })
+      // TODO: Replace with actual authentication API call
+      // const response = await fetch('/api/auth/login', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ ...formData, role: selectedRole }),
+      // })
 
-      if (signInError) throw signInError
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1500))
 
-      if (data.user) {
-        // Get user profile from public.users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('auth_id', data.user.id)
-          .single()
-
-        if (userError) throw userError
-
-        // Check role and redirect accordingly
-        if (userData.role === 'provider') {
-          // Provider logged in via customer portal - sign them out and redirect to provider portal
-          await supabase.auth.signOut()
-          setError('This is a provider account. Please use the Provider Portal to sign in.')
-          setLoading(false)
-          return
+      // Store auth data (replace with actual implementation)
+      localStorage.setItem('clarence_auth', JSON.stringify({
+        userInfo: {
+          email: formData.email,
+          role: selectedRole,
+          firstName: formData.email.split('@')[0] // Placeholder
         }
+      }))
 
-        // Customer - store auth and redirect to dashboard
-        const authData = {
-          userInfo: {
-            userId: userData.user_id,           // Changed from auth_id
-            companyId: userData.company_id,     // ADDED
-            email: userData.email,
-            firstName: userData.first_name,
-            lastName: userData.last_name,
-            company: userData.company_name,
-            role: userData.role || 'customer'
-          },
-          timestamp: new Date().toISOString()
-        }
-        localStorage.setItem('clarence_auth', JSON.stringify(authData))
+      // Redirect based on role
+      if (selectedRole === 'initiator') {
         router.push('/auth/contracts-dashboard')
+      } else {
+        router.push('/auth/provider-dashboard')
       }
-    } catch (err: unknown) {
+    } catch (err) {
       console.error('Login error:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Failed to login. Please check your credentials.'
-      setError(errorMessage)
+      setError('Login failed. Please check your credentials and try again.')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  // ==========================================================================
-  // SECTION 6: SIGNUP HANDLER
-  // ==========================================================================
-
-  async function handleSignup(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setSuccess(null)
-
-    // Validate
-    const validationError = validateSignupForm()
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      // Sign up with Supabase Auth
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: signupEmail,
-        password: signupPassword,
-        options: {
-          emailRedirectTo: 'https://www.clarencelegal.ai/auth/callback',
-          data: {
-            first_name: signupFirstName,
-            last_name: signupLastName,
-            company_name: signupCompany,
-            role: signupRole
-          }
-        }
-      })
-
-      if (signUpError) throw signUpError
-
-      if (data.user) {
-        // Check if user already exists (identities array is empty)
-        if (data.user.identities && data.user.identities.length === 0) {
-          setError('An account with this email already exists. Please sign in instead.')
-          setActiveTab('login')
-          setLoginEmail(signupEmail) // Pre-fill login email
-          setLoading(false)
-          return
-        }
-
-        // Check if email is confirmed (session exists only if confirmed or confirmation disabled)
-        const emailConfirmed = data.user.email_confirmed_at !== null
-
-        if (emailConfirmed && data.session) {
-          // Email already confirmed (confirmation disabled in Supabase)
-          setSuccess('Account created successfully! Redirecting...')
-
-          const authData = {
-            userInfo: {
-              userId: data.user.id,
-              email: signupEmail,
-              firstName: signupFirstName,
-              lastName: signupLastName,
-              company: signupCompany,
-              role: signupRole
-            },
-            timestamp: new Date().toISOString()
-          }
-          localStorage.setItem('clarence_auth', JSON.stringify(authData))
-
-          setTimeout(() => {
-            router.push('/auth/contracts-dashboard')
-          }, 1500)
-        } else {
-          // Email confirmation required - show confirmation message
-          setShowEmailConfirmation(true)
-        }
-      }
-    } catch (err: unknown) {
-      console.error('Signup error:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.'
-      setError(errorMessage)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ==========================================================================
-  // SECTION 7: RENDER
-  // ==========================================================================
-
-  // ==========================================================================
-  // SECTION 7: RENDER
-  // ==========================================================================
-
-  // Show email confirmation screen after signup
-  if (showEmailConfirmation) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
-        {/* Header */}
-        <header className="bg-slate-800 text-white">
-          <div className="container mx-auto px-6">
-            <nav className="flex justify-between items-center h-16">
-              <Link href="/" className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">C</span>
-                </div>
-                <div>
-                  <div className="font-semibold text-white tracking-wide">CLARENCE</div>
-                  <div className="text-xs text-slate-400">The Honest Broker</div>
-                </div>
-              </Link>
-            </nav>
-          </div>
-        </header>
-
-        {/* Email Confirmation Content */}
-        <main className="flex-1 flex items-center justify-center p-6">
-          <div className="w-full max-w-md">
-            <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-              {/* Success Header */}
-              <div className="bg-emerald-50 p-8 text-center border-b border-emerald-100">
-                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h2 className="text-xl font-semibold text-slate-800 mb-2">Check Your Email</h2>
-                <p className="text-slate-600 text-sm">We&apos;ve sent a confirmation link to:</p>
-                <p className="text-emerald-700 font-medium mt-1">{signupEmail}</p>
-              </div>
-
-              {/* Instructions */}
-              <div className="p-6">
-                <div className="bg-slate-50 rounded-lg p-4 mb-6">
-                  <h3 className="font-medium text-slate-700 mb-3 text-sm">Next Steps:</h3>
-                  <ol className="space-y-3 text-sm text-slate-600">
-                    <li className="flex items-start gap-3">
-                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">1</span>
-                      <span>Open the email from CLARENCE</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">2</span>
-                      <span>Click &quot;Confirm Email Address&quot;</span>
-                    </li>
-                    <li className="flex items-start gap-3">
-                      <span className="bg-emerald-100 text-emerald-700 rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0">3</span>
-                      <span>Return here to sign in</span>
-                    </li>
-                  </ol>
-                </div>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-sm text-amber-700">
-                  <strong>Didn&apos;t receive the email?</strong><br />
-                  Check your spam folder. Emails can take up to 5 minutes to arrive.
-                </div>
-
-                <button
-                  onClick={() => {
-                    setShowEmailConfirmation(false)
-                    setActiveTab('login')
-                    setLoginEmail(signupEmail)
-                  }}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-medium transition"
-                >
-                  Go to Sign In
-                </button>
-
-                <button
-                  onClick={() => setShowEmailConfirmation(false)}
-                  className="w-full mt-3 text-sm text-slate-500 hover:text-slate-700"
-                >
-                  ← Use a different email
-                </button>
-              </div>
-            </div>
-          </div>
-        </main>
-
-        {/* Footer */}
-        <footer className="bg-slate-900 text-slate-400 py-6">
-          <div className="container mx-auto px-6 text-center text-sm">
-            <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
-          </div>
-        </footer>
-      </div>
-    )
-  }
+  // ========================================================================
+  // SECTION 4: RENDER
+  // ========================================================================
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-700 to-slate-800">
       {/* ================================================================== */}
-      {/* SECTION 8: NAVIGATION HEADER */}
+      {/* SECTION 5: NAVIGATION */}
       {/* ================================================================== */}
-      <header className="bg-slate-800 text-white">
-        <div className="container mx-auto px-6">
-          <nav className="flex justify-between items-center h-16">
-            {/* Logo & Brand */}
-            <Link href="/" className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
-              <div>
-                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
-                <div className="text-xs text-slate-400">The Honest Broker</div>
-              </div>
+      <nav className="bg-slate-900/50 backdrop-blur border-b border-slate-700/50">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            {/* Back to Home */}
+            <Link
+              href="/"
+              className="text-slate-300 hover:text-white text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Home
             </Link>
 
-            {/* Navigation Links */}
-            <div className="flex items-center gap-6">
+            {/* Nav Links */}
+            <div className="flex gap-6 items-center">
               <Link
                 href="/how-it-works"
                 className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
@@ -381,330 +127,246 @@ function LoginSignupContent() {
                 How It Works
               </Link>
               <Link
-                href="/phases"
+                href="/pricing"
                 className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
               >
-                The 6 Phases
+                Pricing
               </Link>
-
-              {/* Sign In Buttons */}
-              <div className="flex items-center gap-3 ml-2">
-                <span className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg">
-                  Customer Sign In
-                </span>
-                <a
-                  href="https://www.clarencelegal.ai/provider"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Provider Sign In
-                </a>
-              </div>
             </div>
-          </nav>
+          </div>
         </div>
-      </header>
+      </nav>
 
       {/* ================================================================== */}
-      {/* SECTION 9: MAIN CONTENT */}
+      {/* SECTION 6: MAIN CONTENT */}
       {/* ================================================================== */}
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          {/* Header Text */}
+      <div className="container mx-auto px-6 py-12">
+        <div className="max-w-md mx-auto">
+          {/* ============================================================ */}
+          {/* SECTION 7: BRANDING */}
+          {/* ============================================================ */}
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-slate-800 mb-2">
-              {activeTab === 'login' ? 'Welcome Back' : 'Create Your Account'}
-            </h1>
-            <p className="text-slate-600 text-sm">
-              {activeTab === 'login'
-                ? 'Sign in to your customer account to continue'
-                : 'Get started with CLARENCE contract mediation'
-              }
-            </p>
+            {/* Logo */}
+            <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/25">
+              <span className="text-white font-bold text-2xl">C</span>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-1">Welcome to CLARENCE</h1>
+            <p className="text-slate-400 text-sm">The Honest Broker</p>
           </div>
 
-          {/* Main Card */}
-          <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-            {/* Tabs */}
-            <div className="flex border-b border-slate-200">
-              <button
-                onClick={() => {
-                  setActiveTab('login')
-                  setError(null)
-                  setSuccess(null)
-                }}
-                className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'login'
-                  ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
-                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                  }`}
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab('signup')
-                  setError(null)
-                  setSuccess(null)
-                }}
-                className={`flex-1 py-4 text-sm font-medium transition ${activeTab === 'signup'
-                  ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50'
-                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                  }`}
-              >
-                Create Account
-              </button>
-            </div>
+          {/* ============================================================ */}
+          {/* SECTION 8: LOGIN CARD */}
+          {/* ============================================================ */}
+          <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700/50 overflow-hidden">
+            {/* Role Selection Header */}
+            <div className="p-6 border-b border-slate-700/50">
+              <h2 className="text-lg font-semibold text-white mb-4">Select Your Role</h2>
 
-            {/* Error/Success Messages */}
-            {error && (
-              <div className="mx-6 mt-6 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
-                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {error}
-              </div>
-            )}
-            {success && (
-              <div className="mx-6 mt-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700 flex items-start gap-2">
-                <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {success}
-              </div>
-            )}
-
-            {/* ============================================================ */}
-            {/* SECTION 10: LOGIN FORM */}
-            {/* ============================================================ */}
-            {activeTab === 'login' && (
-              <form onSubmit={handleLogin} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="you@company.com"
-                    disabled={loading}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="••••••••"
-                    disabled={loading}
-                  />
-                </div>
-
+              <div className="grid grid-cols-2 gap-3">
+                {/* Contract Initiator */}
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={() => handleRoleSelect('initiator')}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${selectedRole === 'initiator'
+                      ? 'border-emerald-500 bg-emerald-500/10'
+                      : 'border-slate-600 hover:border-slate-500 bg-slate-700/30'
+                    }`}
                 >
-                  {loading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Signing in...
-                    </>
-                  ) : (
-                    'Sign In'
-                  )}
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${selectedRole === 'initiator' ? 'bg-emerald-500' : 'bg-slate-600'
+                    }`}>
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <div className="font-medium text-white text-sm mb-1">Contract Initiator</div>
+                  <div className="text-xs text-slate-400">Start & manage contracts</div>
                 </button>
 
-                <div className="text-center text-sm text-slate-500">
-                  Forgot password?{' '}
-                  <button type="button" className="text-blue-600 hover:underline">
-                    Reset it
+                {/* Contract Respondent */}
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('respondent')}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${selectedRole === 'respondent'
+                      ? 'border-blue-500 bg-blue-500/10'
+                      : 'border-slate-600 hover:border-slate-500 bg-slate-700/30'
+                    }`}
+                >
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${selectedRole === 'respondent' ? 'bg-blue-500' : 'bg-slate-600'
+                    }`}>
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="font-medium text-white text-sm mb-1">Contract Respondent</div>
+                  <div className="text-xs text-slate-400">Respond to invitations</div>
+                </button>
+              </div>
+            </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 9: LOGIN FORM */}
+            {/* ============================================================ */}
+            <form onSubmit={handleSubmit} className="p-6">
+              <h3 className="text-sm font-medium text-slate-300 mb-4">Sign in to your account</h3>
+
+              {/* Email Field */}
+              <div className="mb-4">
+                <label htmlFor="email" className="block text-sm text-slate-400 mb-1.5">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                  placeholder="you@company.com"
+                />
+              </div>
+
+              {/* Password Field */}
+              <div className="mb-6">
+                <label htmlFor="password" className="block text-sm text-slate-400 mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all pr-10"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    {showPassword ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
                   </button>
                 </div>
-              </form>
-            )}
+                <div className="mt-2 text-right">
+                  <Link href="/auth/forgot-password" className="text-xs text-slate-400 hover:text-emerald-400 transition-colors">
+                    Forgot password?
+                  </Link>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${selectedRole === 'initiator'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/25'
+                    : selectedRole === 'respondent'
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/25'
+                      : 'bg-slate-600 hover:bg-slate-500 text-white'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign In
+                    {selectedRole && (
+                      <span className="text-sm opacity-75">
+                        as {selectedRole === 'initiator' ? 'Initiator' : 'Respondent'}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            </form>
 
             {/* ============================================================ */}
-            {/* SECTION 11: SIGNUP FORM */}
+            {/* SECTION 10: FOOTER LINKS */}
             {/* ============================================================ */}
-            {activeTab === 'signup' && (
-              <form onSubmit={handleSignup} className="p-6 space-y-4">
-                {/* Name Fields */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      value={signupFirstName}
-                      onChange={(e) => setSignupFirstName(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="John"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      value={signupLastName}
-                      onChange={(e) => setSignupLastName(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                      placeholder="Smith"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
+            <div className="px-6 pb-6">
+              {/* Divider */}
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex-1 h-px bg-slate-700"></div>
+                <span className="text-xs text-slate-500">or</span>
+                <div className="flex-1 h-px bg-slate-700"></div>
+              </div>
 
-                {/* Company */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Company Name
-                  </label>
-                  <input
-                    type="text"
-                    value={signupCompany}
-                    onChange={(e) => setSignupCompany(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="Acme Corporation"
-                    disabled={loading}
-                  />
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="you@company.com"
-                    disabled={loading}
-                  />
-                </div>
-
-                {/* Password */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="••••••••"
-                    disabled={loading}
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Minimum 6 characters</p>
-                </div>
-
-                {/* Confirm Password */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Confirm Password
-                  </label>
-                  <input
-                    type="password"
-                    value={signupConfirmPassword}
-                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                    placeholder="••••••••"
-                    disabled={loading}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
+              {/* Request Trial Link */}
+              <div className="text-center">
+                <p className="text-sm text-slate-400 mb-2">Don't have an account?</p>
+                <Link
+                  href="/request-trial"
+                  className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-medium text-sm transition-colors"
                 >
-                  {loading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Creating account...
-                    </>
-                  ) : (
-                    'Create Account'
-                  )}
-                </button>
-
-                <p className="text-xs text-slate-500 text-center">
-                  By signing up, you agree to our{' '}
-                  <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link>
-                  {' '}and{' '}
-                  <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
-                </p>
-              </form>
-            )}
+                  Request a Free Trial
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
           </div>
 
-          {/* Provider Portal Link */}
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
-            <p className="text-sm text-slate-700">
-              Are you a service provider?{' '}
-              <a
-                href="https://www.clarencelegal.ai/provider"
-                className="text-blue-600 font-medium hover:underline"
-              >
-                Access the Provider Portal →
+          {/* ============================================================ */}
+          {/* SECTION 11: HELP TEXT */}
+          {/* ============================================================ */}
+          <div className="mt-6 text-center">
+            <p className="text-xs text-slate-500">
+              Need help? Contact{' '}
+              <a href="mailto:support@clarencelegal.ai" className="text-slate-400 hover:text-white transition-colors">
+                support@clarencelegal.ai
               </a>
             </p>
           </div>
         </div>
-      </main>
+      </div>
 
       {/* ================================================================== */}
       {/* SECTION 12: FOOTER */}
       {/* ================================================================== */}
-      <footer className="bg-slate-900 text-slate-400 py-8">
-        <div className="container mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center">
+      <footer className="border-t border-slate-700/50 mt-auto">
+        <div className="container mx-auto px-6 py-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             {/* Brand */}
-            <div className="flex items-center gap-3 mb-4 md:mb-0">
+            <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">C</span>
               </div>
-              <span className="text-white font-medium">CLARENCE</span>
+              <span className="text-slate-400 text-sm">CLARENCE - The Honest Broker</span>
             </div>
 
             {/* Links */}
-            <div className="flex gap-8 text-sm">
-              <Link href="/" className="hover:text-white transition-colors">Home</Link>
-              <Link href="/how-it-works" className="hover:text-white transition-colors">How It Works</Link>
-              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
-              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+            <div className="flex gap-6 text-sm">
+              <Link href="/privacy" className="text-slate-500 hover:text-slate-300 transition-colors">
+                Privacy
+              </Link>
+              <Link href="/terms" className="text-slate-500 hover:text-slate-300 transition-colors">
+                Terms
+              </Link>
             </div>
-          </div>
-
-          <div className="border-t border-slate-800 mt-6 pt-6 text-center text-sm">
-            <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
           </div>
         </div>
       </footer>
     </div>
-  )
-}
-
-// ============================================================================
-// SECTION 13: DEFAULT EXPORT WITH SUSPENSE
-// ============================================================================
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<LoginLoading />}>
-      <LoginSignupContent />
-    </Suspense>
   )
 }
