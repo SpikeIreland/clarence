@@ -5,6 +5,7 @@
 // ============================================================================
 // File: /app/auth/training/page.tsx
 // Purpose: Training mode lobby with scenarios, videos, and session management
+// Updated: Now uses create-contract page with ?mode=training
 // ============================================================================
 
 // ============================================================================
@@ -12,7 +13,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
@@ -44,16 +45,11 @@ interface TrainingScenario {
     learningObjectives: string[]
     isNew?: boolean
     completedByUser?: boolean
-}
-
-interface ApprovedTrainingUser {
-    id: string
-    userId: string
-    userName: string
-    userEmail: string
-    company: string
-    approvalType: 'training_partner' | 'training_admin' | 'ai_enabled'
-    status: 'active' | 'inactive' | 'expired'
+    // URL params to pass to create-contract
+    createContractParams?: {
+        contractType?: string
+        mediationType?: string
+    }
 }
 
 interface TrainingSession {
@@ -88,34 +84,10 @@ const DIFFICULTY_COLORS = {
     advanced: { bg: 'bg-red-100', text: 'text-red-700', label: 'Advanced' }
 }
 
-const AI_MODES = [
+// Quick start scenarios that map to create-contract presets
+const QUICK_START_SCENARIOS: TrainingScenario[] = [
     {
-        value: 'cooperative',
-        label: 'Cooperative',
-        description: 'AI accepts reasonable proposals quickly',
-        icon: '😊',
-        recommended: true
-    },
-    {
-        value: 'balanced',
-        label: 'Balanced',
-        description: 'AI negotiates fairly with some pushback',
-        icon: '🤝',
-        recommended: false
-    },
-    {
-        value: 'aggressive',
-        label: 'Aggressive',
-        description: 'AI pushes hard and rarely concedes',
-        icon: '😤',
-        recommended: false
-    }
-]
-
-// Sample scenarios (will be replaced with database data)
-const SAMPLE_SCENARIOS: TrainingScenario[] = [
-    {
-        scenarioId: 'scenario-1',
+        scenarioId: 'quick-bpo',
         scenarioName: 'BPO Services Agreement - Basics',
         description: 'Learn the fundamentals of negotiating a Business Process Outsourcing contract. Perfect for beginners.',
         difficulty: 'beginner',
@@ -128,37 +100,49 @@ const SAMPLE_SCENARIOS: TrainingScenario[] = [
             'Navigate service level agreements',
             'Handle payment terms negotiation'
         ],
-        isNew: true
+        isNew: true,
+        createContractParams: {
+            contractType: 'bpo',
+            mediationType: 'full_mediation'
+        }
     },
     {
-        scenarioId: 'scenario-2',
-        scenarioName: 'IT Services Contract - Data Protection Focus',
-        description: 'Practice negotiating data protection and security clauses in an IT services context.',
+        scenarioId: 'quick-saas',
+        scenarioName: 'SaaS Agreement - Data Protection Focus',
+        description: 'Practice negotiating data protection and security clauses in a SaaS context.',
         difficulty: 'intermediate',
         industry: 'Technology',
-        contractType: 'IT Services',
+        contractType: 'SaaS Agreement',
         estimatedDuration: 35,
         clauseCount: 18,
         learningObjectives: [
             'Master data protection clause negotiation',
             'Understand GDPR compliance requirements',
             'Balance security with operational flexibility'
-        ]
+        ],
+        createContractParams: {
+            contractType: 'saas',
+            mediationType: 'full_mediation'
+        }
     },
     {
-        scenarioId: 'scenario-3',
-        scenarioName: 'Complex Multi-Party SaaS Deal',
-        description: 'Advanced scenario with multiple stakeholders and competing interests. Tests your strategic thinking.',
+        scenarioId: 'quick-msa',
+        scenarioName: 'Master Services Agreement',
+        description: 'Advanced scenario covering umbrella agreements for ongoing service relationships.',
         difficulty: 'advanced',
-        industry: 'Technology',
-        contractType: 'SaaS Agreement',
+        industry: 'Professional Services',
+        contractType: 'MSA',
         estimatedDuration: 60,
         clauseCount: 28,
         learningObjectives: [
-            'Manage multi-party negotiations',
+            'Manage complex service definitions',
             'Strategic trade-off decisions',
             'Complex termination scenarios'
-        ]
+        ],
+        createContractParams: {
+            contractType: 'msa',
+            mediationType: 'full_mediation'
+        }
     }
 ]
 
@@ -168,12 +152,8 @@ const SAMPLE_SCENARIOS: TrainingScenario[] = [
 
 export default function TrainingStudioPage() {
     const router = useRouter()
-    const params = useParams()
     const supabase = createClient()
     const chatEndRef = useRef<HTMLDivElement>(null)
-
-    // Get session ID from URL if present (for active training sessions)
-    const activeSessionId = params?.sessionId as string | undefined
 
     // ==========================================================================
     // SECTION 5: STATE DECLARATIONS
@@ -183,18 +163,8 @@ export default function TrainingStudioPage() {
     const [loading, setLoading] = useState(true)
     const [showUserMenu, setShowUserMenu] = useState(false)
 
-    // Scenarios & Partners
-    const [scenarios, setScenarios] = useState<TrainingScenario[]>(SAMPLE_SCENARIOS)
-    const [approvedPartners, setApprovedPartners] = useState<ApprovedTrainingUser[]>([])
+    // Sessions
     const [pastSessions, setPastSessions] = useState<TrainingSession[]>([])
-
-    // Session creation flow
-    const [showNewSessionModal, setShowNewSessionModal] = useState(false)
-    const [selectedScenario, setSelectedScenario] = useState<TrainingScenario | null>(null)
-    const [counterpartyType, setCounterpartyType] = useState<'ai' | 'partner'>('ai')
-    const [selectedAiMode, setSelectedAiMode] = useState<'cooperative' | 'balanced' | 'aggressive'>('cooperative')
-    const [selectedPartner, setSelectedPartner] = useState<ApprovedTrainingUser | null>(null)
-    const [isCreatingSession, setIsCreatingSession] = useState(false)
 
     // Chat state
     const [showChatPanel, setShowChatPanel] = useState(false)
@@ -202,7 +172,7 @@ export default function TrainingStudioPage() {
     const [chatInput, setChatInput] = useState('')
     const [isChatLoading, setIsChatLoading] = useState(false)
 
-    // View state - Added 'videos' tab
+    // View state
     const [activeTab, setActiveTab] = useState<'scenarios' | 'videos' | 'history' | 'progress'>('scenarios')
 
     // ==========================================================================
@@ -213,12 +183,6 @@ export default function TrainingStudioPage() {
     const { videos: featuredVideos, loading: videosLoading } = useVideos({
         category: 'training',
         featuredOnly: true,
-        limit: 3
-    })
-
-    // Fetch onboarding videos for "Getting Started" section
-    const { videos: onboardingVideos } = useVideos({
-        category: 'onboarding',
         limit: 3
     })
 
@@ -243,41 +207,6 @@ export default function TrainingStudioPage() {
             if (!auth) return
 
             const authData = JSON.parse(auth)
-            const companyId = authData.userInfo?.companyId
-
-            // Load approved training partners
-            const { data: partnersData } = await supabase
-                .from('approved_training_users')
-                .select(`
-                    id,
-                    user_id,
-                    approval_type,
-                    status,
-                    users:user_id (
-                        first_name,
-                        last_name,
-                        email,
-                        company_name
-                    )
-                `)
-                .eq('company_id', companyId)
-                .eq('status', 'active')
-
-            if (partnersData) {
-                const mapped: ApprovedTrainingUser[] = partnersData.map((p: Record<string, unknown>) => {
-                    const user = p.users as Record<string, string> | null
-                    return {
-                        id: p.id as string,
-                        userId: p.user_id as string,
-                        userName: user ? `${user.first_name} ${user.last_name}` : 'Unknown',
-                        userEmail: user?.email || '',
-                        company: user?.company_name || '',
-                        approvalType: p.approval_type as 'training_partner' | 'training_admin' | 'ai_enabled',
-                        status: p.status as 'active' | 'inactive' | 'expired'
-                    }
-                })
-                setApprovedPartners(mapped)
-            }
 
             // Load past training sessions
             const { data: sessionsData } = await supabase
@@ -292,7 +221,7 @@ export default function TrainingStudioPage() {
                 const mapped: TrainingSession[] = sessionsData.map((s: Record<string, unknown>) => ({
                     sessionId: s.session_id as string,
                     sessionNumber: s.session_number as string,
-                    scenarioName: (s.scenario_name as string) || 'Custom Training',
+                    scenarioName: (s.contract_name as string) || (s.scenario_name as string) || 'Training Session',
                     counterpartyType: (s.counterparty_type as 'ai' | 'partner') || 'ai',
                     counterpartyName: (s.counterparty_name as string) || 'CLARENCE AI',
                     aiMode: s.ai_mode as 'cooperative' | 'balanced' | 'aggressive' | undefined,
@@ -328,75 +257,36 @@ export default function TrainingStudioPage() {
     }
 
     // ==========================================================================
-    // SECTION 9: SESSION CREATION
+    // SECTION 9: NAVIGATION HANDLERS
     // ==========================================================================
 
-    async function startNewTrainingSession() {
-        if (!selectedScenario) {
-            alert('Please select a scenario first')
-            return
+    function startTraining() {
+        // Navigate to create-contract with training mode
+        eventLogger.started('training_session', 'start_training', {})
+        router.push('/auth/create-contract?mode=training')
+    }
+
+    function startQuickScenario(scenario: TrainingScenario) {
+        // Navigate to create-contract with training mode and preset params
+        eventLogger.started('training_session', 'quick_scenario', {
+            scenarioId: scenario.scenarioId,
+            contractType: scenario.createContractParams?.contractType
+        })
+
+        let url = '/auth/create-contract?mode=training'
+
+        if (scenario.createContractParams?.contractType) {
+            url += `&preset_contract_type=${scenario.createContractParams.contractType}`
+        }
+        if (scenario.createContractParams?.mediationType) {
+            url += `&preset_mediation_type=${scenario.createContractParams.mediationType}`
         }
 
-        if (counterpartyType === 'partner' && !selectedPartner) {
-            alert('Please select a training partner')
-            return
-        }
+        router.push(url)
+    }
 
-        setIsCreatingSession(true)
-
-        try {
-            const auth = localStorage.getItem('clarence_auth')
-            if (!auth) {
-                router.push('/auth/login')
-                return
-            }
-
-            const authData = JSON.parse(auth)
-
-            eventLogger.started('training_session', 'create_session', {
-                scenarioId: selectedScenario.scenarioId,
-                counterpartyType,
-                aiMode: selectedAiMode
-            })
-
-            const response = await fetch(`${API_BASE}/session-create`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId: authData.userInfo?.userId,
-                    userEmail: authData.userInfo?.email,
-                    companyName: authData.userInfo?.company,
-                    userName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim(),
-                    isTraining: true,
-                    scenarioId: selectedScenario.scenarioId,
-                    scenarioName: selectedScenario.scenarioName,
-                    counterpartyType,
-                    counterpartyUserId: selectedPartner?.userId,
-                    counterpartyName: counterpartyType === 'ai'
-                        ? `CLARENCE AI (${selectedAiMode})`
-                        : selectedPartner?.userName,
-                    aiMode: counterpartyType === 'ai' ? selectedAiMode : null
-                })
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-
-                eventLogger.completed('training_session', 'create_session', {
-                    sessionId: data.sessionId
-                })
-
-                setShowNewSessionModal(false)
-                router.push(`/auth/training/${data.sessionId}`)
-            } else {
-                throw new Error('Failed to create training session')
-            }
-        } catch (error) {
-            console.error('Error creating training session:', error)
-            alert('Failed to create training session. Please try again.')
-        } finally {
-            setIsCreatingSession(false)
-        }
+    function resumeSession(sessionId: string) {
+        router.push(`/auth/training/${sessionId}`)
     }
 
     // ==========================================================================
@@ -466,7 +356,7 @@ export default function TrainingStudioPage() {
             setChatMessages([{
                 id: '1',
                 type: 'clarence',
-                content: `Welcome to Training Mode, ${userInfo?.firstName || 'there'}! 🎓\n\nThis is a safe space to practice negotiations without any real-world consequences. I can be your training partner, or you can practice with an approved colleague.\n\nWould you like me to recommend a scenario based on your experience level?`,
+                content: `Welcome to Training Mode, ${userInfo?.firstName || 'there'}! 🎓\n\nThis is a safe space to practice negotiations without any real-world consequences.\n\nClick **"Start Training"** to create a practice contract, or select a **Quick Start** scenario below.\n\nWould you like me to recommend a scenario based on your experience level?`,
                 timestamp: new Date()
             }])
         }
@@ -548,7 +438,7 @@ export default function TrainingStudioPage() {
                                 Dashboard
                             </Link>
                             <Link
-                                href="/auth/contracts"
+                                href="/auth/contracts-dashboard"
                                 className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
                             >
                                 Contract Studio
@@ -630,7 +520,7 @@ export default function TrainingStudioPage() {
                         </p>
                     </div>
                     <button
-                        onClick={() => setShowNewSessionModal(true)}
+                        onClick={startTraining}
                         className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -672,6 +562,11 @@ export default function TrainingStudioPage() {
                                 }`}
                         >
                             Past Sessions
+                            {pastSessions.length > 0 && (
+                                <span className="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                                    {pastSessions.length}
+                                </span>
+                            )}
                         </button>
                         <button
                             onClick={() => setActiveTab('progress')}
@@ -722,73 +617,72 @@ export default function TrainingStudioPage() {
                         )}
 
                         {/* Quick Start Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                            <div
-                                onClick={() => {
-                                    setSelectedScenario(scenarios.find(s => s.difficulty === 'beginner') || null)
-                                    setShowNewSessionModal(true)
-                                }}
-                                className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
-                            >
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-xl">
-                                        🌱
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold text-slate-800">Quick Start</h3>
-                                        <p className="text-xs text-slate-500">Perfect for beginners</p>
-                                    </div>
-                                </div>
-                                <p className="text-sm text-slate-600">Jump into a simple scenario and learn the basics.</p>
-                            </div>
-
-                            <div
-                                onClick={() => {
-                                    setCounterpartyType('ai')
-                                    setSelectedAiMode('cooperative')
-                                    setShowNewSessionModal(true)
-                                }}
-                                className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
-                            >
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-xl">
-                                        🤖
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="font-semibold text-slate-800">Practice with AI</h3>
-                                            <VideoPlayer videoCode="training-ai-opponent" variant="help-icon" />
+                        <div className="mb-8">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Start</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Full Custom Training */}
+                                <div
+                                    onClick={startTraining}
+                                    className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-xl">
+                                            ✨
                                         </div>
-                                        <p className="text-xs text-slate-500">CLARENCE as counterparty</p>
+                                        <div>
+                                            <h3 className="font-semibold text-slate-800">Custom Training</h3>
+                                            <p className="text-xs text-slate-500">Full customization</p>
+                                        </div>
                                     </div>
+                                    <p className="text-sm text-slate-600">Create a practice contract with full control over all settings.</p>
                                 </div>
-                                <p className="text-sm text-slate-600">Train against our AI with adjustable difficulty.</p>
-                            </div>
 
-                            <div
-                                onClick={() => {
-                                    setCounterpartyType('partner')
-                                    setShowNewSessionModal(true)
-                                }}
-                                className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
-                            >
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-xl">
-                                        👥
+                                {/* BPO Quick Start */}
+                                <div
+                                    onClick={() => startQuickScenario(QUICK_START_SCENARIOS[0])}
+                                    className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-xl">
+                                            🏢
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-semibold text-slate-800">BPO Agreement</h3>
+                                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">Beginner</span>
+                                            </div>
+                                            <p className="text-xs text-slate-500">Recommended first scenario</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="font-semibold text-slate-800">Train with Colleague</h3>
-                                        <p className="text-xs text-slate-500">Approved partners only</p>
-                                    </div>
+                                    <p className="text-sm text-slate-600">Learn outsourcing contract fundamentals.</p>
                                 </div>
-                                <p className="text-sm text-slate-600">Practice with an approved training partner.</p>
+
+                                {/* SaaS Quick Start */}
+                                <div
+                                    onClick={() => startQuickScenario(QUICK_START_SCENARIOS[1])}
+                                    className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-xl">
+                                            ☁️
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-semibold text-slate-800">SaaS Agreement</h3>
+                                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">Intermediate</span>
+                                            </div>
+                                            <p className="text-xs text-slate-500">Data protection focus</p>
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-slate-600">Practice software subscription negotiations.</p>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Scenarios List */}
+                        {/* All Scenarios List */}
                         <h2 className="text-lg font-semibold text-slate-800 mb-4">All Scenarios</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {scenarios.map(scenario => {
+                            {QUICK_START_SCENARIOS.map(scenario => {
                                 const difficulty = DIFFICULTY_COLORS[scenario.difficulty]
                                 return (
                                     <div
@@ -848,10 +742,7 @@ export default function TrainingStudioPage() {
 
                                         <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
                                             <button
-                                                onClick={() => {
-                                                    setSelectedScenario(scenario)
-                                                    setShowNewSessionModal(true)
-                                                }}
+                                                onClick={() => startQuickScenario(scenario)}
                                                 className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
                                             >
                                                 Start This Scenario
@@ -932,7 +823,7 @@ export default function TrainingStudioPage() {
                                 <h3 className="text-lg font-semibold mb-2 text-slate-800">No training sessions yet</h3>
                                 <p className="text-slate-500 mb-6 text-sm">Start your first training session to begin learning!</p>
                                 <button
-                                    onClick={() => setShowNewSessionModal(true)}
+                                    onClick={startTraining}
                                     className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg font-medium text-sm"
                                 >
                                     Start Training
@@ -951,7 +842,7 @@ export default function TrainingStudioPage() {
                                                 <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
                                                     <span>{session.sessionNumber}</span>
                                                     <span>•</span>
-                                                    <span>{session.counterpartyType === 'ai' ? `AI (${session.aiMode})` : session.counterpartyName}</span>
+                                                    <span>{session.counterpartyType === 'ai' ? `AI${session.aiMode ? ` (${session.aiMode})` : ''}` : session.counterpartyName}</span>
                                                     <span>•</span>
                                                     <span>{formatDate(session.createdAt)}</span>
                                                 </div>
@@ -967,7 +858,7 @@ export default function TrainingStudioPage() {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => router.push(`/auth/training/${session.sessionId}`)}
+                                                    onClick={() => resumeSession(session.sessionId)}
                                                     className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium"
                                                 >
                                                     Continue
@@ -998,192 +889,7 @@ export default function TrainingStudioPage() {
             </div>
 
             {/* ================================================================== */}
-            {/* SECTION 22: NEW SESSION MODAL */}
-            {/* ================================================================== */}
-            {showNewSessionModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-slate-200 bg-amber-50">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xl">🎓</span>
-                                    <h2 className="text-lg font-semibold text-slate-800">Start Training Session</h2>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        setShowNewSessionModal(false)
-                                        setSelectedScenario(null)
-                                        setSelectedPartner(null)
-                                    }}
-                                    className="text-slate-400 hover:text-slate-600"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Modal Body */}
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            {/* Step 1: Select Scenario */}
-                            <div>
-                                <h3 className="text-sm font-semibold text-slate-700 mb-3">1. Choose a Scenario</h3>
-                                <div className="grid grid-cols-1 gap-3">
-                                    {scenarios.map(scenario => {
-                                        const difficulty = DIFFICULTY_COLORS[scenario.difficulty]
-                                        const isSelected = selectedScenario?.scenarioId === scenario.scenarioId
-                                        return (
-                                            <button
-                                                key={scenario.scenarioId}
-                                                onClick={() => setSelectedScenario(scenario)}
-                                                className={`text-left p-4 rounded-lg border-2 transition-all ${isSelected
-                                                    ? 'border-amber-500 bg-amber-50'
-                                                    : 'border-slate-200 hover:border-slate-300'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <div className="font-medium text-slate-800">{scenario.scenarioName}</div>
-                                                        <div className="text-xs text-slate-500 mt-1">
-                                                            {formatDuration(scenario.estimatedDuration)} • {scenario.clauseCount} clauses
-                                                        </div>
-                                                    </div>
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${difficulty.bg} ${difficulty.text}`}>
-                                                        {difficulty.label}
-                                                    </span>
-                                                </div>
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Step 2: Select Counterparty */}
-                            <div>
-                                <h3 className="text-sm font-semibold text-slate-700 mb-3">2. Who will you train with?</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        onClick={() => setCounterpartyType('ai')}
-                                        className={`p-4 rounded-lg border-2 transition-all ${counterpartyType === 'ai'
-                                            ? 'border-amber-500 bg-amber-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                            }`}
-                                    >
-                                        <div className="text-2xl mb-2">🤖</div>
-                                        <div className="font-medium text-slate-800">CLARENCE AI</div>
-                                        <div className="text-xs text-slate-500">Instant feedback</div>
-                                    </button>
-                                    <button
-                                        onClick={() => setCounterpartyType('partner')}
-                                        className={`p-4 rounded-lg border-2 transition-all ${counterpartyType === 'partner'
-                                            ? 'border-amber-500 bg-amber-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                            }`}
-                                    >
-                                        <div className="text-2xl mb-2">👥</div>
-                                        <div className="font-medium text-slate-800">Training Partner</div>
-                                        <div className="text-xs text-slate-500">Practice together</div>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* AI Mode Selection */}
-                            {counterpartyType === 'ai' && (
-                                <div>
-                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">3. AI Difficulty</h3>
-                                    <div className="space-y-2">
-                                        {AI_MODES.map(mode => (
-                                            <button
-                                                key={mode.value}
-                                                onClick={() => setSelectedAiMode(mode.value as typeof selectedAiMode)}
-                                                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${selectedAiMode === mode.value
-                                                    ? 'border-amber-500 bg-amber-50'
-                                                    : 'border-slate-200 hover:border-slate-300'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-xl">{mode.icon}</span>
-                                                    <div className="flex-1">
-                                                        <div className="font-medium text-slate-800 flex items-center gap-2">
-                                                            {mode.label}
-                                                            {mode.recommended && (
-                                                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">Recommended</span>
-                                                            )}
-                                                        </div>
-                                                        <div className="text-xs text-slate-500">{mode.description}</div>
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Partner Selection */}
-                            {counterpartyType === 'partner' && (
-                                <div>
-                                    <h3 className="text-sm font-semibold text-slate-700 mb-3">3. Select Training Partner</h3>
-                                    {approvedPartners.length === 0 ? (
-                                        <div className="p-4 bg-slate-50 rounded-lg text-center">
-                                            <p className="text-sm text-slate-600 mb-2">No approved training partners yet.</p>
-                                            <p className="text-xs text-slate-500">Contact your administrator to add training partners.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {approvedPartners.map(partner => (
-                                                <button
-                                                    key={partner.id}
-                                                    onClick={() => setSelectedPartner(partner)}
-                                                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${selectedPartner?.id === partner.id
-                                                        ? 'border-amber-500 bg-amber-50'
-                                                        : 'border-slate-200 hover:border-slate-300'
-                                                        }`}
-                                                >
-                                                    <div className="font-medium text-slate-800">{partner.userName}</div>
-                                                    <div className="text-xs text-slate-500">{partner.userEmail}</div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
-                            <button
-                                onClick={() => {
-                                    setShowNewSessionModal(false)
-                                    setSelectedScenario(null)
-                                    setSelectedPartner(null)
-                                }}
-                                className="px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-lg font-medium text-sm"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={startNewTrainingSession}
-                                disabled={!selectedScenario || isCreatingSession || (counterpartyType === 'partner' && !selectedPartner)}
-                                className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                            >
-                                {isCreatingSession ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Creating...
-                                    </>
-                                ) : (
-                                    'Start Training'
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ================================================================== */}
-            {/* SECTION 23: CHAT PANEL */}
+            {/* SECTION 22: CHAT PANEL */}
             {/* ================================================================== */}
             {showChatPanel && (
                 <div className="fixed right-0 top-0 h-full w-full md:w-96 bg-white shadow-2xl z-50 flex flex-col">
@@ -1259,7 +965,7 @@ export default function TrainingStudioPage() {
             )}
 
             {/* ================================================================== */}
-            {/* SECTION 24: FLOATING CHAT BUTTON */}
+            {/* SECTION 23: FLOATING CHAT BUTTON */}
             {/* ================================================================== */}
             {!showChatPanel && (
                 <button
