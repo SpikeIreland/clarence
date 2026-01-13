@@ -265,11 +265,11 @@ export default function BetaTestingAdminDashboard() {
                 setAdminEmail(profile.email)
             } else {
                 console.log('❌ User is NOT admin, redirecting')
-                router.push('/dashboard')
+                router.push('/contracts-dashboard')
             }
         } catch (error) {
             console.error('Admin access check failed:', error)
-            router.push('/dashboard')
+            router.push('/contracts-dashboard')
         } finally {
             setLoading(false)
         }
@@ -808,7 +808,7 @@ export default function BetaTestingAdminDashboard() {
                         <div className="flex items-center gap-4">
                             <span className="text-sm text-slate-300">{adminEmail}</span>
                             <Link
-                                href="/dashboard"
+                                href="/contracts-dashboard"
                                 className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
                             >
                                 Dashboard

@@ -149,7 +149,7 @@ export default function Home() {
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Training, Tendering, Contracts
+              Training, Tendering, Contracting
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
               Three integrated studios that cover your complete contract lifecycle—from
