@@ -4,8 +4,9 @@
 // CLARENCE Training Studio - Lobby Page
 // ============================================================================
 // File: /app/auth/training/page.tsx
-// Purpose: Training mode lobby with scenarios, videos, and session management
-// Updated: Now uses create-contract page with ?mode=training
+// Purpose: Training mode lobby with clear Single Player vs Multi-Player modes
+// Single Player: Pre-built scenarios → Jump straight to negotiation
+// Multi-Player: Create contract → Invite training partner (mirrors Live)
 // ============================================================================
 
 // ============================================================================
@@ -38,18 +39,19 @@ interface TrainingScenario {
     scenarioName: string
     description: string
     difficulty: 'beginner' | 'intermediate' | 'advanced'
+    difficultyLabel: string
     industry: string
     contractType: string
-    estimatedDuration: number
+    estimatedDuration: number // minutes
     clauseCount: number
+    negotiableClauseCount: number
+    aiPersonality: 'cooperative' | 'balanced' | 'aggressive'
     learningObjectives: string[]
     isNew?: boolean
-    completedByUser?: boolean
-    // URL params to pass to create-contract
-    createContractParams?: {
-        contractType?: string
-        mediationType?: string
-    }
+    isFeatured?: boolean
+    iconEmoji: string
+    // For instant-play: references to pre-built contract
+    templateSessionId?: string
 }
 
 interface TrainingSession {
@@ -65,84 +67,192 @@ interface TrainingSession {
     lastActivityAt: string
 }
 
-interface ChatMessage {
-    id: string
-    type: 'user' | 'clarence'
-    content: string
-    timestamp: Date
+interface PendingInvitation {
+    invitationId: string
+    sessionId: string
+    contractName: string
+    inviterName: string
+    inviterEmail: string
+    createdAt: string
+}
+
+interface ApprovedPartner {
+    partnerId: string
+    name: string
+    email: string
+    company: string
+    avatarInitials: string
 }
 
 // ============================================================================
-// SECTION 3: CONSTANTS
+// SECTION 3: CONSTANTS & SCENARIO DATA
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
-const DIFFICULTY_COLORS = {
-    beginner: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Beginner' },
-    intermediate: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Intermediate' },
-    advanced: { bg: 'bg-red-100', text: 'text-red-700', label: 'Advanced' }
+const DIFFICULTY_CONFIG = {
+    beginner: {
+        bg: 'bg-emerald-100',
+        text: 'text-emerald-700',
+        border: 'border-emerald-200',
+        label: 'Beginner',
+        description: 'Great for learning the basics'
+    },
+    intermediate: {
+        bg: 'bg-amber-100',
+        text: 'text-amber-700',
+        border: 'border-amber-200',
+        label: 'Intermediate',
+        description: 'Some experience recommended'
+    },
+    advanced: {
+        bg: 'bg-red-100',
+        text: 'text-red-700',
+        border: 'border-red-200',
+        label: 'Advanced',
+        description: 'For experienced negotiators'
+    }
 }
 
-// Quick start scenarios that map to create-contract presets
-const QUICK_START_SCENARIOS: TrainingScenario[] = [
+const AI_PERSONALITY_CONFIG = {
+    cooperative: {
+        label: 'Cooperative',
+        description: 'AI seeks win-win outcomes',
+        icon: '🤝',
+        color: 'text-emerald-600'
+    },
+    balanced: {
+        label: 'Balanced',
+        description: 'AI plays fair but firm',
+        icon: '⚖️',
+        color: 'text-blue-600'
+    },
+    aggressive: {
+        label: 'Aggressive',
+        description: 'AI pushes hard for advantage',
+        icon: '🔥',
+        color: 'text-red-600'
+    }
+}
+
+// Pre-built scenarios for Single Player mode
+const SINGLE_PLAYER_SCENARIOS: TrainingScenario[] = [
     {
-        scenarioId: 'quick-bpo',
-        scenarioName: 'BPO Services Agreement - Basics',
-        description: 'Learn the fundamentals of negotiating a Business Process Outsourcing contract. Perfect for beginners.',
+        scenarioId: 'bpo-basics-101',
+        scenarioName: 'BPO Fundamentals',
+        description: 'Learn the core concepts of Business Process Outsourcing negotiations. Focus on liability caps, service levels, and payment terms.',
         difficulty: 'beginner',
+        difficultyLabel: 'Beginner',
         industry: 'Business Services',
         contractType: 'BPO Agreement',
-        estimatedDuration: 20,
-        clauseCount: 12,
+        estimatedDuration: 15,
+        clauseCount: 8,
+        negotiableClauseCount: 5,
+        aiPersonality: 'cooperative',
         learningObjectives: [
             'Understand liability cap structures',
-            'Navigate service level agreements',
-            'Handle payment terms negotiation'
+            'Navigate service level basics',
+            'Practice payment term negotiation'
         ],
         isNew: true,
-        createContractParams: {
-            contractType: 'bpo',
-            mediationType: 'full_mediation'
-        }
+        isFeatured: true,
+        iconEmoji: '🏢'
     },
     {
-        scenarioId: 'quick-saas',
-        scenarioName: 'SaaS Agreement - Data Protection Focus',
-        description: 'Practice negotiating data protection and security clauses in a SaaS context.',
+        scenarioId: 'bpo-service-levels',
+        scenarioName: 'BPO Service Level Deep Dive',
+        description: 'Master the art of negotiating SLAs, KPIs, and performance credits in an outsourcing context.',
         difficulty: 'intermediate',
+        difficultyLabel: 'Intermediate',
+        industry: 'Business Services',
+        contractType: 'BPO Agreement',
+        estimatedDuration: 25,
+        clauseCount: 12,
+        negotiableClauseCount: 8,
+        aiPersonality: 'balanced',
+        learningObjectives: [
+            'Define meaningful SLA metrics',
+            'Structure performance credits',
+            'Balance flexibility with accountability'
+        ],
+        isFeatured: true,
+        iconEmoji: '📊'
+    },
+    {
+        scenarioId: 'saas-data-protection',
+        scenarioName: 'SaaS Data Protection',
+        description: 'Navigate the complexities of data protection, security requirements, and GDPR compliance in software agreements.',
+        difficulty: 'intermediate',
+        difficultyLabel: 'Intermediate',
+        industry: 'Technology',
+        contractType: 'SaaS Agreement',
+        estimatedDuration: 30,
+        clauseCount: 14,
+        negotiableClauseCount: 9,
+        aiPersonality: 'balanced',
+        learningObjectives: [
+            'Master data protection clauses',
+            'Understand GDPR requirements',
+            'Balance security with usability'
+        ],
+        iconEmoji: '🔐'
+    },
+    {
+        scenarioId: 'saas-liability-battle',
+        scenarioName: 'SaaS Liability Showdown',
+        description: 'An aggressive provider pushes for minimal liability. Can you protect your interests while keeping the deal alive?',
+        difficulty: 'advanced',
+        difficultyLabel: 'Advanced',
         industry: 'Technology',
         contractType: 'SaaS Agreement',
         estimatedDuration: 35,
-        clauseCount: 18,
+        clauseCount: 10,
+        negotiableClauseCount: 6,
+        aiPersonality: 'aggressive',
         learningObjectives: [
-            'Master data protection clause negotiation',
-            'Understand GDPR compliance requirements',
-            'Balance security with operational flexibility'
+            'Handle aggressive counterparties',
+            'Identify deal breakers',
+            'Strategic trade-off decisions'
         ],
-        createContractParams: {
-            contractType: 'saas',
-            mediationType: 'full_mediation'
-        }
+        iconEmoji: '⚔️'
     },
     {
-        scenarioId: 'quick-msa',
-        scenarioName: 'Master Services Agreement',
-        description: 'Advanced scenario covering umbrella agreements for ongoing service relationships.',
+        scenarioId: 'msa-complex-terms',
+        scenarioName: 'MSA Complex Negotiation',
+        description: 'A comprehensive Master Services Agreement with multiple service streams and complex governance structures.',
         difficulty: 'advanced',
+        difficultyLabel: 'Advanced',
         industry: 'Professional Services',
-        contractType: 'MSA',
-        estimatedDuration: 60,
-        clauseCount: 28,
+        contractType: 'Master Services Agreement',
+        estimatedDuration: 45,
+        clauseCount: 22,
+        negotiableClauseCount: 15,
+        aiPersonality: 'balanced',
         learningObjectives: [
-            'Manage complex service definitions',
-            'Strategic trade-off decisions',
-            'Complex termination scenarios'
+            'Manage multi-faceted agreements',
+            'Structure governance frameworks',
+            'Navigate complex termination rights'
         ],
-        createContractParams: {
-            contractType: 'msa',
-            mediationType: 'full_mediation'
-        }
+        iconEmoji: '📋'
+    },
+    {
+        scenarioId: 'nda-quick-fire',
+        scenarioName: 'NDA Quick Fire',
+        description: 'A fast-paced NDA negotiation. Simple terms, quick decisions. Perfect for warming up.',
+        difficulty: 'beginner',
+        difficultyLabel: 'Beginner',
+        industry: 'General',
+        contractType: 'NDA',
+        estimatedDuration: 10,
+        clauseCount: 5,
+        negotiableClauseCount: 4,
+        aiPersonality: 'cooperative',
+        learningObjectives: [
+            'Quick decision making',
+            'Core confidentiality concepts',
+            'Efficient negotiation flow'
+        ],
+        iconEmoji: '🔒'
     }
 ]
 
@@ -163,23 +273,34 @@ export default function TrainingStudioPage() {
     const [loading, setLoading] = useState(true)
     const [showUserMenu, setShowUserMenu] = useState(false)
 
-    // Sessions
+    // Game mode selection
+    const [selectedMode, setSelectedMode] = useState<'single' | 'multi' | null>(null)
+
+    // Single player
+    const [selectedScenario, setSelectedScenario] = useState<TrainingScenario | null>(null)
+    const [isStartingScenario, setIsStartingScenario] = useState(false)
+    const [scenarioFilter, setScenarioFilter] = useState<'all' | 'beginner' | 'intermediate' | 'advanced'>('all')
+
+    // Multi-player
+    const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
+    const [approvedPartners, setApprovedPartners] = useState<ApprovedPartner[]>([])
+
+    // Sessions history
     const [pastSessions, setPastSessions] = useState<TrainingSession[]>([])
 
     // Chat state
     const [showChatPanel, setShowChatPanel] = useState(false)
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+    const [chatMessages, setChatMessages] = useState<{ id: string; type: 'user' | 'clarence'; content: string; timestamp: Date }[]>([])
     const [chatInput, setChatInput] = useState('')
     const [isChatLoading, setIsChatLoading] = useState(false)
 
     // View state
-    const [activeTab, setActiveTab] = useState<'scenarios' | 'videos' | 'history' | 'progress'>('scenarios')
+    const [activeTab, setActiveTab] = useState<'play' | 'videos' | 'history' | 'progress'>('play')
 
     // ==========================================================================
     // SECTION 6: VIDEO DATA HOOK
     // ==========================================================================
 
-    // Fetch featured training videos
     const { videos: featuredVideos, loading: videosLoading } = useVideos({
         category: 'training',
         featuredOnly: true,
@@ -187,7 +308,7 @@ export default function TrainingStudioPage() {
     })
 
     // ==========================================================================
-    // SECTION 7: AUTHENTICATION & DATA LOADING
+    // SECTION 7: DATA LOADING
     // ==========================================================================
 
     const loadUserInfo = useCallback(async () => {
@@ -196,7 +317,6 @@ export default function TrainingStudioPage() {
             router.push('/auth/login')
             return
         }
-
         const authData = JSON.parse(auth)
         setUserInfo(authData.userInfo)
     }, [router])
@@ -207,13 +327,15 @@ export default function TrainingStudioPage() {
             if (!auth) return
 
             const authData = JSON.parse(auth)
+            const userId = authData.userInfo?.userId
+            const companyId = authData.userInfo?.companyId
 
             // Load past training sessions
             const { data: sessionsData } = await supabase
                 .from('sessions')
                 .select('*')
                 .eq('is_training', true)
-                .eq('customer_id', authData.userInfo?.userId)
+                .eq('customer_id', userId)
                 .order('updated_at', { ascending: false })
                 .limit(10)
 
@@ -233,6 +355,23 @@ export default function TrainingStudioPage() {
                 setPastSessions(mapped)
             }
 
+            // Load pending invitations (where current user is invited)
+            // TODO: Implement when invitation system is ready
+            // const { data: invitations } = await supabase
+            //     .from('training_invitations')
+            //     .select('*')
+            //     .eq('invitee_id', userId)
+            //     .eq('status', 'pending')
+
+            // Load approved partners (same company)
+            // TODO: Implement when partner system is ready
+            // const { data: partners } = await supabase
+            //     .from('users')
+            //     .select('*')
+            //     .eq('company_id', companyId)
+            //     .neq('user_id', userId)
+            //     .eq('training_partner_approved', true)
+
         } catch (error) {
             console.error('Error loading training data:', error)
         } finally {
@@ -241,7 +380,42 @@ export default function TrainingStudioPage() {
     }, [supabase])
 
     // ==========================================================================
-    // SECTION 8: SIGN OUT
+    // SECTION 8: EFFECTS
+    // ==========================================================================
+
+    useEffect(() => {
+        loadUserInfo()
+        loadTrainingData()
+    }, [loadUserInfo, loadTrainingData])
+
+    useEffect(() => {
+        if (showChatPanel && chatMessages.length === 0) {
+            setChatMessages([{
+                id: '1',
+                type: 'clarence',
+                content: `Welcome to the Training Studio, ${userInfo?.firstName || 'there'}! 🎓\n\n**Single Player** - Practice against me (CLARENCE AI). Choose a scenario and jump straight into negotiation.\n\n**Multi-Player** - Set up a training contract and invite a colleague to practice together.\n\nWhat would you like to try?`,
+                timestamp: new Date()
+            }])
+        }
+    }, [showChatPanel, chatMessages.length, userInfo])
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [chatMessages])
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            const target = event.target as Element
+            if (showUserMenu && !target.closest('.user-menu-container')) {
+                setShowUserMenu(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [showUserMenu])
+
+    // ==========================================================================
+    // SECTION 9: HANDLERS
     // ==========================================================================
 
     async function handleSignOut() {
@@ -256,49 +430,69 @@ export default function TrainingStudioPage() {
         }
     }
 
-    // ==========================================================================
-    // SECTION 9: NAVIGATION HANDLERS
-    // ==========================================================================
+    async function startSinglePlayerScenario(scenario: TrainingScenario) {
+        setIsStartingScenario(true)
+        setSelectedScenario(scenario)
 
-    function startTraining() {
-        // Navigate to create-contract with training mode
-        eventLogger.started('training_session', 'start_training', {})
-        router.push('/auth/create-contract?mode=training')
+        try {
+            eventLogger.started('training_session', 'single_player_scenario', {
+                scenarioId: scenario.scenarioId,
+                difficulty: scenario.difficulty,
+                aiPersonality: scenario.aiPersonality
+            })
+
+            // Call API to create/clone the training session from scenario template
+            const response = await fetch(`${API_BASE}/training-start-scenario`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: userInfo?.userId,
+                    scenarioId: scenario.scenarioId,
+                    scenarioName: scenario.scenarioName,
+                    aiPersonality: scenario.aiPersonality,
+                    contractType: scenario.contractType
+                })
+            })
+
+            const result = await response.json()
+
+            if (result.success && result.sessionId) {
+                // Navigate directly to the training negotiation studio
+                router.push(`/auth/training/${result.sessionId}`)
+            } else {
+                // Fallback: show error or use placeholder
+                console.error('Failed to start scenario:', result.error)
+                alert('Unable to start scenario. Please try again.')
+            }
+        } catch (error) {
+            console.error('Error starting scenario:', error)
+            alert('Unable to start scenario. Please try again.')
+        } finally {
+            setIsStartingScenario(false)
+            setSelectedScenario(null)
+        }
     }
 
-    function startQuickScenario(scenario: TrainingScenario) {
-        // Navigate to create-contract with training mode and preset params
-        eventLogger.started('training_session', 'quick_scenario', {
-            scenarioId: scenario.scenarioId,
-            contractType: scenario.createContractParams?.contractType
-        })
-
-        let url = '/auth/create-contract?mode=training'
-
-        if (scenario.createContractParams?.contractType) {
-            url += `&preset_contract_type=${scenario.createContractParams.contractType}`
-        }
-        if (scenario.createContractParams?.mediationType) {
-            url += `&preset_mediation_type=${scenario.createContractParams.mediationType}`
-        }
-
-        router.push(url)
+    function startMultiPlayerSetup() {
+        eventLogger.started('training_session', 'multi_player_setup', {})
+        router.push('/auth/create-contract?mode=training')
     }
 
     function resumeSession(sessionId: string) {
         router.push(`/auth/training/${sessionId}`)
     }
 
-    // ==========================================================================
-    // SECTION 10: CHAT FUNCTIONS
-    // ==========================================================================
+    function acceptInvitation(invitation: PendingInvitation) {
+        router.push(`/auth/training/${invitation.sessionId}`)
+    }
 
+    // Chat handler
     async function sendChatMessage() {
         if (!chatInput.trim() || isChatLoading) return
 
-        const userMessage: ChatMessage = {
+        const userMessage = {
             id: Date.now().toString(),
-            type: 'user',
+            type: 'user' as const,
             content: chatInput,
             timestamp: new Date()
         }
@@ -321,20 +515,18 @@ export default function TrainingStudioPage() {
 
             const data = await response.json()
 
-            const clarenceMessage: ChatMessage = {
+            setChatMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 type: 'clarence',
-                content: data.response || data.message || "I'm here to help you learn! What would you like to practice today?",
+                content: data.response || data.message || "I'm here to help! What would you like to practice?",
                 timestamp: new Date()
-            }
-
-            setChatMessages(prev => [...prev, clarenceMessage])
+            }])
         } catch (error) {
             console.error('Chat error:', error)
             setChatMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 type: 'clarence',
-                content: "I'm having trouble connecting right now. Please try again.",
+                content: "I'm having trouble connecting. Please try again.",
                 timestamp: new Date()
             }])
         } finally {
@@ -343,42 +535,7 @@ export default function TrainingStudioPage() {
     }
 
     // ==========================================================================
-    // SECTION 11: EFFECTS
-    // ==========================================================================
-
-    useEffect(() => {
-        loadUserInfo()
-        loadTrainingData()
-    }, [loadUserInfo, loadTrainingData])
-
-    useEffect(() => {
-        if (showChatPanel && chatMessages.length === 0) {
-            setChatMessages([{
-                id: '1',
-                type: 'clarence',
-                content: `Welcome to Training Mode, ${userInfo?.firstName || 'there'}! 🎓\n\nThis is a safe space to practice negotiations without any real-world consequences.\n\nClick **"Start Training"** to create a practice contract, or select a **Quick Start** scenario below.\n\nWould you like me to recommend a scenario based on your experience level?`,
-                timestamp: new Date()
-            }])
-        }
-    }, [showChatPanel, chatMessages.length, userInfo])
-
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [chatMessages])
-
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            const target = event.target as Element
-            if (showUserMenu && !target.closest('.user-menu-container')) {
-                setShowUserMenu(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [showUserMenu])
-
-    // ==========================================================================
-    // SECTION 12: HELPER FUNCTIONS
+    // SECTION 10: HELPERS
     // ==========================================================================
 
     function formatDate(dateString: string): string {
@@ -396,61 +553,58 @@ export default function TrainingStudioPage() {
         return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`
     }
 
+    const filteredScenarios = scenarioFilter === 'all'
+        ? SINGLE_PLAYER_SCENARIOS
+        : SINGLE_PLAYER_SCENARIOS.filter(s => s.difficulty === scenarioFilter)
+
     // ==========================================================================
-    // SECTION 13: RENDER
+    // SECTION 11: RENDER
     // ==========================================================================
 
     return (
-        <div className="min-h-screen bg-amber-50/30">
-            {/* ================================================================== */}
-            {/* SECTION 14: TRAINING MODE BANNER */}
-            {/* ================================================================== */}
-            <div className="bg-amber-500 text-white py-2 px-4">
+        <div className="min-h-screen bg-slate-900">
+            {/* ================================================================ */}
+            {/* SECTION 12: TRAINING MODE BANNER */}
+            {/* ================================================================ */}
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2 px-4">
                 <div className="container mx-auto flex items-center justify-center gap-2 text-sm font-medium">
-                    <span>🎓</span>
-                    <span>TRAINING MODE - Sessions are for practice only. Outcomes are non-binding.</span>
+                    <span>🎮</span>
+                    <span>TRAINING MODE - Practice negotiations in a risk-free environment</span>
                 </div>
             </div>
 
-            {/* ================================================================== */}
-            {/* SECTION 15: NAVIGATION HEADER */}
-            {/* ================================================================== */}
-            <header className="bg-slate-800 text-white">
+            {/* ================================================================ */}
+            {/* SECTION 13: NAVIGATION HEADER */}
+            {/* ================================================================ */}
+            <header className="bg-slate-800 border-b border-slate-700">
                 <div className="container mx-auto px-6">
                     <nav className="flex justify-between items-center h-16">
-                        {/* Logo & Brand */}
+                        {/* Logo */}
                         <Link href="/" className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center">
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
                             <div>
                                 <div className="font-semibold text-white tracking-wide">CLARENCE</div>
-                                <div className="text-xs text-amber-400">Training Mode</div>
+                                <div className="text-xs text-amber-400">Training Studio</div>
                             </div>
                         </Link>
 
-                        {/* Center: Navigation Links */}
+                        {/* Center Nav */}
                         <div className="hidden md:flex items-center gap-6">
-                            <Link
-                                href="/dashboard"
-                                className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
-                            >
+                            <Link href="/dashboard" className="text-slate-400 hover:text-white text-sm transition-colors">
                                 Dashboard
                             </Link>
-                            <Link
-                                href="/auth/contracts-dashboard"
-                                className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
-                            >
-                                Contract Studio
+                            <Link href="/auth/contracts-dashboard" className="text-slate-400 hover:text-white text-sm transition-colors">
+                                Live Contracts
                             </Link>
                         </div>
 
-                        {/* Right: Actions */}
+                        {/* Right Actions */}
                         <div className="flex items-center gap-4">
-                            {/* Ask CLARENCE */}
                             <button
                                 onClick={() => setShowChatPanel(!showChatPanel)}
-                                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm transition-colors"
+                                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-white text-sm transition-colors"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
@@ -458,7 +612,7 @@ export default function TrainingStudioPage() {
                                 Ask CLARENCE
                             </button>
 
-                            {/* User Dropdown */}
+                            {/* User Menu */}
                             <div className="relative user-menu-container">
                                 <button
                                     onClick={() => setShowUserMenu(!showUserMenu)}
@@ -467,8 +621,8 @@ export default function TrainingStudioPage() {
                                     <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
                                         {userInfo?.firstName?.[0]}{userInfo?.lastName?.[0]}
                                     </div>
-                                    <span className="hidden sm:block text-sm">{userInfo?.firstName}</span>
-                                    <svg className={`w-4 h-4 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span className="hidden sm:block text-sm text-white">{userInfo?.firstName}</span>
+                                    <svg className={`w-4 h-4 text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
                                 </button>
@@ -503,328 +657,377 @@ export default function TrainingStudioPage() {
                 </div>
             </header>
 
-            {/* ================================================================== */}
-            {/* SECTION 16: MAIN CONTENT */}
-            {/* ================================================================== */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {/* ================================================================ */}
+            {/* SECTION 14: MAIN CONTENT */}
+            {/* ================================================================ */}
+            <main className="container mx-auto px-6 py-8">
 
-                {/* Page Header */}
-                <div className="flex justify-between items-start mb-8">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-800 mb-1 flex items-center gap-2">
-                            <span>🎓</span>
-                            Training Studio
-                        </h1>
-                        <p className="text-slate-500 text-sm">
-                            Practice negotiations in a risk-free environment
-                        </p>
-                    </div>
-                    <button
-                        onClick={startTraining}
-                        className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        Start Training
-                    </button>
+                {/* Page Title */}
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-bold text-white mb-2">🎮 Training Studio</h1>
+                    <p className="text-slate-400">Master contract negotiation in a risk-free environment</p>
                 </div>
 
-                {/* ================================================================ */}
-                {/* SECTION 17: TAB NAVIGATION */}
-                {/* ================================================================ */}
-                <div className="border-b border-slate-200 mb-6">
-                    <div className="flex gap-6">
+                {/* ============================================================ */}
+                {/* SECTION 15: TAB NAVIGATION */}
+                {/* ============================================================ */}
+                <div className="flex justify-center mb-8">
+                    <div className="bg-slate-800 rounded-xl p-1 inline-flex">
                         <button
-                            onClick={() => setActiveTab('scenarios')}
-                            className={`pb-3 text-sm font-medium transition-colors ${activeTab === 'scenarios'
-                                ? 'text-amber-600 border-b-2 border-amber-600'
-                                : 'text-slate-500 hover:text-slate-700'
+                            onClick={() => setActiveTab('play')}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'play'
+                                    ? 'bg-amber-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
                                 }`}
                         >
-                            Scenarios
+                            🎮 Play
                         </button>
                         <button
                             onClick={() => setActiveTab('videos')}
-                            className={`pb-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'videos'
-                                ? 'text-amber-600 border-b-2 border-amber-600'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'videos'
+                                    ? 'bg-amber-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
                                 }`}
                         >
-                            <span>📺</span>
-                            Tutorials
+                            📺 Learn
                         </button>
                         <button
                             onClick={() => setActiveTab('history')}
-                            className={`pb-3 text-sm font-medium transition-colors ${activeTab === 'history'
-                                ? 'text-amber-600 border-b-2 border-amber-600'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'history'
+                                    ? 'bg-amber-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
                                 }`}
                         >
-                            Past Sessions
+                            📜 History
                             {pastSessions.length > 0 && (
-                                <span className="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                                <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeTab === 'history' ? 'bg-amber-600' : 'bg-slate-700'
+                                    }`}>
                                     {pastSessions.length}
                                 </span>
                             )}
                         </button>
                         <button
                             onClick={() => setActiveTab('progress')}
-                            className={`pb-3 text-sm font-medium transition-colors ${activeTab === 'progress'
-                                ? 'text-amber-600 border-b-2 border-amber-600'
-                                : 'text-slate-500 hover:text-slate-700'
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'progress'
+                                    ? 'bg-amber-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
                                 }`}
                         >
-                            My Progress
+                            📊 Progress
                         </button>
                     </div>
                 </div>
 
-                {/* ================================================================ */}
-                {/* SECTION 18: SCENARIOS TAB */}
-                {/* ================================================================ */}
-                {activeTab === 'scenarios' && (
-                    <div className="space-y-6">
+                {/* ============================================================ */}
+                {/* SECTION 16: PLAY TAB - MODE SELECTION */}
+                {/* ============================================================ */}
+                {activeTab === 'play' && (
+                    <div className="space-y-8">
 
-                        {/* Featured Tutorial Videos - Show only if videos exist */}
-                        {featuredVideos.length > 0 && (
-                            <div className="mb-8">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-lg">📺</span>
-                                        <h2 className="text-lg font-semibold text-slate-800">Learn Before You Practice</h2>
+                        {/* Mode Selection Cards */}
+                        <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+
+                            {/* Single Player Card */}
+                            <div
+                                onClick={() => setSelectedMode('single')}
+                                className={`relative bg-slate-800 rounded-2xl p-6 cursor-pointer transition-all hover:scale-[1.02] ${selectedMode === 'single'
+                                        ? 'ring-2 ring-amber-500 bg-slate-750'
+                                        : 'hover:bg-slate-750'
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-3xl">
+                                        🤖
                                     </div>
-                                    <button
-                                        onClick={() => setActiveTab('videos')}
-                                        className="text-sm text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1"
-                                    >
-                                        View all tutorials
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    <div className="flex-1">
+                                        <h3 className="text-xl font-bold text-white mb-1">Single Player</h3>
+                                        <p className="text-slate-400 text-sm mb-3">Practice against CLARENCE AI</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Instant Start</span>
+                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">AI Difficulty Levels</span>
+                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Pre-built Scenarios</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {selectedMode === 'single' && (
+                                    <div className="absolute top-4 right-4 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                                         </svg>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Multi-Player Card */}
+                            <div
+                                onClick={() => setSelectedMode('multi')}
+                                className={`relative bg-slate-800 rounded-2xl p-6 cursor-pointer transition-all hover:scale-[1.02] ${selectedMode === 'multi'
+                                        ? 'ring-2 ring-amber-500 bg-slate-750'
+                                        : 'hover:bg-slate-750'
+                                    }`}
+                            >
+                                <div className="flex items-start gap-4">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center text-3xl">
+                                        👥
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="text-xl font-bold text-white mb-1">Multi-Player</h3>
+                                        <p className="text-slate-400 text-sm mb-3">Practice with a training partner</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Custom Contracts</span>
+                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Real Counterparty</span>
+                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Role Swap</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {selectedMode === 'multi' && (
+                                    <div className="absolute top-4 right-4 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* ======================================================== */}
+                        {/* SECTION 17: SINGLE PLAYER - SCENARIO LIBRARY */}
+                        {/* ======================================================== */}
+                        {selectedMode === 'single' && (
+                            <div className="mt-8">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">📚 Scenario Library</h2>
+                                        <p className="text-slate-400 text-sm">Select a scenario to start practicing immediately</p>
+                                    </div>
+
+                                    {/* Difficulty Filter */}
+                                    <div className="flex gap-2">
+                                        {(['all', 'beginner', 'intermediate', 'advanced'] as const).map(filter => (
+                                            <button
+                                                key={filter}
+                                                onClick={() => setScenarioFilter(filter)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${scenarioFilter === filter
+                                                        ? 'bg-amber-500 text-white'
+                                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                                    }`}
+                                            >
+                                                {filter === 'all' ? 'All Levels' : DIFFICULTY_CONFIG[filter].label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Scenario Grid */}
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {filteredScenarios.map(scenario => {
+                                        const difficulty = DIFFICULTY_CONFIG[scenario.difficulty]
+                                        const aiConfig = AI_PERSONALITY_CONFIG[scenario.aiPersonality]
+
+                                        return (
+                                            <div
+                                                key={scenario.scenarioId}
+                                                className="bg-slate-800 rounded-xl overflow-hidden hover:bg-slate-750 transition-all group"
+                                            >
+                                                {/* Card Header */}
+                                                <div className="p-5">
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-2xl">
+                                                                {scenario.iconEmoji}
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="font-semibold text-white group-hover:text-amber-400 transition-colors">
+                                                                    {scenario.scenarioName}
+                                                                </h3>
+                                                                <p className="text-xs text-slate-500">{scenario.contractType}</p>
+                                                            </div>
+                                                        </div>
+                                                        {scenario.isNew && (
+                                                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded-full font-medium">
+                                                                NEW
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <p className="text-sm text-slate-400 mb-4 line-clamp-2">
+                                                        {scenario.description}
+                                                    </p>
+
+                                                    {/* Meta Info */}
+                                                    <div className="flex flex-wrap gap-2 mb-4">
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${difficulty.bg} ${difficulty.text}`}>
+                                                            {difficulty.label}
+                                                        </span>
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium bg-slate-700 ${aiConfig.color}`}>
+                                                            {aiConfig.icon} {aiConfig.label} AI
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Stats */}
+                                                    <div className="flex items-center gap-4 text-xs text-slate-500">
+                                                        <span className="flex items-center gap-1">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            {formatDuration(scenario.estimatedDuration)}
+                                                        </span>
+                                                        <span className="flex items-center gap-1">
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                            </svg>
+                                                            {scenario.negotiableClauseCount} clauses
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Card Footer - Play Button */}
+                                                <div className="px-5 py-3 bg-slate-700/50 border-t border-slate-700">
+                                                    <button
+                                                        onClick={() => startSinglePlayerScenario(scenario)}
+                                                        disabled={isStartingScenario}
+                                                        className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/50 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                    >
+                                                        {isStartingScenario && selectedScenario?.scenarioId === scenario.scenarioId ? (
+                                                            <>
+                                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                                Starting...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                                    <path d="M8 5v14l11-7z" />
+                                                                </svg>
+                                                                Play Now
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+
+                                {filteredScenarios.length === 0 && (
+                                    <div className="text-center py-12">
+                                        <p className="text-slate-400">No scenarios found for this difficulty level.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ======================================================== */}
+                        {/* SECTION 18: MULTI-PLAYER - SETUP & INVITATIONS */}
+                        {/* ======================================================== */}
+                        {selectedMode === 'multi' && (
+                            <div className="mt-8 max-w-2xl mx-auto">
+
+                                {/* Start New Multi-Player */}
+                                <div className="bg-slate-800 rounded-xl p-6 mb-6">
+                                    <h3 className="text-lg font-semibold text-white mb-2">Start a New Training Session</h3>
+                                    <p className="text-slate-400 text-sm mb-4">
+                                        Create a practice contract and invite a colleague from your organisation to negotiate.
+                                    </p>
+                                    <button
+                                        onClick={startMultiPlayerSetup}
+                                        className="w-full py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        Create Training Contract
                                     </button>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    {featuredVideos.map(video => (
-                                        <VideoPlayer
-                                            key={video.video_id}
-                                            videoCode={video.video_code}
-                                            variant="card"
-                                        />
-                                    ))}
+
+                                {/* Pending Invitations */}
+                                <div className="bg-slate-800 rounded-xl p-6">
+                                    <h3 className="text-lg font-semibold text-white mb-4">Pending Invitations</h3>
+
+                                    {pendingInvitations.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                <span className="text-2xl">📬</span>
+                                            </div>
+                                            <p className="text-slate-400 text-sm">No pending invitations</p>
+                                            <p className="text-slate-500 text-xs mt-1">When a colleague invites you to train, it will appear here.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {pendingInvitations.map(inv => (
+                                                <div key={inv.invitationId} className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+                                                    <div>
+                                                        <p className="font-medium text-white">{inv.contractName}</p>
+                                                        <p className="text-sm text-slate-400">From {inv.inviterName}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => acceptInvitation(inv)}
+                                                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium"
+                                                    >
+                                                        Join Session
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
 
-                        {/* Quick Start Cards */}
-                        <div className="mb-8">
-                            <h2 className="text-lg font-semibold text-slate-800 mb-4">Quick Start</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* Full Custom Training */}
-                                <div
-                                    onClick={startTraining}
-                                    className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
-                                >
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center text-xl">
-                                            ✨
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold text-slate-800">Custom Training</h3>
-                                            <p className="text-xs text-slate-500">Full customization</p>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-slate-600">Create a practice contract with full control over all settings.</p>
-                                </div>
-
-                                {/* BPO Quick Start */}
-                                <div
-                                    onClick={() => startQuickScenario(QUICK_START_SCENARIOS[0])}
-                                    className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
-                                >
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-xl">
-                                            🏢
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="font-semibold text-slate-800">BPO Agreement</h3>
-                                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">Beginner</span>
-                                            </div>
-                                            <p className="text-xs text-slate-500">Recommended first scenario</p>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-slate-600">Learn outsourcing contract fundamentals.</p>
-                                </div>
-
-                                {/* SaaS Quick Start */}
-                                <div
-                                    onClick={() => startQuickScenario(QUICK_START_SCENARIOS[1])}
-                                    className="bg-white p-5 rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all cursor-pointer"
-                                >
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-xl">
-                                            ☁️
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="font-semibold text-slate-800">SaaS Agreement</h3>
-                                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">Intermediate</span>
-                                            </div>
-                                            <p className="text-xs text-slate-500">Data protection focus</p>
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-slate-600">Practice software subscription negotiations.</p>
-                                </div>
+                        {/* No Mode Selected - Prompt */}
+                        {!selectedMode && (
+                            <div className="text-center py-12">
+                                <p className="text-slate-400">👆 Select a mode above to get started</p>
                             </div>
-                        </div>
-
-                        {/* All Scenarios List */}
-                        <h2 className="text-lg font-semibold text-slate-800 mb-4">All Scenarios</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {QUICK_START_SCENARIOS.map(scenario => {
-                                const difficulty = DIFFICULTY_COLORS[scenario.difficulty]
-                                return (
-                                    <div
-                                        key={scenario.scenarioId}
-                                        className="bg-white rounded-xl border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all overflow-hidden"
-                                    >
-                                        <div className="p-5">
-                                            <div className="flex items-start justify-between mb-3">
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <h3 className="font-semibold text-slate-800">{scenario.scenarioName}</h3>
-                                                        {scenario.isNew && (
-                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">NEW</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                                                        <span>{scenario.industry}</span>
-                                                        <span>•</span>
-                                                        <span>{scenario.contractType}</span>
-                                                    </div>
-                                                </div>
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${difficulty.bg} ${difficulty.text}`}>
-                                                    {difficulty.label}
-                                                </span>
-                                            </div>
-
-                                            <p className="text-sm text-slate-600 mb-4">{scenario.description}</p>
-
-                                            <div className="flex items-center gap-4 text-xs text-slate-500 mb-4">
-                                                <span className="flex items-center gap-1">
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                    {formatDuration(scenario.estimatedDuration)}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
-                                                    {scenario.clauseCount} clauses
-                                                </span>
-                                            </div>
-
-                                            {/* Learning Objectives */}
-                                            <div className="border-t border-slate-100 pt-4">
-                                                <p className="text-xs font-medium text-slate-500 mb-2">You'll learn:</p>
-                                                <ul className="space-y-1">
-                                                    {scenario.learningObjectives.slice(0, 2).map((obj, i) => (
-                                                        <li key={i} className="text-xs text-slate-600 flex items-start gap-2">
-                                                            <span className="text-amber-500">✓</span>
-                                                            {obj}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        </div>
-
-                                        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
-                                            <button
-                                                onClick={() => startQuickScenario(scenario)}
-                                                className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
-                                            >
-                                                Start This Scenario
-                                            </button>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
+                        )}
                     </div>
                 )}
 
-                {/* ================================================================ */}
+                {/* ============================================================ */}
                 {/* SECTION 19: VIDEOS TAB */}
-                {/* ================================================================ */}
+                {/* ============================================================ */}
                 {activeTab === 'videos' && (
                     <div className="space-y-8">
-                        {/* Getting Started Section */}
-                        <div>
+                        <div className="bg-slate-800 rounded-xl p-6">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">👋</span>
-                                <h2 className="text-lg font-semibold text-slate-800">Getting Started</h2>
+                                <h2 className="text-lg font-semibold text-white">Getting Started</h2>
                             </div>
-                            <p className="text-sm text-slate-500 mb-4">
-                                New to CLARENCE? Start here to learn the basics.
-                            </p>
                             <VideoGrid category="onboarding" limit={6} />
                         </div>
 
-                        {/* Training Mode Section */}
-                        <div>
+                        <div className="bg-slate-800 rounded-xl p-6">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">🎓</span>
-                                <h2 className="text-lg font-semibold text-slate-800">Training Mode</h2>
+                                <h2 className="text-lg font-semibold text-white">Training Mode</h2>
                             </div>
-                            <p className="text-sm text-slate-500 mb-4">
-                                Learn how to get the most out of your training sessions.
-                            </p>
                             <VideoGrid category="training" />
                         </div>
 
-                        {/* Negotiation Skills Section */}
-                        <div>
+                        <div className="bg-slate-800 rounded-xl p-6">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">⚖️</span>
-                                <h2 className="text-lg font-semibold text-slate-800">Negotiation Skills</h2>
+                                <h2 className="text-lg font-semibold text-white">Negotiation Skills</h2>
                             </div>
-                            <p className="text-sm text-slate-500 mb-4">
-                                Master the art of contract negotiation.
-                            </p>
                             <VideoGrid category="negotiation" limit={6} />
-                        </div>
-
-                        {/* Assessment Section */}
-                        <div>
-                            <div className="flex items-center gap-2 mb-4">
-                                <span className="text-lg">📊</span>
-                                <h2 className="text-lg font-semibold text-slate-800">Strategic Assessment</h2>
-                            </div>
-                            <p className="text-sm text-slate-500 mb-4">
-                                Understanding leverage and deal dynamics.
-                            </p>
-                            <VideoGrid category="assessment" />
                         </div>
                     </div>
                 )}
 
-                {/* ================================================================ */}
+                {/* ============================================================ */}
                 {/* SECTION 20: HISTORY TAB */}
-                {/* ================================================================ */}
+                {/* ============================================================ */}
                 {activeTab === 'history' && (
                     <div>
                         {pastSessions.length === 0 ? (
-                            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-                                <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <span className="text-3xl">🎓</span>
+                            <div className="bg-slate-800 rounded-xl p-12 text-center">
+                                <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-3xl">📜</span>
                                 </div>
-                                <h3 className="text-lg font-semibold mb-2 text-slate-800">No training sessions yet</h3>
-                                <p className="text-slate-500 mb-6 text-sm">Start your first training session to begin learning!</p>
+                                <h3 className="text-lg font-semibold text-white mb-2">No training history yet</h3>
+                                <p className="text-slate-400 mb-6 text-sm">Complete your first training session to see it here.</p>
                                 <button
-                                    onClick={startTraining}
-                                    className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg font-medium text-sm"
+                                    onClick={() => { setActiveTab('play'); setSelectedMode('single'); }}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg font-medium"
                                 >
                                     Start Training
                                 </button>
@@ -834,25 +1037,30 @@ export default function TrainingStudioPage() {
                                 {pastSessions.map(session => (
                                     <div
                                         key={session.sessionId}
-                                        className="bg-white rounded-xl border border-slate-200 p-5 hover:border-amber-300 transition-all"
+                                        className="bg-slate-800 rounded-xl p-5 hover:bg-slate-750 transition-all"
                                     >
                                         <div className="flex items-center justify-between">
-                                            <div>
-                                                <h3 className="font-semibold text-slate-800">{session.scenarioName}</h3>
-                                                <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
-                                                    <span>{session.sessionNumber}</span>
-                                                    <span>•</span>
-                                                    <span>{session.counterpartyType === 'ai' ? `AI${session.aiMode ? ` (${session.aiMode})` : ''}` : session.counterpartyName}</span>
-                                                    <span>•</span>
-                                                    <span>{formatDate(session.createdAt)}</span>
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-xl">
+                                                    {session.counterpartyType === 'ai' ? '🤖' : '👥'}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-semibold text-white">{session.scenarioName}</h3>
+                                                    <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
+                                                        <span>{session.sessionNumber}</span>
+                                                        <span>•</span>
+                                                        <span>{session.counterpartyType === 'ai' ? `AI (${session.aiMode || 'balanced'})` : session.counterpartyName}</span>
+                                                        <span>•</span>
+                                                        <span>{formatDate(session.createdAt)}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-4">
                                                 <div className="text-right">
-                                                    <div className="text-sm font-medium text-slate-700">{session.progress}%</div>
-                                                    <div className="w-24 bg-slate-200 rounded-full h-2 mt-1">
+                                                    <div className="text-sm font-medium text-white">{session.progress}%</div>
+                                                    <div className="w-24 bg-slate-700 rounded-full h-2 mt-1">
                                                         <div
-                                                            className="bg-amber-500 h-2 rounded-full"
+                                                            className="bg-amber-500 h-2 rounded-full transition-all"
                                                             style={{ width: `${session.progress}%` }}
                                                         />
                                                     </div>
@@ -861,7 +1069,7 @@ export default function TrainingStudioPage() {
                                                     onClick={() => resumeSession(session.sessionId)}
                                                     className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium"
                                                 >
-                                                    Continue
+                                                    {session.progress === 100 ? 'Review' : 'Continue'}
                                                 </button>
                                             </div>
                                         </div>
@@ -872,27 +1080,27 @@ export default function TrainingStudioPage() {
                     </div>
                 )}
 
-                {/* ================================================================ */}
+                {/* ============================================================ */}
                 {/* SECTION 21: PROGRESS TAB */}
-                {/* ================================================================ */}
+                {/* ============================================================ */}
                 {activeTab === 'progress' && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-                        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div className="bg-slate-800 rounded-xl p-12 text-center">
+                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
                             <span className="text-3xl">📊</span>
                         </div>
-                        <h3 className="text-lg font-semibold mb-2 text-slate-800">Progress Tracking Coming Soon</h3>
-                        <p className="text-slate-500 text-sm max-w-md mx-auto">
-                            Soon you'll be able to track which clauses you negotiate well, see your improvement over time, and get personalized learning recommendations.
+                        <h3 className="text-lg font-semibold text-white mb-2">Progress Tracking Coming Soon</h3>
+                        <p className="text-slate-400 text-sm max-w-md mx-auto">
+                            Track which clauses you negotiate well, see improvement over time, and get personalized recommendations.
                         </p>
                     </div>
                 )}
-            </div>
+            </main>
 
-            {/* ================================================================== */}
+            {/* ================================================================ */}
             {/* SECTION 22: CHAT PANEL */}
-            {/* ================================================================== */}
+            {/* ================================================================ */}
             {showChatPanel && (
-                <div className="fixed right-0 top-0 h-full w-full md:w-96 bg-white shadow-2xl z-50 flex flex-col">
+                <div className="fixed right-0 top-0 h-full w-full md:w-96 bg-slate-800 shadow-2xl z-50 flex flex-col border-l border-slate-700">
                     <div className="bg-amber-600 text-white p-4 flex justify-between items-center">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
@@ -910,25 +1118,27 @@ export default function TrainingStudioPage() {
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 bg-amber-50/50">
+                    <div className="flex-1 overflow-y-auto p-4 bg-slate-900">
                         {chatMessages.map(message => (
                             <div key={message.id} className={`mb-4 ${message.type === 'user' ? 'text-right' : ''}`}>
                                 <div className={`inline-block max-w-[85%] ${message.type === 'user'
-                                    ? 'bg-amber-600 text-white rounded-2xl rounded-br-md px-4 py-2'
-                                    : 'bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200'
+                                        ? 'bg-amber-600 text-white rounded-2xl rounded-br-md px-4 py-2'
+                                        : 'bg-slate-800 rounded-2xl rounded-bl-md px-4 py-3 border border-slate-700'
                                     }`}>
                                     {message.type === 'clarence' && (
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-xs font-medium text-amber-600">🎓 CLARENCE</span>
+                                            <span className="text-xs font-medium text-amber-400">🎓 CLARENCE</span>
                                         </div>
                                     )}
-                                    <p className="text-sm whitespace-pre-line">{message.content}</p>
+                                    <p className={`text-sm whitespace-pre-line ${message.type === 'clarence' ? 'text-slate-300' : ''}`}>
+                                        {message.content}
+                                    </p>
                                 </div>
                             </div>
                         ))}
                         {isChatLoading && (
                             <div className="mb-4">
-                                <div className="inline-block bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200">
+                                <div className="inline-block bg-slate-800 rounded-2xl rounded-bl-md px-4 py-3 border border-slate-700">
                                     <div className="flex gap-1">
                                         <div className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                                         <div className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -940,15 +1150,15 @@ export default function TrainingStudioPage() {
                         <div ref={chatEndRef} />
                     </div>
 
-                    <div className="p-4 border-t border-slate-200 bg-white">
+                    <div className="p-4 border-t border-slate-700 bg-slate-800">
                         <div className="flex gap-2">
                             <input
                                 type="text"
                                 value={chatInput}
                                 onChange={(e) => setChatInput(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                                placeholder="Ask about training scenarios..."
-                                className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                                placeholder="Ask about training..."
+                                className="flex-1 px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm text-white placeholder-slate-400"
                             />
                             <button
                                 onClick={sendChatMessage}
@@ -964,9 +1174,9 @@ export default function TrainingStudioPage() {
                 </div>
             )}
 
-            {/* ================================================================== */}
+            {/* ================================================================ */}
             {/* SECTION 23: FLOATING CHAT BUTTON */}
-            {/* ================================================================== */}
+            {/* ================================================================ */}
             {!showChatPanel && (
                 <button
                     onClick={() => setShowChatPanel(true)}
