@@ -221,6 +221,13 @@ export default function BetaTestingAdminDashboard() {
         checkAdminAccess()
     }, [])
 
+    // Load feedback count on mount (for tab badge)
+    useEffect(() => {
+        if (isAdmin) {
+            loadAllFeedback()
+        }
+    }, [isAdmin])
+
     // Load data when tab changes
     useEffect(() => {
         if (isAdmin && activeTab === 'users') {
@@ -229,8 +236,6 @@ export default function BetaTestingAdminDashboard() {
             loadAllFeedback()
         } else if (isAdmin && activeTab === 'stats') {
             loadStats()
-        } else if (isAdmin && activeTab === 'videos') {
-            loadVideos()
         }
     }, [isAdmin, activeTab, feedbackFilter])
 
@@ -373,10 +378,10 @@ export default function BetaTestingAdminDashboard() {
 
     async function loadUsers() {
         try {
+            // Show all users, not just beta testers - any feedback is valuable
             const { data } = await supabase
                 .from('users')
                 .select('*')
-                .eq('is_beta_tester', true)
                 .order('created_at', { ascending: false })
 
             setUsers(data || [])
@@ -441,13 +446,10 @@ export default function BetaTestingAdminDashboard() {
 
     async function loadAllFeedback() {
         try {
+            // First, get all feedback
             let query = supabase
                 .from('beta_feedback')
-                .select(`
-                    *,
-                    user:users(first_name, last_name, email),
-                    company:companies(company_name)
-                `)
+                .select('*')
                 .order('created_at', { ascending: false })
 
             if (feedbackFilter === 'flagged') {
@@ -456,8 +458,61 @@ export default function BetaTestingAdminDashboard() {
                 query = query.is('reviewed_at', null)
             }
 
-            const { data } = await query
-            setAllFeedback(data || [])
+            const { data: feedbackData, error: feedbackError } = await query
+
+            if (feedbackError) {
+                console.error('Error fetching feedback:', feedbackError)
+                return
+            }
+
+            if (!feedbackData || feedbackData.length === 0) {
+                setAllFeedback([])
+                return
+            }
+
+            // Get unique user IDs and company IDs
+            const userIds = [...new Set(feedbackData.map(f => f.user_id).filter(Boolean))]
+            const companyIds = [...new Set(feedbackData.map(f => f.company_id).filter(Boolean))]
+
+            // Fetch users
+            let usersMap: Record<string, any> = {}
+            if (userIds.length > 0) {
+                const { data: usersData } = await supabase
+                    .from('users')
+                    .select('user_id, first_name, last_name, email')
+                    .in('user_id', userIds)
+
+                if (usersData) {
+                    usersData.forEach(u => {
+                        usersMap[u.user_id] = u
+                    })
+                }
+            }
+
+            // Fetch companies
+            let companiesMap: Record<string, any> = {}
+            if (companyIds.length > 0) {
+                const { data: companiesData } = await supabase
+                    .from('companies')
+                    .select('company_id, company_name')
+                    .in('company_id', companyIds)
+
+                if (companiesData) {
+                    companiesData.forEach(c => {
+                        companiesMap[c.company_id] = c
+                    })
+                }
+            }
+
+            // Combine the data
+            const enrichedFeedback = feedbackData.map(fb => ({
+                ...fb,
+                user: fb.user_id ? usersMap[fb.user_id] : null,
+                company: fb.company_id ? companiesMap[fb.company_id] : null
+            }))
+
+            setAllFeedback(enrichedFeedback)
+
         } catch (error) {
             console.error('Error loading feedback:', error)
         }
@@ -843,7 +898,7 @@ export default function BetaTestingAdminDashboard() {
                                 : 'border-transparent text-slate-600 hover:text-slate-900'
                                 }`}
                         >
-                            👥 Testers ({users.length})
+                            👥 Users ({users.length})
                         </button>
 
                         {/* Feedback Tab */}
@@ -1408,8 +1463,8 @@ export default function BetaTestingAdminDashboard() {
                                 <button
                                     onClick={() => setVideoFilter(f => ({ ...f, category: 'all' }))}
                                     className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${videoFilter.category === 'all'
-                                            ? 'bg-slate-800 text-white'
-                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        ? 'bg-slate-800 text-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                         }`}
                                 >
                                     All ({videoStats.total})
@@ -1419,8 +1474,8 @@ export default function BetaTestingAdminDashboard() {
                                         key={key}
                                         onClick={() => setVideoFilter(f => ({ ...f, category: key }))}
                                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${videoFilter.category === key
-                                                ? 'bg-slate-800 text-white'
-                                                : `${cat.color} hover:opacity-80`
+                                            ? 'bg-slate-800 text-white'
+                                            : `${cat.color} hover:opacity-80`
                                             }`}
                                     >
                                         {cat.icon} {cat.label} ({videoStats.byCategory[key] || 0})
@@ -1576,8 +1631,8 @@ export default function BetaTestingAdminDashboard() {
                                                                 setNewYoutubeId(video.youtube_id || '')
                                                             }}
                                                             className={`px-3 py-1.5 text-sm rounded font-medium ${video.youtube_id
-                                                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                                                                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                                                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                                : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
                                                                 }`}
                                                         >
                                                             {video.youtube_id ? '✏️ Edit ID' : '➕ Add YouTube ID'}
@@ -1589,8 +1644,8 @@ export default function BetaTestingAdminDashboard() {
                                                         <button
                                                             onClick={() => toggleVideoFeatured(video.video_id, video.is_featured)}
                                                             className={`px-2 py-1 text-xs rounded ${video.is_featured
-                                                                    ? 'bg-amber-500 text-white'
-                                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                ? 'bg-amber-500 text-white'
+                                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                                                 }`}
                                                             title={video.is_featured ? 'Remove from featured' : 'Add to featured'}
                                                         >
@@ -1599,8 +1654,8 @@ export default function BetaTestingAdminDashboard() {
                                                         <button
                                                             onClick={() => toggleVideoActive(video.video_id, video.is_active)}
                                                             className={`px-2 py-1 text-xs rounded ${video.is_active
-                                                                    ? 'bg-emerald-100 text-emerald-700'
-                                                                    : 'bg-red-100 text-red-700'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : 'bg-red-100 text-red-700'
                                                                 }`}
                                                             title={video.is_active ? 'Hide video' : 'Show video'}
                                                         >
@@ -1723,8 +1778,8 @@ export default function BetaTestingAdminDashboard() {
                                                         type="button"
                                                         onClick={() => setNewVideo(v => ({ ...v, priority: key }))}
                                                         className={`px-4 py-2 rounded-lg border font-medium ${newVideo.priority === key
-                                                                ? pri.color + ' border-current'
-                                                                : 'bg-white border-slate-300 text-slate-600'
+                                                            ? pri.color + ' border-current'
+                                                            : 'bg-white border-slate-300 text-slate-600'
                                                             }`}
                                                     >
                                                         {pri.label}
