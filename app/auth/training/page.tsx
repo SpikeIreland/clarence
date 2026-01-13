@@ -1,6 +1,13 @@
 'use client'
 
 // ============================================================================
+// CLARENCE Training Studio - Lobby Page
+// ============================================================================
+// File: /app/auth/training/page.tsx
+// Purpose: Training mode lobby with scenarios, videos, and session management
+// ============================================================================
+
+// ============================================================================
 // SECTION 1: IMPORTS
 // ============================================================================
 
@@ -9,6 +16,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
+import VideoPlayer, { VideoGrid, useVideos } from '@/lib/video/VideoPlayer'
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -31,7 +39,7 @@ interface TrainingScenario {
     difficulty: 'beginner' | 'intermediate' | 'advanced'
     industry: string
     contractType: string
-    estimatedDuration: number // minutes
+    estimatedDuration: number
     clauseCount: number
     learningObjectives: string[]
     isNew?: boolean
@@ -194,11 +202,28 @@ export default function TrainingStudioPage() {
     const [chatInput, setChatInput] = useState('')
     const [isChatLoading, setIsChatLoading] = useState(false)
 
-    // View state
-    const [activeTab, setActiveTab] = useState<'scenarios' | 'history' | 'progress'>('scenarios')
+    // View state - Added 'videos' tab
+    const [activeTab, setActiveTab] = useState<'scenarios' | 'videos' | 'history' | 'progress'>('scenarios')
 
     // ==========================================================================
-    // SECTION 6: AUTHENTICATION & DATA LOADING
+    // SECTION 6: VIDEO DATA HOOK
+    // ==========================================================================
+
+    // Fetch featured training videos
+    const { videos: featuredVideos, loading: videosLoading } = useVideos({
+        category: 'training',
+        featuredOnly: true,
+        limit: 3
+    })
+
+    // Fetch onboarding videos for "Getting Started" section
+    const { videos: onboardingVideos } = useVideos({
+        category: 'onboarding',
+        limit: 3
+    })
+
+    // ==========================================================================
+    // SECTION 7: AUTHENTICATION & DATA LOADING
     // ==========================================================================
 
     const loadUserInfo = useCallback(async () => {
@@ -224,17 +249,17 @@ export default function TrainingStudioPage() {
             const { data: partnersData } = await supabase
                 .from('approved_training_users')
                 .select(`
-          id,
-          user_id,
-          approval_type,
-          status,
-          users:user_id (
-            first_name,
-            last_name,
-            email,
-            company_name
-          )
-        `)
+                    id,
+                    user_id,
+                    approval_type,
+                    status,
+                    users:user_id (
+                        first_name,
+                        last_name,
+                        email,
+                        company_name
+                    )
+                `)
                 .eq('company_id', companyId)
                 .eq('status', 'active')
 
@@ -279,9 +304,6 @@ export default function TrainingStudioPage() {
                 setPastSessions(mapped)
             }
 
-            // TODO: Load scenarios from database when available
-            // For now, using SAMPLE_SCENARIOS
-
         } catch (error) {
             console.error('Error loading training data:', error)
         } finally {
@@ -290,7 +312,7 @@ export default function TrainingStudioPage() {
     }, [supabase])
 
     // ==========================================================================
-    // SECTION 7: SIGN OUT
+    // SECTION 8: SIGN OUT
     // ==========================================================================
 
     async function handleSignOut() {
@@ -306,7 +328,7 @@ export default function TrainingStudioPage() {
     }
 
     // ==========================================================================
-    // SECTION 8: SESSION CREATION
+    // SECTION 9: SESSION CREATION
     // ==========================================================================
 
     async function startNewTrainingSession() {
@@ -346,7 +368,6 @@ export default function TrainingStudioPage() {
                     companyName: authData.userInfo?.company,
                     userName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim(),
                     isTraining: true,
-                    // Training-specific fields
                     scenarioId: selectedScenario.scenarioId,
                     scenarioName: selectedScenario.scenarioName,
                     counterpartyType,
@@ -365,9 +386,8 @@ export default function TrainingStudioPage() {
                     sessionId: data.sessionId
                 })
 
-                // Close modal and navigate to the training session
                 setShowNewSessionModal(false)
-                router.push(`/training/${data.sessionId}`)
+                router.push(`/auth/training/${data.sessionId}`)
             } else {
                 throw new Error('Failed to create training session')
             }
@@ -380,7 +400,7 @@ export default function TrainingStudioPage() {
     }
 
     // ==========================================================================
-    // SECTION 9: CHAT FUNCTIONS
+    // SECTION 10: CHAT FUNCTIONS
     // ==========================================================================
 
     async function sendChatMessage() {
@@ -433,7 +453,7 @@ export default function TrainingStudioPage() {
     }
 
     // ==========================================================================
-    // SECTION 10: EFFECTS
+    // SECTION 11: EFFECTS
     // ==========================================================================
 
     useEffect(() => {
@@ -468,7 +488,7 @@ export default function TrainingStudioPage() {
     }, [showUserMenu])
 
     // ==========================================================================
-    // SECTION 11: HELPER FUNCTIONS
+    // SECTION 12: HELPER FUNCTIONS
     // ==========================================================================
 
     function formatDate(dateString: string): string {
@@ -487,13 +507,13 @@ export default function TrainingStudioPage() {
     }
 
     // ==========================================================================
-    // SECTION 12: RENDER
+    // SECTION 13: RENDER
     // ==========================================================================
 
     return (
         <div className="min-h-screen bg-amber-50/30">
             {/* ================================================================== */}
-            {/* SECTION 13: TRAINING MODE BANNER */}
+            {/* SECTION 14: TRAINING MODE BANNER */}
             {/* ================================================================== */}
             <div className="bg-amber-500 text-white py-2 px-4">
                 <div className="container mx-auto flex items-center justify-center gap-2 text-sm font-medium">
@@ -503,7 +523,7 @@ export default function TrainingStudioPage() {
             </div>
 
             {/* ================================================================== */}
-            {/* SECTION 14: NAVIGATION HEADER */}
+            {/* SECTION 15: NAVIGATION HEADER */}
             {/* ================================================================== */}
             <header className="bg-slate-800 text-white">
                 <div className="container mx-auto px-6">
@@ -594,7 +614,7 @@ export default function TrainingStudioPage() {
             </header>
 
             {/* ================================================================== */}
-            {/* SECTION 15: MAIN CONTENT */}
+            {/* SECTION 16: MAIN CONTENT */}
             {/* ================================================================== */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -621,7 +641,7 @@ export default function TrainingStudioPage() {
                 </div>
 
                 {/* ================================================================ */}
-                {/* SECTION 16: TAB NAVIGATION */}
+                {/* SECTION 17: TAB NAVIGATION */}
                 {/* ================================================================ */}
                 <div className="border-b border-slate-200 mb-6">
                     <div className="flex gap-6">
@@ -633,6 +653,16 @@ export default function TrainingStudioPage() {
                                 }`}
                         >
                             Scenarios
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('videos')}
+                            className={`pb-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'videos'
+                                ? 'text-amber-600 border-b-2 border-amber-600'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            <span>📺</span>
+                            Tutorials
                         </button>
                         <button
                             onClick={() => setActiveTab('history')}
@@ -656,10 +686,41 @@ export default function TrainingStudioPage() {
                 </div>
 
                 {/* ================================================================ */}
-                {/* SECTION 17: SCENARIOS TAB */}
+                {/* SECTION 18: SCENARIOS TAB */}
                 {/* ================================================================ */}
                 {activeTab === 'scenarios' && (
                     <div className="space-y-6">
+
+                        {/* Featured Tutorial Videos - Show only if videos exist */}
+                        {featuredVideos.length > 0 && (
+                            <div className="mb-8">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">📺</span>
+                                        <h2 className="text-lg font-semibold text-slate-800">Learn Before You Practice</h2>
+                                    </div>
+                                    <button
+                                        onClick={() => setActiveTab('videos')}
+                                        className="text-sm text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1"
+                                    >
+                                        View all tutorials
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {featuredVideos.map(video => (
+                                        <VideoPlayer
+                                            key={video.video_id}
+                                            videoCode={video.video_code}
+                                            variant="card"
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Quick Start Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                             <div
@@ -693,8 +754,11 @@ export default function TrainingStudioPage() {
                                     <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-xl">
                                         🤖
                                     </div>
-                                    <div>
-                                        <h3 className="font-semibold text-slate-800">Practice with AI</h3>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-semibold text-slate-800">Practice with AI</h3>
+                                            <VideoPlayer videoCode="training-ai-opponent" variant="help-icon" />
+                                        </div>
                                         <p className="text-xs text-slate-500">CLARENCE as counterparty</p>
                                     </div>
                                 </div>
@@ -801,7 +865,62 @@ export default function TrainingStudioPage() {
                 )}
 
                 {/* ================================================================ */}
-                {/* SECTION 18: HISTORY TAB */}
+                {/* SECTION 19: VIDEOS TAB */}
+                {/* ================================================================ */}
+                {activeTab === 'videos' && (
+                    <div className="space-y-8">
+                        {/* Getting Started Section */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="text-lg">👋</span>
+                                <h2 className="text-lg font-semibold text-slate-800">Getting Started</h2>
+                            </div>
+                            <p className="text-sm text-slate-500 mb-4">
+                                New to CLARENCE? Start here to learn the basics.
+                            </p>
+                            <VideoGrid category="onboarding" limit={6} />
+                        </div>
+
+                        {/* Training Mode Section */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="text-lg">🎓</span>
+                                <h2 className="text-lg font-semibold text-slate-800">Training Mode</h2>
+                            </div>
+                            <p className="text-sm text-slate-500 mb-4">
+                                Learn how to get the most out of your training sessions.
+                            </p>
+                            <VideoGrid category="training" />
+                        </div>
+
+                        {/* Negotiation Skills Section */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="text-lg">⚖️</span>
+                                <h2 className="text-lg font-semibold text-slate-800">Negotiation Skills</h2>
+                            </div>
+                            <p className="text-sm text-slate-500 mb-4">
+                                Master the art of contract negotiation.
+                            </p>
+                            <VideoGrid category="negotiation" limit={6} />
+                        </div>
+
+                        {/* Assessment Section */}
+                        <div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="text-lg">📊</span>
+                                <h2 className="text-lg font-semibold text-slate-800">Strategic Assessment</h2>
+                            </div>
+                            <p className="text-sm text-slate-500 mb-4">
+                                Understanding leverage and deal dynamics.
+                            </p>
+                            <VideoGrid category="assessment" />
+                        </div>
+                    </div>
+                )}
+
+                {/* ================================================================ */}
+                {/* SECTION 20: HISTORY TAB */}
                 {/* ================================================================ */}
                 {activeTab === 'history' && (
                     <div>
@@ -848,7 +967,7 @@ export default function TrainingStudioPage() {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => router.push(`/training/${session.sessionId}`)}
+                                                    onClick={() => router.push(`/auth/training/${session.sessionId}`)}
                                                     className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium"
                                                 >
                                                     Continue
@@ -863,7 +982,7 @@ export default function TrainingStudioPage() {
                 )}
 
                 {/* ================================================================ */}
-                {/* SECTION 19: PROGRESS TAB */}
+                {/* SECTION 21: PROGRESS TAB */}
                 {/* ================================================================ */}
                 {activeTab === 'progress' && (
                     <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
@@ -879,7 +998,7 @@ export default function TrainingStudioPage() {
             </div>
 
             {/* ================================================================== */}
-            {/* SECTION 20: NEW SESSION MODAL */}
+            {/* SECTION 22: NEW SESSION MODAL */}
             {/* ================================================================== */}
             {showNewSessionModal && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -1064,7 +1183,7 @@ export default function TrainingStudioPage() {
             )}
 
             {/* ================================================================== */}
-            {/* SECTION 21: CHAT PANEL */}
+            {/* SECTION 23: CHAT PANEL */}
             {/* ================================================================== */}
             {showChatPanel && (
                 <div className="fixed right-0 top-0 h-full w-full md:w-96 bg-white shadow-2xl z-50 flex flex-col">
@@ -1140,7 +1259,7 @@ export default function TrainingStudioPage() {
             )}
 
             {/* ================================================================== */}
-            {/* SECTION 22: FLOATING CHAT BUTTON */}
+            {/* SECTION 24: FLOATING CHAT BUTTON */}
             {/* ================================================================== */}
             {!showChatPanel && (
                 <button
