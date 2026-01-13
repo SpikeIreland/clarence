@@ -1,7 +1,15 @@
 'use client'
 
+// ============================================================================
+// CLARENCE Create Contract Page
+// ============================================================================
+// File: /app/auth/create-contract/page.tsx
+// Purpose: Contract creation assessment wizard with training mode support
+// Training Mode: Activated via ?mode=training URL parameter
+// ============================================================================
+
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
 
@@ -211,6 +219,12 @@ I'll help you set up your new contract in just a few steps. First, I need to und
 
 **Let's get started!**`,
 
+    welcome_training: `Hello! I'm Clarence, your training assistant. 🎓
+
+I'll help you set up a **practice contract** for your training session. This works exactly like the real thing, but with no real-world consequences.
+
+**Let's get started!**`,
+
     mediation_type: `**How much negotiation do you expect for this contract?**
 
 This helps me understand whether we should use a streamlined process or a more comprehensive mediation approach.`,
@@ -293,9 +307,21 @@ Please try uploading again or choose a different source option.`,
 
 I'll create your contract with these settings. Once you confirm, you'll enter the Contract Studio where you can review and customize everything before inviting providers.`,
 
+    summary_training: `**Great! Here's a summary of your training contract setup:** 🎓
+
+I'll create your practice contract with these settings. Once you confirm, you'll be ready to start your training session.`,
+
     creating: `**Creating your contract...**
 
-Setting up your contract workspace. This will just take a moment.`
+Setting up your contract workspace. This will just take a moment.`,
+
+    creating_training: `**Creating your training session...** 🎓
+
+Setting up your practice contract. This will just take a moment.`,
+
+    training_complete: `**Your training session is ready!** 🎓
+
+Your practice contract has been created. You can now start negotiating against the AI opponent or continue with your training partner.`
 }
 
 // ============================================================================
@@ -305,9 +331,6 @@ Setting up your contract workspace. This will just take a moment.`
 // Dynamic import for PDF.js
 const loadPdfJs = async () => {
     const pdfjsLib = await import('pdfjs-dist')
-    // Use local worker file for better performance with large PDFs
-    // Worker file must be copied to public folder:
-    // cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.js
     if (typeof window !== 'undefined') {
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
     }
@@ -366,13 +389,57 @@ const extractTextFromFile = async (file: File): Promise<string> => {
 
 export default function ContractCreationAssessment() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const chatEndRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const pollingRef = useRef<NodeJS.Timeout | null>(null)
     const pollingCountRef = useRef<number>(0)
 
     // ========================================================================
-    // SECTION 5A: STATE
+    // SECTION 5A: TRAINING MODE DETECTION
+    // ========================================================================
+
+    const isTrainingMode = searchParams.get('mode') === 'training'
+
+    // Training mode color classes
+    const colors = {
+        // Primary accent color
+        primary: isTrainingMode ? 'amber' : 'blue',
+        // Background colors
+        bgLight: isTrainingMode ? 'bg-amber-50' : 'bg-blue-50',
+        bgMedium: isTrainingMode ? 'bg-amber-100' : 'bg-blue-100',
+        bgSolid: isTrainingMode ? 'bg-amber-500' : 'bg-blue-500',
+        bgSolidHover: isTrainingMode ? 'hover:bg-amber-600' : 'hover:bg-blue-600',
+        bgGradient: isTrainingMode
+            ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+            : 'bg-gradient-to-br from-blue-500 to-blue-600',
+        // Text colors
+        textPrimary: isTrainingMode ? 'text-amber-600' : 'text-blue-600',
+        textDark: isTrainingMode ? 'text-amber-800' : 'text-blue-800',
+        textLight: isTrainingMode ? 'text-amber-200' : 'text-blue-200',
+        // Border colors
+        borderPrimary: isTrainingMode ? 'border-amber-500' : 'border-blue-500',
+        borderLight: isTrainingMode ? 'border-amber-200' : 'border-blue-200',
+        borderMedium: isTrainingMode ? 'border-amber-300' : 'border-blue-300',
+        borderHover: isTrainingMode ? 'hover:border-amber-400' : 'hover:border-blue-400',
+        // Ring colors
+        ringPrimary: isTrainingMode ? 'focus:ring-amber-500' : 'focus:ring-blue-500',
+        // Button colors
+        btnPrimary: isTrainingMode
+            ? 'bg-amber-600 hover:bg-amber-700'
+            : 'bg-blue-600 hover:bg-blue-700',
+        btnSecondary: isTrainingMode
+            ? 'bg-amber-500 hover:bg-amber-600'
+            : 'bg-blue-500 hover:bg-blue-600',
+        // Chat bubble
+        chatBubble: isTrainingMode ? 'bg-amber-600' : 'bg-blue-600',
+        // Progress indicators
+        progressActive: isTrainingMode ? 'bg-amber-500' : 'bg-blue-500',
+        progressBorder: isTrainingMode ? 'border-amber-200' : 'border-blue-200',
+    }
+
+    // ========================================================================
+    // SECTION 5B: STATE
     // ========================================================================
 
     const [assessment, setAssessment] = useState<AssessmentState>({
@@ -405,9 +472,10 @@ export default function ContractCreationAssessment() {
     const [isUploading, setIsUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState<string>('')
     const [error, setError] = useState<string | null>(null)
+    const [trainingSessionCreated, setTrainingSessionCreated] = useState<string | null>(null)
 
     // ========================================================================
-    // SECTION 5B: LOAD USER INFO
+    // SECTION 5C: LOAD USER INFO
     // ========================================================================
 
     const loadUserInfo = useCallback(() => {
@@ -426,7 +494,7 @@ export default function ContractCreationAssessment() {
                 company: parsed.userInfo?.company || '',
                 role: parsed.userInfo?.role || 'customer',
                 userId: parsed.userInfo?.userId || '',
-                companyId: parsed.userInfo?.companyId || null // May be null for now
+                companyId: parsed.userInfo?.companyId || null
             } as UserInfo
         } catch {
             router.push('/auth/login')
@@ -435,7 +503,7 @@ export default function ContractCreationAssessment() {
     }, [router])
 
     // ========================================================================
-    // SECTION 5C: EFFECTS
+    // SECTION 5D: EFFECTS
     // ========================================================================
 
     // Load user info on mount
@@ -448,11 +516,15 @@ export default function ContractCreationAssessment() {
 
     // Initialize chat with welcome message
     useEffect(() => {
+        const welcomeMessage = isTrainingMode
+            ? CLARENCE_MESSAGES.welcome_training
+            : CLARENCE_MESSAGES.welcome
+
         setChatMessages([
             {
                 id: 'welcome-1',
                 role: 'clarence',
-                content: CLARENCE_MESSAGES.welcome,
+                content: welcomeMessage,
                 timestamp: new Date()
             }
         ])
@@ -464,7 +536,7 @@ export default function ContractCreationAssessment() {
         }, 1500)
 
         return () => clearTimeout(timer)
-    }, [])
+    }, [isTrainingMode])
 
     // Scroll chat to bottom when new messages arrive
     useEffect(() => {
@@ -488,7 +560,7 @@ export default function ContractCreationAssessment() {
     }, [])
 
     // ========================================================================
-    // SECTION 5D: HELPER FUNCTIONS
+    // SECTION 5E: HELPER FUNCTIONS
     // ========================================================================
 
     const addClarenceMessage = (content: string, options?: AssessmentOption[]) => {
@@ -518,7 +590,7 @@ export default function ContractCreationAssessment() {
             'bpo': ['BPO', 'bpo', 'Outsourcing', 'Business Process'],
             'msa': ['MSA', 'msa', 'Master Services', 'Master Service Agreement'],
             'employment': ['Employment', 'employment', 'Employee', 'Staff'],
-            'custom': [] // Custom matches nothing - show all
+            'custom': []
         }
         return typeMapping[selectedType || ''] || []
     }
@@ -531,15 +603,12 @@ export default function ContractCreationAssessment() {
                 const data = await response.json()
                 const allTemplates: Template[] = data.templates || []
 
-                // Filter templates based on selected contract type
                 const matchingTypes = getMatchingContractTypes(assessment.contractType)
 
                 let filteredTemplates: Template[]
                 if (matchingTypes.length === 0) {
-                    // Custom type or no mapping - show all templates
                     filteredTemplates = allTemplates
                 } else {
-                    // Filter to matching contract types (case-insensitive)
                     filteredTemplates = allTemplates.filter(t =>
                         matchingTypes.some(type =>
                             t.contractType.toLowerCase().includes(type.toLowerCase()) ||
@@ -550,9 +619,7 @@ export default function ContractCreationAssessment() {
 
                 setTemplates(filteredTemplates)
 
-                // Add appropriate Clarence message
                 if (filteredTemplates.length === 0) {
-                    // No matching templates
                     addClarenceMessage(`I don't have any **${getContractTypeLabel(assessment.contractType)}** templates available yet.\n\nYou have a few options to proceed:`)
                 } else {
                     const message = assessment.templateSource === 'modified_template'
@@ -575,14 +642,13 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 5E: UPLOAD FUNCTIONS
+    // SECTION 5F: UPLOAD FUNCTIONS
     // ========================================================================
 
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0]
         if (!file) return
 
-        // Validate file type
         const validTypes = [
             'application/pdf',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -596,7 +662,6 @@ export default function ContractCreationAssessment() {
             return
         }
 
-        // Validate file size (10MB max)
         if (file.size > 10 * 1024 * 1024) {
             setError('File size must be less than 10MB')
             return
@@ -618,7 +683,6 @@ export default function ContractCreationAssessment() {
         addClarenceMessage(CLARENCE_MESSAGES.upload_started)
 
         try {
-            // Step 1: Extract text client-side
             const documentText = await extractTextFromFile(file)
 
             if (documentText.length < 100) {
@@ -627,19 +691,19 @@ export default function ContractCreationAssessment() {
 
             setUploadProgress('Sending to CLARENCE for analysis...')
 
-            // Step 2: Call the parse workflow
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_id: userInfo.userId,
-                    company_id: userInfo.companyId, // May be null
-                    session_id: null, // Will create session later
+                    company_id: userInfo.companyId,
+                    session_id: null,
                     file_name: file.name,
                     file_type: file.type || 'application/octet-stream',
                     file_size: file.size,
                     document_text: documentText,
-                    template_name: file.name.replace(/\.[^/.]+$/, '') // Remove extension
+                    template_name: file.name.replace(/\.[^/.]+$/, ''),
+                    is_training: isTrainingMode
                 })
             })
 
@@ -651,7 +715,6 @@ export default function ContractCreationAssessment() {
             const result = await response.json()
 
             if (result.success && result.contractId) {
-                // Update state with the contract ID
                 setAssessment(prev => ({
                     ...prev,
                     step: 'upload_processing',
@@ -661,8 +724,6 @@ export default function ContractCreationAssessment() {
                 }))
 
                 addClarenceMessage(CLARENCE_MESSAGES.upload_processing)
-
-                // Start polling for completion
                 startPolling(result.contractId)
             } else {
                 throw new Error(result.error || 'No contract ID returned')
@@ -681,7 +742,6 @@ export default function ContractCreationAssessment() {
     const startPolling = (contractId: string) => {
         pollingCountRef.current = 0
 
-        // Clear any existing polling
         if (pollingRef.current) {
             clearInterval(pollingRef.current)
         }
@@ -689,7 +749,6 @@ export default function ContractCreationAssessment() {
         pollingRef.current = setInterval(async () => {
             pollingCountRef.current += 1
 
-            // Check if we've exceeded max attempts
             if (pollingCountRef.current >= MAX_POLLING_ATTEMPTS) {
                 clearInterval(pollingRef.current!)
                 pollingRef.current = null
@@ -703,11 +762,9 @@ export default function ContractCreationAssessment() {
                     const contract = await response.json()
 
                     if (contract.status === 'ready') {
-                        // Stop polling
                         clearInterval(pollingRef.current!)
                         pollingRef.current = null
 
-                        // Update state
                         setAssessment(prev => ({
                             ...prev,
                             uploadedContractStatus: 'ready'
@@ -715,11 +772,9 @@ export default function ContractCreationAssessment() {
 
                         addClarenceMessage(CLARENCE_MESSAGES.upload_ready)
                     } else if (contract.status === 'failed') {
-                        // Stop polling
                         clearInterval(pollingRef.current!)
                         pollingRef.current = null
 
-                        // Update state
                         setAssessment(prev => ({
                             ...prev,
                             uploadedContractStatus: 'failed'
@@ -728,40 +783,40 @@ export default function ContractCreationAssessment() {
                         setError(contract.processingError || 'Contract processing failed')
                         addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
                     }
-                    // If still 'processing', continue polling
                 }
             } catch (err) {
                 console.error('Polling error:', err)
-                // Don't stop polling on network errors, just log
             }
         }, POLLING_INTERVAL)
     }
 
     const handleUploadedContractClick = () => {
         if (assessment.uploadedContractStatus === 'ready' && assessment.uploadedContractId) {
-            // Navigate to contract-prep with the contract_id
-            router.push(`/auth/contract-prep?contract_id=${assessment.uploadedContractId}`)
+            if (isTrainingMode) {
+                // In training mode, go to summary to create the training session
+                setAssessment(prev => ({ ...prev, step: 'summary' }))
+                addClarenceMessage(CLARENCE_MESSAGES.summary_training)
+            } else {
+                router.push(`/auth/contract-prep?contract_id=${assessment.uploadedContractId}`)
+            }
         }
     }
 
     // ========================================================================
-    // SECTION 5F: SELECTION HANDLERS
+    // SECTION 5G: SELECTION HANDLERS
     // ========================================================================
 
     const handleMediationSelect = (option: AssessmentOption) => {
         const mediationType = option.value as MediationType
 
-        // Add user's selection as a message
         addUserMessage(`${option.icon} ${option.label}`)
 
-        // Update state
         setAssessment(prev => ({
             ...prev,
             mediationType,
             step: 'contract_type'
         }))
 
-        // Add Clarence's response
         setTimeout(() => {
             let response = CLARENCE_MESSAGES.contract_type
             if (mediationType === 'straight_to_contract') {
@@ -783,7 +838,7 @@ export default function ContractCreationAssessment() {
         setAssessment(prev => ({
             ...prev,
             contractType,
-            step: 'quick_intake'  // Go to quick intake instead of template_source
+            step: 'quick_intake'
         }))
 
         setTimeout(() => {
@@ -810,7 +865,7 @@ export default function ContractCreationAssessment() {
             const currentPriorities = prev.quickIntake.topPriorities
             const newPriorities = currentPriorities.includes(priority)
                 ? currentPriorities.filter(p => p !== priority)
-                : [...currentPriorities, priority].slice(0, 3) // Max 3 priorities
+                : [...currentPriorities, priority].slice(0, 3)
             return {
                 ...prev,
                 quickIntake: {
@@ -822,7 +877,6 @@ export default function ContractCreationAssessment() {
     }
 
     const handleQuickIntakeComplete = () => {
-        // Summarize what they entered
         const dealValueLabels: Record<string, string> = {
             'under_50k': 'Under £50k',
             '50k_250k': '£50k - £250k',
@@ -867,30 +921,25 @@ export default function ContractCreationAssessment() {
 
         addUserMessage(`${option.icon} ${option.label}`)
 
-        // If they want to upload, show the upload UI
         if (templateSource === 'uploaded') {
             setAssessment(prev => ({
                 ...prev,
                 templateSource,
-                step: 'upload_processing' // Use this step for upload UI
+                step: 'upload_processing'
             }))
-            // Trigger file input
             setTimeout(() => {
                 fileInputRef.current?.click()
             }, 100)
             return
         }
 
-        // If they want to use or modify a template, show template selection
         if (templateSource === 'existing_template' || templateSource === 'modified_template') {
             setAssessment(prev => ({
                 ...prev,
                 templateSource,
                 step: 'template_selection'
             }))
-            // Templates will be loaded by the useEffect
         } else {
-            // For from_scratch, go directly to summary
             setAssessment(prev => ({
                 ...prev,
                 templateSource,
@@ -898,7 +947,7 @@ export default function ContractCreationAssessment() {
             }))
 
             setTimeout(() => {
-                addClarenceMessage(CLARENCE_MESSAGES.summary)
+                addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary)
             }, 500)
         }
     }
@@ -914,7 +963,7 @@ export default function ContractCreationAssessment() {
         }))
 
         setTimeout(() => {
-            addClarenceMessage(CLARENCE_MESSAGES.summary)
+            addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary)
         }, 500)
     }
 
@@ -933,7 +982,7 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
-    // SECTION 5G: CONTRACT CREATION
+    // SECTION 5H: CONTRACT CREATION
     // ========================================================================
 
     const createContract = async () => {
@@ -946,7 +995,7 @@ export default function ContractCreationAssessment() {
         setError(null)
 
         setAssessment(prev => ({ ...prev, step: 'creating' }))
-        addClarenceMessage(CLARENCE_MESSAGES.creating)
+        addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.creating_training : CLARENCE_MESSAGES.creating)
 
         try {
             const response = await fetch(`${API_BASE}/session-create`, {
@@ -956,14 +1005,16 @@ export default function ContractCreationAssessment() {
                     userEmail: userInfo.email,
                     companyName: userInfo.company,
                     userName: `${userInfo.firstName} ${userInfo.lastName}`,
+                    // Training mode flag
+                    isTraining: isTrainingMode,
                     // Assessment fields
                     mediation_type: assessment.mediationType,
                     contract_type: assessment.contractType,
                     template_source: assessment.templateSource,
                     source_template_id: assessment.selectedTemplateId,
-                    uploaded_contract_id: assessment.uploadedContractId, // Link uploaded contract if any
+                    uploaded_contract_id: assessment.uploadedContractId,
                     assessment_completed: true,
-                    // Quick Intake context for CLARENCE guidance
+                    // Quick Intake context
                     deal_context: {
                         deal_value: assessment.quickIntake.dealValue,
                         service_criticality: assessment.quickIntake.serviceCriticality,
@@ -982,20 +1033,23 @@ export default function ContractCreationAssessment() {
             const result = await response.json()
 
             if (result.success && result.sessionId) {
-                // Build redirect URL with both session_id and contract_id (if available)
-                let redirectUrl = `/auth/contract-prep?session_id=${result.sessionId}`
+                if (isTrainingMode) {
+                    // Training mode: Show success and option to go to training session
+                    setTrainingSessionCreated(result.sessionId)
+                    addClarenceMessage(CLARENCE_MESSAGES.training_complete)
+                } else {
+                    // Live mode: Navigate to contract-prep
+                    let redirectUrl = `/auth/contract-prep?session_id=${result.sessionId}`
 
-                // If a contractId was returned (from template or uploaded), include it
-                if (result.contractId || result.contract_id) {
-                    const contractId = result.contractId || result.contract_id
-                    redirectUrl = `/auth/contract-prep?contract_id=${contractId}&session_id=${result.sessionId}`
-                }
-                // If we had an uploaded contract already, include that
-                else if (assessment.uploadedContractId) {
-                    redirectUrl = `/auth/contract-prep?contract_id=${assessment.uploadedContractId}&session_id=${result.sessionId}`
-                }
+                    if (result.contractId || result.contract_id) {
+                        const contractId = result.contractId || result.contract_id
+                        redirectUrl = `/auth/contract-prep?contract_id=${contractId}&session_id=${result.sessionId}`
+                    } else if (assessment.uploadedContractId) {
+                        redirectUrl = `/auth/contract-prep?contract_id=${assessment.uploadedContractId}&session_id=${result.sessionId}`
+                    }
 
-                router.push(redirectUrl)
+                    router.push(redirectUrl)
+                }
             } else {
                 throw new Error(result.error || 'No session ID returned')
             }
@@ -1038,7 +1092,6 @@ export default function ContractCreationAssessment() {
             { id: 'summary', label: 'Review & Create', icon: '✅' }
         ]
 
-        // Filter out conditional steps if not applicable
         const visibleSteps = steps.filter(step => {
             if (step.id === 'template_selection') {
                 return assessment.templateSource === 'existing_template' ||
@@ -1058,13 +1111,18 @@ export default function ContractCreationAssessment() {
         const currentIndex = getCurrentStepIndex()
 
         return (
-            <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
+            <div className={`h-full flex flex-col ${isTrainingMode ? 'bg-amber-50/50' : 'bg-slate-50'} border-r border-slate-200`}>
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
-                        ← Back to Dashboard
+                    <Link
+                        href={isTrainingMode ? "/auth/training" : "/auth/contracts-dashboard"}
+                        className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                    >
+                        ← {isTrainingMode ? 'Back to Training' : 'Back to Dashboard'}
                     </Link>
-                    <h2 className="text-lg font-semibold text-slate-800 mt-2">New Contract</h2>
+                    <h2 className="text-lg font-semibold text-slate-800 mt-2">
+                        {isTrainingMode ? '🎓 Training Contract' : 'New Contract'}
+                    </h2>
                     <p className="text-sm text-slate-500">Setup Assessment</p>
                 </div>
 
@@ -1082,7 +1140,9 @@ export default function ContractCreationAssessment() {
                                 <div
                                     key={step.id}
                                     className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isCurrent
-                                        ? 'bg-blue-50 border border-blue-200'
+                                        ? isTrainingMode
+                                            ? 'bg-amber-50 border border-amber-200'
+                                            : 'bg-blue-50 border border-blue-200'
                                         : isComplete
                                             ? 'bg-green-50 border border-green-200'
                                             : 'bg-white border border-slate-200 opacity-50'
@@ -1091,13 +1151,15 @@ export default function ContractCreationAssessment() {
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg ${isComplete
                                         ? 'bg-green-500 text-white'
                                         : isCurrent
-                                            ? 'bg-blue-500 text-white'
+                                            ? isTrainingMode ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'
                                             : 'bg-slate-200 text-slate-500'
                                         }`}>
                                         {isComplete ? '✓' : step.icon}
                                     </div>
                                     <div className="flex-1">
-                                        <p className={`text-sm font-medium ${isCurrent ? 'text-blue-800' : isComplete ? 'text-green-800' : 'text-slate-600'
+                                        <p className={`text-sm font-medium ${isCurrent
+                                            ? isTrainingMode ? 'text-amber-800' : 'text-blue-800'
+                                            : isComplete ? 'text-green-800' : 'text-slate-600'
                                             }`}>
                                             {step.label}
                                         </p>
@@ -1120,7 +1182,7 @@ export default function ContractCreationAssessment() {
                 {/* Footer */}
                 <div className="p-4 border-t border-slate-200 bg-white">
                     <div className="text-xs text-slate-500 text-center">
-                        Powered by CLARENCE AI
+                        {isTrainingMode ? '🎓 Training Mode' : 'Powered by CLARENCE AI'}
                     </div>
                 </div>
             </div>
@@ -1134,9 +1196,21 @@ export default function ContractCreationAssessment() {
     const renderMainPanel = () => {
         return (
             <div className="h-full flex flex-col bg-white">
+                {/* Training Banner */}
+                {isTrainingMode && (
+                    <div className="bg-amber-500 text-white py-2 px-4">
+                        <div className="flex items-center justify-center gap-2 text-sm font-medium">
+                            <span>🎓</span>
+                            <span>TRAINING MODE - This contract is for practice only</span>
+                        </div>
+                    </div>
+                )}
+
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200">
-                    <h1 className="text-xl font-semibold text-slate-800">Create New Contract</h1>
+                    <h1 className="text-xl font-semibold text-slate-800">
+                        {isTrainingMode ? 'Create Training Contract' : 'Create New Contract'}
+                    </h1>
                     <p className="text-sm text-slate-500">
                         {assessment.step === 'summary'
                             ? 'Review your selections and create your contract'
@@ -1160,13 +1234,15 @@ export default function ContractCreationAssessment() {
 
                 {/* Content Area */}
                 <div className="flex-1 overflow-auto p-6">
-                    {assessment.step === 'summary'
-                        ? renderSummary()
-                        : assessment.step === 'template_selection'
-                            ? renderTemplateSelection()
-                            : assessment.step === 'upload_processing'
-                                ? renderUploadProcessing()
-                                : renderCurrentOptions()
+                    {trainingSessionCreated
+                        ? renderTrainingComplete()
+                        : assessment.step === 'summary'
+                            ? renderSummary()
+                            : assessment.step === 'template_selection'
+                                ? renderTemplateSelection()
+                                : assessment.step === 'upload_processing'
+                                    ? renderUploadProcessing()
+                                    : renderCurrentOptions()
                     }
                 </div>
             </div>
@@ -1196,11 +1272,16 @@ export default function ContractCreationAssessment() {
                 return (
                     <div className="flex items-center justify-center h-full">
                         <div className="text-center">
-                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <span className="text-3xl">👋</span>
+                            <div className={`w-16 h-16 ${colors.bgMedium} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                                <span className="text-3xl">{isTrainingMode ? '🎓' : '👋'}</span>
                             </div>
                             <h3 className="text-lg font-medium text-slate-800">Welcome!</h3>
-                            <p className="text-sm text-slate-500 mt-1">Clarence is ready to help you set up your contract.</p>
+                            <p className="text-sm text-slate-500 mt-1">
+                                {isTrainingMode
+                                    ? 'Clarence is ready to help you set up your training contract.'
+                                    : 'Clarence is ready to help you set up your contract.'
+                                }
+                            </p>
                         </div>
                     </div>
                 )
@@ -1214,20 +1295,20 @@ export default function ContractCreationAssessment() {
                         <button
                             key={option.id}
                             onClick={() => handleOptionSelect(option)}
-                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                            className={`flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-blue-50'} transition-all text-left group`}
                         >
-                            <div className="w-12 h-12 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+                            <div className={`w-12 h-12 rounded-lg bg-slate-100 ${isTrainingMode ? 'group-hover:bg-amber-100' : 'group-hover:bg-blue-100'} flex items-center justify-center text-2xl flex-shrink-0`}>
                                 {option.icon}
                             </div>
                             <div className="flex-1">
-                                <h4 className="font-medium text-slate-800 group-hover:text-blue-800">
+                                <h4 className={`font-medium text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-blue-800'}`}>
                                     {option.label}
                                 </h4>
                                 <p className="text-sm text-slate-500 mt-1">
                                     {option.description}
                                 </p>
                             </div>
-                            <div className="text-slate-400 group-hover:text-blue-500 self-center">
+                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-blue-500'} self-center`}>
                                 →
                             </div>
                         </button>
@@ -1286,6 +1367,9 @@ export default function ContractCreationAssessment() {
             'Compliance'
         ]
 
+        // Use amber in training mode, emerald in live mode
+        const accentColor = isTrainingMode ? 'amber' : 'emerald'
+
         return (
             <div className="max-w-2xl mx-auto space-y-6">
                 <h3 className="text-lg font-medium text-slate-800 mb-2">Quick Deal Context</h3>
@@ -1302,8 +1386,8 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('dealValue', opt.value as DealValueRange)}
                                 className={`px-4 py-3 rounded-lg border-2 text-left transition-all ${assessment.quickIntake.dealValue === opt.value
-                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                                    : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                    ? `border-${accentColor}-500 bg-${accentColor}-50 text-${accentColor}-700`
+                                    : `border-slate-200 hover:border-${accentColor}-300 hover:bg-${accentColor}-50/50`
                                     }`}
                             >
                                 <span className="mr-2">{opt.icon}</span>
@@ -1345,8 +1429,12 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('timelinePressure', opt.value as TimelinePressure)}
                                 className={`px-3 py-2 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.timelinePressure === opt.value
-                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                    : 'border-slate-200 hover:border-blue-300'
+                                    ? isTrainingMode
+                                        ? 'border-amber-500 bg-amber-50 text-amber-700'
+                                        : 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : isTrainingMode
+                                        ? 'border-slate-200 hover:border-amber-300'
+                                        : 'border-slate-200 hover:border-blue-300'
                                     }`}
                             >
                                 <span className="font-medium text-sm block">{opt.label}</span>
@@ -1367,8 +1455,12 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('bidderCount', opt.value as BidderCount)}
                                 className={`px-4 py-3 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.bidderCount === opt.value
-                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                    : 'border-slate-200 hover:border-blue-300'
+                                    ? isTrainingMode
+                                        ? 'border-amber-500 bg-amber-50 text-amber-700'
+                                        : 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : isTrainingMode
+                                        ? 'border-slate-200 hover:border-amber-300'
+                                        : 'border-slate-200 hover:border-blue-300'
                                     }`}
                             >
                                 <span className="font-medium text-sm block">{opt.label}</span>
@@ -1389,8 +1481,12 @@ export default function ContractCreationAssessment() {
                                 key={opt.value}
                                 onClick={() => updateQuickIntake('batnaStatus', opt.value as BatnaStatus)}
                                 className={`px-4 py-3 rounded-lg border-2 text-center transition-all ${assessment.quickIntake.batnaStatus === opt.value
-                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                                    : 'border-slate-200 hover:border-emerald-300'
+                                    ? isTrainingMode
+                                        ? 'border-amber-500 bg-amber-50 text-amber-700'
+                                        : 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                    : isTrainingMode
+                                        ? 'border-slate-200 hover:border-amber-300'
+                                        : 'border-slate-200 hover:border-emerald-300'
                                     }`}
                             >
                                 <span className="text-xl block mb-1">{opt.icon}</span>
@@ -1412,10 +1508,12 @@ export default function ContractCreationAssessment() {
                                 onClick={() => togglePriority(priority)}
                                 disabled={!assessment.quickIntake.topPriorities.includes(priority) && assessment.quickIntake.topPriorities.length >= 3}
                                 className={`px-3 py-1.5 rounded-full text-sm transition-all ${assessment.quickIntake.topPriorities.includes(priority)
-                                    ? 'bg-emerald-500 text-white'
+                                    ? isTrainingMode ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
                                     : assessment.quickIntake.topPriorities.length >= 3
                                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700'
+                                        : isTrainingMode
+                                            ? 'bg-slate-100 text-slate-600 hover:bg-amber-100 hover:text-amber-700'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-700'
                                     }`}
                             >
                                 {assessment.quickIntake.topPriorities.includes(priority) && '✓ '}
@@ -1434,7 +1532,7 @@ export default function ContractCreationAssessment() {
                 <div className="flex gap-3 pt-4 border-t border-slate-200">
                     <button
                         onClick={handleQuickIntakeComplete}
-                        className="flex-1 px-6 py-3 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors"
+                        className={`flex-1 px-6 py-3 rounded-lg ${colors.btnPrimary} text-white font-medium transition-colors`}
                     >
                         Continue →
                     </button>
@@ -1454,18 +1552,17 @@ export default function ContractCreationAssessment() {
     // ========================================================================
 
     const renderUploadProcessing = () => {
-        // If no upload started yet, show upload UI
         if (!assessment.uploadedContractId) {
             return (
                 <div className="max-w-2xl mx-auto">
                     <div
                         onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                        className={`border-2 border-dashed border-slate-300 rounded-xl p-12 text-center ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50/50' : 'hover:bg-blue-50/50'} transition-colors cursor-pointer`}
                     >
                         {isUploading ? (
                             <>
-                                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                <div className={`w-16 h-16 ${colors.bgMedium} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                                    <div className={`w-8 h-8 border-3 ${isTrainingMode ? 'border-amber-600' : 'border-blue-600'} border-t-transparent rounded-full animate-spin`}></div>
                                 </div>
                                 <h3 className="text-lg font-medium text-slate-800 mb-2">
                                     {uploadProgress || 'Processing...'}
@@ -1485,7 +1582,7 @@ export default function ContractCreationAssessment() {
                                 <p className="text-sm text-slate-500 mb-4">
                                     Drag and drop or click to upload a PDF, DOCX, or TXT file
                                 </p>
-                                <span className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium inline-block">
+                                <span className={`px-4 py-2 ${colors.btnPrimary} text-white rounded-lg font-medium inline-block`}>
                                     Choose File
                                 </span>
                                 <p className="text-xs text-slate-400 mt-4">
@@ -1501,7 +1598,6 @@ export default function ContractCreationAssessment() {
                         </div>
                     )}
 
-                    {/* Back button */}
                     <div className="mt-6 pt-4 border-t border-slate-200">
                         <button
                             onClick={() => {
@@ -1516,7 +1612,6 @@ export default function ContractCreationAssessment() {
             )
         }
 
-        // Upload in progress or complete - show status
         return (
             <div className="max-w-2xl mx-auto">
                 <h3 className="text-lg font-medium text-slate-800 mb-6">Your Uploaded Contract</h3>
@@ -1527,7 +1622,9 @@ export default function ContractCreationAssessment() {
                         ? 'border-green-300 bg-green-50 cursor-pointer hover:border-green-400'
                         : assessment.uploadedContractStatus === 'failed'
                             ? 'border-red-300 bg-red-50'
-                            : 'border-blue-300 bg-blue-50'
+                            : isTrainingMode
+                                ? 'border-amber-300 bg-amber-50'
+                                : 'border-blue-300 bg-blue-50'
                         }`}
                 >
                     <div className="flex items-center gap-4">
@@ -1535,7 +1632,7 @@ export default function ContractCreationAssessment() {
                             ? 'bg-green-500'
                             : assessment.uploadedContractStatus === 'failed'
                                 ? 'bg-red-500'
-                                : 'bg-blue-500'
+                                : isTrainingMode ? 'bg-amber-500' : 'bg-blue-500'
                             }`}>
                             {assessment.uploadedContractStatus === 'ready' ? (
                                 <span className="text-white text-2xl">✓</span>
@@ -1553,10 +1650,12 @@ export default function ContractCreationAssessment() {
                                 ? 'text-green-700'
                                 : assessment.uploadedContractStatus === 'failed'
                                     ? 'text-red-700'
-                                    : 'text-blue-700'
+                                    : isTrainingMode ? 'text-amber-700' : 'text-blue-700'
                                 }`}>
                                 {assessment.uploadedContractStatus === 'ready'
-                                    ? 'Ready - Click to proceed to Contract Prep'
+                                    ? isTrainingMode
+                                        ? 'Ready - Click to continue to summary'
+                                        : 'Ready - Click to proceed to Contract Prep'
                                     : assessment.uploadedContractStatus === 'failed'
                                         ? 'Processing failed'
                                         : 'Processing... This may take up to 5 minutes'
@@ -1596,11 +1695,9 @@ export default function ContractCreationAssessment() {
                     </div>
                 )}
 
-                {/* Back button */}
                 <div className="mt-6 pt-4 border-t border-slate-200">
                     <button
                         onClick={() => {
-                            // Stop polling if active
                             if (pollingRef.current) {
                                 clearInterval(pollingRef.current)
                                 pollingRef.current = null
@@ -1632,14 +1729,13 @@ export default function ContractCreationAssessment() {
             return (
                 <div className="flex items-center justify-center h-64">
                     <div className="text-center">
-                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <div className={`w-12 h-12 border-4 ${isTrainingMode ? 'border-amber-600' : 'border-blue-600'} border-t-transparent rounded-full animate-spin mx-auto mb-4`}></div>
                         <p className="text-slate-600">Loading templates...</p>
                     </div>
                 </div>
             )
         }
 
-        // No matching templates - show options
         if (templates.length === 0) {
             return (
                 <div className="max-w-2xl mx-auto">
@@ -1658,7 +1754,6 @@ export default function ContractCreationAssessment() {
                     <h4 className="text-sm font-medium text-slate-700 mb-4">How would you like to proceed?</h4>
 
                     <div className="grid gap-4">
-                        {/* Option 1: Build from Scratch */}
                         <button
                             onClick={() => {
                                 addUserMessage('🔨 Build from Scratch')
@@ -1670,32 +1765,30 @@ export default function ContractCreationAssessment() {
                                     step: 'summary'
                                 }))
                                 setTimeout(() => {
-                                    addClarenceMessage(CLARENCE_MESSAGES.summary)
+                                    addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary)
                                 }, 500)
                             }}
-                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                            className={`flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-blue-50'} transition-all text-left group`}
                         >
-                            <div className="w-12 h-12 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+                            <div className={`w-12 h-12 rounded-lg bg-slate-100 ${isTrainingMode ? 'group-hover:bg-amber-100' : 'group-hover:bg-blue-100'} flex items-center justify-center text-2xl flex-shrink-0`}>
                                 🔨
                             </div>
                             <div className="flex-1">
-                                <h4 className="font-medium text-slate-800 group-hover:text-blue-800">
+                                <h4 className={`font-medium text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-blue-800'}`}>
                                     Build from Scratch
                                 </h4>
                                 <p className="text-sm text-slate-500 mt-1">
                                     Start with a blank contract and add clauses one by one
                                 </p>
                             </div>
-                            <div className="text-slate-400 group-hover:text-blue-500 self-center">
+                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-blue-500'} self-center`}>
                                 →
                             </div>
                         </button>
 
-                        {/* Option 2: Modify Existing Template */}
                         <button
                             onClick={async () => {
                                 addUserMessage('✏️ Modify an Existing Template')
-                                // Fetch ALL templates regardless of type
                                 setIsLoadingTemplates(true)
                                 try {
                                     const response = await fetch(`${API_BASE}/get-contract-templates`)
@@ -1719,25 +1812,24 @@ export default function ContractCreationAssessment() {
                                     templateSource: 'modified_template'
                                 }))
                             }}
-                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                            className={`flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-blue-50'} transition-all text-left group`}
                         >
-                            <div className="w-12 h-12 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+                            <div className={`w-12 h-12 rounded-lg bg-slate-100 ${isTrainingMode ? 'group-hover:bg-amber-100' : 'group-hover:bg-blue-100'} flex items-center justify-center text-2xl flex-shrink-0`}>
                                 ✏️
                             </div>
                             <div className="flex-1">
-                                <h4 className="font-medium text-slate-800 group-hover:text-blue-800">
+                                <h4 className={`font-medium text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-blue-800'}`}>
                                     Modify an Existing Template
                                 </h4>
                                 <p className="text-sm text-slate-500 mt-1">
                                     Start with another template type and adapt it to your needs
                                 </p>
                             </div>
-                            <div className="text-slate-400 group-hover:text-blue-500 self-center">
+                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-blue-500'} self-center`}>
                                 →
                             </div>
                         </button>
 
-                        {/* Option 3: Upload a Contract */}
                         <button
                             onClick={() => {
                                 addUserMessage('📤 Upload a Contract')
@@ -1750,26 +1842,25 @@ export default function ContractCreationAssessment() {
                                     fileInputRef.current?.click()
                                 }, 100)
                             }}
-                            className="flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                            className={`flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-blue-50'} transition-all text-left group`}
                         >
-                            <div className="w-12 h-12 rounded-lg bg-slate-100 group-hover:bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
+                            <div className={`w-12 h-12 rounded-lg bg-slate-100 ${isTrainingMode ? 'group-hover:bg-amber-100' : 'group-hover:bg-blue-100'} flex items-center justify-center text-2xl flex-shrink-0`}>
                                 📤
                             </div>
                             <div className="flex-1">
-                                <h4 className="font-medium text-slate-800 group-hover:text-blue-800">
+                                <h4 className={`font-medium text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-blue-800'}`}>
                                     Upload a Contract
                                 </h4>
                                 <p className="text-sm text-slate-500 mt-1">
                                     Upload an existing document (PDF/DOCX) and convert it
                                 </p>
                             </div>
-                            <div className="text-slate-400 group-hover:text-blue-500 self-center">
+                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-blue-500'} self-center`}>
                                 →
                             </div>
                         </button>
                     </div>
 
-                    {/* Back button */}
                     <div className="mt-6 pt-4 border-t border-slate-200">
                         <button
                             onClick={() => {
@@ -1784,7 +1875,6 @@ export default function ContractCreationAssessment() {
             )
         }
 
-        // Templates found - show the list
         return (
             <div className="max-w-3xl mx-auto">
                 <div className="flex items-center justify-between mb-6">
@@ -1814,14 +1904,14 @@ export default function ContractCreationAssessment() {
                         <button
                             key={template.templateId}
                             onClick={() => handleTemplateSelect(template)}
-                            className="flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all text-left group"
+                            className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-blue-50'} transition-all text-left group`}
                         >
-                            <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                            <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}>
                                 <span className="text-white text-2xl">📋</span>
                             </div>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <h4 className="font-semibold text-slate-800 group-hover:text-blue-800">
+                                    <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-blue-800'}`}>
                                         {template.templateName}
                                     </h4>
                                     {template.isDefault && (
@@ -1848,7 +1938,7 @@ export default function ContractCreationAssessment() {
                                     </span>
                                 </div>
                             </div>
-                            <div className="text-slate-400 group-hover:text-blue-500 self-center text-xl">
+                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-blue-500'} self-center text-xl`}>
                                 →
                             </div>
                         </button>
@@ -1865,9 +1955,10 @@ export default function ContractCreationAssessment() {
     const renderSummary = () => {
         return (
             <div className="max-w-2xl mx-auto">
-                <h3 className="text-lg font-medium text-slate-800 mb-6">Contract Setup Summary</h3>
+                <h3 className="text-lg font-medium text-slate-800 mb-6">
+                    {isTrainingMode ? '🎓 Training Contract Summary' : 'Contract Setup Summary'}
+                </h3>
 
-                {/* Summary Cards */}
                 <div className="space-y-4 mb-8">
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                         <div className="flex items-center gap-3">
@@ -1900,12 +1991,12 @@ export default function ContractCreationAssessment() {
                     </div>
 
                     {assessment.selectedTemplateName && (
-                        <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                        <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'} border`}>
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl">✓</span>
                                 <div>
-                                    <p className="text-sm text-blue-600">Selected Template</p>
-                                    <p className="font-medium text-blue-800">{assessment.selectedTemplateName}</p>
+                                    <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-blue-600'}`}>Selected Template</p>
+                                    <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-blue-800'}`}>{assessment.selectedTemplateName}</p>
                                 </div>
                             </div>
                         </div>
@@ -1923,18 +2014,17 @@ export default function ContractCreationAssessment() {
                         </div>
                     )}
 
-                    {/* Quick Intake Summary */}
                     {(assessment.quickIntake.dealValue || assessment.quickIntake.serviceCriticality || assessment.quickIntake.topPriorities.length > 0) && (
-                        <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+                        <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
                             <div className="flex items-start gap-3">
                                 <span className="text-2xl">📊</span>
                                 <div className="flex-1">
-                                    <p className="text-sm text-emerald-600 font-medium mb-2">Deal Context</p>
+                                    <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'} font-medium mb-2`}>Deal Context</p>
                                     <div className="grid grid-cols-2 gap-2 text-sm">
                                         {assessment.quickIntake.dealValue && (
                                             <div>
-                                                <span className="text-emerald-600">Value: </span>
-                                                <span className="text-emerald-800">
+                                                <span className={isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}>Value: </span>
+                                                <span className={isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}>
                                                     {assessment.quickIntake.dealValue === 'under_50k' && 'Under £50k'}
                                                     {assessment.quickIntake.dealValue === '50k_250k' && '£50k - £250k'}
                                                     {assessment.quickIntake.dealValue === '250k_1m' && '£250k - £1M'}
@@ -1944,20 +2034,20 @@ export default function ContractCreationAssessment() {
                                         )}
                                         {assessment.quickIntake.serviceCriticality && (
                                             <div>
-                                                <span className="text-emerald-600">Criticality: </span>
-                                                <span className="text-emerald-800 capitalize">{assessment.quickIntake.serviceCriticality}</span>
+                                                <span className={isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}>Criticality: </span>
+                                                <span className={`${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} capitalize`}>{assessment.quickIntake.serviceCriticality}</span>
                                             </div>
                                         )}
                                         {assessment.quickIntake.timelinePressure && (
                                             <div>
-                                                <span className="text-emerald-600">Timeline: </span>
-                                                <span className="text-emerald-800 capitalize">{assessment.quickIntake.timelinePressure}</span>
+                                                <span className={isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}>Timeline: </span>
+                                                <span className={`${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} capitalize`}>{assessment.quickIntake.timelinePressure}</span>
                                             </div>
                                         )}
                                         {assessment.quickIntake.bidderCount && (
                                             <div>
-                                                <span className="text-emerald-600">Providers: </span>
-                                                <span className="text-emerald-800">
+                                                <span className={isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}>Providers: </span>
+                                                <span className={isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}>
                                                     {assessment.quickIntake.bidderCount === 'single' && 'Single'}
                                                     {assessment.quickIntake.bidderCount === 'few' && '2-3'}
                                                     {assessment.quickIntake.bidderCount === 'many' && '4+'}
@@ -1967,42 +2057,51 @@ export default function ContractCreationAssessment() {
                                     </div>
                                     {assessment.quickIntake.topPriorities.length > 0 && (
                                         <div className="mt-2">
-                                            <span className="text-emerald-600 text-sm">Priorities: </span>
-                                            <span className="text-emerald-800 text-sm">{assessment.quickIntake.topPriorities.join(', ')}</span>
+                                            <span className={`${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'} text-sm`}>Priorities: </span>
+                                            <span className={`${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-sm`}>{assessment.quickIntake.topPriorities.join(', ')}</span>
                                         </div>
                                     )}
                                 </div>
                             </div>
                         </div>
                     )}
+
+                    {/* Training Mode indicator */}
+                    {isTrainingMode && (
+                        <div className="p-4 rounded-lg bg-amber-100 border border-amber-300">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">🎓</span>
+                                <div>
+                                    <p className="text-sm text-amber-700 font-medium">Training Mode Active</p>
+                                    <p className="text-sm text-amber-600">This contract is for practice only. No real commitments will be made.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Contract Name Input */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                         Contract Name (Optional)
                     </label>
                     <input
                         type="text"
-                        className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        placeholder={`e.g., ${getContractTypeLabel(assessment.contractType)} with Acme Corp`}
+                        className={`w-full px-4 py-3 rounded-lg border border-slate-300 focus:border-${isTrainingMode ? 'amber' : 'blue'}-500 focus:ring-1 focus:ring-${isTrainingMode ? 'amber' : 'blue'}-500`}
+                        placeholder={`e.g., ${isTrainingMode ? 'Practice ' : ''}${getContractTypeLabel(assessment.contractType)} with Acme Corp`}
                         value={assessment.contractName}
                         onChange={(e) => setAssessment(prev => ({ ...prev, contractName: e.target.value }))}
                     />
                 </div>
 
-                {/* Error Message */}
                 {error && (
                     <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
                         {error}
                     </div>
                 )}
 
-                {/* Action Buttons */}
                 <div className="flex gap-4">
                     <button
                         onClick={() => {
-                            // Go back to appropriate step
                             if (assessment.uploadedContractId) {
                                 setAssessment(prev => ({ ...prev, step: 'upload_processing' }))
                             } else if (assessment.selectedTemplateId) {
@@ -2018,16 +2117,16 @@ export default function ContractCreationAssessment() {
                     <button
                         onClick={createContract}
                         disabled={isCreating}
-                        className="flex-1 px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className={`flex-1 px-6 py-3 rounded-lg ${colors.btnPrimary} text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
                     >
                         {isCreating ? (
                             <>
                                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                Creating Contract...
+                                {isTrainingMode ? 'Creating Training Session...' : 'Creating Contract...'}
                             </>
                         ) : (
                             <>
-                                Create Contract
+                                {isTrainingMode ? 'Create Training Session' : 'Create Contract'}
                                 <span>→</span>
                             </>
                         )}
@@ -2038,23 +2137,93 @@ export default function ContractCreationAssessment() {
     }
 
     // ========================================================================
+    // SECTION 7D: RENDER - TRAINING COMPLETE
+    // ========================================================================
+
+    const renderTrainingComplete = () => {
+        return (
+            <div className="max-w-2xl mx-auto text-center">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <span className="text-4xl">🎉</span>
+                </div>
+
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">Training Session Created!</h2>
+                <p className="text-slate-500 mb-8">
+                    Your practice contract is ready. You can now start your training negotiation.
+                </p>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
+                    <div className="flex items-center justify-center gap-2 text-amber-700 mb-2">
+                        <span>🎓</span>
+                        <span className="font-semibold">Training Mode</span>
+                    </div>
+                    <p className="text-sm text-amber-600">
+                        This is a practice session. All negotiations are simulated and non-binding.
+                    </p>
+                </div>
+
+                <div className="space-y-4 mb-8">
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-left">
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">📋</span>
+                            <div>
+                                <p className="text-sm text-slate-500">Contract Type</p>
+                                <p className="font-medium text-slate-800">{getContractTypeLabel(assessment.contractType)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-left">
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">⚖️</span>
+                            <div>
+                                <p className="text-sm text-slate-500">Mediation Type</p>
+                                <p className="font-medium text-slate-800">{getMediationTypeLabel(assessment.mediationType)}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => router.push('/auth/training')}
+                        className="flex-1 px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                        Back to Training Lobby
+                    </button>
+                    <button
+                        onClick={() => router.push(`/auth/training/${trainingSessionCreated}`)}
+                        className="flex-1 px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                        Start Training Session
+                        <span>→</span>
+                    </button>
+                </div>
+
+                <p className="text-xs text-slate-400 mt-6">
+                    Session ID: {trainingSessionCreated}
+                </p>
+            </div>
+        )
+    }
+
+    // ========================================================================
     // SECTION 8: RENDER - PANEL 3 (CLARENCE CHAT)
     // ========================================================================
 
     const renderChatPanel = () => {
         return (
-            <div className="h-full flex flex-col bg-gradient-to-b from-blue-50 to-white border-l border-slate-200">
+            <div className={`h-full flex flex-col ${isTrainingMode ? 'bg-gradient-to-b from-amber-50 to-white' : 'bg-gradient-to-b from-blue-50 to-white'} border-l border-slate-200`}>
                 {/* Chat Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                        <div className={`w-10 h-10 rounded-full ${colors.bgGradient} flex items-center justify-center`}>
                             <span className="text-white text-lg">C</span>
                         </div>
                         <div>
                             <h3 className="font-semibold text-slate-800">Clarence</h3>
-                            <p className="text-xs text-green-600 flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                                Online
+                            <p className={`text-xs ${isTrainingMode ? 'text-amber-600' : 'text-green-600'} flex items-center gap-1`}>
+                                <span className={`w-2 h-2 rounded-full ${isTrainingMode ? 'bg-amber-500' : 'bg-green-500'}`}></span>
+                                {isTrainingMode ? 'Training Assistant' : 'Online'}
                             </p>
                         </div>
                     </div>
@@ -2065,7 +2234,7 @@ export default function ContractCreationAssessment() {
                     {chatMessages.map((message) => (
                         <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                ? 'bg-blue-600 text-white rounded-br-md'
+                                ? `${colors.chatBubble} text-white rounded-br-md`
                                 : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
                                 }`}>
                                 <div className="text-sm whitespace-pre-wrap">
@@ -2075,7 +2244,7 @@ export default function ContractCreationAssessment() {
                                             : <span key={i}>{part}</span>
                                     )}
                                 </div>
-                                <div className={`text-xs mt-2 ${message.role === 'user' ? 'text-blue-200' : 'text-slate-400'}`}>
+                                <div className={`text-xs mt-2 ${message.role === 'user' ? colors.textLight : 'text-slate-400'}`}>
                                     {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                             </div>
@@ -2087,7 +2256,10 @@ export default function ContractCreationAssessment() {
                 {/* Chat Footer */}
                 <div className="p-4 border-t border-slate-200 bg-white">
                     <div className="text-xs text-slate-500 text-center">
-                        Clarence is guiding you through contract setup
+                        {isTrainingMode
+                            ? '🎓 Clarence is guiding your training setup'
+                            : 'Clarence is guiding you through contract setup'
+                        }
                     </div>
                 </div>
             </div>
