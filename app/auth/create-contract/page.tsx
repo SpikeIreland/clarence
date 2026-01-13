@@ -8,7 +8,7 @@
 // Training Mode: Activated via ?mode=training URL parameter
 // ============================================================================
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
@@ -384,10 +384,10 @@ const extractTextFromFile = async (file: File): Promise<string> => {
 }
 
 // ============================================================================
-// SECTION 5: MAIN COMPONENT
+// SECTION 5: INNER COMPONENT (wrapped in Suspense)
 // ============================================================================
 
-export default function ContractCreationAssessment() {
+function ContractCreationContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const chatEndRef = useRef<HTMLDivElement>(null)
@@ -2290,5 +2290,65 @@ export default function ContractCreationAssessment() {
             {/* Beta Feedback Button */}
             <FeedbackButton position="bottom-left" />
         </div>
+    )
+}
+
+// ============================================================================
+// SECTION 10: LOADING FALLBACK
+// ============================================================================
+
+function LoadingFallback() {
+    return (
+        <div className="h-screen flex bg-slate-100">
+            {/* Progress Sidebar Skeleton */}
+            <div className="w-64 flex-shrink-0 bg-slate-50 border-r border-slate-200">
+                <div className="p-4 border-b border-slate-200 bg-white">
+                    <div className="h-4 bg-slate-200 rounded w-24 mb-2"></div>
+                    <div className="h-6 bg-slate-200 rounded w-32 mb-1"></div>
+                    <div className="h-4 bg-slate-200 rounded w-28"></div>
+                </div>
+                <div className="p-4 space-y-3">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200">
+                            <div className="w-8 h-8 bg-slate-200 rounded-full"></div>
+                            <div className="h-4 bg-slate-200 rounded w-24"></div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Main Content Skeleton */}
+            <div className="flex-1 min-w-0 bg-white flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-600">Loading...</p>
+                </div>
+            </div>
+
+            {/* Chat Panel Skeleton */}
+            <div className="w-96 flex-shrink-0 bg-gradient-to-b from-blue-50 to-white border-l border-slate-200">
+                <div className="p-4 border-b border-slate-200 bg-white">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
+                        <div>
+                            <div className="h-4 bg-slate-200 rounded w-20 mb-1"></div>
+                            <div className="h-3 bg-slate-200 rounded w-12"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 11: DEFAULT EXPORT WITH SUSPENSE WRAPPER
+// ============================================================================
+
+export default function ContractCreationAssessment() {
+    return (
+        <Suspense fallback={<LoadingFallback />}>
+            <ContractCreationContent />
+        </Suspense>
     )
 }
