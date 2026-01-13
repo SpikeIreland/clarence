@@ -4,7 +4,7 @@
 // CLARENCE Beta Testing Admin Dashboard
 // ============================================================================
 // File: app/admin/beta-testing/page.tsx
-// Purpose: Admin interface for managing beta testers and feedback
+// Purpose: Admin interface for managing beta testers, feedback, and videos
 // ============================================================================
 
 import { useState, useEffect } from 'react'
@@ -83,6 +83,62 @@ interface DashboardStats {
     pendingFeedback: number
 }
 
+interface TrainingVideo {
+    video_id: string
+    video_code: string
+    youtube_id: string | null
+    title: string
+    description: string | null
+    duration: string | null
+    thumbnail_url: string | null
+    category: string
+    placement: string[]
+    priority: 'high' | 'medium' | 'low'
+    status: 'placeholder' | 'scripted' | 'recorded' | 'published'
+    script_notes: string | null
+    is_active: boolean
+    is_featured: boolean
+    display_order: number
+    created_at: string
+    updated_at: string
+    published_at: string | null
+}
+
+interface VideoStats {
+    total: number
+    published: number
+    placeholder: number
+    byCategory: Record<string, number>
+}
+
+// ============================================================================
+// SECTION 1B: CONSTANTS
+// ============================================================================
+
+const VIDEO_CATEGORIES: Record<string, { label: string; icon: string; color: string }> = {
+    onboarding: { label: 'Getting Started', icon: '👋', color: 'bg-blue-100 text-blue-700' },
+    contract_creation: { label: 'Contract Creation', icon: '📝', color: 'bg-emerald-100 text-emerald-700' },
+    contract_prep: { label: 'Contract Prep', icon: '📋', color: 'bg-purple-100 text-purple-700' },
+    assessment: { label: 'Assessment', icon: '📊', color: 'bg-amber-100 text-amber-700' },
+    provider: { label: 'Providers', icon: '🏢', color: 'bg-indigo-100 text-indigo-700' },
+    negotiation: { label: 'Negotiation', icon: '⚖️', color: 'bg-rose-100 text-rose-700' },
+    document_centre: { label: 'Documents', icon: '📁', color: 'bg-slate-100 text-slate-700' },
+    training: { label: 'Training Mode', icon: '🎓', color: 'bg-orange-100 text-orange-700' }
+}
+
+const VIDEO_PRIORITIES: Record<string, { label: string; color: string }> = {
+    high: { label: 'High', color: 'bg-red-100 text-red-700 border-red-300' },
+    medium: { label: 'Medium', color: 'bg-blue-100 text-blue-700 border-blue-300' },
+    low: { label: 'Low', color: 'bg-slate-100 text-slate-600 border-slate-300' }
+}
+
+const VIDEO_STATUSES: Record<string, { label: string; color: string }> = {
+    placeholder: { label: 'Not Started', color: 'bg-slate-100 text-slate-600' },
+    scripted: { label: 'Script Ready', color: 'bg-purple-100 text-purple-700' },
+    recorded: { label: 'Recorded', color: 'bg-amber-100 text-amber-700' },
+    published: { label: 'Published', color: 'bg-emerald-100 text-emerald-700' }
+}
+
 // ============================================================================
 // SECTION 2: MAIN COMPONENT
 // ============================================================================
@@ -100,8 +156,8 @@ export default function BetaTestingAdminDashboard() {
     const [adminEmail, setAdminEmail] = useState('')
     const [loading, setLoading] = useState(true)
 
-    // Tab state
-    const [activeTab, setActiveTab] = useState<'create' | 'users' | 'feedback' | 'stats'>('users')
+    // Tab state - Added 'videos' to the type
+    const [activeTab, setActiveTab] = useState<'create' | 'users' | 'feedback' | 'stats' | 'videos'>('users')
 
     // Create user state
     const [createForm, setCreateForm] = useState({
@@ -133,6 +189,29 @@ export default function BetaTestingAdminDashboard() {
         pendingFeedback: 0
     })
 
+    // Video state
+    const [videos, setVideos] = useState<TrainingVideo[]>([])
+    const [videoStats, setVideoStats] = useState<VideoStats>({ total: 0, published: 0, placeholder: 0, byCategory: {} })
+    const [loadingVideos, setLoadingVideos] = useState(false)
+    const [selectedVideo, setSelectedVideo] = useState<TrainingVideo | null>(null)
+    const [videoFilter, setVideoFilter] = useState<{ category: string; status: string; search: string }>({
+        category: 'all',
+        status: 'all',
+        search: ''
+    })
+    const [editingYoutubeId, setEditingYoutubeId] = useState<string | null>(null)
+    const [newYoutubeId, setNewYoutubeId] = useState('')
+    const [showAddVideoModal, setShowAddVideoModal] = useState(false)
+    const [newVideo, setNewVideo] = useState({
+        video_code: '',
+        title: '',
+        description: '',
+        duration: '',
+        category: 'training',
+        priority: 'medium',
+        script_notes: ''
+    })
+
     // -------------------------------------------------------------------------
     // SECTION 2.2: EFFECTS
     // -------------------------------------------------------------------------
@@ -150,6 +229,8 @@ export default function BetaTestingAdminDashboard() {
             loadAllFeedback()
         } else if (isAdmin && activeTab === 'stats') {
             loadStats()
+        } else if (isAdmin && activeTab === 'videos') {
+            loadVideos()
         }
     }, [isAdmin, activeTab, feedbackFilter])
 
@@ -363,10 +444,10 @@ export default function BetaTestingAdminDashboard() {
             let query = supabase
                 .from('beta_feedback')
                 .select(`
-          *,
-          user:users(first_name, last_name, email),
-          company:companies(company_name)
-        `)
+                    *,
+                    user:users(first_name, last_name, email),
+                    company:companies(company_name)
+                `)
                 .order('created_at', { ascending: false })
 
             if (feedbackFilter === 'flagged') {
@@ -525,7 +606,167 @@ export default function BetaTestingAdminDashboard() {
     }
 
     // -------------------------------------------------------------------------
-    // SECTION 2.8: LOADING STATE
+    // SECTION 2.8: VIDEO FUNCTIONS
+    // -------------------------------------------------------------------------
+
+    async function loadVideos() {
+        setLoadingVideos(true)
+        try {
+            const { data, error } = await supabase
+                .from('training_videos')
+                .select('*')
+                .order('display_order', { ascending: true })
+
+            if (error) throw error
+
+            setVideos(data || [])
+
+            // Calculate stats
+            const calcStats: VideoStats = {
+                total: data?.length || 0,
+                published: data?.filter(v => v.youtube_id).length || 0,
+                placeholder: data?.filter(v => !v.youtube_id).length || 0,
+                byCategory: {}
+            }
+
+            data?.forEach(v => {
+                calcStats.byCategory[v.category] = (calcStats.byCategory[v.category] || 0) + 1
+            })
+
+            setVideoStats(calcStats)
+
+        } catch (error) {
+            console.error('Error loading videos:', error)
+        } finally {
+            setLoadingVideos(false)
+        }
+    }
+
+    async function updateVideoYoutubeId(videoId: string, youtubeId: string) {
+        try {
+            const adminUser = await supabase.auth.getUser()
+
+            const { error } = await supabase
+                .from('training_videos')
+                .update({
+                    youtube_id: youtubeId || null,
+                    status: youtubeId ? 'published' : 'placeholder',
+                    published_at: youtubeId ? new Date().toISOString() : null,
+                    updated_by: adminUser.data.user?.id
+                })
+                .eq('video_id', videoId)
+
+            if (error) throw error
+
+            // Log admin action
+            await supabase.from('admin_actions').insert({
+                admin_id: adminUser.data.user?.id,
+                admin_email: adminEmail,
+                action_type: 'update_video',
+                details: { video_id: videoId, youtube_id: youtubeId }
+            })
+
+            setEditingYoutubeId(null)
+            setNewYoutubeId('')
+            loadVideos()
+
+        } catch (error) {
+            console.error('Error updating video:', error)
+            alert('Failed to update video')
+        }
+    }
+
+    async function toggleVideoFeatured(videoId: string, currentFeatured: boolean) {
+        try {
+            const { error } = await supabase
+                .from('training_videos')
+                .update({ is_featured: !currentFeatured })
+                .eq('video_id', videoId)
+
+            if (error) throw error
+            loadVideos()
+
+        } catch (error) {
+            console.error('Error toggling featured:', error)
+        }
+    }
+
+    async function toggleVideoActive(videoId: string, currentActive: boolean) {
+        try {
+            const { error } = await supabase
+                .from('training_videos')
+                .update({ is_active: !currentActive })
+                .eq('video_id', videoId)
+
+            if (error) throw error
+            loadVideos()
+
+        } catch (error) {
+            console.error('Error toggling active:', error)
+        }
+    }
+
+    async function createNewVideo() {
+        if (!newVideo.video_code || !newVideo.title) {
+            alert('Please fill in video code and title')
+            return
+        }
+
+        try {
+            const adminUser = await supabase.auth.getUser()
+
+            const { error } = await supabase
+                .from('training_videos')
+                .insert({
+                    video_code: newVideo.video_code,
+                    title: newVideo.title,
+                    description: newVideo.description || null,
+                    duration: newVideo.duration || null,
+                    category: newVideo.category,
+                    priority: newVideo.priority,
+                    script_notes: newVideo.script_notes || null,
+                    created_by: adminUser.data.user?.id
+                })
+
+            if (error) throw error
+
+            setShowAddVideoModal(false)
+            setNewVideo({
+                video_code: '',
+                title: '',
+                description: '',
+                duration: '',
+                category: 'training',
+                priority: 'medium',
+                script_notes: ''
+            })
+            loadVideos()
+
+        } catch (error: any) {
+            console.error('Error creating video:', error)
+            alert(`Failed to create video: ${error.message}`)
+        }
+    }
+
+    function getFilteredVideos() {
+        return videos.filter(v => {
+            if (videoFilter.category !== 'all' && v.category !== videoFilter.category) return false
+            if (videoFilter.status !== 'all') {
+                if (videoFilter.status === 'published' && !v.youtube_id) return false
+                if (videoFilter.status === 'placeholder' && v.youtube_id) return false
+            }
+            if (videoFilter.search) {
+                const search = videoFilter.search.toLowerCase()
+                if (!v.title.toLowerCase().includes(search) &&
+                    !v.video_code.toLowerCase().includes(search) &&
+                    !v.description?.toLowerCase().includes(search)) return false
+            }
+            return true
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // SECTION 2.9: LOADING STATE
     // -------------------------------------------------------------------------
 
     if (loading) {
@@ -544,7 +785,7 @@ export default function BetaTestingAdminDashboard() {
     }
 
     // -------------------------------------------------------------------------
-    // SECTION 2.9: MAIN RENDER
+    // SECTION 3: MAIN RENDER
     // -------------------------------------------------------------------------
 
     return (
@@ -587,8 +828,8 @@ export default function BetaTestingAdminDashboard() {
                         <button
                             onClick={() => setActiveTab('create')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'create'
-                                    ? 'border-[#2563eb] text-[#2563eb]'
-                                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                                ? 'border-[#2563eb] text-[#2563eb]'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
                                 }`}
                         >
                             ➕ Create Tester
@@ -598,8 +839,8 @@ export default function BetaTestingAdminDashboard() {
                         <button
                             onClick={() => setActiveTab('users')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'users'
-                                    ? 'border-[#2563eb] text-[#2563eb]'
-                                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                                ? 'border-[#2563eb] text-[#2563eb]'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
                                 }`}
                         >
                             👥 Testers ({users.length})
@@ -609,8 +850,8 @@ export default function BetaTestingAdminDashboard() {
                         <button
                             onClick={() => setActiveTab('feedback')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'feedback'
-                                    ? 'border-[#2563eb] text-[#2563eb]'
-                                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                                ? 'border-[#2563eb] text-[#2563eb]'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
                                 }`}
                         >
                             💬 Feedback ({allFeedback.length})
@@ -620,11 +861,22 @@ export default function BetaTestingAdminDashboard() {
                         <button
                             onClick={() => setActiveTab('stats')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'stats'
-                                    ? 'border-[#2563eb] text-[#2563eb]'
-                                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                                ? 'border-[#2563eb] text-[#2563eb]'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
                                 }`}
                         >
                             📊 Stats
+                        </button>
+
+                        {/* Videos Tab */}
+                        <button
+                            onClick={() => setActiveTab('videos')}
+                            className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'videos'
+                                ? 'border-[#2563eb] text-[#2563eb]'
+                                : 'border-transparent text-slate-600 hover:text-slate-900'
+                                }`}
+                        >
+                            🎬 Videos ({videoStats.published}/{videoStats.total})
                         </button>
                     </div>
                 </div>
@@ -791,8 +1043,8 @@ export default function BetaTestingAdminDashboard() {
                                                 key={user.user_id}
                                                 onClick={() => loadUserDetails(user.user_id)}
                                                 className={`w-full text-left p-4 border-2 rounded-lg transition-all ${selectedUser?.profile.user_id === user.user_id
-                                                        ? 'border-[#2563eb] bg-blue-50'
-                                                        : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                                                    ? 'border-[#2563eb] bg-blue-50'
+                                                    : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
                                                     }`}
                                             >
                                                 <div className="font-semibold text-slate-900">
@@ -936,8 +1188,8 @@ export default function BetaTestingAdminDashboard() {
                                     <button
                                         onClick={() => setFeedbackFilter('all')}
                                         className={`px-4 py-2 rounded-lg font-semibold transition-colors ${feedbackFilter === 'all'
-                                                ? 'bg-[#2563eb] text-white'
-                                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                            ? 'bg-[#2563eb] text-white'
+                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                             }`}
                                     >
                                         All
@@ -945,8 +1197,8 @@ export default function BetaTestingAdminDashboard() {
                                     <button
                                         onClick={() => setFeedbackFilter('flagged')}
                                         className={`px-4 py-2 rounded-lg font-semibold transition-colors ${feedbackFilter === 'flagged'
-                                                ? 'bg-red-600 text-white'
-                                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                            ? 'bg-red-600 text-white'
+                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                             }`}
                                     >
                                         🚩 Flagged
@@ -954,8 +1206,8 @@ export default function BetaTestingAdminDashboard() {
                                     <button
                                         onClick={() => setFeedbackFilter('unreviewed')}
                                         className={`px-4 py-2 rounded-lg font-semibold transition-colors ${feedbackFilter === 'unreviewed'
-                                                ? 'bg-amber-500 text-white'
-                                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                            ? 'bg-amber-500 text-white'
+                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                             }`}
                                     >
                                         ⏳ Unreviewed
@@ -968,10 +1220,10 @@ export default function BetaTestingAdminDashboard() {
                                     <div
                                         key={fb.feedback_id}
                                         className={`p-4 rounded-lg border-2 ${fb.is_flagged
-                                                ? 'bg-red-50 border-red-300'
-                                                : fb.reviewed_at
-                                                    ? 'bg-slate-50 border-slate-200'
-                                                    : 'bg-white border-blue-200'
+                                            ? 'bg-red-50 border-red-300'
+                                            : fb.reviewed_at
+                                                ? 'bg-slate-50 border-slate-200'
+                                                : 'bg-white border-blue-200'
                                             }`}
                                     >
                                         {/* Header */}
@@ -1120,6 +1372,486 @@ export default function BetaTestingAdminDashboard() {
                                 <div className="text-sm text-slate-600">Average Rating</div>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {/* ================================================================ */}
+                {/* VIDEOS TAB */}
+                {/* ================================================================ */}
+                {activeTab === 'videos' && (
+                    <div className="max-w-6xl mx-auto">
+                        {/* Stats Row */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                            <div className="bg-white rounded-xl shadow p-4">
+                                <div className="text-3xl font-bold text-slate-800">{videoStats.total}</div>
+                                <div className="text-sm text-slate-500">Total Videos</div>
+                            </div>
+                            <div className="bg-white rounded-xl shadow p-4">
+                                <div className="text-3xl font-bold text-emerald-600">{videoStats.published}</div>
+                                <div className="text-sm text-slate-500">Published</div>
+                            </div>
+                            <div className="bg-white rounded-xl shadow p-4">
+                                <div className="text-3xl font-bold text-amber-600">{videoStats.placeholder}</div>
+                                <div className="text-sm text-slate-500">To Record</div>
+                            </div>
+                            <div className="bg-white rounded-xl shadow p-4">
+                                <div className="text-3xl font-bold text-red-600">
+                                    {videos.filter(v => v.priority === 'high' && !v.youtube_id).length}
+                                </div>
+                                <div className="text-sm text-slate-500">High Priority Pending</div>
+                            </div>
+                        </div>
+
+                        {/* Category Pills */}
+                        <div className="bg-white rounded-xl shadow p-4 mb-6">
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    onClick={() => setVideoFilter(f => ({ ...f, category: 'all' }))}
+                                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${videoFilter.category === 'all'
+                                            ? 'bg-slate-800 text-white'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                >
+                                    All ({videoStats.total})
+                                </button>
+                                {Object.entries(VIDEO_CATEGORIES).map(([key, cat]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => setVideoFilter(f => ({ ...f, category: key }))}
+                                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${videoFilter.category === key
+                                                ? 'bg-slate-800 text-white'
+                                                : `${cat.color} hover:opacity-80`
+                                            }`}
+                                    >
+                                        {cat.icon} {cat.label} ({videoStats.byCategory[key] || 0})
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Filters & Actions */}
+                        <div className="bg-white rounded-xl shadow p-4 mb-6">
+                            <div className="flex flex-wrap items-center gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Search videos..."
+                                    value={videoFilter.search}
+                                    onChange={(e) => setVideoFilter(f => ({ ...f, search: e.target.value }))}
+                                    className="flex-1 min-w-[200px] px-4 py-2 border border-slate-300 rounded-lg"
+                                />
+                                <select
+                                    value={videoFilter.status}
+                                    onChange={(e) => setVideoFilter(f => ({ ...f, status: e.target.value }))}
+                                    className="px-3 py-2 border border-slate-300 rounded-lg"
+                                >
+                                    <option value="all">All Statuses</option>
+                                    <option value="placeholder">🔴 Not Published</option>
+                                    <option value="published">🟢 Published</option>
+                                </select>
+                                <button
+                                    onClick={() => setShowAddVideoModal(true)}
+                                    className="px-4 py-2 bg-[#2563eb] text-white rounded-lg font-medium hover:bg-[#1d4ed8]"
+                                >
+                                    + Add Video
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Video List */}
+                        <div className="bg-white rounded-xl shadow overflow-hidden">
+                            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                                <span className="font-medium text-slate-700">
+                                    {getFilteredVideos().length} video{getFilteredVideos().length !== 1 ? 's' : ''}
+                                </span>
+                                <button
+                                    onClick={loadVideos}
+                                    className="text-sm text-blue-600 hover:text-blue-700"
+                                >
+                                    🔄 Refresh
+                                </button>
+                            </div>
+
+                            {loadingVideos ? (
+                                <div className="p-12 text-center">
+                                    <div className="text-4xl mb-4 animate-pulse">⏳</div>
+                                    <p className="text-slate-600">Loading videos...</p>
+                                </div>
+                            ) : getFilteredVideos().length === 0 ? (
+                                <div className="p-12 text-center">
+                                    <div className="text-4xl mb-4">🎬</div>
+                                    <p className="text-slate-600">No videos match your filters</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-100">
+                                    {getFilteredVideos().map(video => (
+                                        <div key={video.video_id} className="p-4 hover:bg-slate-50">
+                                            <div className="flex items-start gap-4">
+                                                {/* Thumbnail / Preview */}
+                                                <div className="flex-shrink-0">
+                                                    {video.youtube_id ? (
+                                                        <a
+                                                            href={`https://www.youtube.com/watch?v=${video.youtube_id}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="block w-32 h-20 rounded-lg overflow-hidden bg-slate-200 relative group"
+                                                        >
+                                                            <img
+                                                                src={`https://img.youtube.com/vi/${video.youtube_id}/mqdefault.jpg`}
+                                                                alt={video.title}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                            <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <span className="text-white text-2xl">▶</span>
+                                                            </div>
+                                                        </a>
+                                                    ) : (
+                                                        <div className="w-32 h-20 rounded-lg bg-slate-200 flex items-center justify-center">
+                                                            <span className="text-3xl">{VIDEO_CATEGORIES[video.category]?.icon || '🎬'}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Content */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                        <h4 className="font-semibold text-slate-800">{video.title}</h4>
+                                                        {video.is_featured && (
+                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">⭐ Featured</span>
+                                                        )}
+                                                        {!video.is_active && (
+                                                            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">Hidden</span>
+                                                        )}
+                                                    </div>
+
+                                                    <p className="text-sm text-slate-600 mb-2 line-clamp-1">
+                                                        {video.description || 'No description'}
+                                                    </p>
+
+                                                    <div className="flex items-center gap-3 flex-wrap">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${VIDEO_CATEGORIES[video.category]?.color || 'bg-slate-100'}`}>
+                                                            {VIDEO_CATEGORIES[video.category]?.label || video.category}
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-medium border ${VIDEO_PRIORITIES[video.priority]?.color}`}>
+                                                            {VIDEO_PRIORITIES[video.priority]?.label}
+                                                        </span>
+                                                        <span className="text-xs text-slate-500">
+                                                            {video.duration}
+                                                        </span>
+                                                        <code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">
+                                                            {video.video_code}
+                                                        </code>
+                                                    </div>
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="flex-shrink-0 space-y-2">
+                                                    {/* YouTube ID Input */}
+                                                    {editingYoutubeId === video.video_id ? (
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                value={newYoutubeId}
+                                                                onChange={(e) => setNewYoutubeId(e.target.value)}
+                                                                placeholder="YouTube ID"
+                                                                className="w-32 px-2 py-1 text-sm border border-slate-300 rounded"
+                                                                autoFocus
+                                                            />
+                                                            <button
+                                                                onClick={() => updateVideoYoutubeId(video.video_id, newYoutubeId)}
+                                                                className="px-2 py-1 bg-emerald-600 text-white text-sm rounded hover:bg-emerald-700"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setEditingYoutubeId(null); setNewYoutubeId(''); }}
+                                                                className="px-2 py-1 bg-slate-200 text-slate-700 text-sm rounded hover:bg-slate-300"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingYoutubeId(video.video_id)
+                                                                setNewYoutubeId(video.youtube_id || '')
+                                                            }}
+                                                            className={`px-3 py-1.5 text-sm rounded font-medium ${video.youtube_id
+                                                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                                                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                                                }`}
+                                                        >
+                                                            {video.youtube_id ? '✏️ Edit ID' : '➕ Add YouTube ID'}
+                                                        </button>
+                                                    )}
+
+                                                    {/* Quick Actions */}
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => toggleVideoFeatured(video.video_id, video.is_featured)}
+                                                            className={`px-2 py-1 text-xs rounded ${video.is_featured
+                                                                    ? 'bg-amber-500 text-white'
+                                                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                                }`}
+                                                            title={video.is_featured ? 'Remove from featured' : 'Add to featured'}
+                                                        >
+                                                            ⭐
+                                                        </button>
+                                                        <button
+                                                            onClick={() => toggleVideoActive(video.video_id, video.is_active)}
+                                                            className={`px-2 py-1 text-xs rounded ${video.is_active
+                                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                                    : 'bg-red-100 text-red-700'
+                                                                }`}
+                                                            title={video.is_active ? 'Hide video' : 'Show video'}
+                                                        >
+                                                            {video.is_active ? '👁️' : '🚫'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setSelectedVideo(video)}
+                                                            className="px-2 py-1 text-xs rounded bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                                            title="View details"
+                                                        >
+                                                            ℹ️
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Script Notes (expandable) */}
+                                            {video.script_notes && (
+                                                <details className="mt-3 ml-36">
+                                                    <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+                                                        📝 Script Notes
+                                                    </summary>
+                                                    <p className="mt-2 text-sm text-slate-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                                                        {video.script_notes}
+                                                    </p>
+                                                </details>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Add Video Modal */}
+                        {showAddVideoModal && (
+                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                                <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-auto">
+                                    <div className="p-6 border-b border-slate-200">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-lg font-bold text-slate-800">Add New Video</h3>
+                                            <button
+                                                onClick={() => setShowAddVideoModal(false)}
+                                                className="text-slate-400 hover:text-slate-600"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-6 space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Video Code <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={newVideo.video_code}
+                                                onChange={(e) => setNewVideo(v => ({ ...v, video_code: e.target.value.toLowerCase().replace(/\s+/g, '-') }))}
+                                                placeholder="e.g., training-new-feature"
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1">Unique identifier (lowercase, hyphens)</p>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                Title <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={newVideo.title}
+                                                onChange={(e) => setNewVideo(v => ({ ...v, title: e.target.value }))}
+                                                placeholder="Video title"
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                                            <textarea
+                                                value={newVideo.description}
+                                                onChange={(e) => setNewVideo(v => ({ ...v, description: e.target.value }))}
+                                                placeholder="Brief description..."
+                                                rows={2}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1">Duration</label>
+                                                <input
+                                                    type="text"
+                                                    value={newVideo.duration}
+                                                    onChange={(e) => setNewVideo(v => ({ ...v, duration: e.target.value }))}
+                                                    placeholder="e.g., 60-90s"
+                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                                                <select
+                                                    value={newVideo.category}
+                                                    onChange={(e) => setNewVideo(v => ({ ...v, category: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                                                >
+                                                    {Object.entries(VIDEO_CATEGORIES).map(([key, cat]) => (
+                                                        <option key={key} value={key}>{cat.icon} {cat.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+                                            <div className="flex gap-2">
+                                                {Object.entries(VIDEO_PRIORITIES).map(([key, pri]) => (
+                                                    <button
+                                                        key={key}
+                                                        type="button"
+                                                        onClick={() => setNewVideo(v => ({ ...v, priority: key }))}
+                                                        className={`px-4 py-2 rounded-lg border font-medium ${newVideo.priority === key
+                                                                ? pri.color + ' border-current'
+                                                                : 'bg-white border-slate-300 text-slate-600'
+                                                            }`}
+                                                    >
+                                                        {pri.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Script Notes</label>
+                                            <textarea
+                                                value={newVideo.script_notes}
+                                                onChange={(e) => setNewVideo(v => ({ ...v, script_notes: e.target.value }))}
+                                                placeholder="Notes on what to cover in this video..."
+                                                rows={3}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                                        <button
+                                            onClick={() => setShowAddVideoModal(false)}
+                                            className="px-4 py-2 text-slate-700 hover:bg-slate-100 rounded-lg"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={createNewVideo}
+                                            className="px-4 py-2 bg-[#2563eb] text-white rounded-lg font-medium hover:bg-[#1d4ed8]"
+                                        >
+                                            Create Video
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Video Details Modal */}
+                        {selectedVideo && (
+                            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                                <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto">
+                                    <div className="p-6 border-b border-slate-200">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-lg font-bold text-slate-800">{selectedVideo.title}</h3>
+                                            <button
+                                                onClick={() => setSelectedVideo(null)}
+                                                className="text-slate-400 hover:text-slate-600"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-6">
+                                        {/* Preview */}
+                                        {selectedVideo.youtube_id ? (
+                                            <div className="aspect-video mb-6 rounded-lg overflow-hidden bg-black">
+                                                <iframe
+                                                    src={`https://www.youtube.com/embed/${selectedVideo.youtube_id}`}
+                                                    title={selectedVideo.title}
+                                                    className="w-full h-full"
+                                                    allowFullScreen
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="aspect-video mb-6 rounded-lg bg-slate-100 flex items-center justify-center">
+                                                <div className="text-center">
+                                                    <div className="text-6xl mb-4">{VIDEO_CATEGORIES[selectedVideo.category]?.icon || '🎬'}</div>
+                                                    <p className="text-slate-500">No video uploaded yet</p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Details */}
+                                        <div className="space-y-4">
+                                            <div>
+                                                <h4 className="text-sm font-medium text-slate-500">Description</h4>
+                                                <p className="text-slate-800">{selectedVideo.description || 'No description'}</p>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <h4 className="text-sm font-medium text-slate-500">Video Code</h4>
+                                                    <code className="text-sm bg-slate-100 px-2 py-1 rounded">{selectedVideo.video_code}</code>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-medium text-slate-500">Duration</h4>
+                                                    <p className="text-slate-800">{selectedVideo.duration || 'Not set'}</p>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="text-sm font-medium text-slate-500">Placements</h4>
+                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                    {selectedVideo.placement?.map((p, i) => (
+                                                        <span key={i} className="px-2 py-1 bg-slate-100 text-slate-700 text-sm rounded">
+                                                            {p}
+                                                        </span>
+                                                    ))}
+                                                    {(!selectedVideo.placement || selectedVideo.placement.length === 0) && (
+                                                        <span className="text-slate-400 text-sm">No placements configured</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {selectedVideo.script_notes && (
+                                                <div>
+                                                    <h4 className="text-sm font-medium text-slate-500">Script Notes</h4>
+                                                    <p className="text-slate-800 bg-amber-50 p-3 rounded-lg border border-amber-200 mt-1">
+                                                        {selectedVideo.script_notes}
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            <div className="pt-4 border-t border-slate-200 text-xs text-slate-500">
+                                                <p>Created: {new Date(selectedVideo.created_at).toLocaleString()}</p>
+                                                <p>Updated: {new Date(selectedVideo.updated_at).toLocaleString()}</p>
+                                                {selectedVideo.published_at && (
+                                                    <p>Published: {new Date(selectedVideo.published_at).toLocaleString()}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
