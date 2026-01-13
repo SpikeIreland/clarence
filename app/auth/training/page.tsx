@@ -42,7 +42,7 @@ interface TrainingScenario {
     difficultyLabel: string
     industry: string
     contractType: string
-    estimatedDuration: number // minutes
+    estimatedDuration: number
     clauseCount: number
     negotiableClauseCount: number
     aiPersonality: 'cooperative' | 'balanced' | 'aggressive'
@@ -50,7 +50,6 @@ interface TrainingScenario {
     isNew?: boolean
     isFeatured?: boolean
     iconEmoji: string
-    // For instant-play: references to pre-built contract
     templateSessionId?: string
 }
 
@@ -76,14 +75,6 @@ interface PendingInvitation {
     createdAt: string
 }
 
-interface ApprovedPartner {
-    partnerId: string
-    name: string
-    email: string
-    company: string
-    avatarInitials: string
-}
-
 // ============================================================================
 // SECTION 3: CONSTANTS & SCENARIO DATA
 // ============================================================================
@@ -95,47 +86,40 @@ const DIFFICULTY_CONFIG = {
         bg: 'bg-emerald-100',
         text: 'text-emerald-700',
         border: 'border-emerald-200',
-        label: 'Beginner',
-        description: 'Great for learning the basics'
+        label: 'Beginner'
     },
     intermediate: {
         bg: 'bg-amber-100',
         text: 'text-amber-700',
         border: 'border-amber-200',
-        label: 'Intermediate',
-        description: 'Some experience recommended'
+        label: 'Intermediate'
     },
     advanced: {
         bg: 'bg-red-100',
         text: 'text-red-700',
         border: 'border-red-200',
-        label: 'Advanced',
-        description: 'For experienced negotiators'
+        label: 'Advanced'
     }
 }
 
 const AI_PERSONALITY_CONFIG = {
     cooperative: {
         label: 'Cooperative',
-        description: 'AI seeks win-win outcomes',
         icon: '🤝',
         color: 'text-emerald-600'
     },
     balanced: {
         label: 'Balanced',
-        description: 'AI plays fair but firm',
         icon: '⚖️',
         color: 'text-blue-600'
     },
     aggressive: {
         label: 'Aggressive',
-        description: 'AI pushes hard for advantage',
         icon: '🔥',
         color: 'text-red-600'
     }
 }
 
-// Pre-built scenarios for Single Player mode
 const SINGLE_PLAYER_SCENARIOS: TrainingScenario[] = [
     {
         scenarioId: 'bpo-basics-101',
@@ -265,51 +249,42 @@ export default function TrainingStudioPage() {
     const supabase = createClient()
     const chatEndRef = useRef<HTMLDivElement>(null)
 
-    // ==========================================================================
+    // ========================================================================
     // SECTION 5: STATE DECLARATIONS
-    // ==========================================================================
+    // ========================================================================
 
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [loading, setLoading] = useState(true)
     const [showUserMenu, setShowUserMenu] = useState(false)
 
-    // Game mode selection
     const [selectedMode, setSelectedMode] = useState<'single' | 'multi' | null>(null)
-
-    // Single player
     const [selectedScenario, setSelectedScenario] = useState<TrainingScenario | null>(null)
     const [isStartingScenario, setIsStartingScenario] = useState(false)
     const [scenarioFilter, setScenarioFilter] = useState<'all' | 'beginner' | 'intermediate' | 'advanced'>('all')
 
-    // Multi-player
     const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([])
-    const [approvedPartners, setApprovedPartners] = useState<ApprovedPartner[]>([])
-
-    // Sessions history
     const [pastSessions, setPastSessions] = useState<TrainingSession[]>([])
 
-    // Chat state
     const [showChatPanel, setShowChatPanel] = useState(false)
     const [chatMessages, setChatMessages] = useState<{ id: string; type: 'user' | 'clarence'; content: string; timestamp: Date }[]>([])
     const [chatInput, setChatInput] = useState('')
     const [isChatLoading, setIsChatLoading] = useState(false)
 
-    // View state
     const [activeTab, setActiveTab] = useState<'play' | 'videos' | 'history' | 'progress'>('play')
 
-    // ==========================================================================
+    // ========================================================================
     // SECTION 6: VIDEO DATA HOOK
-    // ==========================================================================
+    // ========================================================================
 
-    const { videos: featuredVideos, loading: videosLoading } = useVideos({
+    const { videos: featuredVideos } = useVideos({
         category: 'training',
         featuredOnly: true,
         limit: 3
     })
 
-    // ==========================================================================
+    // ========================================================================
     // SECTION 7: DATA LOADING
-    // ==========================================================================
+    // ========================================================================
 
     const loadUserInfo = useCallback(async () => {
         const auth = localStorage.getItem('clarence_auth')
@@ -328,9 +303,7 @@ export default function TrainingStudioPage() {
 
             const authData = JSON.parse(auth)
             const userId = authData.userInfo?.userId
-            const companyId = authData.userInfo?.companyId
 
-            // Load past training sessions
             const { data: sessionsData } = await supabase
                 .from('sessions')
                 .select('*')
@@ -354,24 +327,6 @@ export default function TrainingStudioPage() {
                 }))
                 setPastSessions(mapped)
             }
-
-            // Load pending invitations (where current user is invited)
-            // TODO: Implement when invitation system is ready
-            // const { data: invitations } = await supabase
-            //     .from('training_invitations')
-            //     .select('*')
-            //     .eq('invitee_id', userId)
-            //     .eq('status', 'pending')
-
-            // Load approved partners (same company)
-            // TODO: Implement when partner system is ready
-            // const { data: partners } = await supabase
-            //     .from('users')
-            //     .select('*')
-            //     .eq('company_id', companyId)
-            //     .neq('user_id', userId)
-            //     .eq('training_partner_approved', true)
-
         } catch (error) {
             console.error('Error loading training data:', error)
         } finally {
@@ -379,9 +334,9 @@ export default function TrainingStudioPage() {
         }
     }, [supabase])
 
-    // ==========================================================================
+    // ========================================================================
     // SECTION 8: EFFECTS
-    // ==========================================================================
+    // ========================================================================
 
     useEffect(() => {
         loadUserInfo()
@@ -414,9 +369,9 @@ export default function TrainingStudioPage() {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [showUserMenu])
 
-    // ==========================================================================
+    // ========================================================================
     // SECTION 9: HANDLERS
-    // ==========================================================================
+    // ========================================================================
 
     async function handleSignOut() {
         try {
@@ -441,7 +396,6 @@ export default function TrainingStudioPage() {
                 aiPersonality: scenario.aiPersonality
             })
 
-            // Call API to create/clone the training session from scenario template
             const response = await fetch(`${API_BASE}/training-start-scenario`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -457,10 +411,8 @@ export default function TrainingStudioPage() {
             const result = await response.json()
 
             if (result.success && result.sessionId) {
-                // Navigate directly to the training negotiation studio
                 router.push(`/auth/training/${result.sessionId}`)
             } else {
-                // Fallback: show error or use placeholder
                 console.error('Failed to start scenario:', result.error)
                 alert('Unable to start scenario. Please try again.')
             }
@@ -486,7 +438,6 @@ export default function TrainingStudioPage() {
         router.push(`/auth/training/${invitation.sessionId}`)
     }
 
-    // Chat handler
     async function sendChatMessage() {
         if (!chatInput.trim() || isChatLoading) return
 
@@ -534,9 +485,9 @@ export default function TrainingStudioPage() {
         }
     }
 
-    // ==========================================================================
+    // ========================================================================
     // SECTION 10: HELPERS
-    // ==========================================================================
+    // ========================================================================
 
     function formatDate(dateString: string): string {
         return new Date(dateString).toLocaleDateString('en-GB', {
@@ -557,15 +508,15 @@ export default function TrainingStudioPage() {
         ? SINGLE_PLAYER_SCENARIOS
         : SINGLE_PLAYER_SCENARIOS.filter(s => s.difficulty === scenarioFilter)
 
-    // ==========================================================================
+    // ========================================================================
     // SECTION 11: RENDER
-    // ==========================================================================
+    // ========================================================================
 
     return (
-        <div className="min-h-screen bg-slate-900">
-            {/* ================================================================ */}
+        <div className="min-h-screen bg-slate-50">
+            {/* ============================================================ */}
             {/* SECTION 12: TRAINING MODE BANNER */}
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white py-2 px-4">
                 <div className="container mx-auto flex items-center justify-center gap-2 text-sm font-medium">
                     <span>🎮</span>
@@ -573,38 +524,35 @@ export default function TrainingStudioPage() {
                 </div>
             </div>
 
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             {/* SECTION 13: NAVIGATION HEADER */}
-            {/* ================================================================ */}
-            <header className="bg-slate-800 border-b border-slate-700">
+            {/* ============================================================ */}
+            <header className="bg-white border-b border-slate-200">
                 <div className="container mx-auto px-6">
                     <nav className="flex justify-between items-center h-16">
-                        {/* Logo */}
                         <Link href="/" className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center">
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
                             <div>
-                                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
-                                <div className="text-xs text-amber-400">Training Studio</div>
+                                <div className="font-semibold text-slate-800 tracking-wide">CLARENCE</div>
+                                <div className="text-xs text-amber-600">Training Studio</div>
                             </div>
                         </Link>
 
-                        {/* Center Nav */}
                         <div className="hidden md:flex items-center gap-6">
-                            <Link href="/dashboard" className="text-slate-400 hover:text-white text-sm transition-colors">
+                            <Link href="/auth/contracts-dashboard" className="text-slate-500 hover:text-slate-800 text-sm transition-colors">
                                 Dashboard
                             </Link>
-                            <Link href="/auth/contracts-dashboard" className="text-slate-400 hover:text-white text-sm transition-colors">
+                            <Link href="/auth/contracts-dashboard" className="text-slate-500 hover:text-slate-800 text-sm transition-colors">
                                 Live Contracts
                             </Link>
                         </div>
 
-                        {/* Right Actions */}
                         <div className="flex items-center gap-4">
                             <button
                                 onClick={() => setShowChatPanel(!showChatPanel)}
-                                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-white text-sm transition-colors"
+                                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 rounded-lg text-white text-sm transition-colors"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
@@ -612,16 +560,15 @@ export default function TrainingStudioPage() {
                                 Ask CLARENCE
                             </button>
 
-                            {/* User Menu */}
                             <div className="relative user-menu-container">
                                 <button
                                     onClick={() => setShowUserMenu(!showUserMenu)}
-                                    className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                                    className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
                                 >
                                     <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
                                         {userInfo?.firstName?.[0]}{userInfo?.lastName?.[0]}
                                     </div>
-                                    <span className="hidden sm:block text-sm text-white">{userInfo?.firstName}</span>
+                                    <span className="hidden sm:block text-sm text-slate-700">{userInfo?.firstName}</span>
                                     <svg className={`w-4 h-4 text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
@@ -634,7 +581,7 @@ export default function TrainingStudioPage() {
                                             <div className="text-sm text-slate-500">{userInfo?.email}</div>
                                         </div>
                                         <div className="py-2">
-                                            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                                            <Link href="/auth/contracts-dashboard" className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                                                 <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                                 </svg>
@@ -657,95 +604,74 @@ export default function TrainingStudioPage() {
                 </div>
             </header>
 
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             {/* SECTION 14: MAIN CONTENT */}
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             <main className="container mx-auto px-6 py-8">
-
-                {/* Page Title */}
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-white mb-2">🎮 Training Studio</h1>
-                    <p className="text-slate-400">Master contract negotiation in a risk-free environment</p>
+                    <h1 className="text-3xl font-bold text-slate-800 mb-2">🎮 Training Studio</h1>
+                    <p className="text-slate-500">Master contract negotiation in a risk-free environment</p>
                 </div>
 
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 {/* SECTION 15: TAB NAVIGATION */}
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 <div className="flex justify-center mb-8">
-                    <div className="bg-slate-800 rounded-xl p-1 inline-flex">
+                    <div className="bg-white border border-slate-200 rounded-xl p-1 inline-flex shadow-sm">
                         <button
                             onClick={() => setActiveTab('play')}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'play'
-                                    ? 'bg-amber-500 text-white'
-                                    : 'text-slate-400 hover:text-white'
-                                }`}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'play' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             🎮 Play
                         </button>
                         <button
                             onClick={() => setActiveTab('videos')}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'videos'
-                                    ? 'bg-amber-500 text-white'
-                                    : 'text-slate-400 hover:text-white'
-                                }`}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'videos' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             📺 Learn
                         </button>
                         <button
                             onClick={() => setActiveTab('history')}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'history'
-                                    ? 'bg-amber-500 text-white'
-                                    : 'text-slate-400 hover:text-white'
-                                }`}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${activeTab === 'history' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             📜 History
                             {pastSessions.length > 0 && (
-                                <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeTab === 'history' ? 'bg-amber-600' : 'bg-slate-700'
-                                    }`}>
+                                <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeTab === 'history' ? 'bg-amber-600' : 'bg-slate-200 text-slate-600'}`}>
                                     {pastSessions.length}
                                 </span>
                             )}
                         </button>
                         <button
                             onClick={() => setActiveTab('progress')}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'progress'
-                                    ? 'bg-amber-500 text-white'
-                                    : 'text-slate-400 hover:text-white'
-                                }`}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'progress' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                         >
                             📊 Progress
                         </button>
                     </div>
                 </div>
 
-                {/* ============================================================ */}
-                {/* SECTION 16: PLAY TAB - MODE SELECTION */}
-                {/* ============================================================ */}
+                {/* ======================================================== */}
+                {/* SECTION 16: PLAY TAB */}
+                {/* ======================================================== */}
                 {activeTab === 'play' && (
                     <div className="space-y-8">
-
                         {/* Mode Selection Cards */}
                         <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-
-                            {/* Single Player Card */}
                             <div
                                 onClick={() => setSelectedMode('single')}
-                                className={`relative bg-slate-800 rounded-2xl p-6 cursor-pointer transition-all hover:scale-[1.02] ${selectedMode === 'single'
-                                        ? 'ring-2 ring-amber-500 bg-slate-750'
-                                        : 'hover:bg-slate-750'
-                                    }`}
+                                className={`relative bg-white rounded-2xl p-6 cursor-pointer transition-all border-2 hover:shadow-lg ${selectedMode === 'single' ? 'border-amber-500 shadow-md' : 'border-slate-200 hover:border-amber-300'}`}
                             >
                                 <div className="flex items-start gap-4">
                                     <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center text-3xl">
                                         🤖
                                     </div>
                                     <div className="flex-1">
-                                        <h3 className="text-xl font-bold text-white mb-1">Single Player</h3>
-                                        <p className="text-slate-400 text-sm mb-3">Practice against CLARENCE AI</p>
+                                        <h3 className="text-xl font-bold text-slate-800 mb-1">Single Player</h3>
+                                        <p className="text-slate-500 text-sm mb-3">Practice against CLARENCE AI</p>
                                         <div className="flex flex-wrap gap-2">
-                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Instant Start</span>
-                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">AI Difficulty Levels</span>
-                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Pre-built Scenarios</span>
+                                            <span className="px-2 py-1 bg-slate-100 rounded-full text-xs text-slate-600">Instant Start</span>
+                                            <span className="px-2 py-1 bg-slate-100 rounded-full text-xs text-slate-600">AI Difficulty Levels</span>
+                                            <span className="px-2 py-1 bg-slate-100 rounded-full text-xs text-slate-600">Pre-built Scenarios</span>
                                         </div>
                                     </div>
                                 </div>
@@ -758,25 +684,21 @@ export default function TrainingStudioPage() {
                                 )}
                             </div>
 
-                            {/* Multi-Player Card */}
                             <div
                                 onClick={() => setSelectedMode('multi')}
-                                className={`relative bg-slate-800 rounded-2xl p-6 cursor-pointer transition-all hover:scale-[1.02] ${selectedMode === 'multi'
-                                        ? 'ring-2 ring-amber-500 bg-slate-750'
-                                        : 'hover:bg-slate-750'
-                                    }`}
+                                className={`relative bg-white rounded-2xl p-6 cursor-pointer transition-all border-2 hover:shadow-lg ${selectedMode === 'multi' ? 'border-amber-500 shadow-md' : 'border-slate-200 hover:border-amber-300'}`}
                             >
                                 <div className="flex items-start gap-4">
                                     <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center text-3xl">
                                         👥
                                     </div>
                                     <div className="flex-1">
-                                        <h3 className="text-xl font-bold text-white mb-1">Multi-Player</h3>
-                                        <p className="text-slate-400 text-sm mb-3">Practice with a training partner</p>
+                                        <h3 className="text-xl font-bold text-slate-800 mb-1">Multi-Player</h3>
+                                        <p className="text-slate-500 text-sm mb-3">Practice with a training partner</p>
                                         <div className="flex flex-wrap gap-2">
-                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Custom Contracts</span>
-                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Real Counterparty</span>
-                                            <span className="px-2 py-1 bg-slate-700 rounded-full text-xs text-slate-300">Role Swap</span>
+                                            <span className="px-2 py-1 bg-slate-100 rounded-full text-xs text-slate-600">Custom Contracts</span>
+                                            <span className="px-2 py-1 bg-slate-100 rounded-full text-xs text-slate-600">Real Counterparty</span>
+                                            <span className="px-2 py-1 bg-slate-100 rounded-full text-xs text-slate-600">Role Swap</span>
                                         </div>
                                     </div>
                                 </div>
@@ -790,27 +712,22 @@ export default function TrainingStudioPage() {
                             </div>
                         </div>
 
-                        {/* ======================================================== */}
-                        {/* SECTION 17: SINGLE PLAYER - SCENARIO LIBRARY */}
-                        {/* ======================================================== */}
+                        {/* ================================================ */}
+                        {/* SECTION 17: SINGLE PLAYER SCENARIOS */}
+                        {/* ================================================ */}
                         {selectedMode === 'single' && (
                             <div className="mt-8">
                                 <div className="flex items-center justify-between mb-6">
                                     <div>
-                                        <h2 className="text-xl font-bold text-white">📚 Scenario Library</h2>
-                                        <p className="text-slate-400 text-sm">Select a scenario to start practicing immediately</p>
+                                        <h2 className="text-xl font-bold text-slate-800">📚 Scenario Library</h2>
+                                        <p className="text-slate-500 text-sm">Select a scenario to start practicing immediately</p>
                                     </div>
-
-                                    {/* Difficulty Filter */}
                                     <div className="flex gap-2">
                                         {(['all', 'beginner', 'intermediate', 'advanced'] as const).map(filter => (
                                             <button
                                                 key={filter}
                                                 onClick={() => setScenarioFilter(filter)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${scenarioFilter === filter
-                                                        ? 'bg-amber-500 text-white'
-                                                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                                                    }`}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${scenarioFilter === filter ? 'bg-amber-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'}`}
                                             >
                                                 {filter === 'all' ? 'All Levels' : DIFFICULTY_CONFIG[filter].label}
                                             </button>
@@ -818,54 +735,43 @@ export default function TrainingStudioPage() {
                                     </div>
                                 </div>
 
-                                {/* Scenario Grid */}
                                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {filteredScenarios.map(scenario => {
                                         const difficulty = DIFFICULTY_CONFIG[scenario.difficulty]
                                         const aiConfig = AI_PERSONALITY_CONFIG[scenario.aiPersonality]
 
                                         return (
-                                            <div
-                                                key={scenario.scenarioId}
-                                                className="bg-slate-800 rounded-xl overflow-hidden hover:bg-slate-750 transition-all group"
-                                            >
-                                                {/* Card Header */}
+                                            <div key={scenario.scenarioId} className="bg-white rounded-xl overflow-hidden border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all group">
                                                 <div className="p-5">
                                                     <div className="flex items-start justify-between mb-3">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-2xl">
+                                                            <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-2xl">
                                                                 {scenario.iconEmoji}
                                                             </div>
                                                             <div>
-                                                                <h3 className="font-semibold text-white group-hover:text-amber-400 transition-colors">
+                                                                <h3 className="font-semibold text-slate-800 group-hover:text-amber-600 transition-colors">
                                                                     {scenario.scenarioName}
                                                                 </h3>
                                                                 <p className="text-xs text-slate-500">{scenario.contractType}</p>
                                                             </div>
                                                         </div>
                                                         {scenario.isNew && (
-                                                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded-full font-medium">
-                                                                NEW
-                                                            </span>
+                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">NEW</span>
                                                         )}
                                                     </div>
 
-                                                    <p className="text-sm text-slate-400 mb-4 line-clamp-2">
-                                                        {scenario.description}
-                                                    </p>
+                                                    <p className="text-sm text-slate-500 mb-4 line-clamp-2">{scenario.description}</p>
 
-                                                    {/* Meta Info */}
                                                     <div className="flex flex-wrap gap-2 mb-4">
                                                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${difficulty.bg} ${difficulty.text}`}>
                                                             {difficulty.label}
                                                         </span>
-                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium bg-slate-700 ${aiConfig.color}`}>
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-medium bg-slate-100 ${aiConfig.color}`}>
                                                             {aiConfig.icon} {aiConfig.label} AI
                                                         </span>
                                                     </div>
 
-                                                    {/* Stats */}
-                                                    <div className="flex items-center gap-4 text-xs text-slate-500">
+                                                    <div className="flex items-center gap-4 text-xs text-slate-400">
                                                         <span className="flex items-center gap-1">
                                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -881,12 +787,11 @@ export default function TrainingStudioPage() {
                                                     </div>
                                                 </div>
 
-                                                {/* Card Footer - Play Button */}
-                                                <div className="px-5 py-3 bg-slate-700/50 border-t border-slate-700">
+                                                <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
                                                     <button
                                                         onClick={() => startSinglePlayerScenario(scenario)}
                                                         disabled={isStartingScenario}
-                                                        className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/50 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                                        className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                                                     >
                                                         {isStartingScenario && selectedScenario?.scenarioId === scenario.scenarioId ? (
                                                             <>
@@ -910,22 +815,20 @@ export default function TrainingStudioPage() {
 
                                 {filteredScenarios.length === 0 && (
                                     <div className="text-center py-12">
-                                        <p className="text-slate-400">No scenarios found for this difficulty level.</p>
+                                        <p className="text-slate-500">No scenarios found for this difficulty level.</p>
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        {/* ======================================================== */}
-                        {/* SECTION 18: MULTI-PLAYER - SETUP & INVITATIONS */}
-                        {/* ======================================================== */}
+                        {/* ================================================ */}
+                        {/* SECTION 18: MULTI-PLAYER */}
+                        {/* ================================================ */}
                         {selectedMode === 'multi' && (
                             <div className="mt-8 max-w-2xl mx-auto">
-
-                                {/* Start New Multi-Player */}
-                                <div className="bg-slate-800 rounded-xl p-6 mb-6">
-                                    <h3 className="text-lg font-semibold text-white mb-2">Start a New Training Session</h3>
-                                    <p className="text-slate-400 text-sm mb-4">
+                                <div className="bg-white rounded-xl p-6 mb-6 border border-slate-200">
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-2">Start a New Training Session</h3>
+                                    <p className="text-slate-500 text-sm mb-4">
                                         Create a practice contract and invite a colleague from your organisation to negotiate.
                                     </p>
                                     <button
@@ -939,25 +842,23 @@ export default function TrainingStudioPage() {
                                     </button>
                                 </div>
 
-                                {/* Pending Invitations */}
-                                <div className="bg-slate-800 rounded-xl p-6">
-                                    <h3 className="text-lg font-semibold text-white mb-4">Pending Invitations</h3>
-
+                                <div className="bg-white rounded-xl p-6 border border-slate-200">
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Pending Invitations</h3>
                                     {pendingInvitations.length === 0 ? (
                                         <div className="text-center py-8">
-                                            <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                                 <span className="text-2xl">📬</span>
                                             </div>
-                                            <p className="text-slate-400 text-sm">No pending invitations</p>
-                                            <p className="text-slate-500 text-xs mt-1">When a colleague invites you to train, it will appear here.</p>
+                                            <p className="text-slate-500 text-sm">No pending invitations</p>
+                                            <p className="text-slate-400 text-xs mt-1">When a colleague invites you to train, it will appear here.</p>
                                         </div>
                                     ) : (
                                         <div className="space-y-3">
                                             {pendingInvitations.map(inv => (
-                                                <div key={inv.invitationId} className="flex items-center justify-between p-4 bg-slate-700 rounded-lg">
+                                                <div key={inv.invitationId} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
                                                     <div>
-                                                        <p className="font-medium text-white">{inv.contractName}</p>
-                                                        <p className="text-sm text-slate-400">From {inv.inviterName}</p>
+                                                        <p className="font-medium text-slate-800">{inv.contractName}</p>
+                                                        <p className="text-sm text-slate-500">From {inv.inviterName}</p>
                                                     </div>
                                                     <button
                                                         onClick={() => acceptInvitation(inv)}
@@ -973,58 +874,58 @@ export default function TrainingStudioPage() {
                             </div>
                         )}
 
-                        {/* No Mode Selected - Prompt */}
+                        {/* No Mode Selected */}
                         {!selectedMode && (
                             <div className="text-center py-12">
-                                <p className="text-slate-400">👆 Select a mode above to get started</p>
+                                <p className="text-slate-500">👆 Select a mode above to get started</p>
                             </div>
                         )}
                     </div>
                 )}
 
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 {/* SECTION 19: VIDEOS TAB */}
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 {activeTab === 'videos' && (
                     <div className="space-y-8">
-                        <div className="bg-slate-800 rounded-xl p-6">
+                        <div className="bg-white rounded-xl p-6 border border-slate-200">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">👋</span>
-                                <h2 className="text-lg font-semibold text-white">Getting Started</h2>
+                                <h2 className="text-lg font-semibold text-slate-800">Getting Started</h2>
                             </div>
                             <VideoGrid category="onboarding" limit={6} />
                         </div>
 
-                        <div className="bg-slate-800 rounded-xl p-6">
+                        <div className="bg-white rounded-xl p-6 border border-slate-200">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">🎓</span>
-                                <h2 className="text-lg font-semibold text-white">Training Mode</h2>
+                                <h2 className="text-lg font-semibold text-slate-800">Training Mode</h2>
                             </div>
                             <VideoGrid category="training" />
                         </div>
 
-                        <div className="bg-slate-800 rounded-xl p-6">
+                        <div className="bg-white rounded-xl p-6 border border-slate-200">
                             <div className="flex items-center gap-2 mb-4">
                                 <span className="text-lg">⚖️</span>
-                                <h2 className="text-lg font-semibold text-white">Negotiation Skills</h2>
+                                <h2 className="text-lg font-semibold text-slate-800">Negotiation Skills</h2>
                             </div>
                             <VideoGrid category="negotiation" limit={6} />
                         </div>
                     </div>
                 )}
 
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 {/* SECTION 20: HISTORY TAB */}
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 {activeTab === 'history' && (
                     <div>
                         {pastSessions.length === 0 ? (
-                            <div className="bg-slate-800 rounded-xl p-12 text-center">
-                                <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
+                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <span className="text-3xl">📜</span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-white mb-2">No training history yet</h3>
-                                <p className="text-slate-400 mb-6 text-sm">Complete your first training session to see it here.</p>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">No training history yet</h3>
+                                <p className="text-slate-500 mb-6 text-sm">Complete your first training session to see it here.</p>
                                 <button
                                     onClick={() => { setActiveTab('play'); setSelectedMode('single'); }}
                                     className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg font-medium"
@@ -1035,18 +936,15 @@ export default function TrainingStudioPage() {
                         ) : (
                             <div className="space-y-4">
                                 {pastSessions.map(session => (
-                                    <div
-                                        key={session.sessionId}
-                                        className="bg-slate-800 rounded-xl p-5 hover:bg-slate-750 transition-all"
-                                    >
+                                    <div key={session.sessionId} className="bg-white rounded-xl p-5 border border-slate-200 hover:border-amber-300 hover:shadow-md transition-all">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-xl">
+                                                <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-xl">
                                                     {session.counterpartyType === 'ai' ? '🤖' : '👥'}
                                                 </div>
                                                 <div>
-                                                    <h3 className="font-semibold text-white">{session.scenarioName}</h3>
-                                                    <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
+                                                    <h3 className="font-semibold text-slate-800">{session.scenarioName}</h3>
+                                                    <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
                                                         <span>{session.sessionNumber}</span>
                                                         <span>•</span>
                                                         <span>{session.counterpartyType === 'ai' ? `AI (${session.aiMode || 'balanced'})` : session.counterpartyName}</span>
@@ -1057,12 +955,9 @@ export default function TrainingStudioPage() {
                                             </div>
                                             <div className="flex items-center gap-4">
                                                 <div className="text-right">
-                                                    <div className="text-sm font-medium text-white">{session.progress}%</div>
-                                                    <div className="w-24 bg-slate-700 rounded-full h-2 mt-1">
-                                                        <div
-                                                            className="bg-amber-500 h-2 rounded-full transition-all"
-                                                            style={{ width: `${session.progress}%` }}
-                                                        />
+                                                    <div className="text-sm font-medium text-slate-700">{session.progress}%</div>
+                                                    <div className="w-24 bg-slate-200 rounded-full h-2 mt-1">
+                                                        <div className="bg-amber-500 h-2 rounded-full transition-all" style={{ width: `${session.progress}%` }} />
                                                     </div>
                                                 </div>
                                                 <button
@@ -1080,57 +975,54 @@ export default function TrainingStudioPage() {
                     </div>
                 )}
 
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 {/* SECTION 21: PROGRESS TAB */}
-                {/* ============================================================ */}
+                {/* ======================================================== */}
                 {activeTab === 'progress' && (
-                    <div className="bg-slate-800 rounded-xl p-12 text-center">
-                        <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <span className="text-3xl">📊</span>
                         </div>
-                        <h3 className="text-lg font-semibold text-white mb-2">Progress Tracking Coming Soon</h3>
-                        <p className="text-slate-400 text-sm max-w-md mx-auto">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-2">Progress Tracking Coming Soon</h3>
+                        <p className="text-slate-500 text-sm max-w-md mx-auto">
                             Track which clauses you negotiate well, see improvement over time, and get personalized recommendations.
                         </p>
                     </div>
                 )}
             </main>
 
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             {/* SECTION 22: CHAT PANEL */}
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             {showChatPanel && (
-                <div className="fixed right-0 top-0 h-full w-full md:w-96 bg-slate-800 shadow-2xl z-50 flex flex-col border-l border-slate-700">
-                    <div className="bg-amber-600 text-white p-4 flex justify-between items-center">
+                <div className="fixed right-0 top-0 h-full w-full md:w-96 bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200">
+                    <div className="bg-amber-500 text-white p-4 flex justify-between items-center">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                                 <span className="font-bold text-sm">C</span>
                             </div>
                             <div>
                                 <div className="font-semibold text-sm">CLARENCE</div>
-                                <div className="text-xs text-amber-200">Training Assistant</div>
+                                <div className="text-xs text-amber-100">Training Assistant</div>
                             </div>
                         </div>
-                        <button onClick={() => setShowChatPanel(false)} className="text-amber-200 hover:text-white">
+                        <button onClick={() => setShowChatPanel(false)} className="text-amber-100 hover:text-white">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 bg-slate-900">
+                    <div className="flex-1 overflow-y-auto p-4 bg-amber-50/30">
                         {chatMessages.map(message => (
                             <div key={message.id} className={`mb-4 ${message.type === 'user' ? 'text-right' : ''}`}>
-                                <div className={`inline-block max-w-[85%] ${message.type === 'user'
-                                        ? 'bg-amber-600 text-white rounded-2xl rounded-br-md px-4 py-2'
-                                        : 'bg-slate-800 rounded-2xl rounded-bl-md px-4 py-3 border border-slate-700'
-                                    }`}>
+                                <div className={`inline-block max-w-[85%] ${message.type === 'user' ? 'bg-amber-500 text-white rounded-2xl rounded-br-md px-4 py-2' : 'bg-white rounded-2xl rounded-bl-md px-4 py-3 border border-slate-200 shadow-sm'}`}>
                                     {message.type === 'clarence' && (
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-xs font-medium text-amber-400">🎓 CLARENCE</span>
+                                            <span className="text-xs font-medium text-amber-600">🎓 CLARENCE</span>
                                         </div>
                                     )}
-                                    <p className={`text-sm whitespace-pre-line ${message.type === 'clarence' ? 'text-slate-300' : ''}`}>
+                                    <p className={`text-sm whitespace-pre-line ${message.type === 'clarence' ? 'text-slate-700' : ''}`}>
                                         {message.content}
                                     </p>
                                 </div>
@@ -1138,7 +1030,7 @@ export default function TrainingStudioPage() {
                         ))}
                         {isChatLoading && (
                             <div className="mb-4">
-                                <div className="inline-block bg-slate-800 rounded-2xl rounded-bl-md px-4 py-3 border border-slate-700">
+                                <div className="inline-block bg-white rounded-2xl rounded-bl-md px-4 py-3 border border-slate-200 shadow-sm">
                                     <div className="flex gap-1">
                                         <div className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                                         <div className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -1150,7 +1042,7 @@ export default function TrainingStudioPage() {
                         <div ref={chatEndRef} />
                     </div>
 
-                    <div className="p-4 border-t border-slate-700 bg-slate-800">
+                    <div className="p-4 border-t border-slate-200 bg-white">
                         <div className="flex gap-2">
                             <input
                                 type="text"
@@ -1158,12 +1050,12 @@ export default function TrainingStudioPage() {
                                 onChange={(e) => setChatInput(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
                                 placeholder="Ask about training..."
-                                className="flex-1 px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm text-white placeholder-slate-400"
+                                className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm text-slate-700 placeholder-slate-400"
                             />
                             <button
                                 onClick={sendChatMessage}
                                 disabled={isChatLoading || !chatInput.trim()}
-                                className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+                                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg disabled:opacity-50"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -1174,13 +1066,13 @@ export default function TrainingStudioPage() {
                 </div>
             )}
 
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             {/* SECTION 23: FLOATING CHAT BUTTON */}
-            {/* ================================================================ */}
+            {/* ============================================================ */}
             {!showChatPanel && (
                 <button
                     onClick={() => setShowChatPanel(true)}
-                    className="fixed bottom-6 right-6 bg-amber-500 hover:bg-amber-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all"
+                    className="fixed bottom-6 right-6 bg-amber-500 hover:bg-amber-600 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all border-2 border-white"
                 >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
