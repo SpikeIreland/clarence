@@ -37,6 +37,9 @@ interface Session {
     templatePackId?: string
     clausesSelected?: boolean
     clauseCount?: number
+    // TRAINING MODE ADDITIONS:
+    isTraining?: boolean
+    notes?: string
 }
 
 // ============================================================================
@@ -1809,6 +1812,67 @@ function MovesTrackerOverlay({ isOpen, onClose, negotiationHistory, userRole, se
 }
 
 // ============================================================================
+// SECTION 5E: TRAINING MODE BANNER COMPONENT
+// ============================================================================
+
+interface TrainingModeBannerProps {
+    scenarioName?: string
+    aiPersonality?: string
+    onExitTraining: () => void
+}
+
+function TrainingModeBanner({ scenarioName, aiPersonality, onExitTraining }: TrainingModeBannerProps) {
+    return (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-2">
+            <div className="max-w-7xl mx-auto flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    {/* Training Icon */}
+                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                    </div>
+
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm tracking-wide">TRAINING MODE</span>
+                            <span className="px-2 py-0.5 bg-white/20 rounded text-xs font-medium">
+                                Practice Session
+                            </span>
+                        </div>
+                        <p className="text-xs text-amber-100">
+                            {scenarioName ? `Scenario: ${scenarioName}` : 'Practicing with CLARENCE AI'}
+                            {aiPersonality && ` • AI: ${aiPersonality}`}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    {/* Info tooltip */}
+                    <div className="hidden sm:flex items-center gap-2 text-xs text-amber-100">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>No real contracts affected</span>
+                    </div>
+
+                    {/* Exit Training Button */}
+                    <button
+                        onClick={onExitTraining}
+                        className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition flex items-center gap-1.5"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
+                        </svg>
+                        Exit Training
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
 // SECTION 6: MAIN CONTRACT STUDIO COMPONENT
 // ============================================================================
 
@@ -1835,6 +1899,8 @@ function ContractStudioContent() {
     const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'locks' | 'agreements'>('all')
     // Preview Contract state
     const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
+    // Training Mode state
+    const [isTrainingMode, setIsTrainingMode] = useState(false)
 
     // ==========================================================================
     // SIGN OUT FUNCTION
@@ -2256,11 +2322,13 @@ function ContractStudioContent() {
                 phase: parsePhaseFromState(data.session.phase),
                 status: data.session.status,
                 createdAt: data.session.createdAt || null,
-                // Template & Clause Builder tracking
                 templateName: data.session.templateName || null,
                 templatePackId: data.session.templatePackId || null,
                 clausesSelected: data.session.clausesSelected || false,
-                clauseCount: data.session.clauseCount || 0
+                clauseCount: data.session.clauseCount || 0,
+                // TRAINING MODE ADDITIONS:
+                isTraining: data.session.is_training || data.session.isTraining || false,
+                notes: data.session.notes || null
             }
 
             const clauseData: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
@@ -2719,6 +2787,7 @@ function ContractStudioContent() {
                 console.log('Clauses from API:', data.clauses.length)
                 console.log('Clause IDs:', data.clauses.map(c => c.clauseId))
                 setSession(data.session)
+                setIsTrainingMode(data.session.isTraining || false)
                 setClauses(data.clauses)
                 const tree = buildClauseTree(data.clauses)
                 console.log('Clause tree length:', tree.length)
@@ -4841,10 +4910,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             onClick={handleSetPosition}
                             disabled={!isProposing || isCommitting}
                             className={`flex-1 py-2 px-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 text-sm ${isProposing && !isCommitting
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                ? isTrainingMode
+                                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                 }`}
                         >
+
                             {isCommitting ? (
                                 <>
                                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -5420,7 +5492,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     }
 
     // ============================================================================
-    // COMPLETE UPDATED SECTION 13: PartyStatusBanner
+    // COMPLETE UPDATED SECTION 13: PartyStatusBanner WITH TRAINING MODE
+    // Replace your entire existing PartyStatusBanner component with this
     // ============================================================================
 
     const PartyStatusBanner = () => {
@@ -5428,31 +5501,36 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         console.log('PartyStatusBanner - clauses.length:', clauses.length, 'isGeneratingPreview:', isGeneratingPreview)
 
         const isCustomer = userInfo.role === 'customer'
-        const myCompany = isCustomer ? session.customerCompany : session.providerCompany
-        const otherCompany = isCustomer ? session.providerCompany : session.customerCompany
-        const myRole = isCustomer ? 'Customer' : 'Provider'
-        const otherRole = isCustomer ? 'Provider' : 'Customer'
-
         const customerCompany = session.customerCompany
         const providerCompany = session.providerCompany
 
+        // ========== TRAINING MODE STYLING HELPERS ==========
+        const headerBg = isTrainingMode ? 'bg-amber-900' : 'bg-slate-800'
+        const borderColor = isTrainingMode ? 'border-amber-700' : 'border-slate-700'
+        const accentColor = isTrainingMode ? 'text-amber-400' : 'text-emerald-400'
+        const buttonBg = isTrainingMode ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'
+        const logoBg = isTrainingMode ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-emerald-500 to-teal-600'
+        const dotColor = isTrainingMode ? 'bg-amber-400' : 'bg-emerald-400'
+        const youBadgeBg = isTrainingMode ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+        const previewButtonBg = isTrainingMode ? 'bg-amber-700 hover:bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'
+
         return (
-            <div className="bg-slate-800 text-white">
+            <div className={`${headerBg} text-white`}>
                 {/* ============================================================ */}
                 {/* ROW 1: Navigation Row */}
                 {/* ============================================================ */}
-                <div className="px-6 py-2 border-b border-slate-700">
+                <div className={`px-6 py-2 border-b ${borderColor}`}>
                     <div className="flex items-center justify-between">
-                        {/* Left: Dashboard Button (Customers only) */}
+                        {/* Left: Dashboard/Training Lobby Button (Customers only) */}
                         {userInfo?.role !== 'provider' ? (
                             <button
-                                onClick={() => router.push('/auth/contracts-dashboard')}
+                                onClick={() => router.push(isTrainingMode ? '/auth/training' : '/auth/contracts-dashboard')}
                                 className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                                 </svg>
-                                <span className="text-sm">Dashboard</span>
+                                <span className="text-sm">{isTrainingMode ? 'Training Lobby' : 'Dashboard'}</span>
                             </button>
                         ) : (
                             <div className="w-20"></div>
@@ -5460,12 +5538,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         {/* Center: Title */}
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                            <div className={`w-8 h-8 ${logoBg} rounded-lg flex items-center justify-center`}>
                                 <span className="text-white font-bold text-sm">C</span>
                             </div>
                             <div>
                                 <span className="font-semibold text-white tracking-wide">CLARENCE</span>
-                                <span className="text-slate-400 text-sm ml-2">Contract Studio</span>
+                                <span className="text-slate-400 text-sm ml-2">
+                                    {isTrainingMode ? 'Training Studio' : 'Contract Studio'}
+                                </span>
                             </div>
                         </div>
 
@@ -5477,7 +5557,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 disabled={isGeneratingPreview || clauses.length === 0}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition ${isGeneratingPreview || clauses.length === 0
                                     ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-                                    : 'bg-slate-700 hover:bg-slate-600 text-white'
+                                    : previewButtonBg + ' text-white'
                                     }`}
                                 title="Generate a preview of the full contract"
                             >
@@ -5500,7 +5580,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             {/* Documents Centre Button */}
                             <button
                                 onClick={() => router.push(`/auth/document-centre?session_id=${session.sessionId}`)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition"
+                                className={`flex items-center gap-1.5 px-3 py-1.5 ${buttonBg} text-white text-sm font-medium rounded-lg transition`}
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -5518,10 +5598,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     <div className="flex items-center justify-between">
                         {/* Left: Customer Info (always on left) */}
                         <div className="flex items-center gap-3 min-w-[200px]">
-                            <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
+                            <div className={`w-3 h-3 rounded-full ${isCustomer
+                                ? `${dotColor} animate-pulse`
+                                : (otherPartyStatus.isOnline ? dotColor : 'bg-slate-500')
+                                }`}></div>
                             <div>
                                 <div className="text-xs text-slate-400">Customer</div>
-                                <div className="text-sm font-medium text-emerald-400">{customerCompany}</div>
+                                <div className={`text-sm font-medium ${accentColor}`}>{customerCompany}</div>
                                 <div className="text-xs text-slate-500">
                                     {isCustomer
                                         ? `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim() || session.customerContactName || 'Contact'
@@ -5530,7 +5613,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </div>
                             </div>
                             {isCustomer && (
-                                <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">
+                                <span className={`text-xs ${youBadgeBg} px-2 py-0.5 rounded`}>
                                     You
                                 </span>
                             )}
@@ -5544,13 +5627,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                             <div className="text-center">
                                 <div className="text-xs text-slate-400">Deal Value</div>
-                                <div className="text-sm font-semibold text-emerald-400">{session.dealValue}</div>
+                                <div className={`text-sm font-semibold ${accentColor}`}>{session.dealValue}</div>
                             </div>
                             <div className="text-center">
                                 <div className="text-xs text-slate-400">Phase</div>
                                 <div className="text-sm">
                                     <span className="inline-flex items-center gap-1">
-                                        <span className="w-5 h-5 bg-emerald-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                                        <span className={`w-5 h-5 ${isTrainingMode ? 'bg-amber-500' : 'bg-emerald-500'} text-white text-xs font-bold rounded-full flex items-center justify-center`}>
                                             {session.phase}
                                         </span>
                                         <span className="text-slate-300">of 6</span>
@@ -5567,8 +5650,18 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </span>
                             )}
 
-                            {/* Customer sees provider dropdown, Provider sees static display */}
-                            {isCustomer ? (
+                            {/* TRAINING MODE: Show AI Opponent indicator */}
+                            {isTrainingMode ? (
+                                <div className="text-right">
+                                    <div className="text-xs text-slate-400">AI Opponent</div>
+                                    <div className="text-sm font-medium text-amber-400 flex items-center gap-1 justify-end">
+                                        <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
+                                        {providerCompany}
+                                    </div>
+                                    <div className="text-xs text-slate-500">Automated Responses</div>
+                                </div>
+                            ) : isCustomer ? (
+                                /* Customer sees provider dropdown */
                                 <div className="relative" ref={providerDropdownRef}>
                                     <button
                                         onClick={() => setShowProviderDropdown(!showProviderDropdown)}
@@ -5618,7 +5711,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                     alert(`${provider.providerCompany} has not completed their intake yet.`)
                                                                 }
                                                             }}
-                                                            className={`w-full px-3 py-2 text-left hover:bg-slate-700 transition...`}
+                                                            className={`w-full px-3 py-2 text-left hover:bg-slate-700 transition flex items-center justify-between`}
                                                         >
                                                             <div>
                                                                 <div className="text-sm font-medium text-white">{provider.providerCompany}</div>
@@ -5671,35 +5764,40 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </div>
                             )}
 
-                            <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
+                            {/* Online indicator and Party Chat - HIDDEN in training mode */}
+                            {!isTrainingMode && (
+                                <>
+                                    <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
 
-                            {/* Party Chat Toggle Button - Available to BOTH parties */}
-                            <button
-                                onClick={() => setIsChatOpen(true)}
-                                className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
-                                title={isCustomer ? `Chat with ${providerCompany}` : `Chat with ${customerCompany}`}
-                            >
-                                <svg
-                                    className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                    />
-                                </svg>
+                                    {/* Party Chat Toggle Button - Available to BOTH parties */}
+                                    <button
+                                        onClick={() => setIsChatOpen(true)}
+                                        className="relative ml-2 p-2 hover:bg-slate-700 rounded-lg transition group"
+                                        title={isCustomer ? `Chat with ${providerCompany}` : `Chat with ${customerCompany}`}
+                                    >
+                                        <svg
+                                            className="w-5 h-5 text-slate-400 group-hover:text-emerald-400 transition"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                            />
+                                        </svg>
 
-                                {/* Unread Badge */}
-                                {chatUnreadCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                        {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
-                                    </span>
-                                )}
-                            </button>
+                                        {/* Unread Badge */}
+                                        {chatUnreadCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                                {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+                                            </span>
+                                        )}
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -6258,6 +6356,18 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
+            {/* Training Mode Banner - shows only in training mode */}
+            {isTrainingMode && (
+                <TrainingModeBanner
+                    scenarioName={session?.notes?.includes('Training scenario:')
+                        ? session.notes.split('Training scenario:')[1]?.split('|')[0]?.trim()
+                        : undefined}
+                    aiPersonality={session?.notes?.includes('AI:')
+                        ? session.notes.split('AI:')[1]?.trim()
+                        : undefined}
+                    onExitTraining={() => router.push('/auth/training')}
+                />
+            )}
             <PartyStatusBanner />
 
             {/* Party Chat Slide-Out Panel - Rendered at main component level to prevent remounting */}
@@ -7072,15 +7182,19 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <div className="w-96 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
                     <div className="flex-shrink-0 p-4 border-b border-slate-200">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center">
+                            <div className={`w-10 h-10 ${isTrainingMode ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-emerald-500 to-teal-600'} rounded-full flex items-center justify-center`}>
                                 <span className="text-white font-bold">C</span>
                             </div>
                             <div className="flex-1">
                                 <div className="font-semibold text-slate-800">CLARENCE</div>
                                 <div className="text-xs text-slate-500">
-                                    {selectedClause
-                                        ? `Discussing: ${selectedClause.clauseNumber} ${selectedClause.clauseName}`
-                                        : 'General Discussion'
+                                    {isTrainingMode
+                                        ? (selectedClause
+                                            ? `Training: ${selectedClause.clauseNumber} ${selectedClause.clauseName}`
+                                            : 'Training Session - AI Opponent')
+                                        : (selectedClause
+                                            ? `Discussing: ${selectedClause.clauseNumber} ${selectedClause.clauseName}`
+                                            : 'General Discussion')
                                     }
                                 </div>
                             </div>
