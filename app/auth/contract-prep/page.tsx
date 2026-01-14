@@ -2207,23 +2207,23 @@ function ContractPrepContent() {
 
                         {/* Action Buttons */}
                         <div className="flex items-center gap-2">
-                            {/* Move Buttons */}
-                            <div className="flex flex-col gap-1 mr-2">
+                            {/* Move Buttons - Horizontal with labels */}
+                            <div className="flex items-center gap-1 mr-3 bg-slate-100 rounded-lg p-1">
                                 <button
                                     onClick={() => handleMoveClause(selectedClause, 'up')}
                                     disabled={!canMoveUp || isReordering}
-                                    className="px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                                    className="px-3 py-1.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shadow-sm flex items-center gap-1"
                                     title="Move up"
                                 >
-                                    ↑
+                                    <span>↑</span> Up
                                 </button>
                                 <button
                                     onClick={() => handleMoveClause(selectedClause, 'down')}
                                     disabled={!canMoveDown || isReordering}
-                                    className="px-2 py-1 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+                                    className="px-3 py-1.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shadow-sm flex items-center gap-1"
                                     title="Move down"
                                 >
-                                    ↓
+                                    <span>↓</span> Down
                                 </button>
                             </div>
 
@@ -3032,7 +3032,7 @@ function ContractPrepContent() {
 
             {/* Delete Confirmation Modal */}
             {renderDeleteConfirmModal()}
-            
+
             {/* Beta Feedback Button */}
             <FeedbackButton position="bottom-left" />
         </div>
