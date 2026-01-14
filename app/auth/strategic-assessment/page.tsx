@@ -230,6 +230,8 @@ const STRATEGIC_QUESTIONS: StrategicQuestion[] = [
 ]
 
 // ========== SECTION 4: MAIN COMPONENT ==========
+import FeedbackButton from '@/app/components/FeedbackButton'
+
 function IntelligentQuestionnaireContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -863,6 +865,8 @@ Your data is saved and ready. Click below to invite providers.`)
           </div>
         </div>
       </div>
+      {/* Beta Feedback Button */}
+      <FeedbackButton position="bottom-left" />
     </div>
   )
 }
