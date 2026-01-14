@@ -245,24 +245,37 @@ export default function BetaTestingAdminDashboard() {
 
     async function checkAdminAccess() {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { user }, error: authError } = await supabase.auth.getUser()
             console.log('🔍 Admin check - User:', user?.id, user?.email)
 
-            if (!user) {
-                console.log('❌ No user, redirecting to login')
-                router.push('/login')
+            if (authError) {
+                console.error('❌ Auth error:', authError)
+                router.push('/auth/login')
                 return
             }
 
-            // Check if user has admin role
-            const { data: profile } = await supabase
+            if (!user) {
+                console.log('❌ No user, redirecting to login')
+                router.push('/auth/login')
+                return
+            }
+
+            // Check if user has admin role - use auth_id to match RLS policy
+            const { data: profile, error: profileError } = await supabase
                 .from('users')
                 .select('role, email')
-                .eq('user_id', user.id)
+                .eq('auth_id', user.id)
                 .single()
 
             console.log('🔍 Admin check - Profile:', profile)
+            console.log('🔍 Admin check - Profile Error:', profileError)
             console.log('🔍 Admin check - Role:', profile?.role)
+
+            if (profileError) {
+                console.error('❌ Profile fetch error:', profileError)
+                router.push('/auth/contracts-dashboard')
+                return
+            }
 
             if (profile?.role === 'admin') {
                 console.log('✅ User is admin!')
@@ -270,11 +283,11 @@ export default function BetaTestingAdminDashboard() {
                 setAdminEmail(profile.email)
             } else {
                 console.log('❌ User is NOT admin, redirecting')
-                router.push('/contracts-dashboard')
+                router.push('/auth/contracts-dashboard')
             }
         } catch (error) {
             console.error('Admin access check failed:', error)
-            router.push('/contracts-dashboard')
+            router.push('/auth/contracts-dashboard')
         } finally {
             setLoading(false)
         }
@@ -863,7 +876,7 @@ export default function BetaTestingAdminDashboard() {
                         <div className="flex items-center gap-4">
                             <span className="text-sm text-slate-300">{adminEmail}</span>
                             <Link
-                                href="/contracts-dashboard"
+                                href="/auth/contracts-dashboard"
                                 className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
                             >
                                 Dashboard
