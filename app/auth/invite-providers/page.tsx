@@ -119,8 +119,11 @@ function InviteProvidersContent() {
     const [providers, setProviders] = useState<ProviderInvite[]>([])
     const [existingBids, setExistingBids] = useState<any[]>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
-    const [allSent, setAllSent] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Success state - shows celebration after successful sends
+    const [showSuccessState, setShowSuccessState] = useState(false)
+    const [justSentCount, setJustSentCount] = useState(0)
 
     // New provider form
     const [newProvider, setNewProvider] = useState({
@@ -191,8 +194,6 @@ function InviteProvidersContent() {
                 })
 
                 // Extract deal context if available
-                // Note: Full quick intake data requires adding deal_context column to sessions table
-                // For now, use dealValue from customer_requirements
                 if (data.deal_context || data.dealContext) {
                     const ctx = data.deal_context || data.dealContext
                     setDealContext({
@@ -204,7 +205,6 @@ function InviteProvidersContent() {
                         topPriorities: ctx.top_priorities || ctx.topPriorities || []
                     })
                 } else if (data.dealValue || data.deal_value) {
-                    // Fallback: use dealValue from customer_requirements
                     setDealContext({
                         dealValue: data.dealValue || data.deal_value || null,
                         serviceCriticality: null,
@@ -238,7 +238,6 @@ function InviteProvidersContent() {
             }
         } catch (err) {
             console.error('Error loading contract:', err)
-            // Non-fatal - continue without contract data
         }
     }
 
@@ -253,7 +252,6 @@ function InviteProvidersContent() {
             }
         } catch (err) {
             console.error('Error loading existing bids:', err)
-            // Non-fatal - continue without existing bids
         }
     }
 
@@ -267,20 +265,17 @@ function InviteProvidersContent() {
             return
         }
 
-        // Validate email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
         if (!emailRegex.test(newProvider.contactEmail)) {
             alert('Please enter a valid email address')
             return
         }
 
-        // Check for duplicate email in new providers
         if (providers.some(p => p.contactEmail.toLowerCase() === newProvider.contactEmail.toLowerCase())) {
             alert('This email has already been added')
             return
         }
 
-        // Check for duplicate in existing bids
         if (existingBids.some(b => b.provider_contact_email?.toLowerCase() === newProvider.contactEmail.toLowerCase())) {
             alert('This provider has already been invited to this session')
             return
@@ -331,7 +326,6 @@ function InviteProvidersContent() {
         let failCount = 0
 
         for (const provider of pendingProviders) {
-            // Update status to sending
             setProviders(prev => prev.map(p =>
                 p.id === provider.id ? { ...p, status: 'sending' as const } : p
             ))
@@ -383,36 +377,58 @@ function InviteProvidersContent() {
                 failCount++
             }
 
-            // Small delay between sends
             await new Promise(resolve => setTimeout(resolve, 500))
         }
 
         setIsSubmitting(false)
 
-        // Check if at least one was sent successfully
-        const anySuccessful = providers.some(p => p.status === 'sent')
-        if (anySuccessful) {
-            setAllSent(true)
-            // Reload existing bids to show the newly invited providers
+        // If any were successful, show success state
+        if (successCount > 0) {
+            setJustSentCount(successCount)
             await loadExistingBids(session.sessionId)
+            setShowSuccessState(true)
         }
 
-        // Show summary
+        // Show error message if some failed
         if (failCount > 0 && successCount > 0) {
-            alert(`${successCount} invitation(s) sent successfully. ${failCount} failed - you can retry or remove them.`)
+            setError(`${failCount} invitation(s) failed to send. You can retry them below.`)
         } else if (failCount > 0 && successCount === 0) {
-            alert(`Failed to send invitations. Please check the errors and retry.`)
-        } else if (successCount > 0) {
-            // All successful - no alert needed, UI shows status
+            setError('Failed to send invitations. Please check the errors and retry.')
         }
-    }
-
-    const proceedToDashboard = () => {
-        router.push(`/auth/contracts-dashboard`)
     }
 
     // ========================================================================
-    // SECTION 9: LOADING STATE
+    // SECTION 9: NAVIGATION HELPERS
+    // ========================================================================
+
+    const navigateToDashboard = () => {
+        router.push('/auth/contracts-dashboard')
+    }
+
+    const navigateToStudio = () => {
+        const contractId = searchParams.get('contract_id')
+        let url = `/auth/negotiation-studio?session_id=${session?.sessionId}`
+        if (contractId) {
+            url += `&contract_id=${contractId}`
+        }
+        router.push(url)
+    }
+
+    const navigateToAssessment = () => {
+        const contractId = searchParams.get('contract_id')
+        let url = `/auth/strategic-assessment?session_id=${session?.sessionId}`
+        if (contractId) {
+            url += `&contract_id=${contractId}`
+        }
+        router.push(url)
+    }
+
+    const handleAddMoreProviders = () => {
+        setShowSuccessState(false)
+    }
+
+    // ========================================================================
+    // SECTION 10: LOADING STATE
     // ========================================================================
 
     if (loading) {
@@ -427,14 +443,264 @@ function InviteProvidersContent() {
     }
 
     // ========================================================================
-    // SECTION 10: MAIN RENDER
+    // SECTION 11: SUCCESS STATE RENDER
+    // ========================================================================
+
+    if (showSuccessState) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+                {/* Navigation */}
+                <nav className="bg-white shadow-sm border-b border-slate-200">
+                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between h-16">
+                            <div className="flex items-center">
+                                <Link href="/auth/contracts-dashboard" className="flex items-center">
+                                    <div>
+                                        <div className="text-2xl font-medium text-slate-700">CLARENCE</div>
+                                        <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
+                                    </div>
+                                </Link>
+                            </div>
+                            {session?.sessionNumber && (
+                                <div className="flex items-center">
+                                    <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-mono">
+                                        {session.sessionNumber}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </nav>
+
+                {/* Success Content */}
+                <div className="max-w-3xl mx-auto px-4 py-12">
+                    {/* Success Banner */}
+                    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden mb-8">
+                        {/* Header with celebration */}
+                        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-10 text-center text-white">
+                            <div className="text-5xl mb-4">🎉</div>
+                            <h1 className="text-2xl font-bold mb-2">
+                                Invitations Sent Successfully!
+                            </h1>
+                            <p className="text-emerald-100 text-lg">
+                                You&apos;ve invited {justSentCount} provider{justSentCount !== 1 ? 's' : ''} to negotiate on
+                            </p>
+                            <p className="text-white font-medium text-lg mt-1">
+                                &ldquo;{contract?.contractName || CONTRACT_TYPE_LABELS[session?.contractType || ''] || 'Your Contract'}&rdquo;
+                            </p>
+                        </div>
+
+                        {/* What Happens Next */}
+                        <div className="px-8 py-6 border-b border-slate-200">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="text-xl">📧</span> What Happens Next
+                            </h2>
+                            <div className="space-y-3">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">1</div>
+                                    <div>
+                                        <p className="text-slate-700 font-medium">Providers receive email invitations</p>
+                                        <p className="text-sm text-slate-500">Each provider gets a unique link to access the contract</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">2</div>
+                                    <div>
+                                        <p className="text-slate-700 font-medium">They complete their intake questionnaire</p>
+                                        <p className="text-sm text-slate-500">Providers review clauses and submit their positions</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">3</div>
+                                    <div>
+                                        <p className="text-slate-700 font-medium">You&apos;ll be notified as each provider responds</p>
+                                        <p className="text-sm text-slate-500">Check your dashboard or email for updates</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">4</div>
+                                    <div>
+                                        <p className="text-slate-700 font-medium">Leverage positions calculated &amp; negotiation begins</p>
+                                        <p className="text-sm text-slate-500">CLARENCE analyses both parties to identify gaps and opportunities</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-4 flex items-center gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg px-4 py-3">
+                                <span className="text-lg">⏳</span>
+                                <span>Average provider response time: <strong>2-5 business days</strong></span>
+                            </div>
+                        </div>
+
+                        {/* Invitation Summary */}
+                        <div className="px-8 py-6 border-b border-slate-200">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="text-xl">📋</span> Invitation Summary
+                            </h2>
+                            <div className="bg-slate-50 rounded-xl overflow-hidden">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="border-b border-slate-200">
+                                            <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Provider</th>
+                                            <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Contact</th>
+                                            <th className="text-right text-xs font-medium text-slate-500 uppercase tracking-wider px-4 py-3">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                        {existingBids.map((bid, idx) => (
+                                            <tr key={idx} className="bg-white">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-medium text-sm">
+                                                            {(bid.provider_company || bid.providerCompany || 'P').charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span className="font-medium text-slate-800">
+                                                            {bid.provider_company || bid.providerCompany}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-slate-600">
+                                                    {bid.provider_contact_email || bid.providerContactEmail}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    {bid.status === 'submitted' || bid.intake_complete ? (
+                                                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                                            <span>✓</span> Submitted
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                                                            <span>📨</span> Sent
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Add More Providers Link */}
+                            <button
+                                onClick={handleAddMoreProviders}
+                                className="mt-4 text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                            >
+                                <span>+</span> Invite Another Provider
+                            </button>
+                        </div>
+
+                        {/* Important Notice */}
+                        <div className="px-8 py-6 bg-amber-50 border-b border-amber-200">
+                            <div className="flex items-start gap-3">
+                                <span className="text-2xl">⚠️</span>
+                                <div>
+                                    <h3 className="font-semibold text-amber-800 mb-1">Important</h3>
+                                    <p className="text-sm text-amber-700">
+                                        The Negotiation Studio will be in <strong>&ldquo;Waiting&rdquo; mode</strong> until providers
+                                        complete their intake. Leverage calculations and gap analysis require both party
+                                        positions to be submitted.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Navigation Buttons */}
+                        <div className="px-8 py-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <button
+                                    onClick={navigateToDashboard}
+                                    className="flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-slate-700 to-slate-800 text-white rounded-xl hover:from-slate-800 hover:to-slate-900 transition-all shadow-md"
+                                >
+                                    <span className="text-2xl">📊</span>
+                                    <div className="text-left">
+                                        <div className="font-semibold">View Dashboard</div>
+                                        <div className="text-xs text-slate-300">See all your sessions</div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={navigateToStudio}
+                                    className="flex items-center justify-center gap-3 px-6 py-4 bg-white border-2 border-slate-200 text-slate-700 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-all"
+                                >
+                                    <span className="text-2xl">🏛️</span>
+                                    <div className="text-left">
+                                        <div className="font-semibold">Preview Studio</div>
+                                        <div className="text-xs text-slate-500">Waiting for responses</div>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={navigateToAssessment}
+                                className="w-full text-center text-sm text-slate-500 hover:text-slate-700 py-2 transition-colors"
+                            >
+                                ← Back to Strategic Assessment (modify your positions)
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Failed Invitations - Show if any */}
+                    {providers.some(p => p.status === 'error') && (
+                        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
+                            <h3 className="text-lg font-medium text-red-800 mb-4 flex items-center gap-2">
+                                <span>⚠️</span> Failed Invitations
+                            </h3>
+                            <p className="text-sm text-slate-600 mb-4">
+                                The following invitations failed to send. You can retry or remove them.
+                            </p>
+                            <div className="space-y-3">
+                                {providers.filter(p => p.status === 'error').map((provider) => (
+                                    <div
+                                        key={provider.id}
+                                        className="flex items-center justify-between p-4 rounded-lg bg-red-50 border border-red-200"
+                                    >
+                                        <div>
+                                            <div className="font-medium text-slate-800">{provider.companyName}</div>
+                                            <div className="text-sm text-slate-500">{provider.contactEmail}</div>
+                                            {provider.errorMessage && (
+                                                <div className="text-xs text-red-600 mt-1">{provider.errorMessage}</div>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => resetProviderStatus(provider.id)}
+                                                className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                                            >
+                                                Retry
+                                            </button>
+                                            <button
+                                                onClick={() => removeProvider(provider.id)}
+                                                className="px-3 py-1.5 text-sm bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            {providers.some(p => p.status === 'pending') && (
+                                <button
+                                    onClick={sendInvitations}
+                                    disabled={isSubmitting}
+                                    className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {isSubmitting ? 'Sending...' : 'Retry Failed Invitations'}
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <FeedbackButton position="bottom-left" />
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 12: MAIN RENDER (Invite Form State)
     // ========================================================================
 
     return (
         <div className="min-h-screen bg-slate-50">
-            {/* ================================================================ */}
-            {/* SECTION 11: NAVIGATION */}
-            {/* ================================================================ */}
+            {/* Navigation */}
             <nav className="bg-white shadow-sm border-b border-slate-200">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16">
@@ -493,9 +759,7 @@ function InviteProvidersContent() {
                 </div>
             </div>
 
-            {/* ================================================================ */}
-            {/* SECTION 12: MAIN CONTENT */}
-            {/* ================================================================ */}
+            {/* Main Content */}
             <div className="max-w-4xl mx-auto px-4 py-8">
                 {/* Error Display */}
                 {error && (
@@ -535,7 +799,6 @@ function InviteProvidersContent() {
                         </div>
                     </div>
 
-                    {/* Deal Context - Top Priorities */}
                     {dealContext?.topPriorities && dealContext.topPriorities.length > 0 && (
                         <div className="mt-4 pt-4 border-t border-slate-200">
                             <span className="text-xs text-slate-500">Your Priorities</span>
@@ -702,7 +965,6 @@ function InviteProvidersContent() {
                                                         'Ready to Send'}
                                         </span>
 
-                                        {/* Action buttons */}
                                         {provider.status === 'pending' && (
                                             <button
                                                 onClick={() => removeProvider(provider.id)}
@@ -752,7 +1014,7 @@ function InviteProvidersContent() {
                     </div>
                 )}
 
-                {/* Empty State - No providers yet */}
+                {/* Empty State */}
                 {providers.length === 0 && existingBids.length === 0 && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mb-6 text-center">
                         <div className="text-4xl mb-3">📧</div>
@@ -766,24 +1028,24 @@ function InviteProvidersContent() {
                 {/* Action Buttons */}
                 <div className="flex justify-between items-center">
                     <button
-                        onClick={() => router.back()}
-                        className="px-6 py-3 text-slate-600 hover:text-slate-800 transition-all"
+                        onClick={navigateToAssessment}
+                        className="px-6 py-3 text-slate-600 hover:text-slate-800 transition-all flex items-center gap-2"
                     >
-                        ← Back
+                        ← Back to Assessment
                     </button>
 
                     <div className="flex items-center gap-3">
-                        {/* Show "Continue" button once any invitations have been sent */}
-                        {(allSent || existingBids.length > 0) && (
+                        {/* Show Dashboard button if providers already exist */}
+                        {existingBids.length > 0 && (
                             <button
-                                onClick={proceedToDashboard}
-                                className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg hover:from-emerald-700 hover:to-emerald-800 font-medium transition-all"
+                                onClick={navigateToDashboard}
+                                className="px-6 py-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium transition-all"
                             >
-                                Continue to Dashboard →
+                                Go to Dashboard
                             </button>
                         )}
 
-                        {/* Always show send button if there are pending providers */}
+                        {/* Send button */}
                         {providers.some(p => p.status === 'pending') && (
                             <button
                                 onClick={sendInvitations}
@@ -817,7 +1079,6 @@ function InviteProvidersContent() {
                 </div>
             </div>
 
-            {/* Beta Feedback Button */}
             <FeedbackButton position="bottom-left" />
         </div>
     )
