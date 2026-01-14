@@ -86,12 +86,17 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
     // -------------------------------------------------------------------------
 
     useEffect(() => {
-        // Get current user context
+        // Get current user context from multiple sources
         async function getUserContext() {
+            let foundUserId: string | null = null
+            let foundCompanyId: string | null = null
+
+            // Source 1: Supabase Auth (primary)
             try {
                 const { data: { user } } = await supabase.auth.getUser()
                 if (user) {
-                    setUserId(user.id)
+                    foundUserId = user.id
+                    console.log('📧 Feedback: Got user from Supabase auth:', foundUserId)
 
                     // Try to get company_id from user profile
                     const { data: profile } = await supabase
@@ -101,28 +106,82 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
                         .single()
 
                     if (profile?.company_id) {
-                        setCompanyId(profile.company_id)
+                        foundCompanyId = profile.company_id
                     }
                 }
             } catch (err) {
-                console.log('Could not get user context:', err)
+                console.log('Supabase auth check:', err)
             }
+
+            // Source 2: clarence_auth localStorage (fallback for regular users)
+            if (!foundUserId) {
+                try {
+                    const clarenceAuth = localStorage.getItem('clarence_auth')
+                    if (clarenceAuth) {
+                        const parsed = JSON.parse(clarenceAuth)
+                        foundUserId = parsed.userInfo?.userId || parsed.userId || parsed.user_id || null
+                        foundCompanyId = parsed.userInfo?.companyId || parsed.companyId || parsed.company_id || null
+                        if (foundUserId) {
+                            console.log('📧 Feedback: Got user from clarence_auth:', foundUserId)
+                        }
+                    }
+                } catch (err) {
+                    console.log('clarence_auth parse error:', err)
+                }
+            }
+
+            // Source 3: Provider context from URL or localStorage (for invited providers)
+            if (!foundUserId) {
+                try {
+                    // Check URL for provider context
+                    const urlParams = new URLSearchParams(window.location.search)
+                    const providerId = urlParams.get('provider_id')
+
+                    // Check provider_auth localStorage
+                    const providerAuth = localStorage.getItem('provider_auth') || localStorage.getItem('clarence_provider_auth')
+                    if (providerAuth) {
+                        const parsed = JSON.parse(providerAuth)
+                        foundUserId = parsed.userId || parsed.user_id || parsed.providerId || providerId || null
+                        foundCompanyId = parsed.companyId || parsed.company_id || null
+                        if (foundUserId) {
+                            console.log('📧 Feedback: Got user from provider_auth:', foundUserId)
+                        }
+                    }
+
+                    // If still no user but we have provider_id in URL, use that as identifier
+                    if (!foundUserId && providerId && providerId !== '00000000-0000-0000-0000-000000000001') {
+                        // Try to look up the provider's user_id from bids table
+                        const { data: bidData } = await supabase
+                            .from('bids')
+                            .select('provider_user_id, provider_company_id')
+                            .eq('bid_id', providerId)
+                            .single()
+
+                        if (bidData?.provider_user_id) {
+                            foundUserId = bidData.provider_user_id
+                            foundCompanyId = bidData.provider_company_id || null
+                            console.log('📧 Feedback: Got user from bids lookup:', foundUserId)
+                        }
+                    }
+                } catch (err) {
+                    console.log('Provider context check:', err)
+                }
+            }
+
+            // Set the values
+            if (foundUserId) {
+                setUserId(foundUserId)
+            }
+            if (foundCompanyId) {
+                setCompanyId(foundCompanyId)
+            }
+
+            // Log final result for debugging
+            console.log('📧 Feedback context:', { userId: foundUserId, companyId: foundCompanyId })
         }
 
         getUserContext()
     }, [supabase])
-
-    // Close on escape key
-    useEffect(() => {
-        function handleEscape(e: KeyboardEvent) {
-            if (e.key === 'Escape') {
-                onClose()
-            }
-        }
-
-        document.addEventListener('keydown', handleEscape)
-        return () => document.removeEventListener('keydown', handleEscape)
-    }, [onClose])
 
     // -------------------------------------------------------------------------
     // SECTION 3.3: FORM SUBMISSION
