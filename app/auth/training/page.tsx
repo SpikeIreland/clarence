@@ -389,6 +389,13 @@ export default function TrainingStudioPage() {
         setIsStartingScenario(true)
         setSelectedScenario(scenario)
 
+        // Map AI personality to system provider ID
+        const aiProviderMap: Record<string, string> = {
+            cooperative: '00000000-0000-0000-0000-000000000001',
+            balanced: '00000000-0000-0000-0000-000000000002',
+            aggressive: '00000000-0000-0000-0000-000000000003'
+        }
+
         try {
             eventLogger.started('training_session', 'single_player_scenario', {
                 scenarioId: scenario.scenarioId,
@@ -411,7 +418,9 @@ export default function TrainingStudioPage() {
             const result = await response.json()
 
             if (result.success && result.sessionId) {
-                router.push(`/auth/training/${result.sessionId}`)
+                // Navigate to contract-studio with session and provider IDs
+                const providerId = aiProviderMap[scenario.aiPersonality] || aiProviderMap.balanced
+                router.push(`/auth/contract-studio?session_id=${result.sessionId}&provider_id=${providerId}`)
             } else {
                 console.error('Failed to start scenario:', result.error)
                 alert('Unable to start scenario. Please try again.')
