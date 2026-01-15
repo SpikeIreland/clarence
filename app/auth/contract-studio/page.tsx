@@ -3454,6 +3454,10 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         }
     }
 
+    // ============================================================================
+    // SECTION: handleSetPosition - FIXED VERSION
+    // ============================================================================
+
     const handleSetPosition = async () => {
         if (!selectedClause || !userInfo || !session || !leverage || proposedPosition === null) return
 
@@ -3462,7 +3466,13 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
 
         const currentPosition = userInfo.role === 'customer'
             ? selectedClause.customerPosition
-            : selectedClause.providerPosition
+            : userInfo.role === 'provider'
+                ? selectedClause.providerPosition
+                : null  // For admin, we'll determine from session context
+
+        // For admin role, check both positions to see if proposedPosition matches current
+        const customerPos = selectedClause.customerPosition
+        const providerPos = selectedClause.providerPosition
 
         if (currentPosition === proposedPosition) {
             setIsAdjusting(false)
@@ -3476,13 +3486,18 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         try {
             // ============================================================
             // CALCULATE NEW LEVERAGE BEFORE API CALL
+            // We'll use a preliminary party guess, but API response is authoritative
             // ============================================================
+            const preliminaryParty = userInfo.role === 'customer' || userInfo.role === 'provider'
+                ? userInfo.role
+                : 'customer'  // Default for admin - will be corrected by API
+
             const previewClauses = clauses.map(c => {
                 if (c.positionId === selectedClause.positionId) {
                     return {
                         ...c,
-                        customerPosition: userInfo.role === 'customer' ? proposedPosition : c.customerPosition,
-                        providerPosition: userInfo.role === 'provider' ? proposedPosition : c.providerPosition,
+                        customerPosition: preliminaryParty === 'customer' ? proposedPosition : c.customerPosition,
+                        providerPosition: preliminaryParty === 'provider' ? proposedPosition : c.providerPosition,
                     }
                 }
                 return c
@@ -3492,7 +3507,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 leverage.leverageScoreCustomer,
                 leverage.leverageScoreProvider,
                 previewClauses,
-                userInfo.role as 'customer' | 'provider'
+                preliminaryParty as 'customer' | 'provider'
             )
 
             // ============================================================
@@ -3501,7 +3516,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
             const result = await commitPositionChange(
                 session.sessionId,
                 selectedClause.positionId,
-                userInfo.role as 'customer' | 'provider',
+                userInfo.role as 'customer' | 'provider',  // API will resolve if needed
                 proposedPosition,
                 pendingLeverageImpact,
                 {
@@ -3514,16 +3529,22 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
             )
 
             if (result.success) {
+                // ============================================================
+                // USE THE RESOLVED PARTY FROM API RESPONSE
+                // This is the key fix - API returns the correct negotiation role
+                // ============================================================
+                const resolvedParty = (result as { success: boolean; positionUpdate?: { party: string } }).positionUpdate?.party || userInfo.role
+
                 const updatedClauses = clauses.map(c => {
                     if (c.positionId === selectedClause.positionId) {
                         const newGap = calculateGapSize(
-                            userInfo.role === 'customer' ? proposedPosition : c.customerPosition,
-                            userInfo.role === 'provider' ? proposedPosition : c.providerPosition
+                            resolvedParty === 'customer' ? proposedPosition : c.customerPosition,
+                            resolvedParty === 'provider' ? proposedPosition : c.providerPosition
                         )
                         return {
                             ...c,
-                            customerPosition: userInfo.role === 'customer' ? proposedPosition : c.customerPosition,
-                            providerPosition: userInfo.role === 'provider' ? proposedPosition : c.providerPosition,
+                            customerPosition: resolvedParty === 'customer' ? proposedPosition : c.customerPosition,
+                            providerPosition: resolvedParty === 'provider' ? proposedPosition : c.providerPosition,
                             gapSize: newGap,
                             status: determineClauseStatus(newGap)
                         }
@@ -3549,10 +3570,11 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
 
                 // ============================================================
                 // CLARENCE INTELLIGENT RESPONSE TO POSITION CHANGE
+                // Also use resolvedParty here
                 // ============================================================
                 const newGap = calculateGapSize(
-                    userInfo.role === 'customer' ? proposedPosition : selectedClause.customerPosition,
-                    userInfo.role === 'provider' ? proposedPosition : selectedClause.providerPosition
+                    resolvedParty === 'customer' ? proposedPosition : selectedClause.customerPosition,
+                    resolvedParty === 'provider' ? proposedPosition : selectedClause.providerPosition
                 )
                 const isNowAligned = newGap <= 1
                 const clarenceRec = selectedClause.clarenceRecommendation
@@ -3574,18 +3596,18 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
 
                 // Call CLARENCE AI for intelligent response
                 try {
-                    const aiResponse = await callClarenceAI(session.sessionId, promptType, userInfo.role || 'customer', {
+                    const aiResponse = await callClarenceAI(session.sessionId, promptType, resolvedParty || 'customer', {
                         clauseId: selectedClause.clauseId,
                         positionChange: {
                             clauseName: selectedClause.clauseName,
                             clauseNumber: selectedClause.clauseNumber,
-                            party: userInfo.role || 'customer',
+                            party: resolvedParty || 'customer',
                             oldPosition: currentPosition ?? 5,
                             newPosition: proposedPosition ?? 5,
                             newGapSize: newGap,
-                            otherPartyPosition: userInfo.role === 'customer' ? selectedClause.providerPosition : selectedClause.customerPosition,
+                            otherPartyPosition: resolvedParty === 'customer' ? selectedClause.providerPosition : selectedClause.customerPosition,
                             clarenceRecommendation: clarenceRec,
-                            clauseWeight: userInfo.role === 'customer' ? selectedClause.customerWeight : selectedClause.providerWeight,
+                            clauseWeight: resolvedParty === 'customer' ? selectedClause.customerWeight : selectedClause.providerWeight,
                             leverageImpact: pendingLeverageImpact,
                             customerLeverage: newLeverage.customerLeverage,
                             providerLeverage: newLeverage.providerLeverage,
