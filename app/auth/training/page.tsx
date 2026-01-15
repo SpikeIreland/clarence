@@ -19,6 +19,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
 import VideoPlayer, { VideoGrid, useVideos } from '@/lib/video/VideoPlayer'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -1088,6 +1089,11 @@ export default function TrainingStudioPage() {
                     </svg>
                 </button>
             )}
+
+            {/* ============================================================ */}
+            {/* SECTION 24: BETA FEEDBACK BUTTON */}
+            {/* ============================================================ */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
