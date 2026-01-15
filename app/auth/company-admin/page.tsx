@@ -727,21 +727,41 @@ function CompanyAdminContent() {
     const checkAuth = useCallback(async (): Promise<UserInfo | null> => {
         try {
             const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
+            const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-            if (!user) {
+            if (authError) {
+                console.error('Auth error:', authError)
                 router.push('/auth/login')
                 return null
             }
+
+            if (!user) {
+                console.log('No authenticated user found')
+                router.push('/auth/login')
+                return null
+            }
+
+            console.log('Authenticated user:', user.id, user.email)
 
             // Get user info from localStorage (set during login)
             const stored = localStorage.getItem('clarenceAuth')
             if (!stored) {
-                router.push('/auth/login')
-                return null
+                console.log('No clarenceAuth in localStorage, but user is authenticated')
+                // User is authenticated but no localStorage - create basic info
+                return {
+                    userId: user.id,
+                    email: user.email || '',
+                    firstName: user.user_metadata?.first_name || '',
+                    lastName: user.user_metadata?.last_name || '',
+                    company: user.user_metadata?.company || '',
+                    companyId: user.user_metadata?.company_id || '',
+                    role: 'customer'
+                }
             }
 
             const parsed = JSON.parse(stored)
+            console.log('Parsed clarenceAuth:', parsed)
+
             return {
                 userId: user.id,
                 email: user.email || '',
@@ -751,7 +771,8 @@ function CompanyAdminContent() {
                 companyId: parsed.userInfo?.companyId || '',
                 role: parsed.userInfo?.role || 'customer'
             }
-        } catch {
+        } catch (error) {
+            console.error('checkAuth error:', error)
             router.push('/auth/login')
             return null
         }
@@ -774,21 +795,56 @@ function CompanyAdminContent() {
                     .single()
 
                 if (!error && data?.role === 'admin') {
+                    console.log('Admin access granted via company_users table')
                     return true
                 }
             }
 
             // Fallback: Check if user is marked as admin in users table
-            const { data: userData, error: userError } = await supabase
+            // Try with user_id column first
+            let userData = null
+
+            const result1 = await supabase
                 .from('users')
                 .select('role')
                 .eq('user_id', userId)
                 .single()
 
-            if (!userError && userData?.role === 'admin') {
+            if (!result1.error && result1.data) {
+                userData = result1.data
+            } else {
+                // Try with id column
+                const result2 = await supabase
+                    .from('users')
+                    .select('role')
+                    .eq('id', userId)
+                    .single()
+
+                if (!result2.error && result2.data) {
+                    userData = result2.data
+                } else {
+                    // Try with email from auth
+                    const { data: { user } } = await supabase.auth.getUser()
+                    if (user?.email) {
+                        const result3 = await supabase
+                            .from('users')
+                            .select('role')
+                            .eq('email', user.email)
+                            .single()
+
+                        if (!result3.error && result3.data) {
+                            userData = result3.data
+                        }
+                    }
+                }
+            }
+
+            if (userData?.role === 'admin') {
+                console.log('Admin access granted via users table')
                 return true
             }
 
+            console.log('Admin access denied - user role:', userData?.role)
             return false
         } catch (error) {
             console.error('Error checking admin access:', error)
@@ -1032,7 +1088,8 @@ function CompanyAdminContent() {
 
             if (!hasAdminAccess) {
                 // Redirect non-admins
-                router.push('/auth/dashboard')
+                console.log('User is not admin, redirecting to contracts-dashboard')
+                router.push('/auth/contracts-dashboard')
                 return
             }
 
@@ -1070,7 +1127,7 @@ function CompanyAdminContent() {
                     <h2 className="text-xl font-semibold text-slate-800 mb-2">Access Denied</h2>
                     <p className="text-slate-600 mb-4">You don&apos;t have permission to access the Company Admin panel.</p>
                     <button
-                        onClick={() => router.push('/auth/dashboard')}
+                        onClick={() => router.push('/auth/contracts-dashboard')}
                         className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
                     >
                         Go to Dashboard
@@ -1090,7 +1147,7 @@ function CompanyAdminContent() {
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => router.push('/auth/dashboard')}
+                                onClick={() => router.push('/auth/contracts-dashboard')}
                                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
