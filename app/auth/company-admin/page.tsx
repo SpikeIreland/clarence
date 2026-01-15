@@ -784,6 +784,19 @@ function CompanyAdminContent() {
         try {
             const supabase = createClient()
 
+            // ============================================================
+            // TEMPORARY BOOTSTRAP ADMIN - Remove after company_users is set up
+            // ============================================================
+            const { data: { user } } = await supabase.auth.getUser()
+            const bootstrapAdmins = [
+                'paul.lyons67@icloud.com'
+            ]
+            if (user?.email && bootstrapAdmins.includes(user.email.toLowerCase())) {
+                console.log('Admin access granted via bootstrap admin list')
+                return true
+            }
+            // ============================================================
+
             // Check company_users table for admin role
             if (companyId) {
                 const { data, error } = await supabase
@@ -824,7 +837,6 @@ function CompanyAdminContent() {
                     userData = result2.data
                 } else {
                     // Try with email from auth
-                    const { data: { user } } = await supabase.auth.getUser()
                     if (user?.email) {
                         const result3 = await supabase
                             .from('users')
