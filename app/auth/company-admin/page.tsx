@@ -295,7 +295,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         disabled={isUploading}
                     />
-
+                    
                     {isUploading ? (
                         <div className="flex flex-col items-center">
                             <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -317,7 +317,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                         </>
                     )}
                 </div>
-
+                
                 {uploadError && (
                     <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         {uploadError}
@@ -377,7 +377,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                 <span className="text-xs text-slate-400">v{playbook.playbookVersion}</span>
                                             )}
                                         </div>
-
+                                        
                                         {playbook.playbookDescription && (
                                             <p className="text-sm text-slate-600 mb-3">{playbook.playbookDescription}</p>
                                         )}
@@ -430,7 +430,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                 Activate
                                             </button>
                                         ) : null}
-
+                                        
                                         <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
@@ -706,14 +706,14 @@ function AuditLogTab() {
 
 function CompanyAdminContent() {
     const router = useRouter()
-
+    
     // State
     const [loading, setLoading] = useState(true)
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [companyName, setCompanyName] = useState<string>('')
     const [activeTab, setActiveTab] = useState<AdminTab>('playbooks')
     const [isAdmin, setIsAdmin] = useState(false)
-
+    
     // Data states
     const [playbooks, setPlaybooks] = useState<Playbook[]>([])
     const [playbooksLoading, setPlaybooksLoading] = useState(false)
@@ -728,13 +728,13 @@ function CompanyAdminContent() {
         try {
             const supabase = createClient()
             const { data: { user }, error: authError } = await supabase.auth.getUser()
-
+            
             if (authError) {
                 console.error('Auth error:', authError)
                 router.push('/auth/login')
                 return null
             }
-
+            
             if (!user) {
                 console.log('No authenticated user found')
                 router.push('/auth/login')
@@ -761,7 +761,7 @@ function CompanyAdminContent() {
 
             const parsed = JSON.parse(stored)
             console.log('Parsed clarenceAuth:', parsed)
-
+            
             return {
                 userId: user.id,
                 email: user.email || '',
@@ -783,7 +783,7 @@ function CompanyAdminContent() {
         // This will be replaced with a proper database check once company_users is populated
         try {
             const supabase = createClient()
-
+            
             // ============================================================
             // TEMPORARY BOOTSTRAP ADMIN - Remove after company_users is set up
             // ============================================================
@@ -796,7 +796,7 @@ function CompanyAdminContent() {
                 return true
             }
             // ============================================================
-
+            
             // Check company_users table for admin role
             if (companyId) {
                 const { data, error } = await supabase
@@ -806,7 +806,7 @@ function CompanyAdminContent() {
                     .eq('company_id', companyId)
                     .eq('status', 'active')
                     .single()
-
+                
                 if (!error && data?.role === 'admin') {
                     console.log('Admin access granted via company_users table')
                     return true
@@ -816,13 +816,13 @@ function CompanyAdminContent() {
             // Fallback: Check if user is marked as admin in users table
             // Try with user_id column first
             let userData = null
-
+            
             const result1 = await supabase
                 .from('users')
                 .select('role')
                 .eq('user_id', userId)
                 .single()
-
+            
             if (!result1.error && result1.data) {
                 userData = result1.data
             } else {
@@ -832,7 +832,7 @@ function CompanyAdminContent() {
                     .select('role')
                     .eq('id', userId)
                     .single()
-
+                
                 if (!result2.error && result2.data) {
                     userData = result2.data
                 } else {
@@ -843,14 +843,14 @@ function CompanyAdminContent() {
                             .select('role')
                             .eq('email', user.email)
                             .single()
-
+                        
                         if (!result3.error && result3.data) {
                             userData = result3.data
                         }
                     }
                 }
             }
-
+            
             if (userData?.role === 'admin') {
                 console.log('Admin access granted via users table')
                 return true
@@ -877,9 +877,9 @@ function CompanyAdminContent() {
                 .select('*')
                 .eq('company_id', companyId)
                 .order('created_at', { ascending: false })
-
+            
             if (error) throw error
-
+            
             const mappedPlaybooks: Playbook[] = (data || []).map(p => ({
                 playbookId: p.playbook_id,
                 playbookName: p.playbook_name,
@@ -895,7 +895,7 @@ function CompanyAdminContent() {
                 createdAt: p.created_at,
                 createdBy: p.created_by
             }))
-
+            
             setPlaybooks(mappedPlaybooks)
         } catch (error) {
             console.error('Error loading playbooks:', error)
@@ -913,9 +913,9 @@ function CompanyAdminContent() {
                 .select('*')
                 .eq('company_id', companyId)
                 .order('requested_at', { ascending: false })
-
+            
             if (error) throw error
-
+            
             const mappedApprovals: TrainingApproval[] = (data || []).map(a => ({
                 approvalId: a.approval_id,
                 userId: a.user_id,
@@ -930,7 +930,7 @@ function CompanyAdminContent() {
                 sessionsCompleted: a.sessions_completed || 0,
                 maxTrainingSessions: a.max_training_sessions
             }))
-
+            
             setTrainingApprovals(mappedApprovals)
         } catch (error) {
             console.error('Error loading training approvals:', error)
@@ -945,114 +945,166 @@ function CompanyAdminContent() {
     // ========================================================================
 
     const handlePlaybookUpload = async (file: File) => {
-        if (!userInfo?.companyId || !userInfo?.userId) return
-
+        console.log('handlePlaybookUpload called with:', file.name)
+        console.log('userInfo:', userInfo)
+        
+        // Bootstrap: If no companyId, we need to create/find one
+        let companyId = userInfo?.companyId
+        
+        if (!companyId) {
+            console.log('No companyId found, attempting to find or create company')
+            const supabase = createClient()
+            
+            // Try to find existing company for this user
+            const { data: existingCompany } = await supabase
+                .from('companies')
+                .select('company_id')
+                .eq('created_by', userInfo?.userId)
+                .single()
+            
+            if (existingCompany?.company_id) {
+                companyId = existingCompany.company_id
+                console.log('Found existing company:', companyId)
+            } else {
+                // Create a bootstrap company
+                const { data: newCompany, error: companyError } = await supabase
+                    .from('companies')
+                    .insert({
+                        company_name: userInfo?.company || 'My Company',
+                        created_by: userInfo?.userId
+                    })
+                    .select('company_id')
+                    .single()
+                
+                if (companyError) {
+                    console.error('Failed to create company:', companyError)
+                    throw new Error('Failed to create company: ' + companyError.message)
+                }
+                
+                companyId = newCompany?.company_id
+                console.log('Created new company:', companyId)
+            }
+        }
+        
+        if (!companyId || !userInfo?.userId) {
+            console.error('Missing companyId or userId:', { companyId, userId: userInfo?.userId })
+            throw new Error('Unable to determine company. Please contact support.')
+        }
+        
         const supabase = createClient()
-
+        
         // 1. Upload file to Supabase Storage
         const fileExt = file.name.split('.').pop()
-        const fileName = `${userInfo.companyId}/${Date.now()}.${fileExt}`
-
+        const fileName = `${companyId}/${Date.now()}.${fileExt}`
+        
+        console.log('Uploading to storage:', fileName)
+        
         const { error: uploadError } = await supabase.storage
             .from('playbooks')
             .upload(fileName, file)
-
+        
         if (uploadError) {
+            console.error('Storage upload error:', uploadError)
             throw new Error('Failed to upload file: ' + uploadError.message)
         }
-
+        
+        console.log('File uploaded successfully')
+        
         // 2. Create playbook record
         const { error: insertError } = await supabase
             .from('company_playbooks')
             .insert({
-                company_id: userInfo.companyId,
+                company_id: companyId,
                 playbook_name: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
                 source_file_name: file.name,
                 source_file_path: fileName,
                 status: 'pending_parse',
                 created_by: userInfo.userId
             })
-
+        
         if (insertError) {
+            console.error('Playbook record insert error:', insertError)
             throw new Error('Failed to create playbook record: ' + insertError.message)
         }
-
+        
+        console.log('Playbook record created')
+        
         // 3. Refresh playbooks list
-        await loadPlaybooks(userInfo.companyId)
-
+        await loadPlaybooks(companyId)
+        
         // TODO: Trigger N8N workflow to parse the playbook
     }
 
     const handlePlaybookActivate = async (playbookId: string) => {
         if (!userInfo?.companyId || !userInfo?.userId) return
-
+        
         const supabase = createClient()
-
+        
         // Deactivate any currently active playbook
         await supabase
             .from('company_playbooks')
             .update({ is_active: false, deactivated_at: new Date().toISOString(), deactivated_by: userInfo.userId })
             .eq('company_id', userInfo.companyId)
             .eq('is_active', true)
-
+        
         // Activate the selected playbook
         const { error } = await supabase
             .from('company_playbooks')
-            .update({
-                is_active: true,
-                activated_at: new Date().toISOString(),
+            .update({ 
+                is_active: true, 
+                activated_at: new Date().toISOString(), 
                 activated_by: userInfo.userId,
                 status: 'active'
             })
             .eq('playbook_id', playbookId)
-
+        
         if (error) {
             throw new Error('Failed to activate playbook: ' + error.message)
         }
-
+        
         await loadPlaybooks(userInfo.companyId)
     }
 
     const handlePlaybookDeactivate = async (playbookId: string) => {
         if (!userInfo?.companyId || !userInfo?.userId) return
-
+        
         const supabase = createClient()
-
+        
         const { error } = await supabase
             .from('company_playbooks')
-            .update({
-                is_active: false,
-                deactivated_at: new Date().toISOString(),
+            .update({ 
+                is_active: false, 
+                deactivated_at: new Date().toISOString(), 
                 deactivated_by: userInfo.userId,
                 status: 'inactive'
             })
             .eq('playbook_id', playbookId)
-
+        
         if (error) {
             throw new Error('Failed to deactivate playbook: ' + error.message)
         }
-
+        
         await loadPlaybooks(userInfo.companyId)
     }
 
     const handleTrainingApprove = async (approvalId: string) => {
         if (!userInfo?.userId) return
-
+        
         const supabase = createClient()
-
+        
         const { error } = await supabase
             .from('training_approvals')
-            .update({
+            .update({ 
                 status: 'approved',
                 reviewed_by: userInfo.userId,
                 reviewed_at: new Date().toISOString()
             })
             .eq('approval_id', approvalId)
-
+        
         if (error) {
             throw new Error('Failed to approve training request: ' + error.message)
         }
-
+        
         if (userInfo.companyId) {
             await loadTrainingApprovals(userInfo.companyId)
         }
@@ -1060,23 +1112,23 @@ function CompanyAdminContent() {
 
     const handleTrainingReject = async (approvalId: string, reason: string) => {
         if (!userInfo?.userId) return
-
+        
         const supabase = createClient()
-
+        
         const { error } = await supabase
             .from('training_approvals')
-            .update({
+            .update({ 
                 status: 'rejected',
                 reviewed_by: userInfo.userId,
                 reviewed_at: new Date().toISOString(),
                 review_notes: reason
             })
             .eq('approval_id', approvalId)
-
+        
         if (error) {
             throw new Error('Failed to reject training request: ' + error.message)
         }
-
+        
         if (userInfo.companyId) {
             await loadTrainingApprovals(userInfo.companyId)
         }
@@ -1090,21 +1142,21 @@ function CompanyAdminContent() {
         const initialize = async () => {
             const user = await checkAuth()
             if (!user) return
-
+            
             setUserInfo(user)
             setCompanyName(user.company || 'Your Company')
-
+            
             // Check admin access
             const hasAdminAccess = await checkAdminAccess(user.userId, user.companyId)
             setIsAdmin(hasAdminAccess)
-
+            
             if (!hasAdminAccess) {
                 // Redirect non-admins
                 console.log('User is not admin, redirecting to contracts-dashboard')
                 router.push('/auth/contracts-dashboard')
                 return
             }
-
+            
             // Load data
             if (user.companyId) {
                 await Promise.all([
@@ -1112,10 +1164,10 @@ function CompanyAdminContent() {
                     loadTrainingApprovals(user.companyId)
                 ])
             }
-
+            
             setLoading(false)
         }
-
+        
         initialize()
     }, [checkAuth, checkAdminAccess, loadPlaybooks, loadTrainingApprovals, router])
 
@@ -1171,7 +1223,7 @@ function CompanyAdminContent() {
                                 <p className="text-sm text-slate-500">{companyName}</p>
                             </div>
                         </div>
-
+                        
                         <div className="flex items-center gap-3">
                             <div className="text-right">
                                 <p className="text-sm font-medium text-slate-700">
@@ -1209,7 +1261,7 @@ function CompanyAdminContent() {
                             onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)}
                         />
                     )}
-
+                    
                     {activeTab === 'training' && (
                         <TrainingApprovalsTab
                             approvals={trainingApprovals}
@@ -1219,9 +1271,9 @@ function CompanyAdminContent() {
                             onRefresh={() => userInfo?.companyId && loadTrainingApprovals(userInfo.companyId)}
                         />
                     )}
-
+                    
                     {activeTab === 'users' && <UsersTab />}
-
+                    
                     {activeTab === 'audit' && <AuditLogTab />}
                 </div>
             </main>
