@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger';
+import FeedbackButton from '@/app/components/FeedbackButton';
 
 // ============================================================================
 // SECTION 2: INTERFACES
@@ -637,6 +638,9 @@ function ProviderIntakeContent() {
                     </div>
                 </main>
                 <ProviderFooter />
+
+                {/* Beta Feedback Button */}
+                <FeedbackButton position="bottom-left" />
             </div>
         )
     }
@@ -667,6 +671,9 @@ function ProviderIntakeContent() {
                     </div>
                 </main>
                 <ProviderFooter />
+
+                {/* Beta Feedback Button */}
+                <FeedbackButton position="bottom-left" />
             </div>
         )
     }
@@ -812,12 +819,15 @@ function ProviderIntakeContent() {
             </main>
 
             <ProviderFooter />
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
 
-// ============================================================================
-// SECTION 18: STEP COMPONENTS - INTERFACES
+// ========================================================================
+// SECTION 15: MAIN RENDER
 // ============================================================================
 
 interface StepProps {

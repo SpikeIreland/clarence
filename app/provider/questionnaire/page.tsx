@@ -8,6 +8,8 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger';
+import FeedbackButton from '@/app/components/FeedbackButton';
+
 
 // ============================================================================
 // SECTION 2: CONSTANTS & TYPES
@@ -558,6 +560,9 @@ function ProviderQuestionnaireContent() {
                     </div>
                 </main>
                 <ProviderFooter />
+
+                {/* Beta Feedback Button */}
+                <FeedbackButton position="bottom-left" />
             </div>
         )
     }
@@ -653,6 +658,9 @@ function ProviderQuestionnaireContent() {
                 </main>
 
                 <ProviderFooter />
+
+                {/* Beta Feedback Button */}
+                <FeedbackButton position="bottom-left" />
             </div>
         )
     }
@@ -858,6 +866,9 @@ function ProviderQuestionnaireContent() {
             </main>
 
             <ProviderFooter />
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }

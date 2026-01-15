@@ -23,6 +23,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { eventLogger } from '@/lib/eventLogger';
 import { createClient } from '@supabase/supabase-js';
+import FeedbackButton from '@/app/components/FeedbackButton';
 
 // ============================================================================
 // SECTION 2: SUPABASE INITIALIZATION
@@ -155,6 +156,9 @@ function LoadingSpinner() {
                 </div>
             </main>
             <ProviderFooter />
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     );
 }
@@ -1188,6 +1192,9 @@ function ProviderAuthContent() {
             </main>
 
             <ProviderFooter />
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     );
 }

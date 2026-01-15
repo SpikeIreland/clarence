@@ -8,6 +8,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger';
+import FeedbackButton from '@/app/components/FeedbackButton';
 
 // ============================================================================
 // SECTION 2: SHARED HEADER COMPONENT
@@ -85,6 +86,9 @@ export default function ProviderWelcomePage() {
                     </div>
                 </main>
                 <ProviderFooter />
+
+                {/* Beta Feedback Button */}
+                <FeedbackButton position="bottom-left" />
             </div>
         }>
             <ProviderWelcomeContent />
@@ -455,6 +459,9 @@ function ProviderWelcomeContent() {
             </main>
 
             <ProviderFooter />
+
+            {/* Beta Feedback Button */}
+            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
