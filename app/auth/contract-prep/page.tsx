@@ -440,6 +440,11 @@ function ContractPrepContent() {
     // Editing state for ranges
     const [isEditingRange, setIsEditingRange] = useState(false)
 
+    const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false)
+    const [suggestionError, setSuggestionError] = useState<string | null>(null)
+    const [lastSuggestedClauseId, setLastSuggestedClauseId] = useState<string | null>(null)
+
+
     // Session Data State
     const [sessionData, setSessionData] = useState<SessionData | null>(null)
 
@@ -1066,6 +1071,23 @@ function ContractPrepContent() {
         } catch (err) {
             console.error('Error saving edit:', err)
             setError('Failed to save changes')
+        }
+    }
+
+    // ========================================================================
+    // CLAUSE SELECTION HANDLER (with AI Suggestion)
+    // ========================================================================
+
+    const handleClauseSelect = (clause: ContractClause) => {
+        setSelectedClause(clause)
+
+        // Fetch AI range suggestion when clause is selected
+        // Only if we don't already have values for this clause
+        const existingRange = clauseRanges[clause.clauseId]
+        const hasExistingValues = existingRange && (existingRange.minValue || existingRange.targetValue)
+
+        if (!hasExistingValues && lastSuggestedClauseId !== clause.clauseId) {
+            fetchRangeSuggestion(clause)
         }
     }
 
@@ -1798,6 +1820,104 @@ function ContractPrepContent() {
         }
     }
 
+    // ============================================================================
+    // SECTION 5Q: RANGE SUGGESTION FUNCTION
+    // Fetches AI-powered range suggestions from CLARENCE when clause is selected
+    // ============================================================================
+
+    interface RangeSuggestion {
+        range_type: 'duration' | 'percentage' | 'currency' | 'count' | 'boolean' | 'text' | 'custom'
+        unit: string
+        industry_min: string
+        industry_max: string
+        suggested_target: string
+        suggested_walkaway: string
+        suggested_importance: 'low' | 'medium' | 'high' | 'critical'
+        rationale: string
+        chat_message: string
+    }
+
+    const fetchRangeSuggestion = async (clause: ContractClause) => {
+        // Don't re-fetch if we already have a suggestion for this clause
+        if (lastSuggestedClauseId === clause.clauseId) {
+            return
+        }
+
+        // Don't fetch if we already have user-configured values
+        const existingRange = clauseRanges[clause.clauseId]
+        if (existingRange && (existingRange.minValue || existingRange.targetValue)) {
+            return
+        }
+
+        setIsLoadingSuggestion(true)
+        setSuggestionError(null)
+
+        try {
+            // Build the request payload with all available context
+            const payload: Record<string, any> = {
+                clause_id: clause.clauseId,
+                clause_name: clause.clauseName,
+                clause_content: clause.content,
+                clause_category: clause.category,
+                clause_number: clause.clauseNumber,
+                contract_id: contract?.contractId,
+                contract_name: contract?.contractName,
+                contract_type: sessionData?.contractType || contract?.detectedContractType || 'general',
+                session_id: sessionData?.sessionId || sessionId,
+                mediation_type: sessionData?.mediationType,
+                user_id: userInfo?.userId
+            }
+
+            const response = await fetch(`${API_BASE}/clarence-suggest-range`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+
+            const data = await response.json()
+
+            if (data.success && data.suggestion) {
+                const suggestion: RangeSuggestion = data.suggestion
+
+                // Pre-fill the range fields with CLARENCE's suggestion
+                updateClauseRange(clause.clauseId, {
+                    rangeType: suggestion.range_type,
+                    unit: suggestion.unit,
+                    minValue: suggestion.industry_min,
+                    maxValue: suggestion.industry_max,
+                    targetValue: suggestion.suggested_target,
+                    walkawayValue: suggestion.suggested_walkaway,
+                    importance: suggestion.suggested_importance,
+                    rationale: suggestion.rationale
+                })
+
+                // Add CLARENCE's message to the chat panel
+                addChatMessage('clarence', suggestion.chat_message)
+
+                // Track that we've suggested for this clause
+                setLastSuggestedClauseId(clause.clauseId)
+
+            } else if (data.suggestion) {
+                // We got a fallback suggestion (API had issues but gave us something)
+                addChatMessage('clarence', data.suggestion.chat_message)
+                setSuggestionError(data.error || null)
+            } else {
+                throw new Error(data.error || 'Failed to get suggestion')
+            }
+
+        } catch (err) {
+            console.error('Error fetching range suggestion:', err)
+            setSuggestionError('Unable to get AI suggestion')
+
+            // Add a helpful message to chat
+            addChatMessage('clarence',
+                `I'm having trouble analyzing the **${clause.clauseName}** clause right now. ` +
+                `Please configure the range manually based on your requirements.`
+            )
+        } finally {
+            setIsLoadingSuggestion(false)
+        }
+    }
 
     // ========================================================================
     // SECTION 6: RENDER - BULK ACTION TOOLBAR
@@ -2029,7 +2149,7 @@ function ContractPrepContent() {
 
                                                     {/* Clause Info - Clickable */}
                                                     <button
-                                                        onClick={() => setSelectedClause(parent)}
+                                                        onClick={() => handleClauseSelect(parent)}
                                                         className="flex-1 min-w-0 text-left"
                                                     >
                                                         <div className="flex items-center gap-2">
@@ -2097,7 +2217,7 @@ function ContractPrepContent() {
 
                                                                     {/* Clause Info - Clickable */}
                                                                     <button
-                                                                        onClick={() => setSelectedClause(child)}
+                                                                        onClick={() => handleClauseSelect(child)}
                                                                         className="flex-1 min-w-0 text-left"
                                                                     >
                                                                         <div className="flex items-center gap-2">
@@ -2206,7 +2326,7 @@ function ContractPrepContent() {
 
                                                             {/* Clause Info */}
                                                             <button
-                                                                onClick={() => setSelectedClause(clause)}
+                                                                onClick={() => handleClauseSelect(clause)}
                                                                 className="flex-1 min-w-0 text-left"
                                                             >
                                                                 <div className="flex items-center gap-1">
@@ -2296,6 +2416,34 @@ function ContractPrepContent() {
                 className="hidden"
             />
         )
+
+        // ====================================================================
+        // LOADING OVERLAY FOR AI SUGGESTIONS
+        // ====================================================================
+        const renderSuggestionLoadingOverlay = () => {
+            if (!isLoadingSuggestion) return null
+
+            return (
+                <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
+                    <div className="text-center p-6">
+                        <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                            <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                            Clarence is analyzing...
+                        </h3>
+                        <p className="text-sm text-slate-500 max-w-xs">
+                            Reviewing clause context and suggesting appropriate ranges based on industry standards
+                        </p>
+                        {suggestionError && (
+                            <p className="text-sm text-amber-600 mt-3">
+                                {suggestionError}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )
+        }
 
         // Loading state
         if (isLoading) {
@@ -2439,10 +2587,10 @@ function ContractPrepContent() {
                                     {selectedClause.category}
                                 </span>
                                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedClause.status === 'verified'
-                                        ? 'bg-green-100 text-green-700'
-                                        : selectedClause.status === 'rejected'
-                                            ? 'bg-red-100 text-red-700'
-                                            : 'bg-amber-100 text-amber-700'
+                                    ? 'bg-green-100 text-green-700'
+                                    : selectedClause.status === 'rejected'
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-amber-100 text-amber-700'
                                     }`}>
                                     {selectedClause.status.charAt(0).toUpperCase() + selectedClause.status.slice(1)}
                                 </span>
@@ -2453,10 +2601,10 @@ function ContractPrepContent() {
                                 )}
                                 {selectedClause.aiConfidence && (
                                     <span className={`text-sm ${selectedClause.aiConfidence >= 0.9
-                                            ? 'text-green-600'
-                                            : selectedClause.aiConfidence >= 0.7
-                                                ? 'text-amber-600'
-                                                : 'text-red-600'
+                                        ? 'text-green-600'
+                                        : selectedClause.aiConfidence >= 0.7
+                                            ? 'text-amber-600'
+                                            : 'text-red-600'
                                         }`}>
                                         {Math.round(selectedClause.aiConfidence * 100)}% confidence
                                     </span>
@@ -2556,247 +2704,251 @@ function ContractPrepContent() {
                     </div>
 
                     {/* Range Configuration Section */}
-                    <div className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 className="text-lg font-semibold text-slate-800">Range Configuration</h3>
-                                <p className="text-sm text-slate-500 mt-1">
-                                    Define the acceptable range for this clause in your negotiation
-                                </p>
-                            </div>
-                            {!isEditingRange && isRangeComplete && (
-                                <button
-                                    onClick={() => setIsEditingRange(true)}
-                                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                                >
-                                    Edit Range
-                                </button>
-                            )}
-                        </div>
+                    <div className="p-6 relative">
+                        {/* AI Suggestion Loading Overlay */}
+                        {renderSuggestionLoadingOverlay()}
 
-                        {/* Range Type Selector */}
-                        <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-6 border border-slate-200">
-                            {/* Range Type */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Range Type
-                                </label>
-                                <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                                    {(Object.keys(RANGE_TYPE_CONFIG) as RangeType[]).map((type) => (
-                                        <button
-                                            key={type}
-                                            onClick={() => updateClauseRange(selectedClause.clauseId, {
-                                                rangeType: type,
-                                                unit: RANGE_TYPE_CONFIG[type].units[0].value
-                                            })}
-                                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${currentRange.rangeType === type
+                        <div className={`transition-opacity duration-200 ${isLoadingSuggestion ? 'opacity-30 pointer-events-none' : ''}`}>
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-800">Range Configuration</h3>
+                                    <p className="text-sm text-slate-500 mt-1">
+                                        Define the acceptable range for this clause in your negotiation
+                                    </p>
+                                </div>
+                                {!isEditingRange && isRangeComplete && (
+                                    <button
+                                        onClick={() => setIsEditingRange(true)}
+                                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                    >
+                                        Edit Range
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Range Type Selector */}
+                            <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-6 border border-slate-200">
+                                {/* Range Type */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Range Type
+                                    </label>
+                                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                                        {(Object.keys(RANGE_TYPE_CONFIG) as RangeType[]).map((type) => (
+                                            <button
+                                                key={type}
+                                                onClick={() => updateClauseRange(selectedClause.clauseId, {
+                                                    rangeType: type,
+                                                    unit: RANGE_TYPE_CONFIG[type].units[0].value
+                                                })}
+                                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${currentRange.rangeType === type
                                                     ? 'bg-blue-600 text-white shadow-md'
                                                     : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-300 hover:bg-blue-50'
-                                                }`}
-                                        >
-                                            {RANGE_TYPE_CONFIG[type].label}
-                                        </button>
-                                    ))}
+                                                    }`}
+                                            >
+                                                {RANGE_TYPE_CONFIG[type].label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        {rangeConfig.description}
+                                    </p>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-2">
-                                    {rangeConfig.description}
-                                </p>
-                            </div>
 
-                            {/* Unit Selector */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Unit
-                                </label>
-                                <select
-                                    value={currentRange.unit}
-                                    onChange={(e) => updateClauseRange(selectedClause.clauseId, { unit: e.target.value })}
-                                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                >
-                                    {rangeConfig.units.map((unit) => (
-                                        <option key={unit.value} value={unit.value}>
-                                            {unit.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Value Inputs - Conditional based on range type */}
-                            {currentRange.rangeType === 'boolean' ? (
-                                /* Boolean Range */
-                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-emerald-700 mb-2">
-                                            🎯 Our Preferred Position
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'Yes' })}
-                                                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'Yes'
-                                                        ? 'bg-emerald-600 text-white'
-                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
-                                                    }`}
-                                            >
-                                                Yes / Allowed
-                                            </button>
-                                            <button
-                                                onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'No' })}
-                                                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'No'
-                                                        ? 'bg-emerald-600 text-white'
-                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
-                                                    }`}
-                                            >
-                                                No / Prohibited
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-amber-700 mb-2">
-                                            ⚠️ Would Accept (Walkaway)
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'Yes' })}
-                                                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'Yes'
-                                                        ? 'bg-amber-500 text-white'
-                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
-                                                    }`}
-                                            >
-                                                Yes / Allowed
-                                            </button>
-                                            <button
-                                                onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'No' })}
-                                                className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'No'
-                                                        ? 'bg-amber-500 text-white'
-                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
-                                                    }`}
-                                            >
-                                                No / Prohibited
-                                            </button>
-                                        </div>
-                                    </div>
+                                {/* Unit Selector */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Unit
+                                    </label>
+                                    <select
+                                        value={currentRange.unit}
+                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { unit: e.target.value })}
+                                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    >
+                                        {rangeConfig.units.map((unit) => (
+                                            <option key={unit.value} value={unit.value}>
+                                                {unit.label}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
-                            ) : currentRange.rangeType === 'text' ? (
-                                /* Text Range */
-                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                    <div>
-                                        <label className="block text-sm font-medium text-emerald-700 mb-2">
-                                            🎯 Our Preferred Position
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={currentRange.targetValue}
-                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
-                                            placeholder="e.g., England & Wales"
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-amber-700 mb-2">
-                                            ⚠️ Would Accept (Walkaway)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={currentRange.walkawayValue}
-                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
-                                            placeholder="e.g., Any EU jurisdiction"
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                        />
-                                    </div>
-                                </div>
-                            ) : (
-                                /* Numeric Ranges (Duration, Percentage, Currency, Count) */
-                                <>
-                                    {/* Industry Range */}
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                                            📊 Typical Industry Range
-                                        </label>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs text-slate-500 mb-1">Minimum</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type="text"
-                                                        value={currentRange.minValue}
-                                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { minValue: e.target.value })}
-                                                        placeholder={rangeConfig.placeholder.min}
-                                                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                                                        {currentRange.rangeType === 'percentage' ? '%' :
-                                                            currentRange.rangeType === 'currency' ? currentRange.unit :
-                                                                currentRange.unit}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs text-slate-500 mb-1">Maximum</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type="text"
-                                                        value={currentRange.maxValue}
-                                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { maxValue: e.target.value })}
-                                                        placeholder={rangeConfig.placeholder.max}
-                                                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                                                        {currentRange.rangeType === 'percentage' ? '%' :
-                                                            currentRange.rangeType === 'currency' ? currentRange.unit :
-                                                                currentRange.unit}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
 
-                                    {/* Target and Walkaway */}
+                                {/* Value Inputs - Conditional based on range type */}
+                                {currentRange.rangeType === 'boolean' ? (
+                                    /* Boolean Range */
                                     <div className="grid grid-cols-2 gap-4 mb-6">
-                                        <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-                                            <label className="block text-sm font-semibold text-emerald-700 mb-2">
-                                                🎯 Our Target
+                                        <div>
+                                            <label className="block text-sm font-medium text-emerald-700 mb-2">
+                                                🎯 Our Preferred Position
                                             </label>
-                                            <p className="text-xs text-emerald-600 mb-2">What we're aiming for</p>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    value={currentRange.targetValue}
-                                                    onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
-                                                    placeholder={rangeConfig.placeholder.target}
-                                                    className="w-full px-4 py-2.5 bg-white border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                />
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'Yes' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'Yes'
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
+                                                        }`}
+                                                >
+                                                    Yes / Allowed
+                                                </button>
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'No' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'No'
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
+                                                        }`}
+                                                >
+                                                    No / Prohibited
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                                            <label className="block text-sm font-semibold text-amber-700 mb-2">
-                                                ⚠️ Our Walkaway
+                                        <div>
+                                            <label className="block text-sm font-medium text-amber-700 mb-2">
+                                                ⚠️ Would Accept (Walkaway)
                                             </label>
-                                            <p className="text-xs text-amber-600 mb-2">Bottom line we'd accept</p>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    value={currentRange.walkawayValue}
-                                                    onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
-                                                    placeholder={rangeConfig.placeholder.walkaway}
-                                                    className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                                />
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'Yes' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'Yes'
+                                                        ? 'bg-amber-500 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
+                                                        }`}
+                                                >
+                                                    Yes / Allowed
+                                                </button>
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'No' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'No'
+                                                        ? 'bg-amber-500 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
+                                                        }`}
+                                                >
+                                                    No / Prohibited
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
-                                </>
-                            )}
+                                ) : currentRange.rangeType === 'text' ? (
+                                    /* Text Range */
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-emerald-700 mb-2">
+                                                🎯 Our Preferred Position
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={currentRange.targetValue}
+                                                onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
+                                                placeholder="e.g., England & Wales"
+                                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-amber-700 mb-2">
+                                                ⚠️ Would Accept (Walkaway)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={currentRange.walkawayValue}
+                                                onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
+                                                placeholder="e.g., Any EU jurisdiction"
+                                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* Numeric Ranges (Duration, Percentage, Currency, Count) */
+                                    <>
+                                        {/* Industry Range */}
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                                📊 Typical Industry Range
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs text-slate-500 mb-1">Minimum</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={currentRange.minValue}
+                                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { minValue: e.target.value })}
+                                                            placeholder={rangeConfig.placeholder.min}
+                                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                                                            {currentRange.rangeType === 'percentage' ? '%' :
+                                                                currentRange.rangeType === 'currency' ? currentRange.unit :
+                                                                    currentRange.unit}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-slate-500 mb-1">Maximum</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={currentRange.maxValue}
+                                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { maxValue: e.target.value })}
+                                                            placeholder={rangeConfig.placeholder.max}
+                                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                                                            {currentRange.rangeType === 'percentage' ? '%' :
+                                                                currentRange.rangeType === 'currency' ? currentRange.unit :
+                                                                    currentRange.unit}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                            {/* Importance Level */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Clause Importance
-                                </label>
-                                <div className="grid grid-cols-4 gap-2">
-                                    {(['low', 'medium', 'high', 'critical'] as const).map((level) => (
-                                        <button
-                                            key={level}
-                                            onClick={() => updateClauseRange(selectedClause.clauseId, { importance: level })}
-                                            className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${currentRange.importance === level
+                                        {/* Target and Walkaway */}
+                                        <div className="grid grid-cols-2 gap-4 mb-6">
+                                            <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                                                <label className="block text-sm font-semibold text-emerald-700 mb-2">
+                                                    🎯 Our Target
+                                                </label>
+                                                <p className="text-xs text-emerald-600 mb-2">What we're aiming for</p>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={currentRange.targetValue}
+                                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
+                                                        placeholder={rangeConfig.placeholder.target}
+                                                        className="w-full px-4 py-2.5 bg-white border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                                                <label className="block text-sm font-semibold text-amber-700 mb-2">
+                                                    ⚠️ Our Walkaway
+                                                </label>
+                                                <p className="text-xs text-amber-600 mb-2">Bottom line we'd accept</p>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={currentRange.walkawayValue}
+                                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
+                                                        placeholder={rangeConfig.placeholder.walkaway}
+                                                        className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Importance Level */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Clause Importance
+                                    </label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {(['low', 'medium', 'high', 'critical'] as const).map((level) => (
+                                            <button
+                                                key={level}
+                                                onClick={() => updateClauseRange(selectedClause.clauseId, { importance: level })}
+                                                className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${currentRange.importance === level
                                                     ? level === 'critical'
                                                         ? 'bg-red-600 text-white shadow-md'
                                                         : level === 'high'
@@ -2805,103 +2957,104 @@ function ContractPrepContent() {
                                                                 ? 'bg-blue-500 text-white shadow-md'
                                                                 : 'bg-slate-500 text-white shadow-md'
                                                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                                                }`}
-                                        >
-                                            {level.charAt(0).toUpperCase() + level.slice(1)}
-                                        </button>
-                                    ))}
+                                                    }`}
+                                            >
+                                                {level.charAt(0).toUpperCase() + level.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Rationale */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Rationale / Notes
+                                    </label>
+                                    <textarea
+                                        value={currentRange.rationale}
+                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { rationale: e.target.value })}
+                                        placeholder="Why is this range important? Any context for the negotiation..."
+                                        rows={3}
+                                        className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
+                                    />
+                                </div>
+
+                                {/* Save Button */}
+                                <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+                                    <div className="text-sm text-slate-500">
+                                        {isRangeComplete ? (
+                                            <span className="text-green-600 flex items-center gap-1">
+                                                <span>✓</span> Range configuration complete
+                                            </span>
+                                        ) : (
+                                            <span className="text-amber-600 flex items-center gap-1">
+                                                <span>⚠</span> Please complete the range values
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => saveClauseRange(selectedClause.clauseId)}
+                                        disabled={!isRangeComplete}
+                                        className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        Save Range
+                                    </button>
                                 </div>
                             </div>
 
-                            {/* Rationale */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Rationale / Notes
-                                </label>
-                                <textarea
-                                    value={currentRange.rationale}
-                                    onChange={(e) => updateClauseRange(selectedClause.clauseId, { rationale: e.target.value })}
-                                    placeholder="Why is this range important? Any context for the negotiation..."
-                                    rows={3}
-                                    className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
-                                />
-                            </div>
-
-                            {/* Save Button */}
-                            <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-                                <div className="text-sm text-slate-500">
-                                    {isRangeComplete ? (
-                                        <span className="text-green-600 flex items-center gap-1">
-                                            <span>✓</span> Range configuration complete
-                                        </span>
-                                    ) : (
-                                        <span className="text-amber-600 flex items-center gap-1">
-                                            <span>⚠</span> Please complete the range values
-                                        </span>
+                            {/* Range Summary Card (shows when complete) */}
+                            {isRangeComplete && (
+                                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                    <h4 className="text-sm font-semibold text-blue-800 mb-3">Range Summary</h4>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        {currentRange.rangeType !== 'boolean' && currentRange.rangeType !== 'text' && (
+                                            <>
+                                                <div>
+                                                    <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Min</span>
+                                                    <p className="font-medium text-blue-900">
+                                                        {formatRangeValue(currentRange.minValue, currentRange.rangeType, currentRange.unit)}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Max</span>
+                                                    <p className="font-medium text-blue-900">
+                                                        {formatRangeValue(currentRange.maxValue, currentRange.rangeType, currentRange.unit)}
+                                                    </p>
+                                                </div>
+                                            </>
+                                        )}
+                                        <div>
+                                            <span className="text-emerald-600 text-xs uppercase tracking-wide">Our Target</span>
+                                            <p className="font-medium text-emerald-700">
+                                                {formatRangeValue(currentRange.targetValue, currentRange.rangeType, currentRange.unit)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="text-amber-600 text-xs uppercase tracking-wide">Walkaway</span>
+                                            <p className="font-medium text-amber-700">
+                                                {formatRangeValue(currentRange.walkawayValue, currentRange.rangeType, currentRange.unit)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {currentRange.rationale && (
+                                        <div className="mt-3 pt-3 border-t border-blue-200">
+                                            <span className="text-blue-600 text-xs uppercase tracking-wide">Rationale</span>
+                                            <p className="text-sm text-blue-800 mt-1">{currentRange.rationale}</p>
+                                        </div>
                                     )}
                                 </div>
-                                <button
-                                    onClick={() => saveClauseRange(selectedClause.clauseId)}
-                                    disabled={!isRangeComplete}
-                                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    Save Range
-                                </button>
-                            </div>
-                        </div>
+                            )}
 
-                        {/* Range Summary Card (shows when complete) */}
-                        {isRangeComplete && (
-                            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                <h4 className="text-sm font-semibold text-blue-800 mb-3">Range Summary</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                    {currentRange.rangeType !== 'boolean' && currentRange.rangeType !== 'text' && (
-                                        <>
-                                            <div>
-                                                <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Min</span>
-                                                <p className="font-medium text-blue-900">
-                                                    {formatRangeValue(currentRange.minValue, currentRange.rangeType, currentRange.unit)}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Max</span>
-                                                <p className="font-medium text-blue-900">
-                                                    {formatRangeValue(currentRange.maxValue, currentRange.rangeType, currentRange.unit)}
-                                                </p>
-                                            </div>
-                                        </>
-                                    )}
-                                    <div>
-                                        <span className="text-emerald-600 text-xs uppercase tracking-wide">Our Target</span>
-                                        <p className="font-medium text-emerald-700">
-                                            {formatRangeValue(currentRange.targetValue, currentRange.rangeType, currentRange.unit)}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <span className="text-amber-600 text-xs uppercase tracking-wide">Walkaway</span>
-                                        <p className="font-medium text-amber-700">
-                                            {formatRangeValue(currentRange.walkawayValue, currentRange.rangeType, currentRange.unit)}
-                                        </p>
-                                    </div>
+                            {/* AI Suggestions */}
+                            {selectedClause.aiSuggestion && (
+                                <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                                    <h4 className="text-sm font-medium text-purple-800 mb-2 flex items-center gap-2">
+                                        <span>🤖</span> AI Suggestion
+                                    </h4>
+                                    <p className="text-sm text-purple-700">{selectedClause.aiSuggestion}</p>
                                 </div>
-                                {currentRange.rationale && (
-                                    <div className="mt-3 pt-3 border-t border-blue-200">
-                                        <span className="text-blue-600 text-xs uppercase tracking-wide">Rationale</span>
-                                        <p className="text-sm text-blue-800 mt-1">{currentRange.rationale}</p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* AI Suggestions */}
-                        {selectedClause.aiSuggestion && (
-                            <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-                                <h4 className="text-sm font-medium text-purple-800 mb-2 flex items-center gap-2">
-                                    <span>🤖</span> AI Suggestion
-                                </h4>
-                                <p className="text-sm text-purple-700">{selectedClause.aiSuggestion}</p>
-                            </div>
-                        )}
+                            )}
+                        </div>{/* End of opacity wrapper */}
                     </div>
                 </div>
 
