@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
@@ -49,9 +49,10 @@ interface Playbook {
     playbookName: string
     playbookVersion?: string
     playbookDescription?: string
-    status: 'pending_parse' | 'parsing' | 'parsed' | 'review_required' | 'active' | 'inactive' | 'superseded'
+    status: 'pending_parse' | 'parsing' | 'parsed' | 'review_required' | 'active' | 'inactive' | 'superseded' | 'parse_failed'
     isActive: boolean
     sourceFileName?: string
+    sourceFilePath?: string
     rulesExtracted: number
     aiConfidenceScore?: number
     effectiveDate?: string
@@ -186,14 +187,41 @@ interface PlaybooksTabProps {
     onActivate: (playbookId: string) => Promise<void>
     onDeactivate: (playbookId: string) => Promise<void>
     onParse: (playbookId: string) => Promise<void>
+    onDelete: (playbookId: string, sourceFilePath?: string) => Promise<void>
+    onDownload: (sourceFilePath: string, fileName: string) => Promise<void>
     onRefresh: () => void
 }
 
-function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate, onParse, onRefresh }: PlaybooksTabProps) {
+function PlaybooksTab({
+    playbooks,
+    isLoading,
+    onUpload,
+    onActivate,
+    onDeactivate,
+    onParse,
+    onDelete,
+    onDownload,
+    onRefresh
+}: PlaybooksTabProps) {
     const [isDragging, setIsDragging] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
     const [parsingId, setParsingId] = useState<string | null>(null)
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+    const menuRef = useRef<HTMLDivElement>(null)
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setOpenMenuId(null)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault()
@@ -250,6 +278,19 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         }
     }
 
+    const handleDeleteClick = async (playbookId: string, sourceFilePath?: string) => {
+        setDeletingId(playbookId)
+        setOpenMenuId(null)
+        try {
+            await onDelete(playbookId, sourceFilePath)
+        } catch (error) {
+            console.error('Delete failed:', error)
+        } finally {
+            setDeletingId(null)
+            setShowDeleteConfirm(null)
+        }
+    }
+
     const getStatusBadge = (status: Playbook['status'], isActive: boolean) => {
         if (isActive) {
             return <span className="px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Active</span>
@@ -267,6 +308,8 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                 return <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">Inactive</span>
             case 'superseded':
                 return <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-400 rounded-full">Superseded</span>
+            case 'parse_failed':
+                return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">Parse Failed</span>
             default:
                 return <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">{status}</span>
         }
@@ -366,7 +409,9 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                     p-4 rounded-xl border transition-all
                                     ${playbook.isActive
                                         ? 'bg-emerald-50 border-emerald-200'
-                                        : 'bg-white border-slate-200 hover:border-slate-300'
+                                        : deletingId === playbook.playbookId
+                                            ? 'bg-red-50 border-red-200 opacity-50'
+                                            : 'bg-white border-slate-200 hover:border-slate-300'
                                     }
                                 `}
                             >
@@ -416,6 +461,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         </div>
                                     </div>
 
+                                    {/* Action Buttons */}
                                     <div className="flex items-center gap-2 ml-4">
                                         {/* Parse button for pending playbooks */}
                                         {playbook.status === 'pending_parse' && (
@@ -424,15 +470,56 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                     setParsingId(playbook.playbookId)
                                                     try {
                                                         await onParse(playbook.playbookId)
+                                                    } catch (err) {
+                                                        console.error('Parse failed:', err)
                                                     } finally {
                                                         setParsingId(null)
                                                     }
                                                 }}
                                                 disabled={parsingId === playbook.playbookId}
-                                                className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50"
+                                                className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                {parsingId === playbook.playbookId ? 'Processing...' : 'Parse Playbook'}
+                                                {parsingId === playbook.playbookId ? (
+                                                    <span className="flex items-center gap-2">
+                                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        Processing...
+                                                    </span>
+                                                ) : 'Parse Playbook'}
                                             </button>
+                                        )}
+
+                                        {/* Retry parse for failed */}
+                                        {playbook.status === 'parse_failed' && (
+                                            <button
+                                                onClick={async () => {
+                                                    setParsingId(playbook.playbookId)
+                                                    try {
+                                                        await onParse(playbook.playbookId)
+                                                    } catch (err) {
+                                                        console.error('Parse failed:', err)
+                                                    } finally {
+                                                        setParsingId(null)
+                                                    }
+                                                }}
+                                                disabled={parsingId === playbook.playbookId}
+                                                className="px-3 py-1.5 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition disabled:opacity-50"
+                                            >
+                                                Retry Parse
+                                            </button>
+                                        )}
+
+                                        {/* Show "Parsing..." indicator */}
+                                        {playbook.status === 'parsing' && (
+                                            <span className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg flex items-center gap-2">
+                                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                Parsing...
+                                            </span>
                                         )}
 
                                         {/* Activate/Deactivate buttons */}
@@ -446,7 +533,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         ) : (playbook.status === 'parsed' || playbook.status === 'inactive') ? (
                                             <button
                                                 onClick={() => onActivate(playbook.playbookId)}
-                                                className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition"
+                                                className="px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition"
                                             >
                                                 Activate
                                             </button>
@@ -458,16 +545,92 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                 onClick={() => {/* TODO: Open review modal */ }}
                                                 className="px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition"
                                             >
-                                                Review
+                                                Review Rules
                                             </button>
                                         )}
 
                                         {/* More options menu */}
-                                        <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition">
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                                            </svg>
-                                        </button>
+                                        <div className="relative" ref={openMenuId === playbook.playbookId ? menuRef : null}>
+                                            <button
+                                                onClick={() => setOpenMenuId(openMenuId === playbook.playbookId ? null : playbook.playbookId)}
+                                                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                                            >
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                                </svg>
+                                            </button>
+
+                                            {/* Dropdown Menu */}
+                                            {openMenuId === playbook.playbookId && (
+                                                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10">
+                                                    {/* Download/View Document */}
+                                                    {playbook.sourceFilePath && (
+                                                        <button
+                                                            onClick={() => {
+                                                                onDownload(playbook.sourceFilePath!, playbook.sourceFileName || 'playbook')
+                                                                setOpenMenuId(null)
+                                                            }}
+                                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                            </svg>
+                                                            Download Document
+                                                        </button>
+                                                    )}
+
+                                                    {/* View Rules (if parsed) */}
+                                                    {playbook.rulesExtracted > 0 && (
+                                                        <button
+                                                            onClick={() => {
+                                                                /* TODO: Open rules viewer */
+                                                                setOpenMenuId(null)
+                                                            }}
+                                                            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                                            </svg>
+                                                            View Extracted Rules
+                                                        </button>
+                                                    )}
+
+                                                    {/* Divider */}
+                                                    <div className="border-t border-slate-100 my-1"></div>
+
+                                                    {/* Delete */}
+                                                    {showDeleteConfirm === playbook.playbookId ? (
+                                                        <div className="px-4 py-2">
+                                                            <p className="text-xs text-red-600 mb-2">Are you sure? This cannot be undone.</p>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleDeleteClick(playbook.playbookId, playbook.sourceFilePath)}
+                                                                    className="px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition"
+                                                                >
+                                                                    Yes, Delete
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setShowDeleteConfirm(null)}
+                                                                    className="px-2 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded transition"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => setShowDeleteConfirm(playbook.playbookId)}
+                                                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                            Delete Playbook
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -920,6 +1083,7 @@ function CompanyAdminContent() {
                 status: p.status,
                 isActive: p.is_active,
                 sourceFileName: p.source_file_name,
+                sourceFilePath: p.source_file_path,
                 rulesExtracted: p.rules_extracted || 0,
                 aiConfidenceScore: p.ai_confidence_score,
                 effectiveDate: p.effective_date,
@@ -1061,38 +1225,8 @@ function CompanyAdminContent() {
 
         console.log('Playbook record created')
 
-        // 4. Trigger parsing workflow
-        try {
-            console.log('Triggering parsing workflow...')
-            const parseResponse = await fetch(`${API_BASE}/parse-playbook`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ playbook_id: companyId })
-            })
-
-            // Get the playbook_id from the inserted record
-            const { data: newPlaybook } = await supabase
-                .from('company_playbooks')
-                .select('playbook_id')
-                .eq('source_file_path', fileName)
-                .single()
-
-            if (newPlaybook?.playbook_id) {
-                const parseResult = await fetch(`${API_BASE}/parse-playbook`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ playbook_id: newPlaybook.playbook_id })
-                })
-                console.log('Parse workflow triggered:', await parseResult.json())
-            }
-        } catch (parseError) {
-            console.log('Parse workflow not triggered (may need to be run manually):', parseError)
-        }
-
-        // 5. Refresh playbooks list
+        // 3. Refresh playbooks list (user will click Parse button manually)
         await loadPlaybooks(companyId)
-
-        // TODO: Trigger N8N workflow to parse the playbook
     }
 
     const handlePlaybookActivate = async (playbookId: string) => {
@@ -1147,43 +1281,115 @@ function CompanyAdminContent() {
         await loadPlaybooks(userInfo.companyId)
     }
 
+    // ========================================================================
+    // PARSE PLAYBOOK - Trigger N8N workflow
+    // ========================================================================
+
     const handlePlaybookParse = async (playbookId: string) => {
         if (!userInfo?.companyId) return
 
         try {
-            // Update status to parsing
-            const supabase = createClient()
-            await supabase
-                .from('company_playbooks')
-                .update({ status: 'parsing' })
-                .eq('playbook_id', playbookId)
-
             // Trigger the N8N parsing workflow
             const response = await fetch(`${API_BASE}/parse-playbook`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    playbook_id: playbookId,
-                    company_id: userInfo.companyId,
-                    user_id: userInfo.userId
+                    playbook_id: playbookId
                 })
             })
 
-            if (!response.ok) {
-                throw new Error('Failed to trigger parsing workflow')
+            const result = await response.json()
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Failed to parse playbook')
             }
 
             // Refresh the list to show updated status
             await loadPlaybooks(userInfo.companyId)
         } catch (error) {
             console.error('Error triggering parse:', error)
-            // Revert status on error
-            const supabase = createClient()
-            await supabase
-                .from('company_playbooks')
-                .update({ status: 'pending_parse' })
+            throw error
+        }
+    }
+
+    // ========================================================================
+    // DELETE PLAYBOOK - Remove from database and storage
+    // ========================================================================
+
+    const handlePlaybookDelete = async (playbookId: string, sourceFilePath?: string) => {
+        if (!userInfo?.companyId) return
+
+        const supabase = createClient()
+
+        try {
+            // 1. Delete associated rules first (if foreign key doesn't cascade)
+            const { error: rulesError } = await supabase
+                .from('playbook_rules')
+                .delete()
                 .eq('playbook_id', playbookId)
 
+            if (rulesError) {
+                console.warn('Error deleting rules (may not exist):', rulesError)
+                // Continue anyway - rules table might not have any records
+            }
+
+            // 2. Delete the playbook record
+            const { error: playbookError } = await supabase
+                .from('company_playbooks')
+                .delete()
+                .eq('playbook_id', playbookId)
+
+            if (playbookError) {
+                throw new Error('Failed to delete playbook record: ' + playbookError.message)
+            }
+
+            // 3. Delete the file from storage (if path exists)
+            if (sourceFilePath) {
+                const { error: storageError } = await supabase.storage
+                    .from('playbooks')
+                    .remove([sourceFilePath])
+
+                if (storageError) {
+                    console.warn('Failed to delete file from storage:', storageError)
+                    // Don't throw - the record is already deleted
+                }
+            }
+
+            // 4. Refresh the list
+            await loadPlaybooks(userInfo.companyId)
+        } catch (error) {
+            console.error('Error deleting playbook:', error)
+            throw error
+        }
+    }
+
+    // ========================================================================
+    // DOWNLOAD PLAYBOOK - Get file from storage
+    // ========================================================================
+
+    const handlePlaybookDownload = async (sourceFilePath: string, fileName: string) => {
+        const supabase = createClient()
+
+        try {
+            const { data, error } = await supabase.storage
+                .from('playbooks')
+                .download(sourceFilePath)
+
+            if (error) {
+                throw new Error('Failed to download file: ' + error.message)
+            }
+
+            // Create download link
+            const url = URL.createObjectURL(data)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = fileName
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } catch (error) {
+            console.error('Error downloading playbook:', error)
             throw error
         }
     }
@@ -1360,6 +1566,8 @@ function CompanyAdminContent() {
                             onActivate={handlePlaybookActivate}
                             onDeactivate={handlePlaybookDeactivate}
                             onParse={handlePlaybookParse}
+                            onDelete={handlePlaybookDelete}
+                            onDownload={handlePlaybookDownload}
                             onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)}
                         />
                     )}
