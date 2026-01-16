@@ -192,16 +192,16 @@ interface PlaybooksTabProps {
     onRefresh: () => void
 }
 
-function PlaybooksTab({
-    playbooks,
-    isLoading,
-    onUpload,
-    onActivate,
-    onDeactivate,
-    onParse,
+function PlaybooksTab({ 
+    playbooks, 
+    isLoading, 
+    onUpload, 
+    onActivate, 
+    onDeactivate, 
+    onParse, 
     onDelete,
     onDownload,
-    onRefresh
+    onRefresh 
 }: PlaybooksTabProps) {
     const [isDragging, setIsDragging] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
@@ -410,8 +410,8 @@ function PlaybooksTab({
                                     ${playbook.isActive
                                         ? 'bg-emerald-50 border-emerald-200'
                                         : deletingId === playbook.playbookId
-                                            ? 'bg-red-50 border-red-200 opacity-50'
-                                            : 'bg-white border-slate-200 hover:border-slate-300'
+                                        ? 'bg-red-50 border-red-200 opacity-50'
+                                        : 'bg-white border-slate-200 hover:border-slate-300'
                                     }
                                 `}
                             >
@@ -542,7 +542,7 @@ function PlaybooksTab({
                                         {/* Review button for low confidence */}
                                         {playbook.status === 'review_required' && (
                                             <button
-                                                onClick={() => {/* TODO: Open review modal */ }}
+                                                onClick={() => {/* TODO: Open review modal */}}
                                                 className="px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg transition"
                                             >
                                                 Review Rules
@@ -551,7 +551,7 @@ function PlaybooksTab({
 
                                         {/* More options menu */}
                                         <div className="relative" ref={openMenuId === playbook.playbookId ? menuRef : null}>
-                                            <button
+                                            <button 
                                                 onClick={() => setOpenMenuId(openMenuId === playbook.playbookId ? null : playbook.playbookId)}
                                                 className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
                                             >
