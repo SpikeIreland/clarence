@@ -27,6 +27,7 @@ interface Session {
     customerContactName: string | null
     providerContactName: string | null
     providerId: string | null
+    bidId?: string | null
     serviceType: string
     dealValue: string
     phase: number
@@ -707,6 +708,7 @@ function getPositionOptionsForClause(
     return null
 }
 
+
 // ============================================================================
 // SECTION 2B: CLARENCE AI API FUNCTIONS
 // ============================================================================
@@ -807,6 +809,85 @@ async function commitPositionChange(
     } catch (error) {
         console.error('Error committing position:', error)
         return { success: false }
+    }
+}
+
+// ============================================================================
+// SECTION 2D: TRAINING MODE AI FUNCTIONS
+// ============================================================================
+
+// Extract AI personality from session notes for Training Mode
+function extractAIPersonality(notes: string | null): 'cooperative' | 'balanced' | 'aggressive' {
+    if (!notes) return 'balanced'
+    const match = notes.match(/AI:\s*(cooperative|balanced|aggressive)/i)
+    return match ? match[1].toLowerCase() as 'cooperative' | 'balanced' | 'aggressive' : 'balanced'
+}
+
+// Training AI Move Response Type
+interface TrainingAIMoveResult {
+    success: boolean
+    decision?: string
+    newProviderPosition?: number
+    previousProviderPosition?: number
+    agreementReached?: boolean
+    chatMessage?: string
+    teachingMoment?: {
+        type: 'tip' | 'celebration' | 'warning'
+        message: string
+    }
+    sessionState?: {
+        clausesAgreed: number
+        clausesRemaining: number
+        totalClauses: number
+        isComplete: boolean
+    }
+    error?: string
+}
+
+// Trigger AI counter-move in Training Mode (standalone function)
+async function triggerAICounterMove(
+    sessionId: string,
+    clauseId: string,
+    positionId: string,
+    newCustomerPosition: number,
+    previousCustomerPosition: number | null,
+    currentProviderPosition: number,
+    clauseNumber: string,
+    clauseName: string,
+    aiPersonality: 'cooperative' | 'balanced' | 'aggressive',
+    bidId: string | null
+): Promise<TrainingAIMoveResult> {
+    console.log('=== TRIGGERING AI COUNTER-MOVE ===')
+    console.log('Clause:', clauseNumber, clauseName)
+    console.log('Customer Position:', newCustomerPosition)
+    console.log('Provider Position:', currentProviderPosition)
+    console.log('AI Personality:', aiPersonality)
+
+    try {
+        const response = await fetch(`${API_BASE}/training-ai-move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: sessionId,
+                clauseId: clauseId,
+                clauseNumber: clauseNumber,
+                clauseName: clauseName,
+                customerPosition: newCustomerPosition,
+                previousCustomerPosition: previousCustomerPosition,
+                currentProviderPosition: currentProviderPosition,
+                aiPersonality: aiPersonality,
+                moveNumber: 1,
+                bidId: bidId
+            })
+        })
+
+        const result = await response.json()
+        console.log('AI Move Result:', result)
+        return result
+
+    } catch (error) {
+        console.error('Error calling AI move endpoint:', error)
+        return { success: false, error: 'Failed to call AI endpoint' }
     }
 }
 
@@ -1901,6 +1982,8 @@ function ContractStudioContent() {
     const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
     // Training Mode state
     const [isTrainingMode, setIsTrainingMode] = useState(false)
+    const [aiThinking, setAiThinking] = useState(false)
+    const [aiThinkingClause, setAiThinkingClause] = useState<string | null>(null)
 
     // ==========================================================================
     // SIGN OUT FUNCTION
@@ -3457,6 +3540,124 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
     // ============================================================================
     // SECTION: handleSetPosition - FIXED VERSION
     // ============================================================================
+
+    // ============================================================================
+    // TRAINING MODE: Handle AI counter-move response and update state
+    // ============================================================================
+    const handleTrainingAIMove = async (
+        clauseId: string,
+        positionId: string,
+        newCustomerPosition: number,
+        previousCustomerPosition: number | null,
+        currentProviderPosition: number,
+        clauseNumber: string,
+        clauseName: string
+    ) => {
+        // Don't trigger if not in training mode
+        if (!isTrainingMode || !session) return
+
+        const aiPersonality = extractAIPersonality(session.notes || null)
+
+        // Show loading state
+        setAiThinking(true)
+        setAiThinkingClause(clauseId)
+
+        try {
+            // Call the standalone function
+            const result = await triggerAICounterMove(
+                session.sessionId,
+                clauseId,
+                positionId,
+                newCustomerPosition,
+                previousCustomerPosition,
+                currentProviderPosition,
+                clauseNumber,
+                clauseName,
+                aiPersonality,
+                session.bidId || null
+            )
+
+            if (result.success && result.newProviderPosition !== undefined) {
+                // Update provider position in the clauses state
+                setClauses(prev => prev.map(c => {
+                    if (c.clauseId === clauseId) {
+                        const newGap = calculateGapSize(newCustomerPosition, result.newProviderPosition!)
+                        return {
+                            ...c,
+                            providerPosition: result.newProviderPosition!,
+                            gapSize: newGap,
+                            status: result.agreementReached ? 'agreed' : determineClauseStatus(newGap),
+                            isAgreed: result.agreementReached || false
+                        }
+                    }
+                    return c
+                }))
+
+                // Update the selected clause if it's the one that changed
+                if (selectedClause?.clauseId === clauseId) {
+                    setSelectedClause(prev => prev ? {
+                        ...prev,
+                        providerPosition: result.newProviderPosition!,
+                        gapSize: calculateGapSize(newCustomerPosition, result.newProviderPosition!),
+                        status: result.agreementReached ? 'agreed' : prev.status,
+                        isAgreed: result.agreementReached || false
+                    } : null)
+                }
+
+                // Add AI message to chat
+                if (result.chatMessage) {
+                    const aiChatMessage: ClauseChatMessage = {
+                        messageId: `training-ai-${Date.now()}`,
+                        sessionId: session.sessionId,
+                        positionId: positionId,
+                        sender: 'clarence',
+                        senderUserId: null,
+                        message: result.chatMessage,
+                        messageType: 'auto_response',
+                        relatedPositionChange: true,
+                        triggeredBy: 'training_ai_move',
+                        createdAt: new Date().toISOString()
+                    }
+                    setChatMessages(prev => [...prev, aiChatMessage])
+
+                    // If there's a teaching moment, add it as a separate message
+                    if (result.teachingMoment) {
+                        const emoji = result.teachingMoment.type === 'celebration' ? '🎉'
+                            : result.teachingMoment.type === 'tip' ? '💡' : '⚠️'
+
+                        const teachingMessage: ClauseChatMessage = {
+                            messageId: `teaching-${Date.now()}`,
+                            sessionId: session.sessionId,
+                            positionId: positionId,
+                            sender: 'clarence',
+                            senderUserId: null,
+                            message: `${emoji} **Teaching Moment:** ${result.teachingMoment.message}`,
+                            messageType: 'notification',
+                            relatedPositionChange: false,
+                            triggeredBy: 'training_ai_move',
+                            createdAt: new Date().toISOString()
+                        }
+                        setChatMessages(prev => [...prev, teachingMessage])
+                    }
+                }
+
+                // Refresh history to show the AI move
+                await fetchNegotiationHistory()
+
+            } else {
+                console.error('AI move failed:', result.error)
+            }
+
+        } catch (error) {
+            console.error('Error in training AI move:', error)
+        } finally {
+            // Small delay before clearing thinking state
+            setTimeout(() => {
+                setAiThinking(false)
+                setAiThinkingClause(null)
+            }, 500)
+        }
+    }
 
     const handleSetPosition = async () => {
         if (!selectedClause || !userInfo || !session || !leverage || proposedPosition === null) return
