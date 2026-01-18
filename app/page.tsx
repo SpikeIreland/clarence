@@ -11,6 +11,11 @@ export const metadata: Metadata = {
 // ============================================================================
 // SECTION 1: MAIN PAGE COMPONENT
 // Location: app/page.tsx
+// 
+// COLOR SCHEME:
+// - Create: Emerald (text-emerald-600, bg-emerald-500)
+// - Negotiate: Amber (text-amber-500, bg-amber-500)
+// - Agree: Blue (text-blue-600, bg-blue-500)
 // ============================================================================
 
 export default function Home() {
@@ -29,7 +34,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30"></div>
 
         {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-teal-50/50 to-transparent"></div>
+        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-amber-50/50 to-transparent"></div>
         <div className="absolute bottom-0 left-0 w-1/2 h-32 bg-gradient-to-t from-slate-100/50 to-transparent"></div>
 
         <div className="relative container mx-auto px-6 py-20">
@@ -48,7 +53,7 @@ export default function Home() {
             <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight">
               <span className="text-emerald-600">Create</span>
               <span className="text-slate-400 mx-3">·</span>
-              <span className="text-teal-600">Negotiate</span>
+              <span className="text-amber-500">Negotiate</span>
               <span className="text-slate-400 mx-3">·</span>
               <span className="text-blue-600">Agree</span>
             </h1>
@@ -111,7 +116,7 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
 
             {/* ============================================================ */}
-            {/* STAGE 1: CREATE */}
+            {/* STAGE 1: CREATE (Emerald) */}
             {/* ============================================================ */}
             <div className="bg-gradient-to-br from-emerald-50 to-white rounded-2xl p-8 border border-emerald-200 hover:shadow-lg transition-shadow">
               <div className="flex items-center gap-3 mb-6">
@@ -149,16 +154,16 @@ export default function Home() {
             </div>
 
             {/* ============================================================ */}
-            {/* STAGE 2: NEGOTIATE */}
+            {/* STAGE 2: NEGOTIATE (Amber) */}
             {/* ============================================================ */}
-            <div className="bg-gradient-to-br from-teal-50 to-white rounded-2xl p-8 border border-teal-200 hover:shadow-lg transition-shadow">
+            <div className="bg-gradient-to-br from-amber-50 to-white rounded-2xl p-8 border border-amber-200 hover:shadow-lg transition-shadow">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <h3 className="text-2xl font-bold text-teal-600">Negotiate</h3>
+                <h3 className="text-2xl font-bold text-amber-600">Negotiate</h3>
               </div>
               <p className="text-slate-600 mb-6">
                 Work through clauses with AI-powered mediation, real-time leverage
@@ -166,19 +171,19 @@ export default function Home() {
               </p>
               <ul className="space-y-3 text-sm text-slate-500">
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-teal-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>AI-Mediated Clause Negotiation</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-teal-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>Real-Time Leverage Tracking</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-teal-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>Smart Trade-off Suggestions</span>
@@ -187,7 +192,7 @@ export default function Home() {
             </div>
 
             {/* ============================================================ */}
-            {/* STAGE 3: AGREE */}
+            {/* STAGE 3: AGREE (Blue) */}
             {/* ============================================================ */}
             <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-8 border border-blue-200 hover:shadow-lg transition-shadow">
               <div className="flex items-center gap-3 mb-6">
@@ -255,7 +260,7 @@ export default function Home() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Card 1: Transparent Leverage */}
+            {/* Card 1: Transparent Leverage (Emerald) */}
             <div className="bg-white rounded-xl p-6 border border-slate-200 hover:border-emerald-300 hover:shadow-lg transition-all group">
               <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
                 <svg className="w-6 h-6 text-emerald-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -268,10 +273,10 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Card 2: Principled Mediation */}
-            <div className="bg-white rounded-xl p-6 border border-slate-200 hover:border-teal-300 hover:shadow-lg transition-all group">
-              <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-teal-500 transition-colors">
-                <svg className="w-6 h-6 text-teal-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* Card 2: Principled Mediation (Amber) */}
+            <div className="bg-white rounded-xl p-6 border border-slate-200 hover:border-amber-300 hover:shadow-lg transition-all group">
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-500 transition-colors">
+                <svg className="w-6 h-6 text-amber-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                 </svg>
               </div>
@@ -281,7 +286,7 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Card 3: Stress-Free Process */}
+            {/* Card 3: Stress-Free Process (Blue) */}
             <div className="bg-white rounded-xl p-6 border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all group">
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-500 transition-colors">
                 <svg className="w-6 h-6 text-blue-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -368,7 +373,7 @@ export default function Home() {
             </div>
 
             {/* ============================================================ */}
-            {/* STUDIO 2: Negotiation Environment */}
+            {/* STUDIO 2: Negotiation Environment (Amber) */}
             {/* ============================================================ */}
             <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
               <div className="grid md:grid-cols-2 gap-0">
@@ -384,7 +389,7 @@ export default function Home() {
                 </div>
                 {/* Content */}
                 <div className="p-8 flex flex-col justify-center order-1 md:order-2">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-sm font-medium w-fit mb-4">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium w-fit mb-4">
                     <span>⚖️</span>
                     <span>Negotiation Environment</span>
                   </div>
@@ -398,19 +403,19 @@ export default function Home() {
                   </p>
                   <ul className="space-y-2 text-sm text-slate-500">
                     <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
                       Three-panel workspace with clause navigation
                     </li>
                     <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
                       Real-time leverage baseline and tracker
                     </li>
                     <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
                       AI-suggested trade-offs and compromises
@@ -421,7 +426,7 @@ export default function Home() {
             </div>
 
             {/* ============================================================ */}
-            {/* STUDIO 3: Document Centre */}
+            {/* STUDIO 3: Document Centre (Blue) */}
             {/* ============================================================ */}
             <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
               <div className="grid md:grid-cols-2 gap-0">
@@ -487,7 +492,7 @@ export default function Home() {
               <div className="text-slate-300 text-sm">Faster Agreement Time</div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-teal-400 mb-2">100%</div>
+              <div className="text-4xl font-bold text-amber-400 mb-2">100%</div>
               <div className="text-slate-300 text-sm">Transparent Leverage</div>
             </div>
             <div>
@@ -507,7 +512,7 @@ export default function Home() {
           <div className="text-2xl font-bold mb-6">
             <span className="text-emerald-400">Create</span>
             <span className="text-slate-500 mx-2">·</span>
-            <span className="text-teal-400">Negotiate</span>
+            <span className="text-amber-400">Negotiate</span>
             <span className="text-slate-500 mx-2">·</span>
             <span className="text-blue-400">Agree</span>
           </div>
@@ -575,7 +580,7 @@ export default function Home() {
             <p className="text-slate-500 mt-1">
               <span className="text-emerald-500">Create</span>
               <span className="mx-2">·</span>
-              <span className="text-teal-500">Negotiate</span>
+              <span className="text-amber-500">Negotiate</span>
               <span className="mx-2">·</span>
               <span className="text-blue-500">Agree</span>
             </p>
