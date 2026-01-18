@@ -90,7 +90,7 @@ const contractTypes: Record<string, string> = {
 }
 
 // ============================================================================
-// DEAL VALUE MAPPING
+// SECTION 4: DEAL VALUE MAPPING
 // ============================================================================
 
 const dealValueMap: Record<string, number> = {
@@ -99,19 +99,12 @@ const dealValueMap: Record<string, number> = {
   '250k_500k': 375000,
   '500k_1m': 750000,
   'over_1m': 1500000,
-  // Handle numeric strings too
 }
 
 function parseDealValue(dealValue: string | number | null | undefined): number {
   if (!dealValue) return 0
-
-  // If it's already a number, return it
   if (typeof dealValue === 'number') return dealValue
-
-  // If it's a category string, map it
   if (dealValueMap[dealValue]) return dealValueMap[dealValue]
-
-  // Try parsing as number (for numeric strings like "500000")
   const parsed = parseInt(dealValue)
   return isNaN(parsed) ? 0 : parsed
 }
@@ -119,7 +112,6 @@ function parseDealValue(dealValue: string | number | null | undefined): number {
 function formatDealValueDisplay(dealValue: string | number | null | undefined, currency: string = 'GBP'): string {
   const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : 'A$'
 
-  // Category labels for display
   const categoryLabels: Record<string, string> = {
     'under_100k': `Under ${symbol}100k`,
     '100k_250k': `${symbol}100k - ${symbol}250k`,
@@ -150,7 +142,7 @@ const dealSizeCategories = [
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 // ============================================================================
-// SECTION 4: MAIN COMPONENT
+// SECTION 5: MAIN COMPONENT
 // ============================================================================
 
 export default function ContractsDashboard() {
@@ -159,7 +151,7 @@ export default function ContractsDashboard() {
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   // ==========================================================================
-  // SECTION 5: STATE DECLARATIONS
+  // SECTION 6: STATE DECLARATIONS
   // ==========================================================================
 
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
@@ -175,11 +167,11 @@ export default function ContractsDashboard() {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
 
-  // NEW: Active tab state for Live/Training
+  // Active tab state for Live/Training
   const [activeTab, setActiveTab] = useState<'live' | 'training'>('live')
 
   // ==========================================================================
-  // SECTION 6: DATA LOADING FUNCTIONS
+  // SECTION 7: DATA LOADING FUNCTIONS
   // ==========================================================================
 
   const loadUserInfo = useCallback(async () => {
@@ -221,19 +213,18 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 7: FILTERED SESSIONS BY TAB
+  // SECTION 8: FILTERED SESSIONS BY TAB
   // ==========================================================================
 
   const filteredSessions = sessions.filter(session => {
     if (activeTab === 'training') {
       return session.isTraining === true
     }
-    // Live tab shows non-training sessions
     return session.isTraining !== true
   })
 
   // ==========================================================================
-  // SECTION 8: SIGN OUT FUNCTION
+  // SECTION 9: SIGN OUT FUNCTION
   // ==========================================================================
 
   async function handleSignOut() {
@@ -253,7 +244,7 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 9: CREATE NEW CONTRACT/TRAINING FUNCTION
+  // SECTION 10: CREATE NEW CONTRACT/TRAINING FUNCTION
   // ==========================================================================
 
   async function createNewSession() {
@@ -280,7 +271,6 @@ export default function ContractsDashboard() {
 
       const authData = JSON.parse(auth)
 
-      // Call the session-create API for training
       const response = await fetch(`${API_BASE}/session-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -306,7 +296,6 @@ export default function ContractsDashboard() {
         localStorage.setItem('currentSessionId', data.sessionId)
         localStorage.setItem('newSessionNumber', data.sessionNumber)
 
-        // Training goes to Training Studio
         router.push('/auth/training')
 
       } else {
@@ -325,11 +314,10 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 10: METRICS CALCULATION
+  // SECTION 11: METRICS CALCULATION
   // ==========================================================================
 
   const getMetricsData = () => {
-    // Use filtered sessions for metrics
     const sessionsToAnalyze = filteredSessions
 
     const active = sessionsToAnalyze.filter(s => s.status !== 'completed').length
@@ -386,7 +374,7 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 11: NAVIGATION FUNCTIONS
+  // SECTION 12: NAVIGATION FUNCTIONS
   // ==========================================================================
 
   function continueWithClarence(sessionId?: string) {
@@ -411,7 +399,6 @@ export default function ContractsDashboard() {
     localStorage.setItem('currentSessionId', sessionId)
     localStorage.setItem('selectedProviderId', providerId)
 
-    // Route based on training mode
     const session = sessions.find(s => s.sessionId === sessionId)
     if (session?.isTraining) {
       router.push(`/training/${sessionId}?provider_id=${providerId}`)
@@ -433,12 +420,11 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 12: UI HELPER FUNCTIONS
+  // SECTION 13: UI HELPER FUNCTIONS
   // ==========================================================================
 
   function getStatusBadgeClass(status: string, isTraining: boolean = false) {
     if (isTraining) {
-      // Training mode uses amber tones
       const trainingClasses: Record<string, string> = {
         'created': 'bg-amber-100 text-amber-700',
         'initiated': 'bg-amber-100 text-amber-700',
@@ -560,7 +546,7 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 13: CHAT FUNCTIONS
+  // SECTION 14: CHAT FUNCTIONS
   // ==========================================================================
 
   async function sendChatMessage() {
@@ -625,7 +611,7 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 14: EFFECTS
+  // SECTION 15: EFFECTS
   // ==========================================================================
 
   useEffect(() => {
@@ -661,7 +647,7 @@ export default function ContractsDashboard() {
   }, [showUserMenu])
 
   // ==========================================================================
-  // SECTION 15: EVENT LOGGING
+  // SECTION 16: EVENT LOGGING
   // ==========================================================================
 
   useEffect(() => {
@@ -685,7 +671,7 @@ export default function ContractsDashboard() {
   }, [loading, sessions]);
 
   // ==========================================================================
-  // SECTION 16: COMPUTED VALUES
+  // SECTION 17: COMPUTED VALUES
   // ==========================================================================
 
   const metrics = getMetricsData()
@@ -703,13 +689,13 @@ export default function ContractsDashboard() {
   }
 
   // ==========================================================================
-  // SECTION 17: RENDER
+  // SECTION 18: RENDER
   // ==========================================================================
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* ================================================================== */}
-      {/* SECTION 18: NAVIGATION HEADER */}
+      {/* SECTION 19: NAVIGATION HEADER */}
       {/* ================================================================== */}
       <header className="bg-slate-800 text-white">
         <div className="container mx-auto px-6">
@@ -725,20 +711,35 @@ export default function ContractsDashboard() {
               </div>
             </Link>
 
-            {/* Center: Navigation Links */}
-            <div className="hidden md:flex items-center gap-6">
-              <Link
-                href="/auth/contracts-dashboard"
-                className="text-white font-medium text-sm border-b-2 border-emerald-500 pb-1"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/auth/contracts"
-                className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
-              >
-                Contract Studio
-              </Link>
+            {/* Center: Brand Tagline + Navigation */}
+            <div className="hidden md:flex items-center gap-8">
+              {/* Brand Tagline - Subtle */}
+              <div className="text-xs font-medium tracking-wide">
+                <span className="text-emerald-400">Create</span>
+                <span className="text-slate-500 mx-1">·</span>
+                <span className="text-amber-400">Negotiate</span>
+                <span className="text-slate-500 mx-1">·</span>
+                <span className="text-blue-400">Agree</span>
+              </div>
+
+              {/* Navigation Divider */}
+              <div className="h-4 w-px bg-slate-600"></div>
+
+              {/* Navigation Links */}
+              <div className="flex items-center gap-6">
+                <Link
+                  href="/auth/contracts-dashboard"
+                  className="text-white font-medium text-sm border-b-2 border-emerald-500 pb-1"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/auth/contract-prep"
+                  className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
+                >
+                  Contract Prep
+                </Link>
+              </div>
             </div>
 
             {/* Right: User Menu */}
@@ -815,7 +816,7 @@ export default function ContractsDashboard() {
       </header>
 
       {/* ================================================================== */}
-      {/* SECTION 19: MAIN CONTENT */}
+      {/* SECTION 20: MAIN CONTENT */}
       {/* ================================================================== */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -832,7 +833,7 @@ export default function ContractsDashboard() {
         </div>
 
         {/* ================================================================ */}
-        {/* SECTION 20: LIVE / TRAINING TABS */}
+        {/* SECTION 21: LIVE / TRAINING TABS */}
         {/* ================================================================ */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-8">
           {/* Tab Headers */}
@@ -897,7 +898,7 @@ export default function ContractsDashboard() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    {activeTab === 'live' ? 'New Session' : 'New Training'}
+                    {activeTab === 'live' ? 'Create New Contract' : 'New Training'}
                   </>
                 )}
               </button>
@@ -905,7 +906,7 @@ export default function ContractsDashboard() {
           </div>
 
           {/* ============================================================== */}
-          {/* SECTION 21: QUICK STATS CARDS */}
+          {/* SECTION 22: QUICK STATS CARDS */}
           {/* ============================================================== */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50/50">
             <div className="bg-white p-4 rounded-lg border border-slate-200">
@@ -969,7 +970,7 @@ export default function ContractsDashboard() {
           </div>
 
           {/* ============================================================== */}
-          {/* SECTION 22: SESSIONS LIST */}
+          {/* SECTION 23: SESSIONS LIST */}
           {/* ============================================================== */}
           <div className="p-6">
             {loading ? (
@@ -995,7 +996,7 @@ export default function ContractsDashboard() {
                 <p className="text-slate-500 mb-6 text-sm max-w-md mx-auto">
                   {activeTab === 'training'
                     ? 'Start a training session to practice negotiations in a risk-free environment.'
-                    : 'Create your first session to begin the intelligent mediation process with CLARENCE.'
+                    : 'Create your first contract to begin the intelligent mediation process with CLARENCE.'
                   }
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -1017,7 +1018,7 @@ export default function ContractsDashboard() {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
-                        {activeTab === 'training' ? 'Start Training' : 'Create New Session'}
+                        {activeTab === 'training' ? 'Start Training' : 'Create New Contract'}
                       </>
                     )}
                   </button>
@@ -1126,7 +1127,6 @@ export default function ContractsDashboard() {
 
                           {/* Action Buttons */}
                           <div className="mt-4 flex gap-2">
-                            {/* Setup action button for early stages */}
                             {actionButton && (
                               <button
                                 onClick={actionButton.action}
@@ -1196,10 +1196,10 @@ export default function ContractsDashboard() {
                                           onClick={() => openMediationStudio(session.sessionId, bid.providerId)}
                                           className={`px-3 py-1.5 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${isTraining
                                             ? 'bg-amber-500 hover:bg-amber-600'
-                                            : 'bg-blue-600 hover:bg-blue-700'
+                                            : 'bg-amber-500 hover:bg-amber-600'
                                             }`}
                                         >
-                                          {isTraining ? 'Practice' : 'Open Studio'}
+                                          {isTraining ? 'Practice' : 'Negotiate'}
                                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                           </svg>
@@ -1230,7 +1230,7 @@ export default function ContractsDashboard() {
                           {readyProviders.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-slate-200">
                               <p className={`text-xs font-medium ${isTraining ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                ✓ {readyProviders.length} {isTraining ? 'partner' : 'provider'}{readyProviders.length > 1 ? 's' : ''} ready
+                                ✓ {readyProviders.length} {isTraining ? 'partner' : 'provider'}{readyProviders.length > 1 ? 's' : ''} ready to negotiate
                               </p>
                             </div>
                           )}
@@ -1271,7 +1271,7 @@ export default function ContractsDashboard() {
         </div>
 
         {/* ================================================================ */}
-        {/* SECTION 23: COLLAPSIBLE METRICS */}
+        {/* SECTION 24: COLLAPSIBLE METRICS */}
         {/* ================================================================ */}
         {filteredSessions.length > 0 && (
           <div className="mb-8">
@@ -1374,7 +1374,7 @@ export default function ContractsDashboard() {
       </div>
 
       {/* ================================================================== */}
-      {/* SECTION 24: CHAT OVERLAY */}
+      {/* SECTION 25: CHAT OVERLAY */}
       {/* ================================================================== */}
       {showChatOverlay && (
         <div className={`fixed ${chatMinimized ? 'bottom-4 right-4' : 'inset-0'} z-50 ${chatMinimized ? '' : 'bg-black/50'}`}>
@@ -1478,7 +1478,7 @@ export default function ContractsDashboard() {
       )}
 
       {/* ================================================================== */}
-      {/* SECTION 25: FLOATING CHAT BUTTON */}
+      {/* SECTION 26: FLOATING CHAT BUTTON */}
       {/* ================================================================== */}
       {!showChatOverlay && (
         <button
@@ -1494,8 +1494,9 @@ export default function ContractsDashboard() {
           </svg>
         </button>
       )}
+
       {/* ================================================================== */}
-      {/* SECTION 26: BETA FEEDBACK BUTTON */}
+      {/* SECTION 27: BETA FEEDBACK BUTTON */}
       {/* ================================================================== */}
       <FeedbackButton position="bottom-left" />
     </div>
