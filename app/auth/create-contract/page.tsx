@@ -529,8 +529,17 @@ function ContractCreationContent() {
 
     const handleContractTypeSelect = (option: AssessmentOption) => {
         addUserMessage(`${option.icon} ${option.label}`)
-        setAssessment(prev => ({ ...prev, contractType: option.value as ContractType, step: 'quick_intake' }))
-        setTimeout(() => addClarenceMessage(CLARENCE_MESSAGES.quick_intake), 500)
+
+        // Straight to Contract: Skip Deal Context (quick_intake) step
+        if (assessment.mediationType === 'straight_to_contract') {
+            setAssessment(prev => ({ ...prev, contractType: option.value as ContractType, step: 'template_source' }))
+            setTimeout(() => {
+                addClarenceMessage("Perfect! Since you're going **Straight to Contract**, let's skip the deal context for now - you can always add that later.\n\nHow would you like to start your contract?", TEMPLATE_SOURCE_OPTIONS)
+            }, 500)
+        } else {
+            setAssessment(prev => ({ ...prev, contractType: option.value as ContractType, step: 'quick_intake' }))
+            setTimeout(() => addClarenceMessage(CLARENCE_MESSAGES.quick_intake), 500)
+        }
     }
 
     const updateQuickIntake = (field: keyof AssessmentState['quickIntake'], value: any) => {
@@ -596,13 +605,21 @@ function ContractCreationContent() {
                     userEmail: userInfo.email, companyName: userInfo.company, userName: `${userInfo.firstName} ${userInfo.lastName}`,
                     isTraining: isTrainingMode, mediation_type: assessment.mediationType, contract_type: assessment.contractType,
                     template_source: assessment.templateSource, source_template_id: assessment.selectedTemplateId, uploaded_contract_id: assessment.uploadedContractId, assessment_completed: true,
+                    straight_to_contract: assessment.mediationType === 'straight_to_contract',
                     deal_context: { deal_value: assessment.quickIntake.dealValue, service_criticality: assessment.quickIntake.serviceCriticality, timeline_pressure: assessment.quickIntake.timelinePressure, bidder_count: assessment.quickIntake.bidderCount, batna_status: assessment.quickIntake.batnaStatus, top_priorities: assessment.quickIntake.topPriorities }
                 })
             })
             if (!response.ok) throw new Error('Failed to create contract session')
             const result = await response.json()
             if (result.success && result.sessionId) {
-                if (isTrainingMode) { setTrainingSessionCreated(result.sessionId); addClarenceMessage(CLARENCE_MESSAGES.training_complete) }
+                if (isTrainingMode) {
+                    setTrainingSessionCreated(result.sessionId)
+                    addClarenceMessage(CLARENCE_MESSAGES.training_complete)
+                }
+                // Straight to Contract: Go directly to Contract Studio
+                else if (assessment.mediationType === 'straight_to_contract') {
+                    router.push(`/auth/contract-studio?session_id=${result.sessionId}`)
+                }
                 else {
                     let redirectUrl = `/auth/contract-prep?session_id=${result.sessionId}`
                     if (result.contractId || result.contract_id) redirectUrl = `/auth/contract-prep?contract_id=${result.contractId || result.contract_id}&session_id=${result.sessionId}`
