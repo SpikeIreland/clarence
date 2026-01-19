@@ -830,12 +830,15 @@ function DocumentCentreHeader({ session, userInfo, onBackToStudio }: DocumentCen
 
                     {/* Center: Title */}
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                        <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
                             <span className="text-white font-bold text-sm">C</span>
                         </div>
                         <div>
-                            <span className="font-semibold text-white tracking-wide">CLARENCE</span>
-                            <span className="text-slate-400 text-sm ml-2">Document Centre</span>
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold text-white tracking-wide">CLARENCE</span>
+                                <span className="font-semibold text-violet-400">Agree</span>
+                            </div>
+                            <span className="text-slate-500 text-xs">The Honest Broker</span>
                         </div>
                     </div>
 
