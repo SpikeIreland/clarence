@@ -1997,7 +1997,7 @@ function ContractStudioContent() {
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'locks' | 'agreements'>('all')
 
-   // Deal Context Editing state
+    // Deal Context Editing state
     const [isEditingDealContext, setIsEditingDealContext] = useState(false)
     const [editedDealValue, setEditedDealValue] = useState<string>('')
     const [editedServiceCriticality, setEditedServiceCriticality] = useState<string>('medium')
@@ -5304,11 +5304,82 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
     // ============================================================================
     // SECTION 11: LEVERAGE INDICATOR COMPONENT (COMPACT VERSION)
+    // With No-Provider State
     // ============================================================================
 
     const LeverageIndicator = () => {
         // Determine viewer's perspective
         const isCustomer = userInfo?.role === 'customer'
+
+        // ========================================================================
+        // CHECK IF PROVIDER IS INVITED/AVAILABLE
+        // ========================================================================
+        const hasProvider = session?.providerId !== null && session?.providerId !== undefined
+        const hasProviderBids = availableProviders && availableProviders.length > 0
+        const providerReady = hasProvider || hasProviderBids
+
+        // ========================================================================
+        // NO PROVIDER STATE - Show greyed out placeholder with invite button
+        // ========================================================================
+        if (!providerReady && !isTrainingMode) {
+            return (
+                <div className="bg-white rounded-xl border border-slate-200 p-3 mb-2 relative">
+                    {/* Greyed out overlay */}
+                    <div className="absolute inset-0 bg-slate-100/80 backdrop-blur-[1px] rounded-xl z-10 flex flex-col items-center justify-center">
+                        <div className="text-center px-4">
+                            <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                            </div>
+                            <p className="text-sm font-medium text-slate-600 mb-1">Leverage Not Available</p>
+                            <p className="text-xs text-slate-500 mb-3">Invite a provider to enable leverage calculations</p>
+                            <button
+                                onClick={() => {
+                                    const sessionNum = session?.sessionNumber || ''
+                                    router.push(`/auth/invite-providers?session_id=${session?.sessionId}&session_number=${sessionNum}`)
+                                }}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 mx-auto"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                </svg>
+                                Invite Provider
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Placeholder content (visible but greyed) */}
+                    <div className="opacity-30 pointer-events-none">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
+                            </div>
+                            <div className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-400">
+                                --% Aligned
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
+                                <span className="text-xs text-slate-500">◆ Baseline:</span>
+                                <span className="text-sm font-bold text-slate-400">--:--</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
+                                <span className="text-xs text-slate-500">⬡ Tracker:</span>
+                                <span className="text-sm font-bold text-slate-400">--:--</span>
+                            </div>
+                        </div>
+
+                        <div className="h-3 bg-slate-200 rounded-full"></div>
+                    </div>
+                </div>
+            )
+        }
+
+        // ========================================================================
+        // NORMAL STATE - Full leverage display
+        // ========================================================================
 
         // Get leverage values - ALWAYS Customer vs Provider (not "you" vs "them")
         const customerBaseline = displayLeverage.leverageScoreCustomer
@@ -5468,91 +5539,81 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         />
                     </div>
 
-                    {/* Tracker values below the bar - inline */}
-                    <div className="flex justify-between text-xs font-bold mt-1">
-                        <span className="text-emerald-600">{customerTracker}%</span>
-                        <span className="text-blue-600">{providerTracker}%</span>
+                    {/* Labels under bar */}
+                    <div className="flex justify-between mt-1 text-xs text-slate-400">
+                        <span>Customer Favored</span>
+                        <span>Provider Favored</span>
                     </div>
                 </div>
 
-                {/* Expandable 4-Factor Breakdown */}
+                {/* Expandable Details Section */}
                 {showLeverageDetails && (
                     <div className="mt-3 pt-3 border-t border-slate-200">
-                        <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-xs font-semibold text-slate-600">Leverage Factors (from Assessment)</h4>
-                            <p className="text-xs text-slate-400">Scores &gt;50 favor Customer • &lt;50 favor Provider</p>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
-                            {/* Market Dynamics */}
-                            <div className="bg-slate-50 rounded p-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Market Dynamics</div>
-                                <div className="flex items-center gap-1">
-                                    <span className={`text-sm font-bold ${marketDynamicsScore >= 60 ? 'text-emerald-600' :
-                                        marketDynamicsScore <= 40 ? 'text-blue-600' : 'text-slate-700'
-                                        }`}>
-                                        {marketDynamicsScore}
-                                    </span>
-                                    <span className="text-xs text-slate-400">/ 100</span>
+                        <div className="grid grid-cols-2 gap-3">
+                            {/* Leverage Factor Breakdown */}
+                            <div>
+                                <h4 className="text-xs font-semibold text-slate-600 mb-2">Leverage Factors</h4>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-500">Market Dynamics</span>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="h-full bg-emerald-500" style={{ width: `${marketDynamicsScore}%` }} />
+                                            </div>
+                                            <span className="text-xs font-medium text-slate-600">{marketDynamicsScore}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-500">Economic Factors</span>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="h-full bg-emerald-500" style={{ width: `${economicFactorsScore}%` }} />
+                                            </div>
+                                            <span className="text-xs font-medium text-slate-600">{economicFactorsScore}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-500">Strategic Position</span>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="h-full bg-emerald-500" style={{ width: `${strategicPositionScore}%` }} />
+                                            </div>
+                                            <span className="text-xs font-medium text-slate-600">{strategicPositionScore}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-500">BATNA Strength</span>
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="h-full bg-emerald-500" style={{ width: `${batnaScore}%` }} />
+                                            </div>
+                                            <span className="text-xs font-medium text-slate-600">{batnaScore}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                                {displayLeverage.marketDynamicsRationale && (
-                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
-                                        {displayLeverage.marketDynamicsRationale}
-                                    </p>
-                                )}
                             </div>
 
-                            {/* Economic Factors */}
-                            <div className="bg-slate-50 rounded p-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Economic Factors</div>
-                                <div className="flex items-center gap-1">
-                                    <span className={`text-sm font-bold ${economicFactorsScore >= 60 ? 'text-emerald-600' :
-                                        economicFactorsScore <= 40 ? 'text-blue-600' : 'text-slate-700'
-                                        }`}>
-                                        {economicFactorsScore}
-                                    </span>
-                                    <span className="text-xs text-slate-400">/ 100</span>
+                            {/* Quick Stats */}
+                            <div>
+                                <h4 className="text-xs font-semibold text-slate-600 mb-2">Session Stats</h4>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-slate-500">Total Clauses</span>
+                                        <span className="font-medium text-slate-700">{clauses.length}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-slate-500">Aligned</span>
+                                        <span className="font-medium text-emerald-600">{clauseStats.aligned}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-slate-500">Negotiating</span>
+                                        <span className="font-medium text-amber-600">{clauseStats.negotiating}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-slate-500">Disputed</span>
+                                        <span className="font-medium text-red-600">{clauseStats.disputed}</span>
+                                    </div>
                                 </div>
-                                {displayLeverage.economicFactorsRationale && (
-                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
-                                        {displayLeverage.economicFactorsRationale}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Strategic Position */}
-                            <div className="bg-slate-50 rounded p-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Strategic Position</div>
-                                <div className="flex items-center gap-1">
-                                    <span className={`text-sm font-bold ${strategicPositionScore >= 60 ? 'text-emerald-600' :
-                                        strategicPositionScore <= 40 ? 'text-blue-600' : 'text-slate-700'
-                                        }`}>
-                                        {strategicPositionScore}
-                                    </span>
-                                    <span className="text-xs text-slate-400">/ 100</span>
-                                </div>
-                                {displayLeverage.strategicPositionRationale && (
-                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
-                                        {displayLeverage.strategicPositionRationale}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* BATNA */}
-                            <div className="bg-slate-50 rounded p-2">
-                                <div className="text-xs text-slate-500 mb-0.5">BATNA Analysis</div>
-                                <div className="flex items-center gap-1">
-                                    <span className={`text-sm font-bold ${batnaScore >= 60 ? 'text-emerald-600' :
-                                        batnaScore <= 40 ? 'text-blue-600' : 'text-slate-700'
-                                        }`}>
-                                        {batnaScore}
-                                    </span>
-                                    <span className="text-xs text-slate-400">/ 100</span>
-                                </div>
-                                {displayLeverage.batnaRationale && (
-                                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
-                                        {displayLeverage.batnaRationale}
-                                    </p>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -5560,6 +5621,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             </div>
         )
     }
+    
     // ============================================================================
     // SECTION 12: CLAUSE TREE ITEM COMPONENT (FOCUS-12 Updated)
     // ============================================================================
