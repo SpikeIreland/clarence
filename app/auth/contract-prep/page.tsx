@@ -4065,15 +4065,26 @@ function ContractPrepContent() {
 
             {/* Header */}
             <header className="h-14 bg-slate-800 flex items-center justify-between px-6 flex-shrink-0">
+                {/* Left: CLARENCE Create branding */}
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                         <span className="text-white font-bold">C</span>
                     </div>
                     <div>
-                        <span className="text-white font-semibold">CLARENCE</span>
-                        <span className="text-slate-400 text-sm ml-2">Contract Studio</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-white font-semibold">CLARENCE</span>
+                            <span className="text-emerald-400 font-semibold">Create</span>
+                        </div>
+                        <span className="text-slate-500 text-xs">The Honest Broker</span>
                     </div>
                 </div>
+
+                {/* Centre: Page Title */}
+                <div className="absolute left-1/2 transform -translate-x-1/2">
+                    <h1 className="text-white font-medium">Contract Preparation</h1>
+                </div>
+
+                {/* Right: User Info */}
                 <div className="flex items-center gap-4">
                     <span className="text-slate-400 text-sm">{userInfo.email}</span>
                     <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center">
