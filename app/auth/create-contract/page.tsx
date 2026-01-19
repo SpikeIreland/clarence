@@ -652,6 +652,8 @@ function ContractCreationContent() {
         const visibleSteps = steps.filter(step => {
             if (step.id === 'template_selection') return assessment.templateSource === 'existing_template' || assessment.templateSource === 'modified_template'
             if (step.id === 'upload_processing') return assessment.templateSource === 'uploaded'
+            // Hide Deal Context step for Straight to Contract
+            if (step.id === 'quick_intake') return assessment.mediationType !== 'straight_to_contract'
             return true
         })
 

@@ -2401,8 +2401,16 @@ function ContractStudioContent() {
 
             const data = await response.json()
             const status = data.session?.status || 'pending_provider'
+            const mediationType = data.session?.mediation_type || data.session?.mediationType || null
+            const isStraightToContract = mediationType === 'straight_to_contract'
 
-            if (status === 'customer_assessment_complete' || status === 'pending_provider') {
+            // Straight to Contract: Bypass provider requirement and go directly to studio
+            if (isStraightToContract) {
+                // Allow access even without provider - they can invite later
+                setSessionStatus('ready')
+                // Continue to load full session data below...
+            }
+            else if (status === 'customer_assessment_complete' || status === 'pending_provider') {
                 setSessionStatus('pending_provider')
                 return null
             } else if (status === 'provider_invited' || status === 'providers_invited') {
@@ -2413,7 +2421,7 @@ function ContractStudioContent() {
                     sessionNumber: data.session.sessionNumber || '',
                     customerCompany: data.session.customerCompany || '',
                     providerCompany: data.session.providerCompany || 'Provider (Pending)',
-                    providerId: data.session.providerId || null,      // ADD THIS
+                    providerId: data.session.providerId || null,
                     customerContactName: data.session.customerContactName || null,
                     providerContactName: null,
                     serviceType: data.session.contractType || 'IT Services',
