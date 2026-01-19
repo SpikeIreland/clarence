@@ -41,6 +41,9 @@ interface Session {
     // TRAINING MODE ADDITIONS:
     isTraining?: boolean
     notes?: string
+    // STRAIGHT TO CONTRACT:
+    mediationType?: 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
+    templateSource?: 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
 }
 
 // ============================================================================
@@ -2138,6 +2141,17 @@ function ContractStudioContent() {
         'Custom'
     ]
 
+    // ========================================================================
+    // STRAIGHT TO CONTRACT - PROGRESSIVE LOADING STATE
+    // ========================================================================
+    const [isStraightToContract, setIsStraightToContract] = useState(false)
+    const [isConfiguringClauses, setIsConfiguringClauses] = useState(false)
+    const [clauseConfigProgress, setClauseConfigProgress] = useState<{
+        total: number
+        configured: number
+        currentClauseName: string | null
+        status: 'idle' | 'configuring' | 'complete' | 'error'
+    }>({ total: 0, configured: 0, currentClauseName: null, status: 'idle' })
 
     const latestMessageRef = useRef<HTMLDivElement>(null)
     const positionPanelRef = useRef<HTMLDivElement>(null)
@@ -2436,7 +2450,10 @@ function ContractStudioContent() {
                 clauseCount: data.session.clauseCount || 0,
                 // TRAINING MODE ADDITIONS:
                 isTraining: data.session.is_training || data.session.isTraining || false,
-                notes: data.session.notes || null
+                notes: data.session.notes || null,
+                // STRAIGHT TO CONTRACT OR FULL INTAKE:
+                mediationType: data.session.mediationType || data.session.mediation_type || null,
+                templateSource: data.session.templateSource || data.session.template_source || null
             }
 
             const clauseData: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
@@ -2533,6 +2550,166 @@ function ContractStudioContent() {
     const loadClauseChat = useCallback(async (sessionId: string, positionId: string | null) => {
         return await fetchClauseChat(sessionId, positionId)
     }, [])
+
+    // ========================================================================
+    // STRAIGHT TO CONTRACT - BATCH AI CONFIGURATION
+    // ========================================================================
+
+    const triggerBatchAIConfiguration = useCallback(async (sessionId: string, clausesToConfigure: ContractClause[]) => {
+        if (clausesToConfigure.length === 0) {
+            setClauseConfigProgress(prev => ({ ...prev, status: 'complete' }))
+            return
+        }
+
+        setIsConfiguringClauses(true)
+        setClauseConfigProgress({
+            total: clausesToConfigure.length,
+            configured: 0,
+            currentClauseName: null,
+            status: 'configuring'
+        })
+
+        for (let i = 0; i < clausesToConfigure.length; i++) {
+            const clause = clausesToConfigure[i]
+
+            setClauseConfigProgress(prev => ({
+                ...prev,
+                configured: i,
+                currentClauseName: clause.clauseName
+            }))
+
+            try {
+                // Call AI to suggest range for this clause
+                const response = await fetch(`${API_BASE}/clarence-suggest-range`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clause_id: clause.clauseId,
+                        clause_name: clause.clauseName,
+                        clause_content: clause.clauseContent,
+                        clause_category: clause.category,
+                        clause_number: clause.clauseNumber,
+                        contract_id: null,
+                        session_id: sessionId,
+                        user_id: userInfo?.userId,
+                        auto_configure: true  // Flag to auto-save the suggestion
+                    })
+                })
+
+                const data = await response.json()
+
+                if (data.success && data.suggestion) {
+                    // Update local clause with the configured range
+                    setClauses(prev => prev.map(c =>
+                        c.clauseId === clause.clauseId
+                            ? {
+                                ...c,
+                                customerPosition: data.suggestion.suggested_target ? parseFloat(data.suggestion.suggested_target) : 5,
+                                originalCustomerPosition: data.suggestion.suggested_target ? parseFloat(data.suggestion.suggested_target) : 5,
+                                status: 'pending' as const
+                            }
+                            : c
+                    ))
+                }
+
+                // Small delay to avoid rate limiting
+                if (i < clausesToConfigure.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 800))
+                }
+
+            } catch (error) {
+                console.error(`Error configuring clause ${clause.clauseName}:`, error)
+            }
+        }
+
+        setClauseConfigProgress(prev => ({
+            ...prev,
+            configured: clausesToConfigure.length,
+            currentClauseName: null,
+            status: 'complete'
+        }))
+        setIsConfiguringClauses(false)
+
+    }, [userInfo])
+
+    // ========================================================================
+    // STRAIGHT TO CONTRACT - DETECT AND TRIGGER CONFIGURATION
+    // ========================================================================
+
+    useEffect(() => {
+        if (!session || !clauses.length) return
+
+        const isSTC = session.mediationType === 'straight_to_contract'
+        setIsStraightToContract(isSTC)
+
+        if (isSTC && session.templateSource === 'uploaded') {
+            // Check which clauses need configuration (no customer position set)
+            const unconfiguredClauses = clauses.filter(c =>
+                c.customerPosition === null || c.customerPosition === undefined
+            )
+
+            if (unconfiguredClauses.length > 0 && clauseConfigProgress.status === 'idle') {
+                triggerBatchAIConfiguration(session.sessionId, unconfiguredClauses)
+            } else if (unconfiguredClauses.length === 0) {
+                setClauseConfigProgress(prev => ({ ...prev, status: 'complete' }))
+            }
+        }
+    }, [session, clauses.length, clauseConfigProgress.status, triggerBatchAIConfiguration])
+
+    // ========================================================================
+    // STRAIGHT TO CONTRACT - PROGRESSIVE LOADING PANEL
+    // ========================================================================
+
+    const StraightToContractProgressPanel = () => {
+        if (!isStraightToContract || clauseConfigProgress.status === 'complete') return null
+
+        const progressPercent = clauseConfigProgress.total > 0
+            ? (clauseConfigProgress.configured / clauseConfigProgress.total) * 100
+            : 0
+
+        return (
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-4 mb-4">
+                <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-slate-800">CLARENCE is Analyzing Your Contract</h3>
+                        <p className="text-sm text-slate-500">
+                            Configuring clause {clauseConfigProgress.configured + 1} of {clauseConfigProgress.total}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mb-3">
+                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>Progress</span>
+                        <span>{Math.round(progressPercent)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-2">
+                        <div
+                            className="bg-gradient-to-r from-emerald-500 to-teal-500 h-2 rounded-full transition-all duration-500"
+                            style={{ width: `${progressPercent}%` }}
+                        />
+                    </div>
+                </div>
+
+                {/* Current Clause */}
+                {clauseConfigProgress.currentClauseName && (
+                    <div className="bg-white/60 rounded-lg px-3 py-2 text-sm">
+                        <span className="text-slate-500">Now analyzing: </span>
+                        <span className="font-medium text-slate-700">{clauseConfigProgress.currentClauseName}</span>
+                    </div>
+                )}
+
+                {/* Info */}
+                <p className="text-xs text-slate-500 mt-3">
+                    💡 You can start reviewing configured clauses in the list while others are still processing.
+                </p>
+            </div>
+        )
+    }
 
     // ============================================================================
     // SECTION 7B: LOAD AVAILABLE PROVIDERS (MULTI-PROVIDER SUPPORT)
@@ -5621,7 +5798,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             </div>
         )
     }
-    
+
     // ============================================================================
     // SECTION 12: CLAUSE TREE ITEM COMPONENT (FOCUS-12 Updated)
     // ============================================================================
@@ -5740,6 +5917,20 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             <span className="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">
                                 Added
                             </span>
+                        )}
+
+                        {/* Straight to Contract - Configuration Status */}
+                        {isStraightToContract && clause.clauseLevel !== 0 && clauseConfigProgress.status === 'configuring' && (
+                            clause.customerPosition === null ? (
+                                <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <span className="w-2 h-2 border border-amber-500 border-t-transparent rounded-full animate-spin"></span>
+                                    Pending
+                                </span>
+                            ) : (
+                                <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded">
+                                    ✓ Ready
+                                </span>
+                            )
                         )}
                     </div>
 
@@ -7106,6 +7297,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                     {/* Workspace Content */}
                     <div className="flex-1 overflow-y-auto p-4 pt-0">
+
+                        {/* Straight to Contract Progress Panel */}
+                        <StraightToContractProgressPanel />
 
                         {/* ==================== POSITIONS TAB ==================== */}
                         {activeTab === 'positions' && selectedClause && (
