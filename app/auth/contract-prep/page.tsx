@@ -236,6 +236,22 @@ const CLAUSE_RANGE_SUGGESTIONS: Record<string, { rangeType: RangeType; unit: str
 }
 
 // ============================================================================
+// CLAUSE STATUS CONFIGURATION
+// ============================================================================
+
+const CLAUSE_STATUS = {
+    NOT_CONFIGURED: 'pending',      // Maps to existing DB value
+    CONFIGURED: 'verified',         // Maps to existing DB value  
+    EXCLUDED: 'rejected'            // Maps to existing DB value
+} as const
+
+const CLAUSE_STATUS_DISPLAY = {
+    pending: { label: 'Not Configured', icon: '○', color: 'text-slate-400', bg: 'bg-slate-100' },
+    verified: { label: 'Configured', icon: '✓', color: 'text-green-600', bg: 'bg-green-100' },
+    rejected: { label: 'Excluded', icon: '✗', color: 'text-red-500', bg: 'bg-red-100' }
+} as const
+
+// ============================================================================
 // SECTION 2: CONSTANTS
 // ============================================================================
 
@@ -444,6 +460,14 @@ function ContractPrepContent() {
     const [suggestionError, setSuggestionError] = useState<string | null>(null)
     const [lastSuggestedClauseId, setLastSuggestedClauseId] = useState<string | null>(null)
 
+    // Bulk AI Configuration State
+    const [isBulkAIProcessing, setIsBulkAIProcessing] = useState(false)
+    const [bulkAIProgress, setBulkAIProgress] = useState<{
+        current: number
+        total: number
+        currentClauseName: string | null
+    } | null>(null)
+    const [showBulkAIModal, setShowBulkAIModal] = useState(false)
 
     // Session Data State
     const [sessionData, setSessionData] = useState<SessionData | null>(null)
@@ -1230,6 +1254,150 @@ function ContractPrepContent() {
     }
 
     // ========================================================================
+    // BULK AI CONFIGURE - Process multiple clauses with AI suggestions
+    // ========================================================================
+
+    const handleBulkAIConfigure = async () => {
+        if (!userInfo || selectedClauseIds.size === 0) return
+
+        const clausesToProcess = clauses.filter(
+            c => selectedClauseIds.has(c.clauseId) && c.status === 'pending'
+        )
+
+        if (clausesToProcess.length === 0) {
+            addChatMessage('system', 'All selected clauses are already configured or excluded.')
+            setShowBulkAIModal(false)
+            return
+        }
+
+        setIsBulkAIProcessing(true)
+        setBulkAIProgress({ current: 0, total: clausesToProcess.length, currentClauseName: null })
+
+        try {
+            for (let i = 0; i < clausesToProcess.length; i++) {
+                const clause = clausesToProcess[i]
+
+                setBulkAIProgress({
+                    current: i + 1,
+                    total: clausesToProcess.length,
+                    currentClauseName: clause.clauseName
+                })
+
+                // Fetch AI suggestion for this clause
+                await fetchRangeSuggestionForBulk(clause)
+
+                // Small delay to avoid rate limiting
+                if (i < clausesToProcess.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500))
+                }
+            }
+
+            addChatMessage('clarence',
+                `I've analyzed ${clausesToProcess.length} clauses and suggested ranges for each. ` +
+                `Please review the suggestions and adjust as needed before finalizing.`
+            )
+
+        } catch (err) {
+            console.error('Error in bulk AI configure:', err)
+            setError('Some clauses could not be processed')
+        } finally {
+            setIsBulkAIProcessing(false)
+            setBulkAIProgress(null)
+            setShowBulkAIModal(false)
+        }
+    }
+
+    // Separate function for bulk processing (doesn't add individual chat messages)
+    const fetchRangeSuggestionForBulk = async (clause: ContractClause) => {
+        try {
+            const payload: Record<string, any> = {
+                clause_id: clause.clauseId,
+                clause_name: clause.clauseName,
+                clause_content: clause.content,
+                clause_category: clause.category,
+                clause_number: clause.clauseNumber,
+                contract_id: contract?.contractId,
+                contract_name: contract?.contractName,
+                contract_type: sessionData?.contractType || contract?.detectedContractType || 'general',
+                session_id: sessionData?.sessionId || sessionId,
+                mediation_type: sessionData?.mediationType,
+                user_id: userInfo?.userId
+            }
+
+            const response = await fetch(`${API_BASE}/clarence-suggest-range`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+
+            const data = await response.json()
+
+            if (data.success && data.suggestion) {
+                const suggestion = data.suggestion
+
+                // Pre-fill the range fields with CLARENCE's suggestion
+                updateClauseRange(clause.clauseId, {
+                    rangeType: suggestion.range_type,
+                    unit: suggestion.unit,
+                    minValue: suggestion.industry_min,
+                    maxValue: suggestion.industry_max,
+                    targetValue: suggestion.suggested_target,
+                    walkawayValue: suggestion.suggested_walkaway,
+                    importance: suggestion.suggested_importance,
+                    rationale: suggestion.rationale
+                })
+            }
+        } catch (err) {
+            console.error(`Error fetching suggestion for ${clause.clauseName}:`, err)
+        }
+    }
+
+    const handleBulkExclude = async () => {
+        if (!userInfo || selectedClauseIds.size === 0) return
+
+        setIsBulkProcessing(true)
+        const clausesToExclude = clauses.filter(c => selectedClauseIds.has(c.clauseId))
+
+        try {
+            for (const clause of clausesToExclude) {
+                await fetch(`${API_BASE}/update-parsed-clause`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contract_id: clause.contractId,
+                        clause_id: clause.clauseId,
+                        user_id: userInfo.userId,
+                        status: 'rejected',
+                        rejection_reason: 'Bulk excluded'
+                    })
+                })
+            }
+
+            setClauses(prev => prev.map(c =>
+                selectedClauseIds.has(c.clauseId)
+                    ? { ...c, status: 'rejected', rejectionReason: 'Bulk excluded' }
+                    : c
+            ))
+
+            const updatedClauses = clauses.map(c =>
+                selectedClauseIds.has(c.clauseId)
+                    ? { ...c, status: 'rejected' as const, rejectionReason: 'Bulk excluded' }
+                    : c
+            )
+            buildCategoryGroups(updatedClauses)
+
+            addChatMessage('system', `✗ Excluded ${clausesToExclude.length} clauses from negotiation`)
+            clearSelection()
+
+        } catch (err) {
+            console.error('Error bulk excluding:', err)
+            setError('Failed to exclude some clauses')
+        } finally {
+            setIsBulkProcessing(false)
+        }
+    }
+
+    // ========================================================================
     // SECTION 5I: DELETE CLAUSE HANDLERS
     // ========================================================================
 
@@ -1699,6 +1867,26 @@ function ContractPrepContent() {
         rejected: clauses.filter(c => c.status === 'rejected').length
     }
 
+    // ========================================================================
+    // CLAUSE STATUS HELPERS
+    // ========================================================================
+
+    const getClauseStatusDisplay = (status: string) => {
+        return CLAUSE_STATUS_DISPLAY[status as keyof typeof CLAUSE_STATUS_DISPLAY]
+            || CLAUSE_STATUS_DISPLAY.pending
+    }
+
+    const getConfiguredCount = () => clauses.filter(c => c.status === 'verified').length
+    const getExcludedCount = () => clauses.filter(c => c.status === 'rejected').length
+    const getNotConfiguredCount = () => clauses.filter(c => c.status === 'pending').length
+
+    const selectAllUnconfigured = () => {
+        const unconfiguredIds = clauses
+            .filter(c => c.status === 'pending')
+            .map(c => c.clauseId)
+        setSelectedClauseIds(new Set(unconfiguredIds))
+    }
+
     // ============================================================================
     // SECTION 5P: RANGE MANAGEMENT FUNCTIONS
     // ============================================================================
@@ -1761,40 +1949,138 @@ function ContractPrepContent() {
         }))
     }
 
-    // Save range to backend
-    const saveClauseRange = async (clauseId: string) => {
+    // ========================================================================
+    // SAVE & CONFIGURE - Unified action that saves range AND marks as configured
+    // ========================================================================
+
+    const saveAndConfigureClause = async (clauseId: string) => {
         if (!userInfo || !contract) return
 
         const range = clauseRanges[clauseId]
-        if (!range) return
+        const clause = clauses.find(c => c.clauseId === clauseId)
+        if (!clause) return
 
         try {
-            const response = await fetch(`${API_BASE}/update-clause-range`, {
+            // Step 1: Save the range (if we have range data)
+            if (range) {
+                const rangeResponse = await fetch(`${API_BASE}/update-clause-range`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contract_id: contract.contractId,
+                        clause_id: clauseId,
+                        user_id: userInfo.userId,
+                        range_type: range.rangeType,
+                        range_unit: range.unit,
+                        range_min: range.minValue,
+                        range_max: range.maxValue,
+                        target_value: range.targetValue,
+                        walkaway_value: range.walkawayValue,
+                        rationale: range.rationale,
+                        importance: range.importance
+                    })
+                })
+
+                const rangeData = await rangeResponse.json()
+                if (!rangeData.success) {
+                    throw new Error(rangeData.error || 'Failed to save range')
+                }
+            }
+
+            // Step 2: Mark clause as configured (verified)
+            const statusResponse = await fetch(`${API_BASE}/update-parsed-clause`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contract_id: contract.contractId,
                     clause_id: clauseId,
                     user_id: userInfo.userId,
-                    range_type: range.rangeType,
-                    range_unit: range.unit,
-                    range_min: range.minValue,
-                    range_max: range.maxValue,
-                    target_value: range.targetValue,
-                    walkaway_value: range.walkawayValue,
-                    rationale: range.rationale,
-                    importance: range.importance
+                    status: 'verified'
                 })
             })
 
-            if (!response.ok) throw new Error('Failed to save range')
+            if (!statusResponse.ok) throw new Error('Failed to update clause status')
 
-            addChatMessage('system', `✓ Range saved for: **${selectedClause?.clauseName}**`)
+            // Step 3: Update local state
+            setClauses(prev => prev.map(c =>
+                c.clauseId === clauseId
+                    ? { ...c, status: 'verified', verified: true }
+                    : c
+            ))
+
+            // Step 4: Auto-tick the checkbox
+            setSelectedClauseIds(prev => {
+                const newSet = new Set(prev)
+                newSet.add(clauseId)
+                return newSet
+            })
+
+            // Step 5: Rebuild category groups
+            const updatedClauses = clauses.map(c =>
+                c.clauseId === clauseId
+                    ? { ...c, status: 'verified' as const, verified: true }
+                    : c
+            )
+            buildCategoryGroups(updatedClauses)
+
+            // Step 6: Success message
+            addChatMessage('system', `✓ **${clause.clauseName}** configured and ready for negotiation`)
             setIsEditingRange(false)
 
         } catch (err) {
-            console.error('Error saving range:', err)
-            setError('Failed to save clause range')
+            console.error('Error saving and configuring clause:', err)
+            setError('Failed to save clause configuration')
+        }
+    }
+
+    // ========================================================================
+    // EXCLUDE CLAUSE - Marks clause as excluded from negotiation
+    // ========================================================================
+
+    const excludeClause = async (clause: ContractClause) => {
+        if (!userInfo) return
+
+        try {
+            const response = await fetch(`${API_BASE}/update-parsed-clause`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: clause.contractId,
+                    clause_id: clause.clauseId,
+                    user_id: userInfo.userId,
+                    status: 'rejected',
+                    rejection_reason: 'User excluded from negotiation'
+                })
+            })
+
+            if (!response.ok) throw new Error('Failed to exclude clause')
+
+            setClauses(prev => prev.map(c =>
+                c.clauseId === clause.clauseId
+                    ? { ...c, status: 'rejected', rejectionReason: 'User excluded from negotiation' }
+                    : c
+            ))
+
+            const updatedClauses = clauses.map(c =>
+                c.clauseId === clause.clauseId
+                    ? { ...c, status: 'rejected' as const, rejectionReason: 'User excluded from negotiation' }
+                    : c
+            )
+            buildCategoryGroups(updatedClauses)
+
+            addChatMessage('system', `✗ **${clause.clauseName}** excluded from negotiation`)
+
+            // Move to next clause if this was selected
+            if (selectedClause?.clauseId === clause.clauseId) {
+                const nextClause = clauses.find(c => c.clauseId !== clause.clauseId && c.status === 'pending')
+                if (nextClause) {
+                    handleClauseSelect(nextClause)
+                }
+            }
+
+        } catch (err) {
+            console.error('Error excluding clause:', err)
+            setError('Failed to exclude clause')
         }
     }
 
@@ -1927,7 +2213,9 @@ function ContractPrepContent() {
         if (selectedClauseIds.size === 0) return null
 
         const selectedCount = selectedClauseIds.size
-        const pendingSelectedCount = clauses.filter(c => selectedClauseIds.has(c.clauseId) && c.status === 'pending').length
+        const unconfiguredSelectedCount = clauses.filter(
+            c => selectedClauseIds.has(c.clauseId) && c.status === 'pending'
+        ).length
 
         return (
             <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
@@ -1939,28 +2227,26 @@ function ContractPrepContent() {
                     <div className="w-px h-6 bg-slate-600" />
 
                     <div className="flex items-center gap-2">
-                        {pendingSelectedCount > 0 && (
-                            <>
-                                <button
-                                    onClick={handleBulkVerify}
-                                    disabled={isBulkProcessing}
-                                    className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
-                                >
-                                    <span>✓</span> Verify ({pendingSelectedCount})
-                                </button>
-                                <button
-                                    onClick={handleBulkReject}
-                                    disabled={isBulkProcessing}
-                                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
-                                >
-                                    <span>✕</span> Reject
-                                </button>
-                            </>
+                        {unconfiguredSelectedCount > 0 && (
+                            <button
+                                onClick={() => setShowBulkAIModal(true)}
+                                disabled={isBulkProcessing || isBulkAIProcessing}
+                                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                <span>🤖</span> AI Configure ({unconfiguredSelectedCount})
+                            </button>
                         )}
                         <button
+                            onClick={handleBulkExclude}
+                            disabled={isBulkProcessing || isBulkAIProcessing}
+                            className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            <span>✗</span> Exclude
+                        </button>
+                        <button
                             onClick={confirmBulkDelete}
-                            disabled={isDeleting}
-                            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                            disabled={isDeleting || isBulkAIProcessing}
+                            className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                             <span>🗑️</span> Delete
                         </button>
@@ -1974,6 +2260,127 @@ function ContractPrepContent() {
                     >
                         Clear
                     </button>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 6B: RENDER - BULK AI MODAL
+    // ========================================================================
+
+    const renderBulkAIModal = () => {
+        if (!showBulkAIModal) return null
+
+        const clausesToProcess = clauses.filter(
+            c => selectedClauseIds.has(c.clauseId) && c.status === 'pending'
+        )
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
+                    <div className="p-6 border-b border-slate-200">
+                        <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
+                            <span>🤖</span> AI Batch Configuration
+                        </h2>
+                    </div>
+
+                    <div className="p-6">
+                        {isBulkAIProcessing ? (
+                            <>
+                                <div className="text-center mb-6">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                                        <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" />
+                                    </div>
+                                    <h3 className="text-lg font-medium text-slate-800 mb-1">
+                                        Analyzing clause {bulkAIProgress?.current} of {bulkAIProgress?.total}
+                                    </h3>
+                                    <p className="text-sm text-slate-500">
+                                        {bulkAIProgress?.currentClauseName || 'Processing...'}
+                                    </p>
+                                </div>
+
+                                <div className="w-full bg-slate-200 rounded-full h-2 mb-4">
+                                    <div
+                                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${((bulkAIProgress?.current || 0) / (bulkAIProgress?.total || 1)) * 100}%` }}
+                                    />
+                                </div>
+
+                                <div className="max-h-48 overflow-auto border border-slate-200 rounded-lg">
+                                    {clausesToProcess.map((clause, idx) => (
+                                        <div
+                                            key={clause.clauseId}
+                                            className={`px-4 py-2 flex items-center gap-3 text-sm ${idx < (bulkAIProgress?.current || 0) - 1
+                                                ? 'bg-green-50 text-green-700'
+                                                : idx === (bulkAIProgress?.current || 0) - 1
+                                                    ? 'bg-blue-50 text-blue-700'
+                                                    : 'text-slate-500'
+                                                }`}
+                                        >
+                                            <span>
+                                                {idx < (bulkAIProgress?.current || 0) - 1
+                                                    ? '✓'
+                                                    : idx === (bulkAIProgress?.current || 0) - 1
+                                                        ? '⟳'
+                                                        : '○'}
+                                            </span>
+                                            <span>{clause.clauseNumber}</span>
+                                            <span className="truncate">{clause.clauseName}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-slate-600 mb-4">
+                                    CLARENCE will analyze <strong>{clausesToProcess.length} clauses</strong> and suggest appropriate ranges for each one based on industry standards.
+                                </p>
+
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                                    <p className="text-sm text-amber-800">
+                                        <strong>⚠️ Note:</strong> You'll be able to review and adjust each suggestion before finalizing.
+                                    </p>
+                                </div>
+
+                                <div className="text-sm text-slate-500 mb-4">
+                                    Estimated time: ~{Math.ceil(clausesToProcess.length * 3 / 60)} minute{Math.ceil(clausesToProcess.length * 3 / 60) !== 1 ? 's' : ''}
+                                </div>
+
+                                <div className="max-h-48 overflow-auto border border-slate-200 rounded-lg">
+                                    {clausesToProcess.map(clause => (
+                                        <div
+                                            key={clause.clauseId}
+                                            className="px-4 py-2 flex items-center gap-3 text-sm text-slate-600 border-b border-slate-100 last:border-0"
+                                        >
+                                            <span className="text-slate-400">○</span>
+                                            <span className="text-slate-400 font-mono">{clause.clauseNumber}</span>
+                                            <span className="truncate">{clause.clauseName}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+                        {!isBulkAIProcessing && (
+                            <>
+                                <button
+                                    onClick={() => setShowBulkAIModal(false)}
+                                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-100 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleBulkAIConfigure}
+                                    className="px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                                >
+                                    <span>🤖</span> Start Processing
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
         )
@@ -1997,11 +2404,27 @@ function ContractPrepContent() {
                     <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
                         ← Back to Dashboard
                     </Link>
-                    <h2 className="text-lg font-semibold text-slate-800">Contract Studio</h2>
+                    <h2 className="text-lg font-semibold text-slate-800">Contract Prep</h2>
                     {contract && (
                         <p className="text-sm text-slate-500 truncate" title={contract.contractName}>
                             {contract.contractName}
                         </p>
+                    )}
+
+                    {/* Progress Bar */}
+                    {clauses.length > 0 && (
+                        <div className="mt-3">
+                            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                                <span>{getConfiguredCount()} of {clauses.length} configured</span>
+                                <span>{Math.round((getConfiguredCount() / clauses.length) * 100)}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2">
+                                <div
+                                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${(getConfiguredCount() / clauses.length) * 100}%` }}
+                                />
+                            </div>
+                        </div>
                     )}
                 </div>
 
@@ -2044,10 +2467,9 @@ function ContractPrepContent() {
                 {clauses.length > 0 && (
                     <div className="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-2 text-xs">
-                            <span className="text-slate-600">{stats.total} clauses</span>
-                            <span className="text-amber-600">⏳ {stats.pending}</span>
-                            <span className="text-green-600">✓ {stats.verified}</span>
-                            <span className="text-red-600">✕ {stats.rejected}</span>
+                            <span className="text-green-600">✓ {getConfiguredCount()}</span>
+                            <span className="text-slate-400">○ {getNotConfiguredCount()}</span>
+                            <span className="text-red-500">✗ {getExcludedCount()}</span>
                         </div>
                         <div className="flex items-center gap-1">
                             <button
@@ -2058,11 +2480,11 @@ function ContractPrepContent() {
                                 All
                             </button>
                             <button
-                                onClick={selectAllPendingClauses}
-                                className="text-xs text-amber-600 hover:text-amber-800 px-2 py-1 rounded hover:bg-amber-50"
-                                title="Select pending"
+                                onClick={selectAllUnconfigured}
+                                className="text-xs text-slate-600 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100"
+                                title="Select unconfigured"
                             >
-                                Pending
+                                Unconfigured
                             </button>
                             {selectedClauseIds.size > 0 && (
                                 <button
@@ -2634,36 +3056,30 @@ function ContractPrepContent() {
                                 </button>
                             </div>
 
-                            {selectedClause.status === 'pending' && (
-                                <>
-                                    <button
-                                        onClick={() => handleVerifyClause(selectedClause)}
-                                        disabled={!isRangeComplete}
-                                        className="px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                        title={isRangeComplete ? 'Verify clause' : 'Configure range before verifying'}
-                                    >
-                                        ✓ Verify
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setEditingClause(selectedClause)
-                                            setEditName(selectedClause.clauseName)
-                                            setEditCategory(selectedClause.category)
-                                            setEditContent(selectedClause.content)
-                                        }}
-                                        className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
-                                    >
-                                        ✏️ Edit
-                                    </button>
-                                    <button
-                                        onClick={() => handleRejectClause(selectedClause, 'User rejected')}
-                                        className="px-4 py-2 rounded-lg bg-amber-100 text-amber-700 font-medium hover:bg-amber-200 transition-colors flex items-center gap-2"
-                                    >
-                                        ✕ Reject
-                                    </button>
-                                </>
+                            {/* Edit Button - Always Available */}
+                            <button
+                                onClick={() => {
+                                    setEditingClause(selectedClause)
+                                    setEditName(selectedClause.clauseName)
+                                    setEditCategory(selectedClause.category)
+                                    setEditContent(selectedClause.content)
+                                }}
+                                className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
+                            >
+                                ✏️ Edit
+                            </button>
+
+                            {/* Exclude Button - Only for non-excluded clauses */}
+                            {selectedClause.status !== 'rejected' && (
+                                <button
+                                    onClick={() => excludeClause(selectedClause)}
+                                    className="px-4 py-2 rounded-lg bg-amber-100 text-amber-700 font-medium hover:bg-amber-200 transition-colors flex items-center gap-2"
+                                >
+                                    ✗ Exclude
+                                </button>
                             )}
 
+                            {/* Delete Button */}
                             <button
                                 onClick={() => confirmDeleteClause(selectedClause)}
                                 disabled={isDeleting}
@@ -2979,12 +3395,20 @@ function ContractPrepContent() {
                                     />
                                 </div>
 
-                                {/* Save Button */}
+                                {/* Save & Configure Button */}
                                 <div className="flex items-center justify-between pt-4 border-t border-slate-200">
                                     <div className="text-sm text-slate-500">
-                                        {isRangeComplete ? (
+                                        {selectedClause.status === 'verified' ? (
                                             <span className="text-green-600 flex items-center gap-1">
-                                                <span>✓</span> Range configuration complete
+                                                <span>✓</span> Clause configured and ready
+                                            </span>
+                                        ) : selectedClause.status === 'rejected' ? (
+                                            <span className="text-red-500 flex items-center gap-1">
+                                                <span>✗</span> Clause excluded from negotiation
+                                            </span>
+                                        ) : isRangeComplete ? (
+                                            <span className="text-blue-600 flex items-center gap-1">
+                                                <span>●</span> Range complete - ready to configure
                                             </span>
                                         ) : (
                                             <span className="text-amber-600 flex items-center gap-1">
@@ -2992,13 +3416,19 @@ function ContractPrepContent() {
                                             </span>
                                         )}
                                     </div>
-                                    <button
-                                        onClick={() => saveClauseRange(selectedClause.clauseId)}
-                                        disabled={!isRangeComplete}
-                                        className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        Save Range
-                                    </button>
+                                    {selectedClause.status !== 'rejected' && (
+                                        <button
+                                            onClick={() => saveAndConfigureClause(selectedClause.clauseId)}
+                                            disabled={!isRangeComplete || selectedClause.status === 'verified'}
+                                            className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                                        >
+                                            {selectedClause.status === 'verified' ? (
+                                                <>✓ Configured</>
+                                            ) : (
+                                                <>✓ Save & Configure</>
+                                            )}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -3671,7 +4101,7 @@ function ContractPrepContent() {
 
             {/* Bulk Action Toolbar */}
             {renderBulkActionToolbar()}
-
+            {renderBulkAIModal()}
 
             {/* Edit Modal */}
             {renderEditModal()}
