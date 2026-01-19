@@ -1196,7 +1196,7 @@ export default function ContractsDashboard() {
                                           onClick={() => openMediationStudio(session.sessionId, bid.providerId)}
                                           className={`px-3 py-1.5 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${isTraining
                                             ? 'bg-amber-500 hover:bg-amber-600'
-                                            : 'bg-amber-500 hover:bg-amber-600'
+                                            : 'bg-slate-700 hover:bg-slate-600'
                                             }`}
                                         >
                                           {isTraining ? 'Practice' : 'Negotiate'}

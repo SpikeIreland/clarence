@@ -708,7 +708,6 @@ function getPositionOptionsForClause(
     return null
 }
 
-
 // ============================================================================
 // SECTION 2B: CLARENCE AI API FUNCTIONS
 // ============================================================================
@@ -1061,6 +1060,25 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
         return { isOnline: false, lastSeen: null, userName: null }
     }
 }
+
+// ============================================================================
+// SECTION 2F: DEAL CONTEXT OPTIONS
+// ============================================================================
+
+const DEAL_VALUE_OPTIONS = [
+    { value: 'under_50k', label: 'Under £50k' },
+    { value: '50k_250k', label: '£50k - £250k' },
+    { value: '250k_1m', label: '£250k - £1M' },
+    { value: '1m_5m', label: '£1M - £5M' },
+    { value: 'over_5m', label: 'Over £5M' }
+]
+
+const SERVICE_CRITICALITY_OPTIONS = [
+    { value: 'low', label: 'Low', description: 'Non-essential service' },
+    { value: 'medium', label: 'Medium', description: 'Important but not critical' },
+    { value: 'high', label: 'High', description: 'Business-critical service' },
+    { value: 'critical', label: 'Critical', description: 'Mission-critical, cannot fail' }
+]
 
 // ============================================================================
 // SECTION 3: LEVERAGE CALCULATION FUNCTIONS
@@ -1978,6 +1996,13 @@ function ContractStudioContent() {
     const [negotiationHistory, setNegotiationHistory] = useState<NegotiationHistoryEntry[]>([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'locks' | 'agreements'>('all')
+
+   // Deal Context Editing state
+    const [isEditingDealContext, setIsEditingDealContext] = useState(false)
+    const [editedDealValue, setEditedDealValue] = useState<string>('')
+    const [editedServiceCriticality, setEditedServiceCriticality] = useState<string>('medium')
+    const [isSavingDealContext, setIsSavingDealContext] = useState(false)
+
     // Preview Contract state
     const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
     // Training Mode state
@@ -3157,6 +3182,51 @@ function ContractStudioContent() {
     // ============================================================================
     // SECTION 8: EVENT HANDLERS
     // ============================================================================
+
+    // ========================================================================
+    // DEAL CONTEXT UPDATE HANDLER
+    // ========================================================================
+
+    const handleSaveDealContext = async () => {
+        if (!session || !userInfo) return
+
+        setIsSavingDealContext(true)
+
+        try {
+            const response = await fetch(`${API_BASE}/update-session-context`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    user_id: userInfo.userId,
+                    deal_value: editedDealValue,
+                    service_criticality: editedServiceCriticality
+                })
+            })
+
+            if (!response.ok) throw new Error('Failed to update deal context')
+
+            // Update local session state
+            setSession(prev => prev ? {
+                ...prev,
+                dealValue: editedDealValue
+            } : null)
+
+            setIsEditingDealContext(false)
+
+        } catch (err) {
+            console.error('Error updating deal context:', err)
+            // Could show error toast here
+        } finally {
+            setIsSavingDealContext(false)
+        }
+    }
+
+    const openDealContextEditor = () => {
+        setEditedDealValue(session?.dealValue || '')
+        setEditedServiceCriticality('medium') // Default or load from session if stored
+        setIsEditingDealContext(true)
+    }
 
     // ============================================================================
     // SECTION 8a: SUB-CLAUSE HANDLERS
@@ -5846,15 +5916,31 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </div>
 
                         {/* Center: Session Details (truly centered) */}
-                        <div className="flex items-center gap-8">
+                        <div className="flex items-center gap-6">
+                            {/* Session Number */}
                             <div className="text-center">
                                 <div className="text-xs text-slate-400">Session</div>
                                 <div className="text-sm font-mono text-white">{session.sessionNumber}</div>
                             </div>
-                            <div className="text-center">
-                                <div className="text-xs text-slate-400">Deal Value</div>
-                                <div className={`text-sm font-semibold ${accentColor}`}>{session.dealValue}</div>
-                            </div>
+
+                            {/* Deal Value - Editable */}
+                            <button
+                                onClick={openDealContextEditor}
+                                className="text-center group hover:bg-slate-700/50 px-3 py-1 rounded transition"
+                                title="Click to edit deal context"
+                            >
+                                <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+                                    Deal Value
+                                    <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                </div>
+                                <div className={`text-sm font-semibold ${accentColor}`}>
+                                    {session.dealValue || 'Not set'}
+                                </div>
+                            </button>
+
+                            {/* Phase */}
                             <div className="text-center">
                                 <div className="text-xs text-slate-400">Phase</div>
                                 <div className="text-sm">
@@ -5866,6 +5952,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     </span>
                                 </div>
                             </div>
+
+                            {/* Provider Status Indicator */}
+                            {!session.providerId && !isTrainingMode && (
+                                <div className="text-center px-3 py-1 bg-amber-500/20 rounded-lg">
+                                    <div className="text-xs text-amber-400">Provider</div>
+                                    <div className="text-sm font-medium text-amber-300">Not Invited</div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Right: Provider Info with Dropdown (customers) or Static (providers) + Party Chat */}
@@ -6027,6 +6121,114 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         </div>
                     </div>
                 </div>
+                {/* Deal Context Edit Modal */}
+                {isEditingDealContext && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                            {/* Header */}
+                            <div className="px-6 py-4 border-b border-slate-200">
+                                <h3 className="text-lg font-semibold text-slate-800">Edit Deal Context</h3>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    This information helps CLARENCE provide better guidance
+                                </p>
+                            </div>
+
+                            {/* Body */}
+                            <div className="px-6 py-4 space-y-4">
+                                {/* Deal Value */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Deal Value
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {DEAL_VALUE_OPTIONS.map(option => (
+                                            <button
+                                                key={option.value}
+                                                onClick={() => setEditedDealValue(option.value)}
+                                                className={`px-3 py-2 rounded-lg text-sm font-medium transition ${editedDealValue === option.value
+                                                    ? 'bg-emerald-600 text-white'
+                                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                                    }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Service Criticality */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Service Criticality
+                                    </label>
+                                    <div className="space-y-2">
+                                        {SERVICE_CRITICALITY_OPTIONS.map(option => (
+                                            <button
+                                                key={option.value}
+                                                onClick={() => setEditedServiceCriticality(option.value)}
+                                                className={`w-full px-4 py-3 rounded-lg text-left transition ${editedServiceCriticality === option.value
+                                                    ? 'bg-emerald-50 border-2 border-emerald-500'
+                                                    : 'bg-slate-50 border-2 border-transparent hover:border-slate-200'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <span className={`font-medium ${editedServiceCriticality === option.value
+                                                        ? 'text-emerald-700'
+                                                        : 'text-slate-700'
+                                                        }`}>
+                                                        {option.label}
+                                                    </span>
+                                                    {editedServiceCriticality === option.value && (
+                                                        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-0.5">{option.description}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Info Box */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <p className="text-sm text-blue-800">
+                                        <strong>💡 Why this matters:</strong> Deal value and service criticality help
+                                        CLARENCE calibrate its range suggestions and negotiation guidance.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                                <button
+                                    onClick={() => setIsEditingDealContext(false)}
+                                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                                    disabled={isSavingDealContext}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveDealContext}
+                                    disabled={isSavingDealContext || !editedDealValue}
+                                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    {isSavingDealContext ? (
+                                        <>
+                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                            </svg>
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save Changes'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         )
     }
