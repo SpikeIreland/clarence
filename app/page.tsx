@@ -12,10 +12,11 @@ export const metadata: Metadata = {
 // SECTION 1: MAIN PAGE COMPONENT
 // Location: app/page.tsx
 // 
-// COLOR SCHEME:
+// COLOR SCHEME (Updated 19 Jan 2026):
 // - Create: Emerald (text-emerald-600, bg-emerald-500)
-// - Negotiate: Amber (text-amber-500, bg-amber-500)
-// - Agree: Blue (text-blue-600, bg-blue-500)
+// - Negotiate: Slate/CLARENCE Blue (text-slate-800 on light, text-slate-300 on dark)
+// - Agree: Violet (text-violet-600, bg-violet-500)
+// - Training Mode: Amber (reserved exclusively for Training Studio)
 // ============================================================================
 
 export default function Home() {
@@ -34,7 +35,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30"></div>
 
         {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-amber-50/50 to-transparent"></div>
+        <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-violet-50/50 to-transparent"></div>
         <div className="absolute bottom-0 left-0 w-1/2 h-32 bg-gradient-to-t from-slate-100/50 to-transparent"></div>
 
         <div className="relative container mx-auto px-6 py-20">
@@ -53,9 +54,9 @@ export default function Home() {
             <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight">
               <span className="text-emerald-600">Create</span>
               <span className="text-slate-400 mx-3">·</span>
-              <span className="text-amber-500">Negotiate</span>
+              <span className="text-slate-800">Negotiate</span>
               <span className="text-slate-400 mx-3">·</span>
-              <span className="text-blue-600">Agree</span>
+              <span className="text-violet-600">Agree</span>
             </h1>
 
             {/* Subheadline */}
@@ -154,16 +155,16 @@ export default function Home() {
             </div>
 
             {/* ============================================================ */}
-            {/* STAGE 2: NEGOTIATE (Amber) */}
+            {/* STAGE 2: NEGOTIATE (Slate/CLARENCE Blue) */}
             {/* ============================================================ */}
-            <div className="bg-gradient-to-br from-amber-50 to-white rounded-2xl p-8 border border-amber-200 hover:shadow-lg transition-shadow">
+            <div className="bg-gradient-to-br from-slate-100 to-white rounded-2xl p-8 border border-slate-300 hover:shadow-lg transition-shadow">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <h3 className="text-2xl font-bold text-amber-600">Negotiate</h3>
+                <h3 className="text-2xl font-bold text-slate-800">Negotiate</h3>
               </div>
               <p className="text-slate-600 mb-6">
                 Work through clauses with AI-powered mediation, real-time leverage
@@ -171,19 +172,19 @@ export default function Home() {
               </p>
               <ul className="space-y-3 text-sm text-slate-500">
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-slate-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>AI-Mediated Clause Negotiation</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-slate-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>Real-Time Leverage Tracking</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-slate-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>Smart Trade-off Suggestions</span>
@@ -192,16 +193,16 @@ export default function Home() {
             </div>
 
             {/* ============================================================ */}
-            {/* STAGE 3: AGREE (Blue) */}
+            {/* STAGE 3: AGREE (Violet) */}
             {/* ============================================================ */}
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-8 border border-blue-200 hover:shadow-lg transition-shadow">
+            <div className="bg-gradient-to-br from-violet-50 to-white rounded-2xl p-8 border border-violet-200 hover:shadow-lg transition-shadow">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-violet-500 rounded-xl flex items-center justify-center">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
-                <h3 className="text-2xl font-bold text-blue-600">Agree</h3>
+                <h3 className="text-2xl font-bold text-violet-600">Agree</h3>
               </div>
               <p className="text-slate-600 mb-6">
                 Finalize your agreement with comprehensive documentation, full
@@ -209,19 +210,19 @@ export default function Home() {
               </p>
               <ul className="space-y-3 text-sm text-slate-500">
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-violet-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>Document Centre & Reports</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-violet-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>Complete Audit Trail</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 text-violet-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <span>Contract Handbook</span>
@@ -248,54 +249,57 @@ export default function Home() {
       {/* ================================================================== */}
       {/* SECTION 5: VALUE PROPOSITIONS */}
       {/* ================================================================== */}
-      <section className="py-20 bg-slate-50 border-t border-slate-200">
+      <section className="py-20 bg-slate-50">
         <div className="container mx-auto px-6">
-          <div className="text-center mb-12">
+          <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              A Better Way to Negotiate
+              Why Choose CLARENCE?
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
-              Move beyond adversarial red-lining to principled, data-driven agreement.
+              Built for professionals who want fair outcomes, not endless negotiations.
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Card 1: Transparent Leverage (Emerald) */}
-            <div className="bg-white rounded-xl p-6 border border-slate-200 hover:border-emerald-300 hover:shadow-lg transition-all group">
-              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
-                <svg className="w-6 h-6 text-emerald-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* Value Prop 1: Neutral AI */}
+            <div className="bg-white rounded-xl p-6 border border-slate-200">
+              <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">Transparent Leverage</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Both parties see the same market data and leverage calculations. No hidden agendas—just facts that drive fair negotiations.
+              <h3 className="text-lg font-semibold text-slate-800 mb-2">Truly Neutral</h3>
+              <p className="text-slate-600 text-sm">
+                CLARENCE represents neither party. Our AI provides balanced guidance
+                based on data, not relationships.
               </p>
             </div>
 
-            {/* Card 2: Principled Mediation (Amber) */}
-            <div className="bg-white rounded-xl p-6 border border-slate-200 hover:border-amber-300 hover:shadow-lg transition-all group">
-              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-500 transition-colors">
-                <svg className="w-6 h-6 text-amber-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            {/* Value Prop 2: Leverage Intelligence */}
+            <div className="bg-white rounded-xl p-6 border border-slate-200">
+              <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">Principled Mediation</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                CLARENCE guides negotiations based on principles, not positions. Focus on interests, not adversarial tactics.
+              <h3 className="text-lg font-semibold text-slate-800 mb-2">See Your Leverage</h3>
+              <p className="text-slate-600 text-sm">
+                Real-time leverage calculations show exactly where you stand.
+                Make informed decisions, not emotional ones.
               </p>
             </div>
 
-            {/* Card 3: Stress-Free Process (Blue) */}
-            <div className="bg-white rounded-xl p-6 border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all group">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-500 transition-colors">
-                <svg className="w-6 h-6 text-blue-600 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            {/* Value Prop 3: Speed */}
+            <div className="bg-white rounded-xl p-6 border border-slate-200">
+              <div className="w-12 h-12 bg-violet-100 rounded-lg flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">Stress-Free Process</h3>
-              <p className="text-slate-600 text-sm leading-relaxed">
-                Remove the emotional friction from negotiations. Preserve relationships while reaching agreements both parties can support.
+              <h3 className="text-lg font-semibold text-slate-800 mb-2">Faster Agreements</h3>
+              <p className="text-slate-600 text-sm">
+                Cut negotiation time by up to 90%. AI-powered suggestions and
+                clear trade-offs accelerate consensus.
               </p>
             </div>
           </div>
@@ -303,178 +307,114 @@ export default function Home() {
       </section>
 
       {/* ================================================================== */}
-      {/* SECTION 6: THREE STUDIOS */}
+      {/* SECTION 6: DETAILED FEATURE SHOWCASE */}
       {/* ================================================================== */}
-      <section className="py-20 bg-white border-t border-slate-200">
+      <section className="py-20 bg-white">
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Three Integrated Studios
+              Powerful Features for Every Stage
             </h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              From learning to negotiating to documenting—everything you need in one platform.
-            </p>
           </div>
 
-          {/* Studio Cards */}
-          <div className="space-y-12 max-w-5xl mx-auto">
-
-            {/* ============================================================ */}
-            {/* STUDIO 1: Training Studio */}
-            {/* ============================================================ */}
-            <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="grid md:grid-cols-2 gap-0">
-                {/* Content */}
-                <div className="p-8 flex flex-col justify-center">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium w-fit mb-4">
-                    <span>🎓</span>
-                    <span>Training Studio</span>
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-800 mb-3">
-                    Practice Risk-Free
-                  </h3>
-                  <p className="text-slate-600 mb-4">
-                    Master contract negotiation in a safe environment. Train new team members
-                    on company playbooks, practice against AI opponents, or run scenarios
-                    with colleagues.
-                  </p>
-                  <ul className="space-y-2 text-sm text-slate-500">
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Single-player AI scenarios with adjustable difficulty
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Multi-player practice with colleagues
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Enterprise playbook integration
-                    </li>
-                  </ul>
+          {/* Feature 1: Contract Studio */}
+          <div className="max-w-6xl mx-auto mb-16">
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              {/* Content */}
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full text-sm font-medium text-slate-700 mb-4">
+                  <span className="w-2 h-2 bg-slate-600 rounded-full"></span>
+                  Negotiate Stage
                 </div>
-                {/* Screenshot */}
-                <div className="bg-slate-100 flex items-center justify-center p-6">
-                  <div className="rounded-lg overflow-hidden shadow-lg border border-slate-200 w-full">
-                    <img
-                      src="/images/training-studio-preview.png"
-                      alt="CLARENCE Training Studio - Practice negotiations risk-free"
-                      className="w-full h-auto"
-                    />
-                  </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                  Contract Studio
+                </h3>
+                <p className="text-slate-600 mb-6">
+                  The heart of CLARENCE. Work through every clause with real-time
+                  leverage tracking, intelligent suggestions, and a neutral AI
+                  mediator guiding both parties toward agreement.
+                </p>
+                <ul className="space-y-2 text-sm text-slate-500">
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Three-panel layout: Clauses, Details, CLARENCE Chat
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Real-time leverage bar shows negotiation dynamics
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Industry-standard position references
+                  </li>
+                </ul>
+              </div>
+              {/* Screenshot */}
+              <div className="bg-slate-100 flex items-center justify-center p-6">
+                <div className="rounded-lg overflow-hidden shadow-lg border border-slate-200 w-full">
+                  <img
+                    src="/images/contract-studio-preview.png"
+                    alt="CLARENCE Contract Studio - AI-powered negotiation interface"
+                    className="w-full h-auto"
+                  />
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* ============================================================ */}
-            {/* STUDIO 2: Negotiation Environment (Amber) */}
-            {/* ============================================================ */}
-            <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="grid md:grid-cols-2 gap-0">
-                {/* Screenshot (reversed order) */}
-                <div className="bg-slate-100 flex items-center justify-center p-6 order-2 md:order-1">
-                  <div className="rounded-lg overflow-hidden shadow-lg border border-slate-200 w-full">
-                    <img
-                      src="/images/contract-studio-preview.png"
-                      alt="CLARENCE Negotiation Environment - AI-powered contract negotiation"
-                      className="w-full h-auto"
-                    />
-                  </div>
-                </div>
-                {/* Content */}
-                <div className="p-8 flex flex-col justify-center order-1 md:order-2">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-medium w-fit mb-4">
-                    <span>⚖️</span>
-                    <span>Negotiation Environment</span>
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-800 mb-3">
-                    AI-Powered Mediation
-                  </h3>
-                  <p className="text-slate-600 mb-4">
-                    Live, AI-mediated negotiation with real-time leverage tracking.
-                    Work through clauses collaboratively, guided by CLARENCE's
-                    principled approach to agreement.
-                  </p>
-                  <ul className="space-y-2 text-sm text-slate-500">
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Three-panel workspace with clause navigation
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Real-time leverage baseline and tracker
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      AI-suggested trade-offs and compromises
-                    </li>
-                  </ul>
+          {/* Feature 2: Document Centre */}
+          <div className="max-w-6xl mx-auto">
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              {/* Screenshot (on left this time) */}
+              <div className="bg-slate-100 flex items-center justify-center p-6 order-2 md:order-1">
+                <div className="rounded-lg overflow-hidden shadow-lg border border-slate-200 w-full">
+                  <img
+                    src="/images/document-centre-preview.png"
+                    alt="CLARENCE Document Centre - Complete evidence package"
+                    className="w-full h-auto"
+                  />
                 </div>
               </div>
-            </div>
-
-            {/* ============================================================ */}
-            {/* STUDIO 3: Document Centre (Blue) */}
-            {/* ============================================================ */}
-            <div className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="grid md:grid-cols-2 gap-0">
-                {/* Content */}
-                <div className="p-8 flex flex-col justify-center">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium w-fit mb-4">
-                    <span>📄</span>
-                    <span>Document Centre</span>
-                  </div>
-                  <h3 className="text-2xl font-bold text-slate-800 mb-3">
-                    Complete Evidence Package
-                  </h3>
-                  <p className="text-slate-600 mb-4">
-                    Every negotiation produces comprehensive documentation—from executive
-                    summaries to full audit trails. Plus a unique Contract Handbook for
-                    post-signature governance.
-                  </p>
-                  <ul className="space-y-2 text-sm text-slate-500">
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Executive summary, leverage report, position history
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Complete audit trail and chat transcripts
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      Contract Handbook for ongoing governance
-                    </li>
-                  </ul>
+              {/* Content */}
+              <div className="order-1 md:order-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-violet-100 rounded-full text-sm font-medium text-violet-700 mb-4">
+                  <span className="w-2 h-2 bg-violet-500 rounded-full"></span>
+                  Agree Stage
                 </div>
-                {/* Screenshot */}
-                <div className="bg-slate-100 flex items-center justify-center p-6">
-                  <div className="rounded-lg overflow-hidden shadow-lg border border-slate-200 w-full">
-                    <img
-                      src="/images/document-centre-preview.png"
-                      alt="CLARENCE Document Centre - Complete evidence package"
-                      className="w-full h-auto"
-                    />
-                  </div>
-                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                  Document Centre
+                </h3>
+                <p className="text-slate-600 mb-6">
+                  Complete evidence package for every negotiation—from executive
+                  summaries to full audit trails. Plus a unique Contract Handbook for
+                  post-signature governance.
+                </p>
+                <ul className="space-y-2 text-sm text-slate-500">
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Executive summary, leverage report, position history
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Complete audit trail and chat transcripts
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-violet-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Contract Handbook for ongoing governance
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
@@ -492,11 +432,11 @@ export default function Home() {
               <div className="text-slate-300 text-sm">Faster Agreement Time</div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-amber-400 mb-2">100%</div>
+              <div className="text-4xl font-bold text-slate-300 mb-2">100%</div>
               <div className="text-slate-300 text-sm">Transparent Leverage</div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-blue-400 mb-2">0</div>
+              <div className="text-4xl font-bold text-violet-400 mb-2">0</div>
               <div className="text-slate-300 text-sm">Hidden Agendas</div>
             </div>
           </div>
@@ -512,9 +452,9 @@ export default function Home() {
           <div className="text-2xl font-bold mb-6">
             <span className="text-emerald-400">Create</span>
             <span className="text-slate-500 mx-2">·</span>
-            <span className="text-amber-400">Negotiate</span>
+            <span className="text-slate-300">Negotiate</span>
             <span className="text-slate-500 mx-2">·</span>
-            <span className="text-blue-400">Agree</span>
+            <span className="text-violet-400">Agree</span>
           </div>
 
           <h2 className="text-3xl font-bold text-white mb-4">
@@ -580,9 +520,9 @@ export default function Home() {
             <p className="text-slate-500 mt-1">
               <span className="text-emerald-500">Create</span>
               <span className="mx-2">·</span>
-              <span className="text-amber-500">Negotiate</span>
+              <span className="text-slate-400">Negotiate</span>
               <span className="mx-2">·</span>
-              <span className="text-blue-500">Agree</span>
+              <span className="text-violet-500">Agree</span>
             </p>
           </div>
         </div>

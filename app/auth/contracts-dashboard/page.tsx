@@ -717,9 +717,9 @@ export default function ContractsDashboard() {
               <div className="text-xs font-medium tracking-wide">
                 <span className="text-emerald-400">Create</span>
                 <span className="text-slate-500 mx-1">·</span>
-                <span className="text-amber-400">Negotiate</span>
+                <span className="text-slate-300">Negotiate</span>
                 <span className="text-slate-500 mx-1">·</span>
-                <span className="text-blue-400">Agree</span>
+                <span className="text-violet-400">Agree</span>
               </div>
 
               {/* Navigation Divider */}
