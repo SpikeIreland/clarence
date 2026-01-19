@@ -5765,10 +5765,13 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <span className="text-white font-bold text-sm">C</span>
                             </div>
                             <div>
-                                <span className="font-semibold text-white tracking-wide">CLARENCE</span>
-                                <span className="text-slate-400 text-sm ml-2">
-                                    {isTrainingMode ? 'Training Studio' : 'Contract Studio'}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-white tracking-wide">CLARENCE</span>
+                                    <span className={`font-semibold ${isTrainingMode ? 'text-amber-400' : 'text-slate-300'}`}>
+                                        {isTrainingMode ? 'Training' : 'Negotiate'}
+                                    </span>
+                                </div>
+                                <span className="text-slate-500 text-xs">The Honest Broker</span>
                             </div>
                         </div>
 
