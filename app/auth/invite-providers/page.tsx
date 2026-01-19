@@ -449,28 +449,38 @@ function InviteProvidersContent() {
     if (showSuccessState) {
         return (
             <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
-                {/* Navigation */}
-                <nav className="bg-white shadow-sm border-b border-slate-200">
-                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex justify-between h-16">
-                            <div className="flex items-center">
-                                <Link href="/auth/contracts-dashboard" className="flex items-center">
-                                    <div>
-                                        <div className="text-2xl font-medium text-slate-700">CLARENCE</div>
-                                        <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
-                                    </div>
-                                </Link>
+                {/* Header */}
+                <header className="h-14 bg-slate-800 flex items-center justify-between px-6 relative">
+                    {/* Left: CLARENCE Create branding */}
+                    <div className="flex items-center gap-3">
+                        <Link href="/auth/contracts-dashboard" className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold">C</span>
                             </div>
-                            {session?.sessionNumber && (
-                                <div className="flex items-center">
-                                    <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-mono">
-                                        {session.sessionNumber}
-                                    </span>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-white font-semibold">CLARENCE</span>
+                                    <span className="text-emerald-400 font-semibold">Create</span>
                                 </div>
-                            )}
-                        </div>
+                                <span className="text-slate-500 text-xs">The Honest Broker</span>
+                            </div>
+                        </Link>
                     </div>
-                </nav>
+
+                    {/* Centre: Page Title */}
+                    <div className="absolute left-1/2 transform -translate-x-1/2">
+                        <h1 className="text-white font-medium">Invite Respondents</h1>
+                    </div>
+
+                    {/* Right: Session Number */}
+                    <div className="flex items-center gap-4">
+                        {session?.sessionNumber && (
+                            <span className="text-sm text-slate-400 bg-slate-700 px-3 py-1 rounded-full font-mono">
+                                {session.sessionNumber}
+                            </span>
+                        )}
+                    </div>
+                </header>
 
                 {/* Success Content */}
                 <div className="max-w-3xl mx-auto px-4 py-12">
