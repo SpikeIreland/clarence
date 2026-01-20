@@ -38,14 +38,15 @@ const processSteps: ProcessStep[] = [
     number: 1,
     title: "Create Your Contract",
     icon: "📋",
-    description: "Set up your negotiation through our guided intake process",
+    description: "Build your contract and gather the strategic intelligence that powers data-driven negotiation",
     color: "emerald",
     details: [
       "Choose your mediation level: Straight to Contract, Partial Mediation, or Full Mediation",
       "Select from pre-built templates or upload your existing contract",
-      "Define deal context: value, timeline, priorities, and alternatives",
-      "CLARENCE builds a comprehensive deal profile from your inputs",
-      "Invite respondents to participate in the negotiation"
+      "Both parties complete strategic assessments—capturing priorities, constraints, and alternatives",
+      "CLARENCE calculates party-fit scores and leverage positions from submitted data",
+      "This upfront intelligence removes guesswork and enables truly objective mediation",
+      "Invite respondents to begin the negotiation process"
     ]
   },
   {

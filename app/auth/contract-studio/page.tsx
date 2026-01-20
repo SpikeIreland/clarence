@@ -6525,19 +6525,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </div>
                             </button>
 
-                            {/* Phase */}
-                            <div className="text-center">
-                                <div className="text-xs text-slate-400">Phase</div>
-                                <div className="text-sm">
-                                    <span className="inline-flex items-center gap-1">
-                                        <span className={`w-5 h-5 ${isTrainingMode ? 'bg-amber-500' : 'bg-emerald-500'} text-white text-xs font-bold rounded-full flex items-center justify-center`}>
-                                            {session.phase}
-                                        </span>
-                                        <span className="text-slate-300">of 6</span>
-                                    </span>
-                                </div>
-                            </div>
-
                             {/* Provider Status Indicator */}
                             {!session.providerId && !isTrainingMode && (
                                 <div className="text-center px-3 py-1 bg-amber-500/20 rounded-lg">

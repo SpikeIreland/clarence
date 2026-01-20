@@ -138,27 +138,28 @@ export default function Home() {
                 <h3 className="text-2xl font-bold text-emerald-600">Create</h3>
               </div>
               <p className="text-slate-600 mb-6">
-                Define your contract scope, choose your mediation level, and set
-                up the foundation for a successful negotiation.
+                Build your contract and gather the strategic intelligence that
+                powers objective negotiation—party-fit assessment and leverage
+                data that removes guesswork from the table.
               </p>
               <ul className="space-y-3 text-sm text-slate-500">
                 <li className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <span>Contract Creation & Setup</span>
+                  <span>Contract Setup & Clause Preparation</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <span>Contract Preparation & Templates</span>
+                  <span>Party-Fit & Leverage Data Gathering</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <span>Invite Respondents</span>
+                  <span>Strategic Assessment & Invite</span>
                 </li>
               </ul>
             </div>
@@ -333,7 +334,7 @@ export default function Home() {
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full text-sm font-medium text-slate-700 mb-4">
                   <span className="w-2 h-2 bg-slate-600 rounded-full"></span>
-                  Negotiate Stage
+                  Negotiate
                 </div>
                 <h3 className="text-2xl font-bold text-slate-800 mb-4">
                   Contract Studio
@@ -394,7 +395,7 @@ export default function Home() {
               <div className="order-1 md:order-2">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-violet-100 rounded-full text-sm font-medium text-violet-700 mb-4">
                   <span className="w-2 h-2 bg-violet-500 rounded-full"></span>
-                  Agree Stage
+                  Agree
                 </div>
                 <h3 className="text-2xl font-bold text-slate-800 mb-4">
                   Document Centre
