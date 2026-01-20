@@ -2703,6 +2703,7 @@ function ContractStudioContent() {
         const isSTC = session.mediationType === 'straight_to_contract'
         setIsStraightToContract(isSTC)
 
+        // For Straight to Contract with UPLOADED templates - may need AI configuration
         if (isSTC && session.templateSource === 'uploaded') {
             // Check which clauses need configuration (no customer position set)
             const unconfiguredClauses = clauses.filter(c =>
@@ -2714,6 +2715,11 @@ function ContractStudioContent() {
             } else if (unconfiguredClauses.length === 0) {
                 setClauseConfigProgress(prev => ({ ...prev, status: 'complete' }))
             }
+        }
+        // For Straight to Contract with EXISTING templates - clauses already have positions
+        else if (isSTC && clauseConfigProgress.status !== 'complete') {
+            // Existing templates come pre-configured, mark as complete immediately
+            setClauseConfigProgress(prev => ({ ...prev, status: 'complete' }))
         }
     }, [session, clauses.length, clauseConfigProgress.status, triggerBatchAIConfiguration])
 
