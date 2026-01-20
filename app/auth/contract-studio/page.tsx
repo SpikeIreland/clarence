@@ -2412,11 +2412,22 @@ function ContractStudioContent() {
         }
     }, [router])
 
-    const loadContractData = useCallback(async (sessionId: string, viewerRole?: string, providerId?: string) => {
+    const loadContractData = useCallback(async (
+        sessionId: string,
+        viewerRole?: string,
+        providerId?: string,
+        userEmail?: string,
+        userId?: string
+    ) => {
         try {
             const roleParam = viewerRole ? `&viewer_role=${viewerRole}` : ''
             const providerParam = providerId ? `&provider_id=${providerId}` : ''
-            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}${roleParam}${providerParam}`)
+            const emailParam = userEmail ? `&user_email=${encodeURIComponent(userEmail)}` : ''
+            const userIdParam = userId ? `&user_id=${encodeURIComponent(userId)}` : ''
+
+            const response = await fetch(
+                `${API_BASE}/contract-studio-api?session_id=${sessionId}${roleParam}${providerParam}${emailParam}${userIdParam}`
+            )
             if (!response.ok) throw new Error('Failed to fetch')
 
             const data = await response.json()
@@ -2975,6 +2986,10 @@ function ContractStudioContent() {
         }
     }, [lastExplainedClauseId, startWorking, stopWorking, setWorkingError])
 
+    // ========================================================================
+    // SECTION 7A: INITIAL LOAD - WITH API VIEWER ROLE DETECTION (V10)
+    // ========================================================================
+
     // Track if we've already started loading to prevent double calls
     const hasInitialized = useRef(false)
 
@@ -2988,23 +3003,22 @@ function ContractStudioContent() {
             const user = loadUserInfo()
             if (!user) return
 
-            // Get provider_id from URL (customer viewing specific provider OR provider viewing their own)
-            const providerIdFromUrl = searchParams.get('provider_id')
-
-            // DON'T change user role based on URL params - keep role from localStorage auth
-            setUserInfo(user)
-
             const sessionId = searchParams.get('session_id') || searchParams.get('session')
             const urlStatus = searchParams.get('status')
             const sessionNumber = searchParams.get('session_number')
+            const providerIdFromUrl = searchParams.get('provider_id')
 
             if (!sessionId) {
                 router.push('/auth/contracts-dashboard')
                 return
             }
 
+            // Handle pending_provider status
             if (urlStatus === 'pending_provider') {
                 setSessionStatus('pending_provider')
+                // For pending_provider, user is definitely the customer
+                user.role = 'customer'
+                setUserInfo(user)
 
                 try {
                     const response = await fetch(`${API_BASE}/customer-requirements-api?session_id=${sessionId}`)
@@ -3067,9 +3081,13 @@ function ContractStudioContent() {
                 })
 
                 setLoading(false)
-                stopWorking() // Stop working overlay
+                stopWorking()
                 return
             }
+
+            // ================================================================
+            // LOAD CONTRACT DATA WITH VIEWER ROLE DETECTION
+            // ================================================================
 
             // Determine which provider_id to load
             let providerIdToLoad: string | undefined = undefined
@@ -3079,63 +3097,311 @@ function ContractStudioContent() {
                 providerIdToLoad = providerIdFromUrl
                 console.log('Using provider_id from URL:', providerIdToLoad)
             }
-            // Fallback for providers: check localStorage
-            else if (user.role === 'provider') {
+            // Fallback for providers: check localStorage (only if URL doesn't have it)
+            else {
                 try {
                     const providerSession = localStorage.getItem('clarence_provider_session') || localStorage.getItem('providerSession')
                     if (providerSession) {
                         const parsed = JSON.parse(providerSession)
-                        providerIdToLoad = parsed.providerId
-                        console.log('Provider loading from localStorage, provider_id:', providerIdToLoad)
+                        // Only use if session matches current session
+                        if (parsed.sessionId === sessionId) {
+                            providerIdToLoad = parsed.providerId
+                            console.log('Provider loading from localStorage, provider_id:', providerIdToLoad)
+                        }
                     }
                 } catch (e) {
                     console.error('Error getting provider_id from localStorage:', e)
                 }
             }
 
-            const data = await loadContractData(sessionId, user.role, providerIdToLoad)
+            // Build API URL with user email for role detection
+            const userEmail = user.email || ''
+            const userId = user.userId || ''
+            const roleParam = user.role ? `&viewer_role=${user.role}` : ''
+            const providerParam = providerIdToLoad ? `&provider_id=${providerIdToLoad}` : ''
+            const emailParam = userEmail ? `&user_email=${encodeURIComponent(userEmail)}` : ''
+            const userIdParam = userId ? `&user_id=${encodeURIComponent(userId)}` : ''
 
-            if (data) {
+            const apiUrl = `${API_BASE}/contract-studio-api?session_id=${sessionId}${roleParam}${providerParam}${emailParam}${userIdParam}`
+            console.log('Fetching contract data with URL:', apiUrl)
+
+            try {
+                const response = await fetch(apiUrl)
+                if (!response.ok) throw new Error('Failed to fetch')
+
+                const data = await response.json()
+                const status = data.session?.status || 'pending_provider'
+
+                // Handle various session statuses
+                if (status === 'customer_assessment_complete' || status === 'pending_provider') {
+                    setSessionStatus('pending_provider')
+                    user.role = 'customer'
+                    setUserInfo(user)
+                    setLoading(false)
+                    stopWorking()
+                    return
+                } else if (status === 'provider_invited' || status === 'providers_invited') {
+                    setSessionStatus('provider_invited')
+                    const basicSession: Session = {
+                        sessionId: data.session.sessionId || sessionId,
+                        sessionNumber: data.session.sessionNumber || '',
+                        customerCompany: data.session.customerCompany || '',
+                        providerCompany: 'Awaiting Provider Response',
+                        providerId: null,
+                        customerContactName: data.session.customerContactName || null,
+                        providerContactName: null,
+                        serviceType: data.session.contractType || 'Service Agreement',
+                        dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
+                        phase: 1,
+                        status: status
+                    }
+                    setSession(basicSession)
+                    // Viewer is customer if they can see this status
+                    user.role = 'customer'
+                    setUserInfo(user)
+                    setLoading(false)
+                    stopWorking()
+                    return
+                } else if (status === 'provider_intake_complete' || status === 'leverage_pending') {
+                    setSessionStatus('leverage_pending')
+                    setLoading(false)
+                    stopWorking()
+                    return
+                }
+
+                setSessionStatus('ready')
+
+                // ============================================================
+                // CRITICAL: USE API's VIEWER ROLE INSTEAD OF LOCALSTORAGE
+                // ============================================================
+
+                const apiViewerRole = data.session?.viewer?.role
+                console.log('=== VIEWER ROLE FROM API ===')
+                console.log('API viewer.role:', apiViewerRole)
+                console.log('localStorage role:', user.role)
+
+                // Trust API's viewer role if it returns a valid one
+                if (apiViewerRole === 'customer' || apiViewerRole === 'provider') {
+                    if (user.role !== apiViewerRole) {
+                        console.log(`Role mismatch detected! Changing from ${user.role} to ${apiViewerRole}`)
+                    }
+                    user.role = apiViewerRole
+                } else if (apiViewerRole === 'unknown') {
+                    // API couldn't determine role - use fallback logic
+                    console.log('API could not determine role, using fallback logic')
+
+                    // If provider_id in URL, likely a provider
+                    if (providerIdFromUrl) {
+                        user.role = 'provider'
+                        console.log('Fallback: provider (provider_id in URL)')
+                    } else {
+                        // Default to customer (safer assumption)
+                        user.role = 'customer'
+                        console.log('Fallback: customer (default)')
+                    }
+                }
+                // If API returns no viewer object at all (old API version), use existing logic
+                else if (!data.session?.viewer) {
+                    console.log('API did not return viewer object - using localStorage role with fallback')
+                    // If no provider_id in URL and localStorage says provider, 
+                    // check if this is the same session
+                    if (user.role === 'provider' && !providerIdFromUrl) {
+                        try {
+                            const providerSession = localStorage.getItem('clarence_provider_session')
+                            if (providerSession) {
+                                const parsed = JSON.parse(providerSession)
+                                if (parsed.sessionId !== sessionId) {
+                                    // Different session - reset to customer
+                                    user.role = 'customer'
+                                    console.log('Reset to customer - localStorage session mismatch')
+                                }
+                            } else {
+                                // No provider session stored - reset to customer
+                                user.role = 'customer'
+                                console.log('Reset to customer - no provider session in localStorage')
+                            }
+                        } catch (e) {
+                            user.role = 'customer'
+                            console.log('Reset to customer - parse error')
+                        }
+                    }
+                }
+
+                console.log('Final determined role:', user.role)
+                setUserInfo(user)
+
+                // Update localStorage with correct role for this session
+                try {
+                    const authData = localStorage.getItem('clarence_auth')
+                    if (authData) {
+                        const parsed = JSON.parse(authData)
+                        if (parsed.userInfo?.role !== user.role) {
+                            parsed.userInfo = { ...parsed.userInfo, role: user.role }
+                            localStorage.setItem('clarence_auth', JSON.stringify(parsed))
+                            console.log('Updated localStorage role to:', user.role)
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error updating localStorage role:', e)
+                }
+
+                // Build session data
+                const sessionData: Session = {
+                    sessionId: data.session.sessionId,
+                    sessionNumber: data.session.sessionNumber,
+                    customerCompany: data.session.customerCompany,
+                    providerCompany: data.session.providerCompany || 'Provider (Pending)',
+                    providerId: data.session.providerId || null,
+                    bidId: data.session.bidId || null,
+                    customerContactName: data.session.customerContactName || null,
+                    providerContactName: data.session.providerContactName || null,
+                    serviceType: data.session.contractType || 'IT Services',
+                    dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
+                    phase: parsePhaseFromState(data.session.phase),
+                    status: data.session.status,
+                    templateName: data.session.templateName,
+                    templatePackId: data.session.templatePackId,
+                    clausesSelected: data.session.clausesSelected,
+                    clauseCount: data.session.clauseCount,
+                    isTraining: data.session.isTraining || false,
+                    notes: data.session.notes,
+                    mediationType: data.session.mediationType,
+                    templateSource: data.session.templateSource
+                }
+
+                // Parse clauses
+                const clauseData: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
+                    const customerPos = c.customerPosition ? parseFloat(String(c.customerPosition)) : null
+                    const providerPos = c.providerPosition ? parseFloat(String(c.providerPosition)) : null
+
+                    return {
+                        positionId: c.positionId,
+                        clauseId: c.clauseId,
+                        clauseNumber: c.clauseNumber,
+                        clauseName: c.clauseName,
+                        category: c.category,
+                        description: c.description,
+                        parentPositionId: c.parentPositionId,
+                        clauseLevel: c.clauseLevel,
+                        displayOrder: c.displayOrder,
+                        customerPosition: customerPos,
+                        providerPosition: providerPos,
+                        originalCustomerPosition: c.originalCustomerPosition != null
+                            ? parseFloat(String(c.originalCustomerPosition))
+                            : customerPos,
+                        originalProviderPosition: c.originalProviderPosition != null
+                            ? parseFloat(String(c.originalProviderPosition))
+                            : providerPos,
+                        currentCompromise: c.currentCompromise ? parseFloat(String(c.currentCompromise)) : null,
+                        clarenceRecommendation: c.aiSuggestedCompromise ? parseFloat(String(c.aiSuggestedCompromise)) : null,
+                        industryStandard: null,
+                        gapSize: c.gapSize ? parseFloat(String(c.gapSize)) : 0,
+                        customerWeight: c.customerWeight,
+                        providerWeight: c.providerWeight,
+                        isDealBreakerCustomer: c.isDealBreakerCustomer,
+                        isDealBreakerProvider: c.isDealBreakerProvider,
+                        clauseContent: c.clauseContent,
+                        customerNotes: c.customerNotes,
+                        providerNotes: c.providerNotes,
+                        status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending' | 'agreed' | 'customer_confirmed' | 'provider_confirmed',
+                        isExpanded: c.isExpanded,
+                        positionOptions: c.positionOptions || getPositionOptionsForClause({
+                            positionOptions: null,
+                            clauseName: c.clauseName
+                        } as ContractClause),
+                        sourceType: c.sourceType as 'legacy' | 'template' | 'master' | 'custom' | undefined,
+                        sourceMasterClauseId: c.sourceMasterClauseId,
+                        sourceTemplateClauseId: c.sourceTemplateClauseId,
+                        addedMidSession: c.addedMidSession,
+                        addedByParty: c.addedByParty as 'customer' | 'provider' | null | undefined,
+                        aiContext: c.aiContext,
+                        negotiationGuidance: c.negotiationGuidance,
+                        isCategoryHeader: c.isCategoryHeader,
+                        customerConfirmedAt: c.customerConfirmedAt,
+                        customerConfirmedPosition: c.customerConfirmedPosition,
+                        providerConfirmedAt: c.providerConfirmedAt,
+                        providerConfirmedPosition: c.providerConfirmedPosition,
+                        agreementReachedAt: c.agreementReachedAt,
+                        finalAgreedPosition: c.finalAgreedPosition,
+                        isAgreed: c.isAgreed,
+                        isCustomerConfirmed: c.isCustomerConfirmed,
+                        isProviderConfirmed: c.isProviderConfirmed
+                    }
+                })
+
+                const leverageData: LeverageData = data.leverage || {
+                    leverageScoreCustomer: 50,
+                    leverageScoreProvider: 50,
+                    leverageScoreCalculatedAt: '',
+                    leverageTrackerCustomer: 50,
+                    leverageTrackerProvider: 50,
+                    alignmentPercentage: 0,
+                    isAligned: false,
+                    leverageTrackerCalculatedAt: '',
+                    marketDynamicsScore: 0,
+                    marketDynamicsRationale: '',
+                    economicFactorsScore: 0,
+                    economicFactorsRationale: '',
+                    strategicPositionScore: 0,
+                    strategicPositionRationale: '',
+                    batnaScore: 0,
+                    batnaRationale: ''
+                }
+
+                // Parse unseen moves from API response
+                if (data.unseenMoves && Array.isArray(data.unseenMoves)) {
+                    const movesMap = new Map<string, number>()
+                    data.unseenMoves.forEach((item: { clauseId: string, unseenCount: number }) => {
+                        movesMap.set(item.clauseId, item.unseenCount)
+                    })
+                    setUnseenMoves(movesMap)
+                    setTotalUnseenMoves(data.totalUnseenMoves || 0)
+                }
+
                 console.log('=== CLAUSE DATA DEBUG ===')
-                console.log('Clauses from API:', data.clauses.length)
-                console.log('Clause IDs:', data.clauses.map(c => c.clauseId))
-                setSession(data.session)
-                setIsTrainingMode(data.session.isTraining || false)
-                setClauses(data.clauses)
-                const tree = buildClauseTree(data.clauses)
+                console.log('Clauses from API:', clauseData.length)
+
+                setSession(sessionData)
+                setIsTrainingMode(sessionData.isTraining || false)
+                setClauses(clauseData)
+                const tree = buildClauseTree(clauseData)
                 console.log('Clause tree length:', tree.length)
-                console.log('Tree clause IDs:', tree.map(c => c.clauseId))
-                setClauseTree(buildClauseTree(data.clauses))
-                setLeverage(data.leverage)
+                setClauseTree(tree)
+                setLeverage(leverageData)
 
                 const messages = await loadClauseChat(sessionId, null)
                 setChatMessages(messages)
 
                 const otherRole = user.role === 'customer' ? 'provider' : 'customer'
-                const status = await checkPartyStatus(sessionId, otherRole)
-                setOtherPartyStatus(status)
+                const partyStatus = await checkPartyStatus(sessionId, otherRole)
+                setOtherPartyStatus(partyStatus)
 
                 // LOG: Contract Studio loaded successfully
                 eventLogger.setSession(sessionId)
                 eventLogger.setUser(user.userId || '')
                 eventLogger.completed('contract_negotiation', 'contract_studio_loaded', {
                     sessionId: sessionId,
-                    sessionNumber: data.session.sessionNumber,
+                    sessionNumber: sessionData.sessionNumber,
                     userRole: user.role,
-                    clauseCount: data.clauses.length,
-                    alignmentPercentage: data.leverage?.alignmentPercentage
+                    roleSource: apiViewerRole ? 'api' : 'fallback',
+                    clauseCount: clauseData.length,
+                    alignmentPercentage: leverageData?.alignmentPercentage
                 })
-            } else {
-                // Data load failed
+
+            } catch (error) {
+                console.error('Error fetching contract studio data:', error)
+                // On error, default to customer role
+                user.role = 'customer'
+                setUserInfo(user)
+                setSessionStatus('pending_provider')
                 setWorkingError('Failed to load contract data. Please refresh the page.')
             }
 
             setLoading(false)
-            // Don't stopWorking here - let the welcome message take over
         }
 
         init()
-    }, [loadUserInfo, loadContractData, loadClauseChat, searchParams, router, stopWorking, setWorkingError])
+    }, [searchParams, router, loadUserInfo, loadClauseChat, checkPartyStatus, buildClauseTree, stopWorking, formatCurrency, parsePhaseFromState, getPositionOptionsForClause])
 
     // Scroll to top when page loads
     useEffect(() => {
