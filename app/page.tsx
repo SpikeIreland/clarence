@@ -60,8 +60,17 @@ export default function Home() {
             </h1>
 
             {/* Subheadline */}
-            <p className="text-xl text-slate-700 mb-4 max-w-2xl mx-auto leading-relaxed font-medium">
+            <p className="text-xl text-slate-700 mb-3 max-w-2xl mx-auto leading-relaxed font-medium">
               AI-Powered Contract Mediation
+            </p>
+
+            {/* Secondary Tagline: Training, Tendering, Contracting */}
+            <p className="text-lg mb-4 max-w-2xl mx-auto">
+              <span className="text-amber-500 font-medium">Training</span>
+              <span className="text-slate-400 mx-2">·</span>
+              <span className="text-slate-600 font-medium">Tendering</span>
+              <span className="text-slate-400 mx-2">·</span>
+              <span className="text-slate-600 font-medium">Contracting</span>
             </p>
 
             {/* Supporting Text */}
@@ -415,6 +424,63 @@ export default function Home() {
                     Contract Handbook for ongoing governance
                   </li>
                 </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Feature 3: Training Studio */}
+          <div className="max-w-6xl mx-auto mt-16">
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              {/* Content */}
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 rounded-full text-sm font-medium text-amber-700 mb-4">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+                  Practice Mode
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-4">
+                  Training Studio
+                </h3>
+                <p className="text-slate-600 mb-6">
+                  Train your team on company negotiation strategies, contract types,
+                  and simulate real contract negotiations in a safe environment—perfect
+                  for preparing staff before important deals.
+                </p>
+                <ul className="space-y-2 text-sm text-slate-500">
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Safe practice environment—no real commitments
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    AI opponents with adjustable negotiation styles
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Prepare for upcoming negotiations risk-free
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Learn company playbooks and contract standards
+                  </li>
+                </ul>
+              </div>
+              {/* Screenshot */}
+              <div className="bg-amber-50 flex items-center justify-center p-6">
+                <div className="rounded-lg overflow-hidden shadow-lg border border-amber-200 w-full">
+                  <img
+                    src="/images/training-studio-preview.png"
+                    alt="CLARENCE Training Studio - Practice negotiations safely"
+                    className="w-full h-auto"
+                  />
+                </div>
               </div>
             </div>
           </div>
