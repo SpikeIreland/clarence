@@ -3389,6 +3389,9 @@ function ContractStudioContent() {
                     alignmentPercentage: leverageData?.alignmentPercentage
                 })
 
+                // Stop the working overlay - data loaded successfully
+                stopWorking()
+
             } catch (error) {
                 console.error('Error fetching contract studio data:', error)
                 // On error, default to customer role
