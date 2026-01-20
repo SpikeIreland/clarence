@@ -1471,6 +1471,13 @@ interface WorkingOverlayProps {
 function WorkingOverlay({ workingState, onRetry, onDismiss }: WorkingOverlayProps) {
     const [elapsedTime, setElapsedTime] = useState(0)
 
+    // DEBUG: Log every render of WorkingOverlay
+    console.log('=== WorkingOverlay RENDER ===', {
+        isWorking: workingState.isWorking,
+        hasError: workingState.hasError,
+        willReturnNull: !workingState.isWorking && !workingState.hasError
+    })
+
     // Update elapsed time every second
     useEffect(() => {
         if (!workingState.isWorking || !workingState.startedAt) {
@@ -1485,7 +1492,12 @@ function WorkingOverlay({ workingState, onRetry, onDismiss }: WorkingOverlayProp
         return () => clearInterval(interval)
     }, [workingState.isWorking, workingState.startedAt])
 
-    if (!workingState.isWorking && !workingState.hasError) return null
+    if (!workingState.isWorking && !workingState.hasError) {
+        console.log('=== WorkingOverlay returning NULL ===')  // ADD THIS
+        return null
+    }
+
+    console.log('=== WorkingOverlay SHOWING OVERLAY ===')  // ADD THIS
 
     const showSlowWarning = elapsedTime > 10000 && !workingState.hasError
     const formatElapsed = (ms: number) => Math.floor(ms / 1000)
