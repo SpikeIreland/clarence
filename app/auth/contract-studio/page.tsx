@@ -2932,6 +2932,7 @@ function ContractStudioContent() {
 
                 setChatMessages(prev => [welcomeMessage, ...prev])
                 setClarenceWelcomeLoaded(true)
+                stopWorking() // Ensure spinner stops after welcome loads
             }
         } catch (error) {
             console.error('Failed to load CLARENCE welcome:', error)
