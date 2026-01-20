@@ -2246,6 +2246,16 @@ function ContractStudioContent() {
         })
     }, [])
 
+    // DEBUG: Log all working state changes
+    useEffect(() => {
+        console.log('=== WORKING STATE CHANGED ===', {
+            isWorking: workingState.isWorking,
+            type: workingState.type,
+            message: workingState.message,
+            hasError: workingState.hasError
+        })
+    }, [workingState])
+
     const setWorkingError = useCallback((errorMessage: string) => {
         // Clear timeout
         if (workingTimeoutRef.current) {
