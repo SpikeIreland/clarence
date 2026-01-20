@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
@@ -2103,6 +2103,26 @@ function ContractStudioContent() {
         document.addEventListener('mousedown', handleClickOutside)
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
+
+
+    // ============================================================================
+    // SECTION 6A: PROVIDER STATUS CHECK
+    // ============================================================================
+
+    // Determine if a provider has been invited (for hiding provider UI in Straight to Contract)
+    const hasProviderInvited = useMemo(() => {
+        // Check if session has a provider
+        if (session?.providerId) return true
+
+        // Check if any providers are available
+        if (availableProviders && availableProviders.length > 0) return true
+
+        // Check session status indicates provider involvement
+        const providerStatuses = ['provider_invited', 'provider_intake', 'leverage_pending', 'ready', 'active']
+        if (session?.status && providerStatuses.includes(session.status)) return true
+
+        return false
+    }, [session?.providerId, session?.status, availableProviders])
 
     //   ============================================================================
     // SECTION 6F: CLAUSE MANAGEMENT STATE (FOCUS-12)
@@ -4991,8 +5011,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         ))}
 
                                         {/* Position Markers */}
-                                        {/* Other Party marker */}
-                                        {otherBarPercent !== null && !isAligned && (
+                                        {/* Other Party marker - ONLY show if provider has been invited */}
+                                        {hasProviderInvited && otherBarPercent !== null && !isAligned && (
                                             <div
                                                 className={`absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md ${isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                                                 style={{
@@ -5169,13 +5189,15 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                                             <span>Proposed</span>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <div className="w-3 h-3 rounded-full overflow-hidden flex">
-                                                <div className="w-1/2 h-full bg-emerald-500"></div>
-                                                <div className="w-1/2 h-full bg-blue-500"></div>
+                                        {hasProviderInvited && (
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-3 h-3 rounded-full overflow-hidden flex">
+                                                    <div className="w-1/2 h-full bg-emerald-500"></div>
+                                                    <div className="w-1/2 h-full bg-blue-500"></div>
+                                                </div>
+                                                <span>Aligned</span>
                                             </div>
-                                            <span>Aligned</span>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
                             )
@@ -5228,8 +5250,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         }}
                                         title="Click to set your position"
                                     >
-                                        {/* Other Party marker */}
-                                        {otherBarPercent !== null && !isAligned && (
+                                        {/* Other Party marker - ONLY show if provider has been invited */}
+                                        {hasProviderInvited && otherBarPercent !== null && !isAligned && (
                                             <div
                                                 className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md"
                                                 style={{
@@ -5245,8 +5267,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             </div>
                                         )}
 
-                                        {/* Your position / Aligned marker */}
-                                        {isAligned && myBarPercent !== null ? (
+                                        {/* Your position / Aligned marker - Aligned only shows if provider invited */}
+                                        {hasProviderInvited && isAligned && myBarPercent !== null ? (
                                             <div
                                                 className="absolute top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold z-20 shadow-lg"
                                                 style={{
@@ -5332,7 +5354,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 </span>
                                                 <div className="font-medium text-slate-800">
                                                     {(proposedPosition ?? myDbPosition)?.toFixed(1)} / 10
-                                                    {isAligned && <span className="ml-2 text-emerald-600">✓ Aligned with {isCustomer ? 'Provider' : 'Customer'}</span>}
+                                                    {hasProviderInvited && isAligned && <span className="ml-2 text-emerald-600">✓ Aligned with {isCustomer ? 'Provider' : 'Customer'}</span>}
                                                 </div>
                                             </div>
                                             {isProposing && (
@@ -5349,21 +5371,25 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
                                             <span>You</span>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                                            <span>{isCustomer ? 'Provider' : 'Customer'}</span>
-                                        </div>
+                                        {hasProviderInvited && (
+                                            <div className="flex items-center gap-1">
+                                                <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
+                                                <span>{isCustomer ? 'Provider' : 'Customer'}</span>
+                                            </div>
+                                        )}
                                         <div className="flex items-center gap-1">
                                             <div className="w-3 h-3 rounded-full bg-amber-500"></div>
                                             <span>Proposed</span>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <div className="w-3 h-3 rounded-full overflow-hidden flex">
-                                                <div className="w-1/2 h-full bg-emerald-500"></div>
-                                                <div className="w-1/2 h-full bg-blue-500"></div>
+                                        {hasProviderInvited && (
+                                            <div className="flex items-center gap-1">
+                                                <div className="w-3 h-3 rounded-full overflow-hidden flex">
+                                                    <div className="w-1/2 h-full bg-emerald-500"></div>
+                                                    <div className="w-1/2 h-full bg-blue-500"></div>
+                                                </div>
+                                                <span>Aligned</span>
                                             </div>
-                                            <span>Aligned</span>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
                             )
@@ -6240,6 +6266,18 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         {providerCompany}
                                     </div>
                                     <div className="text-xs text-slate-500">Automated Responses</div>
+                                </div>
+                            ) : isCustomer && !hasProviderInvited ? (
+                                /* No provider invited yet - show invite prompt */
+                                <div className="text-right">
+                                    <div className="text-xs text-slate-400">Provider</div>
+                                    <div className="text-sm font-medium text-slate-500">Awaiting Provider</div>
+                                    <button
+                                        onClick={() => router.push(`/auth/provider-invite?session_id=${session.sessionId}`)}
+                                        className="mt-1 px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition"
+                                    >
+                                        Invite Provider
+                                    </button>
                                 </div>
                             ) : isCustomer ? (
                                 /* Customer sees provider dropdown */
@@ -7740,7 +7778,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                                     {/* Clause Context */}
                                     <div className="bg-slate-50 rounded-lg p-4 mb-4">
-                                        <div className="grid grid-cols-3 gap-4 text-center">
+                                        <div className={`grid ${hasProviderInvited ? 'grid-cols-3' : 'grid-cols-2'} gap-4 text-center`}>
                                             <div>
                                                 <div className="text-xs text-slate-500 mb-1">Customer Position</div>
                                                 <div className="text-lg font-bold text-emerald-600">
@@ -7753,12 +7791,14 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     {selectedClause.clarenceRecommendation ?? '-'}
                                                 </div>
                                             </div>
-                                            <div>
-                                                <div className="text-xs text-slate-500 mb-1">Provider Position</div>
-                                                <div className="text-lg font-bold text-blue-600">
-                                                    {selectedClause.providerPosition ?? '-'}
+                                            {hasProviderInvited && (
+                                                <div>
+                                                    <div className="text-xs text-slate-500 mb-1">Provider Position</div>
+                                                    <div className="text-lg font-bold text-blue-600">
+                                                        {selectedClause.providerPosition ?? '-'}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </div>
                                         <div className="text-center mt-3 pt-3 border-t border-slate-200">
                                             <span className={`text-sm font-medium ${selectedClause.gapSize <= 1 ? 'text-emerald-600' :

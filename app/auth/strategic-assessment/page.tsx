@@ -786,28 +786,41 @@ Your data is saved and ready. Click below to invite providers.`)
     <div className="min-h-screen bg-slate-50 flex">
       <ProgressMenu />
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-slate-200 px-6 py-4">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
-              <div>
-                <h1 className="font-semibold text-slate-800">CLARENCE</h1>
-                <p className="text-sm text-slate-500">Strategic Assessment</p>
-              </div>
+        <header className="h-14 bg-slate-800 flex items-center justify-between px-6 relative">
+          {/* Left: CLARENCE Create branding */}
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold">C</span>
             </div>
-            <div className="flex items-center gap-4">
-              <button onClick={handleSkipAssessment} disabled={isSkipping} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">
-                {isSkipping ? 'Skipping...' : 'Skip Assessment →'}
-              </button>
-              {existingData && (
-                <div className="text-right text-sm">
-                  <p className="font-medium text-slate-700">{existingData.companyName}</p>
-                  <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
-                </div>
-              )}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-semibold">CLARENCE</span>
+                <span className="text-emerald-400 font-semibold">Create</span>
+              </div>
+              <span className="text-slate-500 text-xs">The Honest Broker</span>
             </div>
+          </div>
+
+          {/* Centre: Page Title */}
+          <div className="absolute left-1/2 transform -translate-x-1/2">
+            <h1 className="text-white font-medium">Strategic Assessment</h1>
+          </div>
+
+          {/* Right: Skip button + Session info */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleSkipAssessment}
+              disabled={isSkipping}
+              className="px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {isSkipping ? 'Skipping...' : 'Skip →'}
+            </button>
+            {existingData && (
+              <div className="text-right text-sm">
+                <p className="font-medium text-slate-300">{existingData.companyName}</p>
+                <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
+              </div>
+            )}
           </div>
         </header>
         <div className="bg-white border-b border-slate-200 px-6 py-3 lg:hidden">
