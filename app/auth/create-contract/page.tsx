@@ -1,12 +1,18 @@
 'use client'
 
 // ============================================================================
-// CLARENCE Create Contract Page
+// CLARENCE Create Contract Page - FIXED VERSION
 // ============================================================================
 // File: /app/auth/create-contract/page.tsx
 // Purpose: Contract creation assessment wizard with training mode support
 // Training Mode: Activated via ?mode=training URL parameter
 // Stage: CREATE (Emerald) - Training overrides to Amber
+// 
+// FIXES APPLIED:
+// 1. handleUploadedContractClick now goes to summary, not contract-prep
+// 2. createContract includes pathway_id for downstream context
+// 3. buildRedirectUrl handles pathway-specific destinations
+// 4. handleContractTypeSelect skips quick_intake for Straight to Contract
 // ============================================================================
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
@@ -189,6 +195,13 @@ Now, what type of contract are you creating?`,
 
 Select the category that best matches your needs. This helps me suggest the right template and structure.`,
 
+    // NEW: Message for STC path that skips quick intake
+    contract_type_stc_selected: `**Great choice!**
+
+Since you're going Straight to Contract, let's get you to the template selection quickly.
+
+**How would you like to start building your contract?**`,
+
     quick_intake: `**Let me understand your deal context.**
 
 A few quick questions will help me provide better guidance during clause review and negotiation. This only takes about 30 seconds.`,
@@ -226,7 +239,7 @@ You can wait here, or I'll let you know when it's ready.`,
 
     upload_ready: `**Your contract is ready!**
 
-I've successfully parsed your document and identified the clauses. Click on it below to proceed to Contract Prep where you can review and configure the clauses.`,
+I've successfully parsed your document and identified the clauses. Click on it below to review your setup and continue.`,
 
     upload_failed: `**There was an issue processing your contract.**
 
@@ -234,7 +247,7 @@ Please try uploading again or choose a different source option.`,
 
     summary: `**Great! Here's a summary of your contract setup:**
 
-I'll create your contract with these settings. Once you confirm, you'll enter the Contract Studio where you can review and customize everything before inviting providers.`,
+I'll create your contract with these settings. Once you confirm, you'll proceed to review and configure the clauses before inviting providers.`,
 
     summary_training: `**Great! Here's a summary of your training contract setup:** 🎓
 
@@ -450,6 +463,75 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
+    // SECTION 5E-2: PATHWAY HELPER FUNCTIONS (NEW)
+    // ========================================================================
+
+    /**
+     * Determine the pathway ID based on mediation type and template source
+     * This ID is used for tracking and determines downstream behavior
+     */
+    const determinePathwayId = (
+        mediationType: MediationType,
+        templateSource: TemplateSource
+    ): string => {
+        const mediationPrefix: Record<NonNullable<MediationType>, string> = {
+            'straight_to_contract': 'STC',
+            'partial_mediation': 'PM',
+            'full_mediation': 'FM'
+        }
+
+        const sourceSuffix: Record<NonNullable<TemplateSource>, string> = {
+            'existing_template': 'EXISTING',
+            'modified_template': 'MODIFIED',
+            'uploaded': 'UPLOADED',
+            'from_scratch': 'SCRATCH'
+        }
+
+        if (!mediationType || !templateSource) {
+            return 'UNKNOWN'
+        }
+
+        return `${mediationPrefix[mediationType]}-${sourceSuffix[templateSource]}`
+    }
+
+    /**
+     * Build the redirect URL based on pathway
+     * Different pathways have different destinations:
+     * - STC-EXISTING: Goes directly to invite-provider (clauses pre-verified)
+     * - All others: Go through contract-prep
+     */
+    const buildRedirectUrl = (
+        pathwayId: string,
+        sessionId: string,
+        contractId?: string | null
+    ): string => {
+        const params = new URLSearchParams()
+        params.set('session_id', sessionId)
+        params.set('pathway_id', pathwayId)
+
+        if (contractId) {
+            params.set('contract_id', contractId)
+        }
+
+        // Special case: STC-EXISTING goes directly to invite-provider
+        // (clauses are pre-verified in template, no editing needed)
+        if (pathwayId === 'STC-EXISTING') {
+            return `/auth/invite-provider?${params.toString()}`
+        }
+
+        // All other pathways go through contract-prep
+        return `/auth/contract-prep?${params.toString()}`
+    }
+
+    /**
+     * Check if current mediation type should skip quick intake
+     * Straight to Contract paths skip the deal context questions
+     */
+    const shouldSkipQuickIntake = (mediationType: MediationType): boolean => {
+        return mediationType === 'straight_to_contract'
+    }
+
+    // ========================================================================
     // SECTION 5F: UPLOAD FUNCTIONS
     // ========================================================================
 
@@ -503,10 +585,39 @@ function ContractCreationContent() {
         }, POLLING_INTERVAL)
     }
 
+    // ========================================================================
+    // SECTION 5F-2: UPLOADED CONTRACT CLICK HANDLER (FIXED!)
+    // ========================================================================
+
+    /**
+     * CRITICAL FIX: This handler now ALWAYS goes to summary step
+     * Previously, it would navigate directly to contract-prep, which caused:
+     * - Loss of session context (no session_id)
+     * - Loss of mediation_type context
+     * - contract-prep not knowing this was a "Straight to Contract" path
+     * 
+     * The session MUST be created before navigating away from this page.
+     */
     const handleUploadedContractClick = () => {
-        if (assessment.uploadedContractStatus === 'ready' && assessment.uploadedContractId) {
-            if (isTrainingMode) { setAssessment(prev => ({ ...prev, step: 'summary' })); addClarenceMessage(CLARENCE_MESSAGES.summary_training) }
-            else router.push(`/auth/contract-prep?contract_id=${assessment.uploadedContractId}`)
+        // Only proceed if upload is complete
+        if (assessment.uploadedContractStatus !== 'ready' || !assessment.uploadedContractId) {
+            return
+        }
+
+        // ⚠️ KEY FIX: ALWAYS go to summary step, never directly to contract-prep
+        // The session will be created when user confirms in the summary step
+        // This ensures we have:
+        //   - session_id
+        //   - mediation_type context  
+        //   - proper pathway identification
+
+        setAssessment(prev => ({ ...prev, step: 'summary' }))
+
+        // Add appropriate message based on mode
+        if (isTrainingMode) {
+            addClarenceMessage(CLARENCE_MESSAGES.summary_training)
+        } else {
+            addClarenceMessage(CLARENCE_MESSAGES.summary)
         }
     }
 
@@ -527,16 +638,23 @@ function ContractCreationContent() {
         }, 500)
     }
 
+    /**
+     * MODIFIED: Contract type selection now checks if we should skip quick intake
+     * For Straight to Contract paths, we skip directly to template_source
+     */
     const handleContractTypeSelect = (option: AssessmentOption) => {
         addUserMessage(`${option.icon} ${option.label}`)
 
-        // Straight to Contract: Skip Deal Context (quick_intake) step
-        if (assessment.mediationType === 'straight_to_contract') {
+        // Check if we should skip quick intake for this pathway
+        if (shouldSkipQuickIntake(assessment.mediationType)) {
+            // Straight to Contract: Skip quick intake, go directly to template source
             setAssessment(prev => ({ ...prev, contractType: option.value as ContractType, step: 'template_source' }))
             setTimeout(() => {
-                addClarenceMessage("Perfect! Since you're going **Straight to Contract**, let's skip the deal context for now - you can always add that later.\n\nHow would you like to start your contract?", TEMPLATE_SOURCE_OPTIONS)
+                addClarenceMessage(CLARENCE_MESSAGES.contract_type_stc_selected)
+                setTimeout(() => addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS), 800)
             }, 500)
         } else {
+            // Partial or Full Mediation: Go through quick intake
             setAssessment(prev => ({ ...prev, contractType: option.value as ContractType, step: 'quick_intake' }))
             setTimeout(() => addClarenceMessage(CLARENCE_MESSAGES.quick_intake), 500)
         }
@@ -591,43 +709,106 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 5H: CONTRACT CREATION
+    // SECTION 5H: CONTRACT CREATION (FIXED!)
     // ========================================================================
 
+    /**
+     * CRITICAL FIX: This function now:
+     * 1. Determines the pathway ID based on selections
+     * 2. Includes pathway_id in the session creation request
+     * 3. Uses buildRedirectUrl for pathway-specific destinations
+     */
     const createContract = async () => {
-        if (!userInfo) { setError('User not authenticated'); return }
-        setIsCreating(true); setError(null); setAssessment(prev => ({ ...prev, step: 'creating' }))
+        if (!userInfo) {
+            setError('User not authenticated')
+            return
+        }
+
+        setIsCreating(true)
+        setError(null)
+        setAssessment(prev => ({ ...prev, step: 'creating' }))
         addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.creating_training : CLARENCE_MESSAGES.creating)
+
         try {
+            // ================================================================
+            // STEP 1: Determine the pathway based on selections
+            // ================================================================
+            const pathwayId = determinePathwayId(assessment.mediationType, assessment.templateSource)
+            console.log('[CreateContract] Pathway ID:', pathwayId)
+
+            // ================================================================
+            // STEP 2: Create the session with ALL context
+            // ================================================================
             const response = await fetch(`${API_BASE}/session-create`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    userEmail: userInfo.email, companyName: userInfo.company, userName: `${userInfo.firstName} ${userInfo.lastName}`,
-                    isTraining: isTrainingMode, mediation_type: assessment.mediationType, contract_type: assessment.contractType,
-                    template_source: assessment.templateSource, source_template_id: assessment.selectedTemplateId, uploaded_contract_id: assessment.uploadedContractId, assessment_completed: true,
-                    straight_to_contract: assessment.mediationType === 'straight_to_contract',
-                    deal_context: { deal_value: assessment.quickIntake.dealValue, service_criticality: assessment.quickIntake.serviceCriticality, timeline_pressure: assessment.quickIntake.timelinePressure, bidder_count: assessment.quickIntake.bidderCount, batna_status: assessment.quickIntake.batnaStatus, top_priorities: assessment.quickIntake.topPriorities }
+                    userEmail: userInfo.email,
+                    companyName: userInfo.company,
+                    userName: `${userInfo.firstName} ${userInfo.lastName}`,
+                    isTraining: isTrainingMode,
+
+                    // Mediation context
+                    mediation_type: assessment.mediationType,
+                    contract_type: assessment.contractType,
+                    template_source: assessment.templateSource,
+
+                    // Template/Contract reference
+                    source_template_id: assessment.selectedTemplateId,
+                    uploaded_contract_id: assessment.uploadedContractId,
+
+                    // Pathway tracking (NEW)
+                    pathway_id: pathwayId,
+
+                    // Assessment status
+                    assessment_completed: true,
+
+                    // Deal context (if collected - may be empty for STC paths)
+                    deal_context: {
+                        deal_value: assessment.quickIntake.dealValue,
+                        service_criticality: assessment.quickIntake.serviceCriticality,
+                        timeline_pressure: assessment.quickIntake.timelinePressure,
+                        bidder_count: assessment.quickIntake.bidderCount,
+                        batna_status: assessment.quickIntake.batnaStatus,
+                        top_priorities: assessment.quickIntake.topPriorities
+                    }
                 })
             })
-            if (!response.ok) throw new Error('Failed to create contract session')
+
+            if (!response.ok) {
+                throw new Error('Failed to create contract session')
+            }
+
             const result = await response.json()
-            if (result.success && result.sessionId) {
-                if (isTrainingMode) {
-                    setTrainingSessionCreated(result.sessionId)
-                    addClarenceMessage(CLARENCE_MESSAGES.training_complete)
-                }
-                // Straight to Contract: Go directly to Contract Studio
-                else if (assessment.mediationType === 'straight_to_contract') {
-                    router.push(`/auth/contract-studio?session_id=${result.sessionId}`)
-                }
-                else {
-                    let redirectUrl = `/auth/contract-prep?session_id=${result.sessionId}`
-                    if (result.contractId || result.contract_id) redirectUrl = `/auth/contract-prep?contract_id=${result.contractId || result.contract_id}&session_id=${result.sessionId}`
-                    else if (assessment.uploadedContractId) redirectUrl = `/auth/contract-prep?contract_id=${assessment.uploadedContractId}&session_id=${result.sessionId}`
-                    router.push(redirectUrl)
-                }
-            } else throw new Error(result.error || 'No session ID returned')
-        } catch (err) { setError(err instanceof Error ? err.message : 'Failed to create contract'); setIsCreating(false); setAssessment(prev => ({ ...prev, step: 'summary' })) }
+
+            if (!result.success || !result.sessionId) {
+                throw new Error(result.error || 'No session ID returned')
+            }
+
+            // ================================================================
+            // STEP 3: Handle Training Mode (separate flow)
+            // ================================================================
+            if (isTrainingMode) {
+                setTrainingSessionCreated(result.sessionId)
+                addClarenceMessage(CLARENCE_MESSAGES.training_complete)
+                return
+            }
+
+            // ================================================================
+            // STEP 4: Determine redirect URL based on pathway (FIXED!)
+            // ================================================================
+            const contractId = result.contractId || result.contract_id || assessment.uploadedContractId
+            const redirectUrl = buildRedirectUrl(pathwayId, result.sessionId, contractId)
+
+            console.log('[CreateContract] Redirecting to:', redirectUrl)
+            router.push(redirectUrl)
+
+        } catch (err) {
+            console.error('[CreateContract] Error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to create contract')
+            setIsCreating(false)
+            setAssessment(prev => ({ ...prev, step: 'summary' }))
+        }
     }
 
     const getContractTypeLabel = (type: ContractType): string => CONTRACT_TYPE_OPTIONS.find(o => o.value === type)?.label || 'Contract'
@@ -639,21 +820,29 @@ function ContractCreationContent() {
     // ========================================================================
 
     const renderProgressPanel = () => {
-        const steps = [
+        // MODIFIED: Steps now conditional on mediation type
+        const baseSteps = [
             { id: 'mediation_type', label: 'Mediation Type', icon: '⚖️' },
             { id: 'contract_type', label: 'Contract Type', icon: '📋' },
-            { id: 'quick_intake', label: 'Deal Context', icon: '📊' },
+        ]
+
+        // Only show quick intake for non-STC paths
+        const quickIntakeStep = !shouldSkipQuickIntake(assessment.mediationType)
+            ? [{ id: 'quick_intake', label: 'Deal Context', icon: '📊' }]
+            : []
+
+        const remainingSteps = [
             { id: 'template_source', label: 'Template Source', icon: '📁' },
             { id: 'template_selection', label: 'Select Template', icon: '✓', conditional: true },
             { id: 'upload_processing', label: 'Upload Contract', icon: '📤', conditional: true },
             { id: 'summary', label: 'Review & Create', icon: '✅' }
         ]
 
+        const steps = [...baseSteps, ...quickIntakeStep, ...remainingSteps]
+
         const visibleSteps = steps.filter(step => {
             if (step.id === 'template_selection') return assessment.templateSource === 'existing_template' || assessment.templateSource === 'modified_template'
             if (step.id === 'upload_processing') return assessment.templateSource === 'uploaded'
-            // Hide Deal Context step for Straight to Contract
-            if (step.id === 'quick_intake') return assessment.mediationType !== 'straight_to_contract'
             return true
         })
 
@@ -747,7 +936,7 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 7: RENDER - MAIN PANEL (Simplified for brevity - full version in actual file)
+    // SECTION 7: RENDER - MAIN PANEL
     // ========================================================================
 
     const renderMainPanel = () => {
@@ -789,9 +978,8 @@ function ContractCreationContent() {
             default: return (
                 <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                        <div className={`w-16 h-16 ${colors.bgMedium} rounded-full flex items-center justify-center mx-auto mb-4`}><span className="text-3xl">{isTrainingMode ? '🎓' : '👋'}</span></div>
-                        <h3 className="text-lg font-medium text-slate-800">Welcome!</h3>
-                        <p className="text-sm text-slate-500 mt-1">{isTrainingMode ? 'Clarence is ready to help you set up your training contract.' : 'Clarence is ready to help you set up your contract.'}</p>
+                        <div className={`w-16 h-16 ${colors.bgMedium} rounded-full flex items-center justify-center mx-auto mb-4`}><span className="text-3xl">{isTrainingMode ? '🎓' : '⚡'}</span></div>
+                        <p className="text-slate-600">{isTrainingMode ? 'Preparing training setup...' : 'Getting things ready...'}</p>
                     </div>
                 </div>
             )
@@ -799,16 +987,16 @@ function ContractCreationContent() {
 
         return (
             <div className="max-w-2xl mx-auto">
-                <h3 className="text-lg font-medium text-slate-800 mb-4">{title}</h3>
-                <div className="grid gap-4">
+                <h3 className="text-lg font-medium text-slate-800 mb-6">{title}</h3>
+                <div className="space-y-3">
                     {options.map((option) => (
-                        <button key={option.id} onClick={() => handleOptionSelect(option)} className={`flex items-start gap-4 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
-                            <div className={`w-12 h-12 rounded-lg bg-slate-100 ${isTrainingMode ? 'group-hover:bg-amber-100' : 'group-hover:bg-emerald-100'} flex items-center justify-center text-2xl flex-shrink-0`}>{option.icon}</div>
-                            <div className="flex-1">
-                                <h4 className={`font-medium text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4>
+                        <button key={option.id} onClick={() => handleOptionSelect(option)} className={`w-full flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
+                            <div className={`w-14 h-14 rounded-lg ${colors.bgMedium} flex items-center justify-center flex-shrink-0`}><span className="text-2xl">{option.icon}</span></div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4>
                                 <p className="text-sm text-slate-500 mt-1">{option.description}</p>
                             </div>
-                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center`}>→</div>
+                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center text-xl`}>→</div>
                         </button>
                     ))}
                 </div>
@@ -817,8 +1005,8 @@ function ContractCreationContent() {
     }
 
     const renderQuickIntakeForm = () => {
-        const dealValueOptions = [{ value: 'under_50k', label: 'Under £50,000', icon: '💷' }, { value: '50k_250k', label: '£50,000 - £250,000', icon: '💰' }, { value: '250k_1m', label: '£250,000 - £1 million', icon: '🏦' }, { value: 'over_1m', label: 'Over £1 million', icon: '🏆' }]
-        const criticalityOptions = [{ value: 'low', label: 'Low', color: 'bg-slate-500' }, { value: 'medium', label: 'Medium', color: 'bg-blue-500' }, { value: 'high', label: 'High', color: 'bg-amber-500' }, { value: 'critical', label: 'Critical', color: 'bg-red-500' }]
+        const dealValueOptions = [{ value: 'under_50k', label: 'Under £50k', icon: '💰' }, { value: '50k_250k', label: '£50k - £250k', icon: '💰💰' }, { value: '250k_1m', label: '£250k - £1M', icon: '💰💰💰' }, { value: 'over_1m', label: 'Over £1M', icon: '💰💰💰💰' }]
+        const criticalityOptions = [{ value: 'low', label: 'Low', color: 'bg-green-500' }, { value: 'medium', label: 'Medium', color: 'bg-yellow-500' }, { value: 'high', label: 'High', color: 'bg-orange-500' }, { value: 'critical', label: 'Critical', color: 'bg-red-500' }]
         const timelineOptions = [{ value: 'flexible', label: 'Flexible', desc: '3+ months' }, { value: 'normal', label: 'Normal', desc: '1-3 months' }, { value: 'tight', label: 'Tight', desc: '2-4 weeks' }, { value: 'urgent', label: 'Urgent', desc: 'Under 2 weeks' }]
         const priorityOptions = ['Price / Cost', 'Quality of Service', 'Speed of Delivery', 'Flexibility', 'Risk Mitigation', 'Long-term Partnership', 'Innovation', 'Compliance']
 
@@ -907,7 +1095,7 @@ function ContractCreationContent() {
                         <div className="flex-1">
                             <h4 className="font-semibold text-slate-800">{assessment.uploadedFileName}</h4>
                             <p className={`text-sm ${assessment.uploadedContractStatus === 'ready' ? 'text-green-700' : assessment.uploadedContractStatus === 'failed' ? 'text-red-700' : isTrainingMode ? 'text-amber-700' : 'text-emerald-700'}`}>
-                                {assessment.uploadedContractStatus === 'ready' ? 'Ready - Click to proceed' : assessment.uploadedContractStatus === 'failed' ? 'Processing failed' : 'Processing...'}
+                                {assessment.uploadedContractStatus === 'ready' ? 'Ready - Click to review and continue' : assessment.uploadedContractStatus === 'failed' ? 'Processing failed' : 'Processing...'}
                             </p>
                         </div>
                         {assessment.uploadedContractStatus === 'ready' && <div className="text-green-600 text-xl">→</div>}
@@ -950,6 +1138,7 @@ function ContractCreationContent() {
                 <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">📋</span><div><p className="text-sm text-slate-500">Contract Type</p><p className="font-medium text-slate-800">{getContractTypeLabel(assessment.contractType)}</p></div></div></div>
                 <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">📁</span><div><p className="text-sm text-slate-500">Starting Point</p><p className="font-medium text-slate-800">{getTemplateSourceLabel(assessment.templateSource)}</p></div></div></div>
                 {assessment.selectedTemplateName && <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}><div className="flex items-center gap-3"><span className="text-2xl">✓</span><div><p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Selected Template</p><p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.selectedTemplateName}</p></div></div></div>}
+                {assessment.uploadedFileName && <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}><div className="flex items-center gap-3"><span className="text-2xl">📄</span><div><p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Uploaded Contract</p><p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.uploadedFileName}</p></div></div></div>}
                 {isTrainingMode && <div className="p-4 rounded-lg bg-amber-100 border border-amber-300"><div className="flex items-center gap-3"><span className="text-2xl">🎓</span><div><p className="text-sm text-amber-700 font-medium">Training Mode Active</p><p className="text-sm text-amber-600">This is for practice only.</p></div></div></div>}
             </div>
             {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
