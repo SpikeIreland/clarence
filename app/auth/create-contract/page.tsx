@@ -534,7 +534,7 @@ function ContractCreationContent() {
 
         // STC-EXISTING: True fast-track - skip assessment AND prep
         if (pathwayId === 'STC-EXISTING') {
-            return `/auth/invite-provider?${params.toString()}`
+            return `/auth/invite-providers?${params.toString()}`
         }
 
         // Other STC paths: Skip assessment, go to contract-prep
