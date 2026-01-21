@@ -4,6 +4,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
 
+// NEW: TransitionModal for stage transitions
+import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
+import type { TransitionConfig } from '@/lib/pathway-utils'
+
 // ============================================================================
 // SECTION 1: INTERFACES
 // ============================================================================
@@ -50,6 +54,12 @@ interface UserInfo {
     company: string
     userId: string
     companyId: string | null
+}
+
+// NEW: Transition state for modal
+interface TransitionState {
+    isOpen: boolean
+    transition: TransitionConfig | null
 }
 
 // ============================================================================
@@ -130,6 +140,12 @@ function InviteProvidersContent() {
         companyName: '',
         contactName: '',
         contactEmail: ''
+    })
+
+    // NEW: Transition Modal State
+    const [transitionState, setTransitionState] = useState<TransitionState>({
+        isOpen: false,
+        transition: null
     })
 
     // ========================================================================
@@ -382,11 +398,30 @@ function InviteProvidersContent() {
 
         setIsSubmitting(false)
 
-        // If any were successful, show success state
+        // If any were successful, show transition modal then success state
         if (successCount > 0) {
             setJustSentCount(successCount)
             await loadExistingBids(session.sessionId)
-            setShowSuccessState(true)
+
+            // NEW: Show transition modal first
+            const transition: TransitionConfig = {
+                id: 'transition_to_invite',
+                fromStage: 'invite_providers',
+                toStage: 'invite_providers',
+                title: 'Invitations Sent!',
+                message: `You've successfully invited ${successCount} provider${successCount !== 1 ? 's' : ''} to negotiate. The Create phase is complete!`,
+                bulletPoints: [
+                    'Providers will receive email invitations shortly',
+                    'Track responses on your dashboard',
+                    'Negotiation begins once a provider responds'
+                ],
+                buttonText: 'View Summary'
+            }
+
+            setTransitionState({
+                isOpen: true,
+                transition
+            })
         }
 
         // Show error message if some failed
@@ -414,6 +449,20 @@ function InviteProvidersContent() {
         router.push(url)
     }
 
+    const navigateToContractPrep = () => {
+        const contractId = searchParams.get('contract_id')
+        const pathwayId = searchParams.get('pathway_id')
+        let url = `/auth/contract-prep?session_id=${session?.sessionId}`
+        if (contractId) {
+            url += `&contract_id=${contractId}`
+        }
+        if (pathwayId) {
+            url += `&pathway_id=${pathwayId}`
+        }
+        router.push(url)
+    }
+
+    // Keep old function for backward compatibility
     const navigateToAssessment = () => {
         const contractId = searchParams.get('contract_id')
         let url = `/auth/strategic-assessment?session_id=${session?.sessionId}`
@@ -425,6 +474,12 @@ function InviteProvidersContent() {
 
     const handleAddMoreProviders = () => {
         setShowSuccessState(false)
+    }
+
+    // NEW: Handle transition modal continue
+    const handleTransitionContinue = () => {
+        setTransitionState({ isOpen: false, transition: null })
+        setShowSuccessState(true)  // Show the detailed success state after modal
     }
 
     // ========================================================================
@@ -700,6 +755,13 @@ function InviteProvidersContent() {
                 </div>
 
                 <FeedbackButton position="bottom-left" />
+
+                {/* NEW: Transition Modal */}
+                <TransitionModal
+                    isOpen={transitionState.isOpen}
+                    transition={transitionState.transition}
+                    onContinue={handleTransitionContinue}
+                />
             </div>
         )
     }
@@ -1038,10 +1100,10 @@ function InviteProvidersContent() {
                 {/* Action Buttons */}
                 <div className="flex justify-between items-center">
                     <button
-                        onClick={navigateToAssessment}
+                        onClick={navigateToContractPrep}
                         className="px-6 py-3 text-slate-600 hover:text-slate-800 transition-all flex items-center gap-2"
                     >
-                        ← Back to Assessment
+                        ← Back to Contract Prep
                     </button>
 
                     <div className="flex items-center gap-3">

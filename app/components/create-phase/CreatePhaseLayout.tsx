@@ -15,6 +15,7 @@ import {
     PathwayState,
     StageId,
     TransitionId,
+    TransitionConfig,
     createInitialPathwayState,
     completeStage,
     getNextStage,
@@ -24,8 +25,8 @@ import {
     TRANSITION_CONFIGS,
     shouldShowTransition,
 } from '@/lib/pathway-utils';
-import { CreatePhaseProgressBar, CreatePhaseProgressLinear } from './CreatePhaseProgressBar';
-import { TransitionModal, useTransitionModal } from './TransitionModal';
+import CreatePhaseProgressBar, { CreatePhaseProgressLinear } from './CreatePhaseProgressBar';
+import TransitionModal from './TransitionModal';
 import { ArrowLeft, HelpCircle, X } from 'lucide-react';
 
 // ============================================================================
@@ -47,7 +48,7 @@ interface CreatePhaseContextValue {
     setPathwayState: (state: PathwayState) => void;
     completeCurrentStage: () => void;
     goToNextStage: () => void;
-    showTransition: (transitionId: TransitionId) => void;
+    showTransition: (transition: TransitionConfig) => void;
 
     // Navigation
     canGoBack: boolean;
@@ -214,8 +215,8 @@ const PathwayBadge: React.FC<{ pathwayId: PathwayId }> = ({ pathwayId }) => {
     return (
         <span
             className={`px-2 py-1 text-xs font-medium rounded-full ${isSTC
-                    ? 'bg-amber-100 text-amber-700'
-                    : 'bg-emerald-100 text-emerald-700'
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-emerald-100 text-emerald-700'
                 }`}
         >
             {pathwayId}
@@ -254,7 +255,19 @@ export const CreatePhaseLayout: React.FC<CreatePhaseLayoutProps> = ({
     const [pathwayState, setPathwayState] = useState<PathwayState | null>(null);
 
     // Transition modal control
-    const { activeTransition, isOpen, showTransition, hideTransition } = useTransitionModal(pathwayId || 'FM-SCRATCH');
+    // Transition modal state (replacing useTransitionModal hook)
+    const [isOpen, setIsOpen] = useState(false);
+    const [activeTransition, setActiveTransition] = useState<TransitionConfig | null>(null);
+
+    const showTransition = (transition: TransitionConfig) => {
+        setActiveTransition(transition);
+        setIsOpen(true);
+    };
+
+    const hideTransition = () => {
+        setIsOpen(false);
+        setActiveTransition(null);
+    };
 
     // Initialize pathway state if we have a pathway ID
     useEffect(() => {
@@ -307,7 +320,7 @@ export const CreatePhaseLayout: React.FC<CreatePhaseLayoutProps> = ({
                 t => t.fromStage === pathwayState.currentStage && t.toStage === nextStage
             );
             if (transitionConfig && shouldShowTransition(pathwayId, transitionConfig.id)) {
-                showTransition(transitionConfig.id);
+                showTransition(transitionConfig);
             }
         }
     };
