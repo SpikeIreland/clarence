@@ -30,6 +30,7 @@ import {
     type PathwayId,
     type TransitionConfig
 } from '@/lib/pathway-utils'
+import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressHeader';
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
 import type { TransitionConfig } from '@/lib/pathway-utils'
+import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressHeader';
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -4138,6 +4139,10 @@ function ContractPrepContent() {
                     </div>
                 </div>
             </header>
+            <CreateProgressBar
+                currentStage="contract_prep"
+                isStraightToContract={sessionData?.mediationType === 'straight_to_contract'}
+            />
 
             {/* Three-Panel Layout */}
             <div className="flex-1 flex overflow-hidden">

@@ -6,6 +6,7 @@ import { Suspense } from 'react'
 // NEW: TransitionModal for stage transitions
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
 import type { TransitionConfig } from '@/lib/pathway-utils'
+import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressHeader';
 
 
 // ========== SECTION 1: INTERFACES ==========
@@ -919,6 +920,7 @@ Your data is saved and ready. Click below to invite providers.`)
             )}
           </div>
         </header>
+        <CreateProgressBar currentStage="strategic_assessment" />
         <div className="bg-white border-b border-slate-200 px-6 py-3 lg:hidden">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-slate-400">Question {Math.min(currentQuestionIndex + 1, STRATEGIC_QUESTIONS.length)} of {STRATEGIC_QUESTIONS.length}</span>

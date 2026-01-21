@@ -35,3 +35,7 @@ export type {
     ProgressGroup,
     TransitionConfig,
 } from '@/lib/pathway-utils';
+
+import CreateProgressHeader, { CreateProgressBar } from './CreateProgressHeader';
+export { CreateProgressHeader, CreateProgressBar };
+export type { CreateStage } from './CreateProgressHeader';

@@ -7,6 +7,7 @@ import FeedbackButton from '@/app/components/FeedbackButton'
 // NEW: TransitionModal for stage transitions
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
 import type { TransitionConfig } from '@/lib/pathway-utils'
+import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressHeader';
 
 // ============================================================================
 // SECTION 1: INTERFACES
@@ -536,7 +537,11 @@ function InviteProvidersContent() {
                         )}
                     </div>
                 </header>
-
+                <CreateProgressBar
+                    currentStage="invite_providers"
+                    isStraightToContract={session?.mediationType === 'straight_to_contract'}
+                />
+                
                 {/* Success Content */}
                 <div className="max-w-3xl mx-auto px-4 py-12">
                     {/* Success Banner */}
@@ -762,7 +767,7 @@ function InviteProvidersContent() {
                     transition={transitionState.transition}
                     onContinue={handleTransitionContinue}
                 />
-            </div>
+            </div >
         )
     }
 
