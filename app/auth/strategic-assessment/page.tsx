@@ -3,6 +3,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 
+// NEW: TransitionModal for stage transitions
+import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
+import type { TransitionConfig } from '@/lib/pathway-utils'
+
+
 // ========== SECTION 1: INTERFACES ==========
 interface ConversationMessage {
   id: string
@@ -88,6 +93,13 @@ interface LeverageAssessment {
   providerLeverage: number
   breakdown: LeverageBreakdown
   reasoning: string
+}
+
+// NEW: Transition state for modal
+interface TransitionState {
+  isOpen: boolean
+  transition: TransitionConfig | null
+  redirectUrl: string | null
 }
 
 // ========== SECTION 2: DISPLAY HELPERS ==========
@@ -240,8 +252,8 @@ function IntelligentQuestionnaireContent() {
   // URL Parameters
   const sessionId = searchParams.get('session_id')
   const contractId = searchParams.get('contract_id')
+  const pathwayId = searchParams.get('pathway_id')
 
-  // Questionnaire sections
   const questionnaireSections = [
     { id: 'summary', name: 'Requirements Summary', icon: '📋', questionIndices: [] as number[] },
     { id: 'batna', name: 'BATNA Deep Dive', icon: '⚖️', questionIndices: [0, 1, 2] },
@@ -249,7 +261,7 @@ function IntelligentQuestionnaireContent() {
     { id: 'risk', name: 'Risk Tolerance', icon: '⚠️', questionIndices: [5, 6] },
     { id: 'internal', name: 'Internal Dynamics', icon: '🏢', questionIndices: [7, 8] },
     { id: 'relationship', name: 'Relationship Priorities', icon: '🤝', questionIndices: [9, 10] },
-    { id: 'complete', name: 'Invite Providers', icon: '📧', questionIndices: [] as number[] }
+    { id: 'complete', name: 'Contract Prep', icon: '📝', questionIndices: [] as number[] }  // UPDATED
   ]
 
   // ========== SECTION 5: STATE ==========
@@ -264,6 +276,14 @@ function IntelligentQuestionnaireContent() {
   const [conversationComplete, setConversationComplete] = useState(false)
   const [leverageAssessment, setLeverageAssessment] = useState<LeverageAssessment | null>(null)
   const [isSkipping, setIsSkipping] = useState(false)
+
+  // NEW: Transition Modal State
+  const [transitionState, setTransitionState] = useState<TransitionState>({
+    isOpen: false,
+    transition: null,
+    redirectUrl: null
+  })
+
 
   // ========== SECTION 6: PROGRESS HELPERS ==========
   const getCurrentSectionId = (): string => {
@@ -639,9 +659,11 @@ Your data is saved and ready. Click below to invite providers.`)
     }
   }
 
-  // ========== SECTION 11: NAVIGATION HANDLERS ==========
-  const handleProceedToInviteProviders = async () => {
+  // ========== SECTION 11: NAVIGATION HANDLERS (UPDATED WITH TRANSITION MODAL) ==========
+
+  const handleProceedToContractPrep = async () => {
     if (!sessionId) return
+
     try {
       // Build leverage_assessment object matching N8N schema
       const leveragePayload = {
@@ -664,22 +686,52 @@ Your data is saved and ready. Click below to invite providers.`)
           session_number: sessionNumber,
           strategic_answers: {
             ...strategicAnswers,
-            providerConcerns: '',  // Optional field expected by N8N
-            trustLevel: ''         // Optional field expected by N8N
+            providerConcerns: '',
+            trustLevel: ''
           },
           leverage_assessment: leveragePayload,
           completed_at: new Date().toISOString()
         })
       })
-    } catch (error) { console.error('Error saving assessment:', error) }
-    let nextUrl = `/auth/invite-providers?session_id=${sessionId}`
-    if (contractId) nextUrl += `&contract_id=${contractId}`
-    router.push(nextUrl)
+    } catch (error) {
+      console.error('Error saving assessment:', error)
+    }
+
+    // Build redirect URL - Strategic Assessment goes to Contract Prep
+    const params = new URLSearchParams()
+    params.set('session_id', sessionId)
+    if (contractId) params.set('contract_id', contractId)
+    if (pathwayId) params.set('pathway_id', pathwayId)
+
+    const redirectUrl = `/auth/contract-prep?${params.toString()}`
+
+    // Create transition config
+    const transition: TransitionConfig = {
+      id: 'transition_to_prep',
+      fromStage: 'strategic_assessment',
+      toStage: 'contract_prep',
+      title: 'Strategic Profile Complete',
+      message: "Excellent work! I now have a clear picture of your negotiating position. Let's move to Contract Preparation where you'll:",
+      bulletPoints: [
+        'Review and configure each clause',
+        'Set your ideal positions and acceptable ranges',
+        'Weight clauses by strategic importance'
+      ],
+      buttonText: 'Continue to Contract Prep'
+    }
+
+    // Show transition modal
+    setTransitionState({
+      isOpen: true,
+      transition,
+      redirectUrl
+    })
   }
 
   const handleSkipAssessment = async () => {
     if (!sessionId) return
     setIsSkipping(true)
+
     try {
       // Send empty assessment with default leverage values
       await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
@@ -703,11 +755,55 @@ Your data is saved and ready. Click below to invite providers.`)
           completed_at: new Date().toISOString()
         })
       })
-    } catch (error) { console.error('Error saving skip status:', error) }
-    let nextUrl = `/auth/invite-providers?session_id=${sessionId}`
-    if (contractId) nextUrl += `&contract_id=${contractId}`
-    router.push(nextUrl)
+    } catch (error) {
+      console.error('Error saving skip status:', error)
+    }
+
+    setIsSkipping(false)
+
+    // Build redirect URL - skipped assessment also goes to Contract Prep
+    const params = new URLSearchParams()
+    params.set('session_id', sessionId)
+    if (contractId) params.set('contract_id', contractId)
+    if (pathwayId) params.set('pathway_id', pathwayId)
+
+    const redirectUrl = `/auth/contract-prep?${params.toString()}`
+
+    // Create transition config for skip
+    const transition: TransitionConfig = {
+      id: 'transition_to_prep',
+      fromStage: 'strategic_assessment',
+      toStage: 'contract_prep',
+      title: 'Proceeding to Contract Prep',
+      message: "No problem - you can always come back to complete the strategic assessment later. Let's move to Contract Preparation where you'll configure your clause positions.",
+      bulletPoints: [
+        'Review and configure each clause',
+        'Set your position ranges',
+        'Default leverage values will be used'
+      ],
+      buttonText: 'Continue to Contract Prep'
+    }
+
+    // Show transition modal
+    setTransitionState({
+      isOpen: true,
+      transition,
+      redirectUrl
+    })
   }
+
+  // NEW: Handle transition modal continue
+  const handleTransitionContinue = () => {
+    const { redirectUrl } = transitionState
+    setTransitionState({ isOpen: false, transition: null, redirectUrl: null })
+
+    if (redirectUrl) {
+      router.push(redirectUrl)
+    }
+  }
+
+  // LEGACY: Keep for backward compatibility (rename old function)
+  const handleProceedToInviteProviders = handleProceedToContractPrep
 
   // ========== SECTION 12: PROGRESS MENU COMPONENT ==========
   const ProgressMenu = () => {
@@ -756,7 +852,7 @@ Your data is saved and ready. Click below to invite providers.`)
         </div>
         <div className="p-4 border-t border-slate-200">
           <button onClick={handleSkipAssessment} disabled={isSkipping} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">
-            {isSkipping ? 'Skipping...' : 'Skip → Invite Providers'}
+            {isSkipping ? 'Skipping...' : 'Skip → Contract Prep'}
           </button>
         </div>
         <div className="p-4 border-t border-slate-200 bg-slate-50">
@@ -867,11 +963,11 @@ Your data is saved and ready. Click below to invite providers.`)
                 </div>
               ) : (
                 <div className="border-t border-slate-200 p-4">
-                  <button onClick={handleProceedToInviteProviders} className="w-full py-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
-                    Invite Providers
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                  <button onClick={handleProceedToContractPrep} className="w-full py-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+                    Continue to Contract Prep
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   </button>
-                  <p className="text-center text-sm text-slate-500 mt-3">Send invitations to your providers to begin the negotiation</p>
+                  <p className="text-center text-sm text-slate-500 mt-3">Configure your clause positions before inviting providers</p>
                 </div>
               )}
             </div>
@@ -880,6 +976,13 @@ Your data is saved and ready. Click below to invite providers.`)
       </div>
       {/* Beta Feedback Button */}
       <FeedbackButton position="bottom-left" />
+
+      {/* NEW: Transition Modal */}
+      <TransitionModal
+        isOpen={transitionState.isOpen}
+        transition={transitionState.transition}
+        onContinue={handleTransitionContinue}
+      />
     </div>
   )
 }

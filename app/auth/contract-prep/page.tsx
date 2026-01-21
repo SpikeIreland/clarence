@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
+import type { TransitionConfig } from '@/lib/pathway-utils'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -115,6 +117,12 @@ interface SessionData {
     mediationType: 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
     contractType: string | null
     status: string | null
+}
+
+interface TransitionState {
+    isOpen: boolean
+    transition: TransitionConfig | null
+    redirectUrl: string | null
 }
 
 
@@ -476,6 +484,15 @@ function ContractPrepContent() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
     const [deleteTarget, setDeleteTarget] = useState<'single' | 'bulk' | null>(null)
     const [clauseToDelete, setClauseToDelete] = useState<ContractClause | null>(null)
+
+    const [transitionState, setTransitionState] = useState<TransitionState>({
+        isOpen: false,
+        transition: null,
+        redirectUrl: null
+    })
+
+    // Also get pathway_id from URL params (add near line 401-402):
+    const pathwayId = searchParams.get('pathway_id')
 
     // ========================================================================
     // SECTION 5B: INITIALIZE & LOAD USER
@@ -1781,26 +1798,53 @@ function ContractPrepContent() {
 
             const targetSessionId = result.sessionId || effectiveSessionId
             const targetContractId = contract.contractId
-            const mediationType = sessionData?.mediationType
 
+            // Build redirect URL - after Contract Prep, ALL paths go to invite-provider
+            const params = new URLSearchParams()
+            params.set('session_id', targetSessionId)
+            if (targetContractId) params.set('contract_id', targetContractId)
+            if (pathwayId) params.set('pathway_id', pathwayId)
+
+            const redirectUrl = `/auth/invite-provider?${params.toString()}`
+
+            // Create transition config
+            const transition: TransitionConfig = {
+                id: 'transition_to_invite',
+                fromStage: 'contract_prep',
+                toStage: 'invite_providers',
+                title: 'Positions Locked In',
+                message: "Your contract positions are locked in. Now it's time to invite your provider(s) to the negotiation. They'll receive an email with a secure link to:",
+                bulletPoints: [
+                    'Enter their company details',
+                    'Set their own clause positions',
+                    'Submit their negotiation parameters'
+                ],
+                buttonText: 'Continue to Invite'
+            }
+
+            // Show transition modal instead of immediate redirect
             setTimeout(() => {
-                if (mediationType === 'straight_to_contract') {
-                    addChatMessage('clarence', 'Your clauses are committed. Next step: invite providers to begin the contract process.')
-                    router.push(`/auth/invite-providers?session_id=${targetSessionId}&contract_id=${targetContractId}`)
-                } else {
-                    let nextUrl = `/auth/strategic-assessment?session_id=${targetSessionId}`
-                    if (targetContractId) {
-                        nextUrl += `&contract_id=${targetContractId}`
-                    }
-                    router.push(nextUrl)
-                }
-            }, 2000)
+                setTransitionState({
+                    isOpen: true,
+                    transition,
+                    redirectUrl
+                })
+            }, 1500)
 
         } catch (err) {
             console.error('Error committing clauses:', err)
             setError('Failed to commit clauses')
         } finally {
             setIsCommitting(false)
+        }
+    }
+
+    const handleTransitionContinue = () => {
+        const { redirectUrl } = transitionState
+        setTransitionState({ isOpen: false, transition: null, redirectUrl: null })
+
+        if (redirectUrl) {
+            router.push(redirectUrl)
         }
     }
 
@@ -4125,6 +4169,13 @@ function ContractPrepContent() {
 
             {/* Beta Feedback Button */}
             <FeedbackButton position="bottom-left" />
+
+            {/* Transition Modal */}
+            <TransitionModal
+                isOpen={transitionState.isOpen}
+                transition={transitionState.transition}
+                onContinue={handleTransitionContinue}
+            />
         </div>
     )
 }
