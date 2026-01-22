@@ -89,35 +89,46 @@ const contractTypes: Record<string, string> = {
   'Other': 'Other'
 }
 
+
 // ============================================================================
 // SECTION 4: DEAL VALUE MAPPING
 // ============================================================================
 
 const dealValueMap: Record<string, number> = {
+  // New format (from Create Contract page)
+  'under_50k': 25000,
+  '50k_250k': 150000,
+  '250k_1m': 625000,
+  'over_1m': 1500000,
+  // Legacy format (backwards compatibility)
   'under_100k': 50000,
   '100k_250k': 175000,
   '250k_500k': 375000,
   '500k_1m': 750000,
-  'over_1m': 1500000,
 }
 
 function parseDealValue(dealValue: string | number | null | undefined): number {
   if (!dealValue) return 0
   if (typeof dealValue === 'number') return dealValue
   if (dealValueMap[dealValue]) return dealValueMap[dealValue]
-  const parsed = parseInt(dealValue)
+  const parsed = parseInt(String(dealValue).replace(/[£$€,]/g, ''))
   return isNaN(parsed) ? 0 : parsed
 }
 
 function formatDealValueDisplay(dealValue: string | number | null | undefined, currency: string = 'GBP'): string {
-  const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : 'A$'
+  const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : '€'
 
   const categoryLabels: Record<string, string> = {
+    // New format (from Create Contract page)
+    'under_50k': `Under ${symbol}50k`,
+    '50k_250k': `${symbol}50k - ${symbol}250k`,
+    '250k_1m': `${symbol}250k - ${symbol}1M`,
+    'over_1m': `Over ${symbol}1M`,
+    // Legacy format (backwards compatibility)
     'under_100k': `Under ${symbol}100k`,
     '100k_250k': `${symbol}100k - ${symbol}250k`,
     '250k_500k': `${symbol}250k - ${symbol}500k`,
-    '500k_1m': `${symbol}500k - ${symbol}1m`,
-    'over_1m': `Over ${symbol}1m`,
+    '500k_1m': `${symbol}500k - ${symbol}1M`,
   }
 
   if (typeof dealValue === 'string' && categoryLabels[dealValue]) {
@@ -135,7 +146,7 @@ const dealSizeCategories = [
   { min: 250000, max: 500000, label: '250-500k', color: '#64748b' },
   { min: 500000, max: 1000000, label: '500k-1m', color: '#475569' },
   { min: 1000000, max: 2000000, label: '1-2m', color: '#334155' },
-  { min: 2000000, max: 5000000, label: '2-5m', color: '#1e293b' },
+  { min: 2000000, max: 5000000, label: '2-5m', color: '#0f172a' },
   { min: 5000000, max: Infinity, label: '5m+', color: '#0f172a' }
 ]
 
@@ -1081,7 +1092,7 @@ export default function ContractsDashboard() {
                             <div>
                               <span className="text-xs text-slate-400">Deal Value</span>
                               <p className="font-medium text-slate-700">
-                                {session.dealValue ? formatDealValueDisplay(session.dealValue, session.currency || 'GBP') : 'TBD'}
+                                {formatDealValueDisplay(session.dealValue)}
                               </p>
                             </div>
                             <div>

@@ -959,8 +959,32 @@ async function withdrawClauseConfirmation(
 
 function formatCurrency(value: string | number | null, currency: string): string {
     if (!value) return '£0'
-    const num = typeof value === 'string' ? parseFloat(value) : value
     const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : '€'
+
+    // Handle category-based deal values from Create Contract page
+    const categoryLabels: Record<string, string> = {
+        'under_50k': `Under ${symbol}50k`,
+        '50k_250k': `${symbol}50k - ${symbol}250k`,
+        '250k_1m': `${symbol}250k - ${symbol}1M`,
+        'over_1m': `Over ${symbol}1M`,
+        // Legacy formats
+        'under_100k': `Under ${symbol}100k`,
+        '100k_250k': `${symbol}100k - ${symbol}250k`,
+        '250k_500k': `${symbol}250k - ${symbol}500k`,
+        '500k_1m': `${symbol}500k - ${symbol}1M`,
+    }
+
+    // Check if it's a category string
+    if (typeof value === 'string' && categoryLabels[value]) {
+        return categoryLabels[value]
+    }
+
+    // Parse as number
+    const num = typeof value === 'string' ? parseFloat(value.replace(/[£$€,]/g, '')) : value
+
+    // Handle NaN
+    if (isNaN(num)) return 'Not specified'
+
     if (num >= 1000000) {
         return `${symbol}${(num / 1000000).toFixed(1)}M`
     } else if (num >= 1000) {
@@ -6511,22 +6535,31 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <div className="text-sm font-mono text-white">{session.sessionNumber}</div>
                             </div>
 
-                            {/* Deal Value - Editable */}
-                            <button
-                                onClick={openDealContextEditor}
-                                className="text-center group hover:bg-slate-700/50 px-3 py-1 rounded transition"
-                                title="Click to edit deal context"
-                            >
-                                <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
-                                    Deal Value
-                                    <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                    </svg>
+                            {/* Deal Value - Editable by Customer only */}
+                            {isCustomer ? (
+                                <button
+                                    onClick={openDealContextEditor}
+                                    className="text-center group hover:bg-slate-700/50 px-3 py-1 rounded transition"
+                                    title="Click to edit deal context"
+                                >
+                                    <div className="text-xs text-slate-400 flex items-center justify-center gap-1">
+                                        Deal Value
+                                        <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                    </div>
+                                    <div className={`text-sm font-semibold ${accentColor}`}>
+                                        {session.dealValue || 'Not set'}
+                                    </div>
+                                </button>
+                            ) : (
+                                <div className="text-center px-3 py-1">
+                                    <div className="text-xs text-slate-400">Deal Value</div>
+                                    <div className={`text-sm font-semibold ${accentColor}`}>
+                                        {session.dealValue || 'Not set'}
+                                    </div>
                                 </div>
-                                <div className={`text-sm font-semibold ${accentColor}`}>
-                                    {session.dealValue || 'Not set'}
-                                </div>
-                            </button>
+                            )}
 
                             {/* Provider Status Indicator */}
                             {!session.providerId && !isTrainingMode && (
