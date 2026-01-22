@@ -1806,7 +1806,7 @@ function ContractPrepContent() {
             if (targetContractId) params.set('contract_id', targetContractId)
             if (pathwayId) params.set('pathway_id', pathwayId)
 
-            const redirectUrl = `/auth/invite-provider?${params.toString()}`
+            const redirectUrl = `/auth/invite-providers?${params.toString()}`
 
             // Create transition config
             const transition: TransitionConfig = {
