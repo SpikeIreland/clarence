@@ -251,7 +251,7 @@ export default function TrainingStudioPage() {
                     negotiationStyle: c.negotiation_style as string || '',
                     baseLeverageCustomer: c.base_leverage_customer as number || 50,
                     baseLeverageProvider: c.base_leverage_provider as number || 50,
-                    signatureQuote: c.signature_quote as string || '',
+                    signatureQuote: Array.isArray(c.sample_quotes) && c.sample_quotes.length > 0 ? c.sample_quotes[0] : '',
                     greetingMessage: c.greeting_message as string || '',
                     isActive: c.is_active as boolean
                 }))
