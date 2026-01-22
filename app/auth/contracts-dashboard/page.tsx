@@ -713,14 +713,6 @@ export default function ContractsDashboard() {
 
             {/* Center: Brand Tagline + Navigation */}
             <div className="hidden md:flex items-center gap-8">
-              {/* Brand Tagline - Subtle */}
-              <div className="text-xs font-medium tracking-wide">
-                <span className="text-emerald-400">Create</span>
-                <span className="text-slate-500 mx-1">·</span>
-                <span className="text-slate-300">Negotiate</span>
-                <span className="text-slate-500 mx-1">·</span>
-                <span className="text-violet-400">Agree</span>
-              </div>
 
               {/* Navigation Divider */}
               <div className="h-4 w-px bg-slate-600"></div>
@@ -901,7 +893,7 @@ export default function ContractsDashboard() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                    {activeTab === 'live' ? 'Create New Contract' : 'New Training'}
+                    {activeTab === 'live' ? 'Create' : 'Create'}
                   </>
                 )}
               </button>
