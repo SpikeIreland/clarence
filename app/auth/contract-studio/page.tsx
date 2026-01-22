@@ -6586,7 +6586,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
                                         {providerCompany}
                                     </div>
-                                    <div className="text-xs text-slate-500">Automated Responses</div>
+                                    <div className="text-xs text-slate-500">{session.providerContactName || 'AI Negotiator'}</div>
                                 </div>
                             ) : isCustomer && !hasProviderInvited ? (
                                 /* No provider invited yet - show invite prompt */
