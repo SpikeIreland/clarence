@@ -6430,8 +6430,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
 
-                        {/* Right: Preview Contract + Documents Centre Buttons */}
+                        {/* Right: Feedback + Preview Contract + Documents Centre Buttons */}
                         <div className="flex items-center gap-2">
+                            {/* Feedback Button */}
+                            <FeedbackButton position="header" />
+
                             {/* Preview Contract Button */}
                             <button
                                 onClick={handlePreviewContract}
@@ -8287,8 +8290,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             {/* FOCUS-12: Mark as N/A Modal */}
             <MarkAsNaModal />
 
-            {/* Beta Feedback Button */}
-            <FeedbackButton position="bottom-left" />
         </div>
     )
 }

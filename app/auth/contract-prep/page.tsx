@@ -4129,8 +4129,9 @@ function ContractPrepContent() {
                     <h1 className="text-white font-medium">Contract Preparation</h1>
                 </div>
 
-                {/* Right: User Info */}
+                {/* Right: Feedback & User Info */}
                 <div className="flex items-center gap-4">
+                    <FeedbackButton position="header" />
                     <span className="text-slate-400 text-sm">{userInfo.email}</span>
                     <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center">
                         <span className="text-white text-sm">
@@ -4171,9 +4172,6 @@ function ContractPrepContent() {
 
             {/* Delete Confirmation Modal */}
             {renderDeleteConfirmModal()}
-
-            {/* Beta Feedback Button */}
-            <FeedbackButton position="bottom-left" />
 
             {/* Transition Modal */}
             <TransitionModal

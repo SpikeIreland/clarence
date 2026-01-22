@@ -744,6 +744,9 @@ export default function ContractsDashboard() {
 
             {/* Right: User Menu */}
             <div className="flex items-center gap-4">
+              {/* Feedback Button */}
+              <FeedbackButton position="header" />
+
               {/* CLARENCE Chat Button */}
               <button
                 onClick={() => setShowChatOverlay(true)}
@@ -1495,10 +1498,6 @@ export default function ContractsDashboard() {
         </button>
       )}
 
-      {/* ================================================================== */}
-      {/* SECTION 27: BETA FEEDBACK BUTTON */}
-      {/* ================================================================== */}
-      <FeedbackButton position="bottom-left" />
     </div>
   )
 }

@@ -1216,18 +1216,23 @@ function ContractCreationContent() {
     // SECTION 8: CHAT PANEL
     // ========================================================================
 
+    // ========================================================================
+    // SECTION 8: CHAT PANEL
+    // ========================================================================
+
     const renderChatPanel = () => (
         <div className={`h-full flex flex-col ${isTrainingMode ? 'bg-gradient-to-b from-amber-50 to-white' : 'bg-gradient-to-b from-emerald-50 to-white'} border-l border-slate-200`}>
             <div className="p-4 border-b border-slate-200 bg-white">
                 <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full ${colors.bgGradient} flex items-center justify-center`}><span className="text-white text-lg">C</span></div>
-                    <div>
+                    <div className="flex-1">
                         <h3 className="font-semibold text-slate-800">Clarence</h3>
                         <p className={`text-xs ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'} flex items-center gap-1`}>
                             <span className={`w-2 h-2 rounded-full ${isTrainingMode ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
                             {isTrainingMode ? 'Training Assistant' : 'Online'}
                         </p>
                     </div>
+                    <FeedbackButton position="header" />
                 </div>
             </div>
             <div className="flex-1 overflow-auto p-4 space-y-4">
@@ -1254,7 +1259,6 @@ function ContractCreationContent() {
             <div className="w-64 flex-shrink-0">{renderProgressPanel()}</div>
             <div className="flex-1 min-w-0">{renderMainPanel()}</div>
             <div className="w-96 flex-shrink-0">{renderChatPanel()}</div>
-            <FeedbackButton position="bottom-left" />
 
             {/* NEW: Transition Modal */}
             <TransitionModal
