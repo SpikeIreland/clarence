@@ -5,9 +5,11 @@
 // ============================================================================
 // File: components/FeedbackModal.tsx
 // Purpose: Modal form for beta testers to submit feedback
+// Uses React Portal to avoid z-index stacking context issues
 // ============================================================================
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
@@ -76,13 +78,23 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [submitted, setSubmitted] = useState(false)
     const [error, setError] = useState('')
+    const [mounted, setMounted] = useState(false)
 
     // User context
     const [userId, setUserId] = useState<string | null>(null)
     const [companyId, setCompanyId] = useState<string | null>(null)
 
     // -------------------------------------------------------------------------
-    // SECTION 3.2: EFFECTS
+    // SECTION 3.2: PORTAL MOUNT CHECK
+    // -------------------------------------------------------------------------
+
+    useEffect(() => {
+        setMounted(true)
+        return () => setMounted(false)
+    }, [])
+
+    // -------------------------------------------------------------------------
+    // SECTION 3.3: USER CONTEXT EFFECTS
     // -------------------------------------------------------------------------
 
     useEffect(() => {
@@ -184,7 +196,7 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
     }, [supabase])
 
     // -------------------------------------------------------------------------
-    // SECTION 3.3: FORM SUBMISSION
+    // SECTION 3.4: FORM SUBMISSION
     // -------------------------------------------------------------------------
 
     async function handleSubmit(e: React.FormEvent) {
@@ -230,7 +242,7 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
     }
 
     // -------------------------------------------------------------------------
-    // SECTION 3.4: HELPER FUNCTIONS
+    // SECTION 3.5: HELPER FUNCTIONS
     // -------------------------------------------------------------------------
 
     function getPageDisplayName(): string {
@@ -246,19 +258,22 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
     }
 
     // -------------------------------------------------------------------------
-    // SECTION 3.5: RENDER
+    // SECTION 3.6: MODAL CONTENT
     // -------------------------------------------------------------------------
 
-    return (
+    const modalContent = (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            className="fixed inset-0 flex items-center justify-center bg-black/50 p-4"
+            style={{ zIndex: 99999 }}
             onClick={(e) => e.target === e.currentTarget && onClose()}
         >
             <div
                 className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto"
+                style={{ zIndex: 100000 }}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="feedback-modal-title"
+                onClick={(e) => e.stopPropagation()}
             >
                 {/* ================================================================ */}
                 {/* HEADER */}
@@ -353,7 +368,7 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
                                     onChange={(e) => setTitle(e.target.value)}
                                     placeholder="Brief summary of your feedback"
                                     maxLength={255}
-                                    className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:border-[#2563eb] focus:ring-2 focus:ring-blue-200 transition-all"
+                                    className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:border-[#2563eb] focus:ring-2 focus:ring-blue-200 transition-all text-slate-800"
                                 />
                             </div>
 
@@ -370,7 +385,7 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
                                     placeholder="Please describe your feedback in detail. For bugs, include steps to reproduce if possible..."
                                     rows={4}
                                     required
-                                    className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:border-[#2563eb] focus:ring-2 focus:ring-blue-200 resize-none transition-all"
+                                    className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:border-[#2563eb] focus:ring-2 focus:ring-blue-200 resize-none transition-all text-slate-800"
                                 />
                             </div>
 
@@ -468,4 +483,13 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
             </div>
         </div>
     )
+
+    // -------------------------------------------------------------------------
+    // SECTION 3.7: RENDER WITH PORTAL
+    // -------------------------------------------------------------------------
+
+    // Use portal to render modal at document.body level, avoiding z-index issues
+    if (!mounted) return null
+
+    return createPortal(modalContent, document.body)
 }
