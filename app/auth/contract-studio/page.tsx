@@ -4150,6 +4150,10 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         setAiThinking(true)
         setAiThinkingClause(clauseId)
 
+        // Track start time for minimum thinking duration
+        const startTime = Date.now()
+        const MINIMUM_THINKING_TIME = 2000 // 2 seconds minimum for UX
+
         try {
             // Call the standalone function
             const result = await triggerAICounterMove(
@@ -4164,6 +4168,12 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 aiPersonality,
                 session.bidId || null
             )
+
+            // Ensure minimum thinking time has elapsed for better UX
+            const elapsedTime = Date.now() - startTime
+            if (elapsedTime < MINIMUM_THINKING_TIME) {
+                await new Promise(resolve => setTimeout(resolve, MINIMUM_THINKING_TIME - elapsedTime))
+            }
 
             if (result.success && result.newProviderPosition !== undefined) {
                 // Update provider position in the clauses state
@@ -4854,6 +4864,59 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             )
 
             if (result.success) {
+                // ============================================================
+                // TRAINING MODE: Auto-confirm for AI opponent after customer confirms
+                // ============================================================
+                if (isTrainingMode && userInfo.role === 'customer') {
+                    // Show "AI is confirming" message
+                    const confirmingMessage: ClauseChatMessage = {
+                        messageId: `ai-confirming-${Date.now()}`,
+                        sessionId: session.sessionId,
+                        positionId: selectedClause.positionId,
+                        sender: 'clarence',
+                        senderUserId: null,
+                        message: `⏳ **${session.providerContactName || 'AI Opponent'}** is reviewing your confirmation...`,
+                        messageType: 'notification',
+                        relatedPositionChange: false,
+                        triggeredBy: 'training_auto_confirm',
+                        createdAt: new Date().toISOString()
+                    }
+                    setChatMessages(prev => [...prev, confirmingMessage])
+
+                    // Wait 2-3 seconds for realism, then auto-confirm for AI
+                    await new Promise(resolve => setTimeout(resolve, 2500))
+
+                    // Get the provider's current position for confirmation
+                    const providerPosition = selectedClause.providerPosition
+
+                    if (providerPosition !== null) {
+                        const aiConfirmResult = await confirmClausePosition(
+                            session.sessionId,
+                            selectedClause.positionId,
+                            'provider',
+                            providerPosition
+                        )
+
+                        if (aiConfirmResult.success) {
+                            // Add success message to chat
+                            const confirmedMessage: ClauseChatMessage = {
+                                messageId: `ai-confirmed-${Date.now()}`,
+                                sessionId: session.sessionId,
+                                positionId: selectedClause.positionId,
+                                sender: 'clarence',
+                                senderUserId: null,
+                                message: `✅ **${session.providerContactName || 'AI Opponent'}** has confirmed the agreement!\n\n🎉 **Clause Locked:** ${selectedClause.clauseName} is now agreed at position ${providerPosition.toFixed(1)}.`,
+                                messageType: 'notification',
+                                relatedPositionChange: true,
+                                triggeredBy: 'training_auto_confirm',
+                                createdAt: new Date().toISOString()
+                            }
+                            setChatMessages(prev => [...prev, confirmedMessage])
+                        }
+                    }
+                }
+                // ============================================================
+
                 // Refresh clause data
                 try {
                     const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${session.sessionId}`)
@@ -6718,9 +6781,46 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </div>
                             )}
 
-                            {/* Online indicator and Party Chat - HIDDEN in training mode */}
-                            {!isTrainingMode && (
+                            {/* Online indicator and Party Chat - NOW VISIBLE in training mode with amber styling */}
+                            {isTrainingMode ? (
                                 <>
+                                    {/* Training Mode: Amber indicator for AI opponent */}
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 bg-amber-400 rounded-full animate-pulse"></div>
+                                        <span className="text-xs text-amber-400">AI Active</span>
+                                    </div>
+
+                                    {/* Training Mode Chat Button - Amber themed */}
+                                    <button
+                                        onClick={() => setIsChatOpen(true)}
+                                        className="relative ml-2 p-2 hover:bg-amber-900/30 rounded-lg transition group"
+                                        title={`Chat with ${session.providerContactName || 'AI Opponent'}`}
+                                    >
+                                        <svg
+                                            className="w-5 h-5 text-amber-400 group-hover:text-amber-300 transition"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                            />
+                                        </svg>
+
+                                        {/* Unread Badge - Amber for training */}
+                                        {chatUnreadCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-amber-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                                {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+                                            </span>
+                                        )}
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Live Mode: Original green indicator */}
                                     <div className={`w-3 h-3 rounded-full ${!isCustomer ? 'bg-emerald-400 animate-pulse' : (otherPartyStatus.isOnline ? 'bg-emerald-400' : 'bg-slate-500')}`}></div>
 
                                     {/* Party Chat Toggle Button - Available to BOTH parties */}
@@ -8337,20 +8437,51 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             {/* FOCUS-12: Mark as N/A Modal */}
             <MarkAsNaModal />
 
-            {/* AI Opponent Thinking Indicator - Training Mode */}
+            {/* AI Opponent Thinking Indicator - Training Mode - ENHANCED VERSION */}
             {aiThinking && isTrainingMode && (
-                <div className="fixed bottom-4 right-4 z-40">
-                    <div className="bg-amber-500 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3">
-                        <div className="flex gap-1">
-                            <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <>
+                    {/* Semi-transparent overlay to draw attention */}
+                    <div className="fixed inset-0 bg-amber-900/10 z-30 pointer-events-none" />
+
+                    {/* Main thinking indicator - larger and more prominent */}
+                    <div className="fixed bottom-6 right-6 z-50">
+                        <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-pulse">
+                            {/* Animated avatar */}
+                            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                            </div>
+
+                            {/* Text content */}
+                            <div>
+                                <div className="font-semibold text-lg">
+                                    {session?.providerContactName || 'AI Opponent'}
+                                </div>
+                                <div className="flex items-center gap-2 text-white/90">
+                                    <span className="text-sm">is considering your move</span>
+                                    <div className="flex gap-1">
+                                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Training badge */}
+                            <div className="ml-2 px-3 py-1 bg-white/20 rounded-full text-xs font-medium">
+                                🎓 Training
+                            </div>
                         </div>
-                        <span className="text-sm font-medium">
-                            {session?.providerContactName || 'AI Opponent'} is considering...
-                        </span>
                     </div>
-                </div>
+
+                    {/* Optional: Top notification bar */}
+                    <div className="fixed top-0 left-0 right-0 z-50">
+                        <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium shadow-lg">
+                            ⏳ Waiting for {session?.providerContactName || 'AI Opponent'} to respond...
+                        </div>
+                    </div>
+                </>
             )}
 
         </div>
