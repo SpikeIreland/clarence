@@ -825,24 +825,20 @@ function extractAIPersonality(notes: string | null): 'cooperative' | 'balanced' 
     return match ? match[1].toLowerCase() as 'cooperative' | 'balanced' | 'aggressive' : 'balanced'
 }
 
-// Training AI Move Response Type
+// Training AI Move Response Type (matches workflow response)
 interface TrainingAIMoveResult {
     success: boolean
-    decision?: string
+    decision?: 'accept' | 'counter' | 'hold'
     newProviderPosition?: number
     previousProviderPosition?: number
-    agreementReached?: boolean
-    chatMessage?: string
-    teachingMoment?: {
-        type: 'tip' | 'celebration' | 'warning'
-        message: string
-    }
-    sessionState?: {
-        clausesAgreed: number
-        clausesRemaining: number
-        totalClauses: number
-        isComplete: boolean
-    }
+    providerResponse?: string
+    teachingMoment?: string
+    characterName?: string
+    companyName?: string
+    isAligned?: boolean
+    newGap?: number
+    customerPosition?: number
+    timestamp?: string
     error?: string
 }
 
@@ -4178,8 +4174,8 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                             ...c,
                             providerPosition: result.newProviderPosition!,
                             gapSize: newGap,
-                            status: result.agreementReached ? 'agreed' : determineClauseStatus(newGap),
-                            isAgreed: result.agreementReached || false
+                            status: result.isAligned ? 'agreed' : determineClauseStatus(newGap),
+                            isAgreed: result.isAligned || false
                         }
                     }
                     return c
@@ -4191,20 +4187,30 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                         ...prev,
                         providerPosition: result.newProviderPosition!,
                         gapSize: calculateGapSize(newCustomerPosition, result.newProviderPosition!),
-                        status: result.agreementReached ? 'agreed' : prev.status,
-                        isAgreed: result.agreementReached || false
+                        status: result.isAligned ? 'agreed' : prev.status,
+                        isAgreed: result.isAligned || false
                     } : null)
                 }
 
-                // Add AI message to chat
-                if (result.chatMessage) {
+                // Add AI opponent's response to chat (field is 'providerResponse', not 'chatMessage')
+                if (result.providerResponse) {
+                    const decisionEmoji = result.decision === 'accept' ? '✅'
+                        : result.decision === 'counter' ? '↔️'
+                            : '✋'
+
+                    const decisionText = result.decision === 'accept'
+                        ? `accepted your position`
+                        : result.decision === 'counter'
+                            ? `countered with position ${result.newProviderPosition?.toFixed(1)}`
+                            : `is holding firm`
+
                     const aiChatMessage: ClauseChatMessage = {
                         messageId: `training-ai-${Date.now()}`,
                         sessionId: session.sessionId,
                         positionId: positionId,
                         sender: 'clarence',
                         senderUserId: null,
-                        message: result.chatMessage,
+                        message: `${decisionEmoji} **${session.providerContactName || 'AI Opponent'}** ${decisionText}:\n\n"${result.providerResponse}"`,
                         messageType: 'auto_response',
                         relatedPositionChange: true,
                         triggeredBy: 'training_ai_move',
@@ -4212,18 +4218,15 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     }
                     setChatMessages(prev => [...prev, aiChatMessage])
 
-                    // If there's a teaching moment, add it as a separate message
+                    // Add teaching moment as separate message (it's a string, not an object)
                     if (result.teachingMoment) {
-                        const emoji = result.teachingMoment.type === 'celebration' ? '🎉'
-                            : result.teachingMoment.type === 'tip' ? '💡' : '⚠️'
-
                         const teachingMessage: ClauseChatMessage = {
                             messageId: `teaching-${Date.now()}`,
                             sessionId: session.sessionId,
                             positionId: positionId,
                             sender: 'clarence',
                             senderUserId: null,
-                            message: `${emoji} **Teaching Moment:** ${result.teachingMoment.message}`,
+                            message: `💡 **CLARENCE's Tip:** ${result.teachingMoment}`,
                             messageType: 'notification',
                             relatedPositionChange: false,
                             triggeredBy: 'training_ai_move',
@@ -4469,7 +4472,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     )
                 }
 
-                stopWorking()
+                stopWorking()  // ← This MUST come AFTER handleTrainingAIMove
             } else {
                 setWorkingError('Failed to save your position. Please try again.')
             }
