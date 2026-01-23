@@ -26,9 +26,9 @@ export default function MainNavigation() {
     return (
         <header className="bg-slate-800 text-white">
             <div className="container mx-auto px-6">
-                <nav className="flex justify-between items-center h-16">
+                <nav className="relative flex justify-between items-center h-16">
                     {/* ============================================================ */}
-                    {/* Logo & Brand */}
+                    {/* Logo & Brand - Left */}
                     {/* ============================================================ */}
                     <Link href="/" className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
@@ -41,9 +41,9 @@ export default function MainNavigation() {
                     </Link>
 
                     {/* ============================================================ */}
-                    {/* Navigation Links */}
+                    {/* Navigation Links - Centered */}
                     {/* ============================================================ */}
-                    <div className="flex items-center gap-6">
+                    <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-8">
                         {/* How It Works */}
                         <Link
                             href="/how-it-works"
@@ -55,7 +55,7 @@ export default function MainNavigation() {
                             How It Works
                         </Link>
 
-                        {/* Training - NEW LINK */}
+                        {/* Training */}
                         <Link
                             href="/training"
                             className={`text-sm font-medium transition-colors ${isActive('/training')
@@ -76,24 +76,24 @@ export default function MainNavigation() {
                         >
                             Pricing
                         </Link>
+                    </div>
 
-                        {/* ============================================================ */}
-                        {/* Sign In Buttons */}
-                        {/* ============================================================ */}
-                        <div className="flex items-center gap-3 ml-2">
-                            <Link
-                                href="/auth/login"
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
-                            >
-                                Customer Sign In
-                            </Link>
-                            <a
-                                href="https://www.clarencelegal.ai/provider"
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                            >
-                                Provider Sign In
-                            </a>
-                        </div>
+                    {/* ============================================================ */}
+                    {/* Sign In Buttons - Right */}
+                    {/* ============================================================ */}
+                    <div className="flex items-center gap-3">
+                        <Link
+                            href="/auth/login"
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                            Customer Sign In
+                        </Link>
+                        <a
+                            href="https://www.clarencelegal.ai/provider"
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                            Provider Sign In
+                        </a>
                     </div>
                 </nav>
             </div>
