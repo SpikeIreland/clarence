@@ -77,17 +77,6 @@ export default function MainNavigation() {
                             Pricing
                         </Link>
 
-                        {/* The 6 Phases */}
-                        <Link
-                            href="/phases"
-                            className={`text-sm font-medium transition-colors ${isActive('/phases')
-                                    ? 'text-white'
-                                    : 'text-slate-300 hover:text-white'
-                                }`}
-                        >
-                            The 6 Phases
-                        </Link>
-
                         {/* ============================================================ */}
                         {/* Sign In Buttons */}
                         {/* ============================================================ */}
