@@ -1,18 +1,18 @@
 'use client'
 
 // ============================================================================
-// CLARENCE Create Contract Page - V2 WITH TRANSITION MODAL
+// CLARENCE Create Contract Page - V3 WITH REORDERED STEPS
 // ============================================================================
 // File: /app/auth/create-contract/page.tsx
 // Purpose: Contract creation assessment wizard with training mode support
 // Training Mode: Activated via ?mode=training URL parameter
 // Stage: CREATE (Emerald) - Training overrides to Amber
 // 
-// V2 CHANGES:
-// 1. Added TransitionModal integration for stage transitions
-// 2. Fixed redirect flow: FM/PM paths → strategic-assessment first
-// 3. STC paths: STC-EXISTING → invite, others → contract-prep
-// 4. Pathway state initialization
+// V3 CHANGES (WP1):
+// 1. Reordered steps: Contract Type now comes BEFORE Mediation Type
+// 2. Updated CLARENCE_MESSAGES for new conversational flow
+// 3. Updated progress panel step order
+// 4. Updated step handlers for new flow
 // ============================================================================
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
@@ -39,7 +39,9 @@ import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressH
 type MediationType = 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
 type ContractType = 'nda' | 'saas' | 'bpo' | 'msa' | 'employment' | 'custom' | null
 type TemplateSource = 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
-type AssessmentStep = 'welcome' | 'mediation_type' | 'contract_type' | 'quick_intake' | 'template_source' | 'template_selection' | 'upload_processing' | 'summary' | 'creating'
+
+// WP1 CHANGE: Reordered steps - contract_type now comes before mediation_type
+type AssessmentStep = 'welcome' | 'contract_type' | 'mediation_type' | 'quick_intake' | 'template_source' | 'template_selection' | 'upload_processing' | 'summary' | 'creating'
 
 type DealValueRange = 'under_50k' | '50k_250k' | '250k_1m' | 'over_1m' | null
 type ServiceCriticality = 'low' | 'medium' | 'high' | 'critical' | null
@@ -163,26 +165,59 @@ const POLLING_INTERVAL = 5000
 const MAX_POLLING_ATTEMPTS = 60
 
 // ============================================================================
-// SECTION 3: CLARENCE MESSAGES
+// SECTION 3: CLARENCE MESSAGES (WP1 UPDATED)
 // ============================================================================
 
 const CLARENCE_MESSAGES = {
+    // WP1 CHANGE: Updated welcome to ask about contract type first
     welcome: `Hello! I'm Clarence, your contract negotiation assistant. 
 
-I'll help you set up your new contract in just a few steps. First, I need to understand what type of negotiation process you're looking for.
+I'll help you set up your new contract in just a few steps. Let's start with the basics.
 
-**Let's get started!**`,
+**What type of contract are you creating today?**`,
 
     welcome_training: `Hello! I'm Clarence, your training assistant. 🎓
 
 I'll help you set up a **practice contract** for your training session. This works exactly like the real thing, but with no real-world consequences.
 
-**Let's get started!**`,
+**What type of contract would you like to practice with?**`,
 
+    // WP1 CHANGE: Contract type is now first, update message accordingly
+    contract_type: `**What type of contract are you creating?**
+
+Select the category that best matches your needs. This helps me suggest the right template and structure.`,
+
+    // WP1 CHANGE: New messages for after contract type selection
+    contract_type_nda_selected: `**Non-Disclosure Agreement** - great choice for protecting confidential information.
+
+Now let's talk about how much negotiation you expect for this contract.`,
+
+    contract_type_saas_selected: `**SaaS Agreement** - perfect for software subscription arrangements.
+
+Now let's talk about how much negotiation you expect for this contract.`,
+
+    contract_type_bpo_selected: `**BPO / Outsourcing Agreement** - ideal for managed services relationships.
+
+Now let's talk about how much negotiation you expect for this contract.`,
+
+    contract_type_msa_selected: `**Master Services Agreement** - excellent for ongoing service relationships.
+
+Now let's talk about how much negotiation you expect for this contract.`,
+
+    contract_type_employment_selected: `**Employment Contract** - for employment terms and conditions.
+
+Now let's talk about how much negotiation you expect for this contract.`,
+
+    contract_type_custom_selected: `**Custom Contract** - we'll build this to your exact specifications.
+
+Now let's talk about how much negotiation you expect for this contract.`,
+
+    // WP1 CHANGE: Mediation type now comes after contract type
     mediation_type: `**How much negotiation do you expect for this contract?**
 
 This helps me understand whether we should use a streamlined process or a more comprehensive mediation approach.`,
 
+    // WP1 CHANGE: Updated mediation selection messages (no longer ask about contract type)
     mediation_straight_selected: `**Straight to Contract** - excellent choice for standard agreements.
 
 With this approach:
@@ -190,7 +225,7 @@ With this approach:
 • All terms are fixed - no negotiation required
 • Fastest path to a signed agreement
 
-Now, what type of contract are you creating?`,
+Now let's choose how you'd like to build your contract.`,
 
     mediation_partial_selected: `**Partial Mediation** - a balanced approach.
 
@@ -199,7 +234,7 @@ With this approach:
 • Specific clauses remain negotiable
 • You'll have control over which terms are open for discussion
 
-Now, what type of contract are you creating?`,
+Let me understand your deal context before we continue.`,
 
     mediation_full_selected: `**Full Mediation** - comprehensive negotiation.
 
@@ -208,17 +243,7 @@ With this approach:
 • Both parties work through each clause together
 • Best for complex or high-value agreements
 
-Now, what type of contract are you creating?`,
-
-    contract_type: `**What type of contract are you creating?**
-
-Select the category that best matches your needs. This helps me suggest the right template and structure.`,
-
-    contract_type_stc_selected: `**Great choice!**
-
-Since you're going Straight to Contract, let's get you to the template selection quickly.
-
-**How would you like to start building your contract?**`,
+Let me understand your deal context before we continue.`,
 
     quick_intake: `**Let me understand your deal context.**
 
@@ -423,17 +448,19 @@ function ContractCreationContent() {
     }, [router])
 
     // ========================================================================
-    // SECTION 5D: EFFECTS
+    // SECTION 5D: EFFECTS (WP1 UPDATED)
     // ========================================================================
 
     useEffect(() => { const user = loadUserInfo(); if (user) setUserInfo(user) }, [loadUserInfo])
 
+    // WP1 CHANGE: After welcome, go to contract_type first (not mediation_type)
     useEffect(() => {
         const welcomeMessage = isTrainingMode ? CLARENCE_MESSAGES.welcome_training : CLARENCE_MESSAGES.welcome
         setChatMessages([{ id: 'welcome-1', role: 'clarence', content: welcomeMessage, timestamp: new Date() }])
         const timer = setTimeout(() => {
-            setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
-            addClarenceMessage(CLARENCE_MESSAGES.mediation_type, MEDIATION_OPTIONS)
+            // WP1: Now go to contract_type first
+            setAssessment(prev => ({ ...prev, step: 'contract_type' }))
+            addClarenceMessage(CLARENCE_MESSAGES.contract_type, CONTRACT_TYPE_OPTIONS)
         }, 1500)
         return () => clearTimeout(timer)
     }, [isTrainingMode])
@@ -487,7 +514,7 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 5E-2: PATHWAY HELPER FUNCTIONS (UPDATED)
+    // SECTION 5E-2: PATHWAY HELPER FUNCTIONS
     // ========================================================================
 
     const determinePathwayId = (
@@ -515,7 +542,7 @@ function ContractCreationContent() {
     }
 
     /**
-     * UPDATED: Build redirect URL based on pathway
+     * Build redirect URL based on pathway
      * - STC-EXISTING: → invite-provider (true fast-track)
      * - Other STC: → contract-prep (need to configure positions)
      * - FM/PM: → strategic-assessment (assessment first, THEN prep)
@@ -688,37 +715,50 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 5G: SELECTION HANDLERS
+    // SECTION 5G: SELECTION HANDLERS (WP1 UPDATED)
     // ========================================================================
 
+    // WP1 CHANGE: Contract type is now selected FIRST
+    const handleContractTypeSelect = (option: AssessmentOption) => {
+        const contractType = option.value as ContractType
+        setAssessment(prev => ({ ...prev, contractType }))
+        addUserMessage(option.label)
+
+        // Get the appropriate message for this contract type
+        const messageKey = `contract_type_${contractType}_selected` as keyof typeof CLARENCE_MESSAGES
+        const message = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.mediation_type
+
+        setTimeout(() => {
+            // WP1: After contract type, go to mediation_type
+            setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
+            addClarenceMessage(message, MEDIATION_OPTIONS)
+        }, 500)
+    }
+
+    // WP1 CHANGE: Mediation type is now selected SECOND
     const handleMediationSelect = (option: AssessmentOption) => {
         const mediationType = option.value as MediationType
         setAssessment(prev => ({ ...prev, mediationType }))
         addUserMessage(option.label)
 
         const messageKey = `mediation_${option.value}_selected` as keyof typeof CLARENCE_MESSAGES
-        const message = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.contract_type
+        const message = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.template_source
 
-        setTimeout(() => {
-            setAssessment(prev => ({ ...prev, step: 'contract_type' }))
-            addClarenceMessage(message, CONTRACT_TYPE_OPTIONS)
-        }, 500)
-    }
-
-    const handleContractTypeSelect = (option: AssessmentOption) => {
-        const contractType = option.value as ContractType
-        setAssessment(prev => ({ ...prev, contractType }))
-        addUserMessage(option.label)
-
-        const skipQuickIntake = shouldSkipQuickIntake(assessment.mediationType)
+        const skipQuickIntake = shouldSkipQuickIntake(mediationType)
 
         setTimeout(() => {
             if (skipQuickIntake) {
+                // STC: Skip quick intake, go straight to template source
                 setAssessment(prev => ({ ...prev, step: 'template_source' }))
-                addClarenceMessage(CLARENCE_MESSAGES.contract_type_stc_selected, TEMPLATE_SOURCE_OPTIONS)
+                addClarenceMessage(message, TEMPLATE_SOURCE_OPTIONS)
             } else {
+                // FM/PM: Go to quick intake first
                 setAssessment(prev => ({ ...prev, step: 'quick_intake' }))
-                addClarenceMessage(CLARENCE_MESSAGES.quick_intake)
+                addClarenceMessage(message)
+                // Add quick intake message after a brief delay
+                setTimeout(() => {
+                    addClarenceMessage(CLARENCE_MESSAGES.quick_intake)
+                }, 1000)
             }
         }, 500)
     }
@@ -763,16 +803,17 @@ function ContractCreationContent() {
         setTimeout(() => addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary), 500)
     }
 
+    // WP1 CHANGE: Updated option select handler for new step order
     const handleOptionSelect = (option: AssessmentOption) => {
         switch (assessment.step) {
-            case 'mediation_type': handleMediationSelect(option); break
             case 'contract_type': handleContractTypeSelect(option); break
+            case 'mediation_type': handleMediationSelect(option); break
             case 'template_source': handleTemplateSourceSelect(option); break
         }
     }
 
     // ========================================================================
-    // SECTION 5H: CONTRACT CREATION (UPDATED WITH TRANSITION MODAL)
+    // SECTION 5H: CONTRACT CREATION (WITH TRANSITION MODAL)
     // ========================================================================
 
     const createContract = async () => {
@@ -844,7 +885,7 @@ function ContractCreationContent() {
             console.log('[CreateContract] Redirecting to:', redirectUrl)
             console.log('[CreateContract] Showing transition:', transition?.id)
 
-            // NEW: Show transition modal instead of immediate redirect
+            // Show transition modal instead of immediate redirect
             if (transition) {
                 setTransitionState({
                     isOpen: true,
@@ -865,7 +906,7 @@ function ContractCreationContent() {
         }
     }
 
-    // NEW: Handle transition modal continue
+    // Handle transition modal continue
     const handleTransitionContinue = () => {
         const { redirectUrl } = transitionState
         setTransitionState({ isOpen: false, transition: null, redirectUrl: null })
@@ -880,13 +921,14 @@ function ContractCreationContent() {
     const getTemplateSourceLabel = (source: TemplateSource): string => TEMPLATE_SOURCE_OPTIONS.find(o => o.value === source)?.label || 'Template'
 
     // ========================================================================
-    // SECTION 6: RENDER - PROGRESS PANEL
+    // SECTION 6: RENDER - PROGRESS PANEL (WP1 UPDATED)
     // ========================================================================
 
     const renderProgressPanel = () => {
+        // WP1 CHANGE: Reordered steps - contract_type now comes before mediation_type
         const baseSteps = [
-            { id: 'mediation_type', label: 'Mediation Type', icon: '⚖️' },
             { id: 'contract_type', label: 'Contract Type', icon: '📋' },
+            { id: 'mediation_type', label: 'Mediation Type', icon: '⚖️' },
         ]
 
         const quickIntakeStep = !shouldSkipQuickIntake(assessment.mediationType)
@@ -908,7 +950,8 @@ function ContractCreationContent() {
             return true
         })
 
-        const stepOrder = ['welcome', 'mediation_type', 'contract_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
+        // WP1 CHANGE: Updated step order to match new flow
+        const stepOrder = ['welcome', 'contract_type', 'mediation_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
         const currentIndex = stepOrder.indexOf(assessment.step)
 
         return (
@@ -967,7 +1010,7 @@ function ContractCreationContent() {
                             return (
                                 <div key={step.id} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isCurrent ? (isTrainingMode ? 'bg-amber-100 border border-amber-300' : 'bg-emerald-100 border border-emerald-300') : isComplete ? 'bg-white border border-slate-200' : 'bg-slate-50/50 border border-transparent'}`}>
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isComplete ? (isTrainingMode ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white') : isCurrent ? (isTrainingMode ? 'bg-amber-200 text-amber-800' : 'bg-emerald-200 text-emerald-800') : 'bg-slate-200 text-slate-400'}`}>
-                                        {isComplete ? '✓' : step.icon}
+                                        {isComplete ? '✔' : step.icon}
                                     </div>
                                     <span className={`text-sm ${isCurrent ? (isTrainingMode ? 'text-amber-800 font-semibold' : 'text-emerald-800 font-semibold') : isComplete ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
                                 </div>
@@ -989,7 +1032,7 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 7: RENDER - MAIN PANEL CONTENT
+    // SECTION 7: RENDER - MAIN PANEL CONTENT (WP1 UPDATED)
     // ========================================================================
 
     const renderMainPanel = () => {
@@ -1000,8 +1043,9 @@ function ContractCreationContent() {
                 <div className="flex-1 overflow-auto">
                     <div className="p-8">
                         {assessment.step === 'welcome' && renderWelcome()}
-                        {assessment.step === 'mediation_type' && renderMediationType()}
+                        {/* WP1: Contract type now renders before mediation type */}
                         {assessment.step === 'contract_type' && renderContractType()}
+                        {assessment.step === 'mediation_type' && renderMediationType()}
                         {assessment.step === 'quick_intake' && renderQuickIntake()}
                         {assessment.step === 'template_source' && renderTemplateSource()}
                         {assessment.step === 'template_selection' && renderTemplateSelection()}
@@ -1026,6 +1070,25 @@ function ContractCreationContent() {
         </div>
     )
 
+    // WP1 CHANGE: Contract type is now the first selection step
+    const renderContractType = () => (
+        <div className="max-w-2xl mx-auto">
+            <h3 className="text-lg font-medium text-slate-800 mb-6">What type of contract are you creating?</h3>
+            <div className="grid grid-cols-2 gap-4">
+                {CONTRACT_TYPE_OPTIONS.map((option) => (
+                    <button key={option.id} onClick={() => handleOptionSelect(option)} className={`flex items-start gap-3 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
+                        <div className={`w-10 h-10 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-xl">{option.icon}</span></div>
+                        <div className="flex-1 min-w-0">
+                            <h4 className={`font-semibold text-slate-800 text-sm ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4>
+                            <p className="text-xs text-slate-500 mt-1">{option.description}</p>
+                        </div>
+                    </button>
+                ))}
+            </div>
+        </div>
+    )
+
+    // WP1 CHANGE: Mediation type is now the second selection step
     const renderMediationType = () => (
         <div className="max-w-2xl mx-auto">
             <h3 className="text-lg font-medium text-slate-800 mb-6">How much negotiation do you expect?</h3>
@@ -1036,23 +1099,6 @@ function ContractCreationContent() {
                         <div className="flex-1">
                             <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4>
                             <p className="text-sm text-slate-500 mt-1">{option.description}</p>
-                        </div>
-                    </button>
-                ))}
-            </div>
-        </div>
-    )
-
-    const renderContractType = () => (
-        <div className="max-w-2xl mx-auto">
-            <h3 className="text-lg font-medium text-slate-800 mb-6">What type of contract are you creating?</h3>
-            <div className="grid grid-cols-2 gap-4">
-                {CONTRACT_TYPE_OPTIONS.map((option) => (
-                    <button key={option.id} onClick={() => handleOptionSelect(option)} className={`flex items-center gap-3 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
-                        <div className={`w-10 h-10 rounded-lg ${colors.bgLight} flex items-center justify-center flex-shrink-0`}><span className="text-xl">{option.icon}</span></div>
-                        <div className="flex-1 min-w-0">
-                            <h4 className={`font-medium text-slate-800 text-sm ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4>
-                            <p className="text-xs text-slate-500 truncate">{option.description}</p>
                         </div>
                     </button>
                 ))}
@@ -1131,7 +1177,7 @@ function ContractCreationContent() {
                 <div className={`p-6 rounded-xl border-2 ${status === 'ready' ? `${colors.borderPrimary} ${colors.bgLight}` : status === 'failed' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
                     <div className="flex items-center gap-4">
                         {status === 'processing' && <div className={`w-10 h-10 border-4 ${isTrainingMode ? 'border-amber-600' : 'border-emerald-600'} border-t-transparent rounded-full animate-spin`}></div>}
-                        {status === 'ready' && <div className={`w-10 h-10 rounded-full ${colors.bgSolid} flex items-center justify-center`}><span className="text-white text-xl">✓</span></div>}
+                        {status === 'ready' && <div className={`w-10 h-10 rounded-full ${colors.bgSolid} flex items-center justify-center`}><span className="text-white text-xl">✔</span></div>}
                         {status === 'failed' && <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center"><span className="text-white text-xl">✗</span></div>}
                         <div className="flex-1">
                             <p className="font-medium text-slate-800">{assessment.uploadedFileName}</p>
@@ -1169,12 +1215,15 @@ function ContractCreationContent() {
         )
     }
 
+    // WP1: Summary now shows Contract Type before Mediation Type
     const renderSummary = () => (
         <div className="max-w-2xl mx-auto">
             <h3 className="text-lg font-medium text-slate-800 mb-6">{isTrainingMode ? '🎓 Training Contract Summary' : 'Contract Setup Summary'}</h3>
             <div className="space-y-4 mb-8">
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">⚖️</span><div><p className="text-sm text-slate-500">Mediation Type</p><p className="font-medium text-slate-800">{getMediationTypeLabel(assessment.mediationType)}</p></div></div></div>
+                {/* WP1: Show Contract Type first */}
                 <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">📋</span><div><p className="text-sm text-slate-500">Contract Type</p><p className="font-medium text-slate-800">{getContractTypeLabel(assessment.contractType)}</p></div></div></div>
+                {/* WP1: Show Mediation Type second */}
+                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">⚖️</span><div><p className="text-sm text-slate-500">Mediation Type</p><p className="font-medium text-slate-800">{getMediationTypeLabel(assessment.mediationType)}</p></div></div></div>
                 <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">📄</span><div><p className="text-sm text-slate-500">Starting Point</p><p className="font-medium text-slate-800">{getTemplateSourceLabel(assessment.templateSource)}</p></div></div></div>
                 {assessment.selectedTemplateName && <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}><div className="flex items-center gap-3"><span className="text-2xl">✔</span><div><p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Selected Template</p><p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.selectedTemplateName}</p></div></div></div>}
                 {assessment.uploadedFileName && <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}><div className="flex items-center gap-3"><span className="text-2xl">📄</span><div><p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Uploaded Contract</p><p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.uploadedFileName}</p></div></div></div>}
@@ -1211,10 +1260,6 @@ function ContractCreationContent() {
             </div>
         </div>
     )
-
-    // ========================================================================
-    // SECTION 8: CHAT PANEL
-    // ========================================================================
 
     // ========================================================================
     // SECTION 8: CHAT PANEL
@@ -1260,7 +1305,7 @@ function ContractCreationContent() {
             <div className="flex-1 min-w-0">{renderMainPanel()}</div>
             <div className="w-96 flex-shrink-0">{renderChatPanel()}</div>
 
-            {/* NEW: Transition Modal */}
+            {/* Transition Modal */}
             <TransitionModal
                 isOpen={transitionState.isOpen}
                 transition={transitionState.transition}
