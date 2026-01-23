@@ -5334,7 +5334,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                                         {/* Position Markers */}
                                         {/* Other Party marker - ONLY show if provider has been invited */}
-                                        {hasProviderInvited && otherBarPercent !== null && !isAligned && (
+                                        {(hasProviderInvited || isTrainingMode) && otherBarPercent !== null && !isAligned && (
                                             <div
                                                 className={`absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md ${isOtherAtClarence ? 'ring-2 ring-purple-400 ring-offset-1' : ''}`}
                                                 style={{
@@ -5573,7 +5573,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         title="Click to set your position"
                                     >
                                         {/* Other Party marker - ONLY show if provider has been invited */}
-                                        {hasProviderInvited && otherBarPercent !== null && !isAligned && (
+                                        {(hasProviderInvited || isTrainingMode) && otherBarPercent !== null && !isAligned && (
                                             <div
                                                 className="absolute top-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 shadow-md"
                                                 style={{
