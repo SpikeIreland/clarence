@@ -870,16 +870,11 @@ async function triggerAICounterMove(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                sessionId: sessionId,
-                clauseId: clauseId,
-                clauseNumber: clauseNumber,
-                clauseName: clauseName,
-                customerPosition: newCustomerPosition,
-                previousCustomerPosition: previousCustomerPosition,
-                currentProviderPosition: currentProviderPosition,
-                aiPersonality: aiPersonality,
-                moveNumber: 1,
-                bidId: bidId
+                sessionId,
+                clauseId,
+                newCustomerPosition,
+                previousCustomerPosition,
+                currentProviderPosition
             })
         })
 
@@ -4458,6 +4453,22 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 setPendingLeverageImpact(0)
                 // Refresh negotiation history to include the new move
                 await fetchNegotiationHistory()
+
+                // ============================================================
+                // TRAINING MODE: Trigger AI opponent counter-move
+                // ============================================================
+                if (isTrainingMode && resolvedParty === 'customer') {
+                    await handleTrainingAIMove(
+                        selectedClause.clauseId,
+                        selectedClause.positionId,
+                        proposedPosition,
+                        currentPosition,
+                        selectedClause.providerPosition || 5,
+                        selectedClause.clauseNumber,
+                        selectedClause.clauseName
+                    )
+                }
+
                 stopWorking()
             } else {
                 setWorkingError('Failed to save your position. Please try again.')
@@ -8322,6 +8333,22 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             <AddClauseModal />
             {/* FOCUS-12: Mark as N/A Modal */}
             <MarkAsNaModal />
+
+            {/* AI Opponent Thinking Indicator - Training Mode */}
+            {aiThinking && isTrainingMode && (
+                <div className="fixed bottom-4 right-4 z-40">
+                    <div className="bg-amber-500 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3">
+                        <div className="flex gap-1">
+                            <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span className="text-sm font-medium">
+                            {session?.providerContactName || 'AI Opponent'} is considering...
+                        </span>
+                    </div>
+                </div>
+            )}
 
         </div>
     )
