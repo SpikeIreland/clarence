@@ -1475,7 +1475,7 @@ const WORKING_MESSAGES: Record<NonNullable<WorkingType>, string> = {
     provider_switch: 'Switching provider view...'
 }
 
-const WORKING_TIMEOUT_MS = 30000 // 30 seconds
+const WORKING_TIMEOUT_MS = 15000 // 15 seconds
 
 interface WorkingOverlayProps {
     workingState: WorkingState
