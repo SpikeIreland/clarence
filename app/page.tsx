@@ -51,11 +51,11 @@ export default function Home() {
             {/* ============================================================ */}
             {/* PRIMARY BRAND MESSAGE: Create, Negotiate, Agree */}
             {/* ============================================================ */}
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight">
+            <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight flex items-baseline justify-center flex-wrap gap-x-3">
               <span className="text-emerald-600">Create</span>
-              <span className="text-slate-400 mx-3">·</span>
-              <span className="text-slate-800">Negotiate</span>
-              <span className="text-slate-400 mx-3">·</span>
+              <span className="text-slate-400">·</span>
+              <span className="text-slate-800 text-6xl md:text-7xl font-black">Negotiate</span>
+              <span className="text-slate-400">·</span>
               <span className="text-violet-600">Agree</span>
             </h1>
 
@@ -66,7 +66,7 @@ export default function Home() {
 
             {/* Secondary Tagline: Training, Tendering, Contracting */}
             <p className="text-lg mb-4 max-w-2xl mx-auto">
-              <span className="text-amber-500 font-medium">Training</span>
+              <span className="text-slate-600 font-medium">Training</span>
               <span className="text-slate-400 mx-2">·</span>
               <span className="text-slate-600 font-medium">Tendering</span>
               <span className="text-slate-400 mx-2">·</span>
