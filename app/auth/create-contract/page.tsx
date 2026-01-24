@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// CLARENCE Create Contract Page - V3 WITH REORDERED STEPS
+// CLARENCE Create Contract Page - V4 WITH TENDERING SUPPORT
 // ============================================================================
 // File: /app/auth/create-contract/page.tsx
 // Purpose: Contract creation assessment wizard with training mode support
@@ -13,6 +13,13 @@
 // 2. Updated CLARENCE_MESSAGES for new conversational flow
 // 3. Updated progress panel step order
 // 4. Updated step handlers for new flow
+//
+// V4 CHANGES (WP3):
+// 1. Enhanced Quick Intake with Tendering Configuration
+// 2. Added qualificationThreshold and evaluationPriorities fields
+// 3. Tendering section appears when bidderCount is 'few' or 'many'
+// 4. Updated CLARENCE messages for tendering context
+// 5. Pass tendering data to session-create API
 // ============================================================================
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
@@ -20,7 +27,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
 
-// NEW: Import TransitionModal and pathway utilities
+// Import TransitionModal and pathway utilities
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
 import {
     getPathwayId as getPathwayIdFromUtils,
@@ -49,6 +56,9 @@ type TimelinePressure = 'flexible' | 'normal' | 'tight' | 'urgent' | null
 type BidderCount = 'single' | 'few' | 'many' | null
 type BatnaStatus = 'strong' | 'weak' | 'uncertain' | null
 
+// WP3: Evaluation priority type for tendering
+type EvaluationPriority = 'cost' | 'quality' | 'speed' | 'innovation' | 'risk_mitigation' | 'relationship'
+
 interface UserInfo {
     firstName: string
     lastName: string
@@ -57,6 +67,20 @@ interface UserInfo {
     role: string
     userId: string
     companyId: string | null
+}
+
+// WP3: Enhanced Quick Intake interface with tendering fields
+interface QuickIntakeData {
+    dealValue: DealValueRange
+    serviceCriticality: ServiceCriticality
+    timelinePressure: TimelinePressure
+    bidderCount: BidderCount
+    batnaStatus: BatnaStatus
+    topPriorities: string[]
+    // WP3: Tendering configuration
+    qualificationThreshold: number  // 50-100, default 65
+    evaluationPriorities: EvaluationPriority[]  // Ordered list of priorities
+    mustHaveCapabilities: string  // Free text for minimum requirements
 }
 
 interface AssessmentState {
@@ -71,14 +95,7 @@ interface AssessmentState {
     uploadedContractId: string | null
     uploadedContractStatus: 'processing' | 'ready' | 'failed' | null
     uploadedFileName: string | null
-    quickIntake: {
-        dealValue: DealValueRange
-        serviceCriticality: ServiceCriticality
-        timelinePressure: TimelinePressure
-        bidderCount: BidderCount
-        batnaStatus: BatnaStatus
-        topPriorities: string[]
-    }
+    quickIntake: QuickIntakeData
 }
 
 interface ChatMessage {
@@ -108,7 +125,7 @@ interface Template {
     clauseCount: number
 }
 
-// NEW: Transition state for modal
+// Transition state for modal
 interface TransitionState {
     isOpen: boolean
     transition: TransitionConfig | null
@@ -161,11 +178,21 @@ const TEMPLATE_SOURCE_OPTIONS: AssessmentOption[] = [
     { id: 'scratch', label: 'Build from Scratch', description: 'Create a new contract clause by clause', value: 'from_scratch', icon: '🔨' }
 ]
 
+// WP3: Evaluation priority options for tendering
+const EVALUATION_PRIORITY_OPTIONS: { value: EvaluationPriority; label: string; icon: string }[] = [
+    { value: 'cost', label: 'Cost Optimization', icon: '💰' },
+    { value: 'quality', label: 'Quality & Standards', icon: '⭐' },
+    { value: 'speed', label: 'Speed of Delivery', icon: '⚡' },
+    { value: 'innovation', label: 'Innovation & Technology', icon: '💡' },
+    { value: 'risk_mitigation', label: 'Risk Mitigation', icon: '🛡️' },
+    { value: 'relationship', label: 'Partnership Potential', icon: '🤝' }
+]
+
 const POLLING_INTERVAL = 5000
 const MAX_POLLING_ATTEMPTS = 60
 
 // ============================================================================
-// SECTION 3: CLARENCE MESSAGES (WP1 UPDATED)
+// SECTION 3: CLARENCE MESSAGES (WP1 + WP3 UPDATED)
 // ============================================================================
 
 const CLARENCE_MESSAGES = {
@@ -185,81 +212,76 @@ I'll help you set up a **practice contract** for your training session. This wor
     // WP1 CHANGE: Contract type is now first, update message accordingly
     contract_type: `**What type of contract are you creating?**
 
-Select the category that best matches your needs. This helps me suggest the right template and structure.`,
+Select the type that best matches your needs. This helps me suggest appropriate templates and clauses.`,
 
-    // WP1 CHANGE: New messages for after contract type selection
+    // WP1 NEW: Messages for after contract type selection (before mediation)
     contract_type_nda_selected: `**Non-Disclosure Agreement** - great choice for protecting confidential information.
 
-Now let's talk about how much negotiation you expect for this contract.`,
+Now let's talk about how much negotiation you expect...`,
 
-    contract_type_saas_selected: `**SaaS Agreement** - perfect for software subscription arrangements.
+    contract_type_saas_selected: `**SaaS Agreement** - perfect for software service subscriptions.
 
-Now let's talk about how much negotiation you expect for this contract.`,
+Now let's discuss the negotiation approach...`,
 
-    contract_type_bpo_selected: `**BPO / Outsourcing Agreement** - ideal for managed services relationships.
+    contract_type_bpo_selected: `**BPO / Outsourcing Agreement** - ideal for managed service relationships.
 
-Now let's talk about how much negotiation you expect for this contract.`,
+Let's determine how flexible the negotiation needs to be...`,
 
-    contract_type_msa_selected: `**Master Services Agreement** - excellent for ongoing service relationships.
+    contract_type_msa_selected: `**Master Services Agreement** - a strong foundation for ongoing partnerships.
 
-Now let's talk about how much negotiation you expect for this contract.`,
+How much negotiation are you expecting?`,
 
-    contract_type_employment_selected: `**Employment Contract** - for employment terms and conditions.
+    contract_type_employment_selected: `**Employment Contract** - essential for formalizing the employment relationship.
 
-Now let's talk about how much negotiation you expect for this contract.`,
+Let's discuss how the terms will be finalized...`,
 
-    contract_type_custom_selected: `**Custom Contract** - we'll build this to your exact specifications.
+    contract_type_custom_selected: `**Custom Contract** - I'll help you build exactly what you need.
 
-Now let's talk about how much negotiation you expect for this contract.`,
+First, let's understand the negotiation requirements...`,
 
-    // WP1 CHANGE: Mediation type now comes after contract type
-    mediation_type: `**How much negotiation do you expect for this contract?**
+    // WP1 CHANGE: Mediation selection now comes after contract type
+    mediation_selection: `**How much negotiation do you expect?**
 
-This helps me understand whether we should use a streamlined process or a more comprehensive mediation approach.`,
+This determines how CLARENCE will facilitate the process:`,
 
-    // WP1 CHANGE: Updated mediation selection messages (no longer ask about contract type)
-    mediation_straight_selected: `**Straight to Contract** - excellent choice for standard agreements.
+    mediation_stc_selected: `**Straight to Contract** - efficient and streamlined.
 
-With this approach:
-• The contract will be generated automatically once provider details are submitted
-• All terms are fixed - no negotiation required
-• Fastest path to a signed agreement
+Since there's minimal negotiation, we'll use standard positions. Let's choose how to start building your contract.`,
 
-Now let's choose how you'd like to build your contract.`,
+    mediation_pm_selected: `**Partial Mediation** - a balanced approach.
 
-    mediation_partial_selected: `**Partial Mediation** - a balanced approach.
+Most terms will use standard positions, with key clauses open for negotiation. Before we continue, I need a bit more context about this deal.`,
 
-With this approach:
-• Most clauses (~85%) will be locked and auto-drafted
-• Specific clauses remain negotiable
-• You'll have control over which terms are open for discussion
+    mediation_fm_selected: `**Full Mediation** - comprehensive negotiation support.
 
-Let me understand your deal context before we continue.`,
+All terms are on the table. To help you negotiate effectively, I need to understand more about this deal.`,
 
-    mediation_full_selected: `**Full Mediation** - comprehensive negotiation.
-
-With this approach:
-• All contract terms are open for discussion
-• Both parties work through each clause together
-• Best for complex or high-value agreements
-
-Let me understand your deal context before we continue.`,
-
+    // WP3: Updated quick_intake message for tendering context
     quick_intake: `**Let me understand your deal context.**
 
-A few quick questions will help me provide better guidance during clause review and negotiation. This only takes about 30 seconds.`,
+This helps me calculate your negotiating leverage and recommend appropriate positions.`,
 
+    // WP3: New message for tendering configuration
+    quick_intake_tendering: `**You're evaluating multiple providers** - excellent! This gives you strong negotiating leverage.
+
+Let me help you configure the provider evaluation criteria. This will help filter providers who meet your minimum requirements.`,
+
+    // WP3: Updated completion message for tendering
     quick_intake_complete: `**Thanks! I now have a clearer picture of your deal.**
 
-This context will help me provide relevant suggestions during contract preparation and negotiation. Now let's choose how you'd like to build your contract.`,
+I'll use this context to calculate leverage and recommend initial positions. Now let's decide how you want to start building the contract.`,
+
+    quick_intake_complete_tendering: `**Perfect! Your tendering configuration is set.**
+
+I'll use your qualification threshold and priorities to help evaluate provider alignment once they submit their positions. Now let's decide how to build the contract.`,
 
     template_source: `**How would you like to start building your contract?**
 
-You can use an existing template, upload your own document, or build from scratch.`,
+Choose the approach that best fits your situation:`,
 
-    template_selection: `**Select a template to start with:**
+    template_selection: `**Select a template from the library:**
 
-These templates contain pre-configured clauses that you can customize. Each includes industry-standard terms and positions.`,
+These are pre-configured with industry-standard clauses. You can modify any clause once we begin.`,
 
     template_selection_modify: `**Select a template to customize:**
 
@@ -391,7 +413,7 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 5B: STATE
+    // SECTION 5B: STATE (WP3 UPDATED)
     // ========================================================================
 
     const [assessment, setAssessment] = useState<AssessmentState>({
@@ -406,7 +428,19 @@ function ContractCreationContent() {
         uploadedContractId: null,
         uploadedContractStatus: null,
         uploadedFileName: null,
-        quickIntake: { dealValue: null, serviceCriticality: null, timelinePressure: null, bidderCount: null, batnaStatus: null, topPriorities: [] }
+        // WP3: Enhanced quickIntake with tendering defaults
+        quickIntake: {
+            dealValue: null,
+            serviceCriticality: null,
+            timelinePressure: null,
+            bidderCount: null,
+            batnaStatus: null,
+            topPriorities: [],
+            // WP3: Tendering fields with sensible defaults
+            qualificationThreshold: 65,
+            evaluationPriorities: ['quality', 'cost', 'risk_mitigation'],
+            mustHaveCapabilities: ''
+        }
     })
 
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
@@ -419,7 +453,10 @@ function ContractCreationContent() {
     const [error, setError] = useState<string | null>(null)
     const [trainingSessionCreated, setTrainingSessionCreated] = useState<string | null>(null)
 
-    // NEW: Transition modal state
+    // WP3: Track if tendering section is expanded
+    const [showTenderingSection, setShowTenderingSection] = useState(false)
+
+    // Transition modal state
     const [transitionState, setTransitionState] = useState<TransitionState>({
         isOpen: false,
         transition: null,
@@ -468,6 +505,14 @@ function ContractCreationContent() {
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages])
     useEffect(() => { if (assessment.step === 'template_selection') loadTemplates() }, [assessment.step])
     useEffect(() => { return () => { if (pollingRef.current) clearInterval(pollingRef.current) } }, [])
+
+    // WP3: Auto-expand tendering section when multi-provider selected
+    useEffect(() => {
+        const isMultiProvider = assessment.quickIntake.bidderCount === 'few' || assessment.quickIntake.bidderCount === 'many'
+        if (isMultiProvider && !showTenderingSection) {
+            setShowTenderingSection(true)
+        }
+    }, [assessment.quickIntake.bidderCount])
 
     // ========================================================================
     // SECTION 5E: HELPER FUNCTIONS
@@ -621,6 +666,11 @@ function ContractCreationContent() {
         return mediationType === 'straight_to_contract'
     }
 
+    // WP3: Check if this is a multi-provider (tendering) scenario
+    const isMultiProviderScenario = (): boolean => {
+        return assessment.quickIntake.bidderCount === 'few' || assessment.quickIntake.bidderCount === 'many'
+    }
+
     // ========================================================================
     // SECTION 5F: UPLOAD FUNCTIONS
     // ========================================================================
@@ -700,120 +750,119 @@ function ContractCreationContent() {
                 const res = await fetch(`${API_BASE}/get-uploaded-contract?contract_id=${contractId}`)
                 if (res.ok) {
                     const data = await res.json()
-                    if (data.contract?.status === 'ready') {
+                    if (data.status === 'ready' || data.status === 'complete' || data.clauseCount > 0) {
                         if (pollingRef.current) clearInterval(pollingRef.current)
                         setAssessment(prev => ({ ...prev, uploadedContractStatus: 'ready' }))
                         addClarenceMessage(CLARENCE_MESSAGES.upload_ready)
-                    } else if (data.contract?.status === 'failed') {
+                    } else if (data.status === 'failed' || data.status === 'error') {
                         if (pollingRef.current) clearInterval(pollingRef.current)
                         setAssessment(prev => ({ ...prev, uploadedContractStatus: 'failed' }))
                         addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
                     }
                 }
-            } catch (e) { console.error('Polling error:', e) }
+            } catch (err) { console.error('Polling error:', err) }
         }, POLLING_INTERVAL)
     }
 
     // ========================================================================
-    // SECTION 5G: SELECTION HANDLERS (WP1 UPDATED)
+    // SECTION 5G: SELECTION HANDLERS (WP1 REORDERED + WP3 ENHANCED)
     // ========================================================================
 
-    // WP1 CHANGE: Contract type is now selected FIRST
-    const handleContractTypeSelect = (option: AssessmentOption) => {
-        const contractType = option.value as ContractType
+    // WP1: Contract type is now selected FIRST
+    const handleContractTypeSelect = (contractType: ContractType) => {
         setAssessment(prev => ({ ...prev, contractType }))
-        addUserMessage(option.label)
+        const label = CONTRACT_TYPE_OPTIONS.find(o => o.value === contractType)?.label || 'Contract'
+        addUserMessage(`I'm creating a ${label}`)
 
-        // Get the appropriate message for this contract type
+        // Get the appropriate follow-up message
         const messageKey = `contract_type_${contractType}_selected` as keyof typeof CLARENCE_MESSAGES
-        const message = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.mediation_type
+        const followUpMessage = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.mediation_selection
 
         setTimeout(() => {
-            // WP1: After contract type, go to mediation_type
+            addClarenceMessage(followUpMessage)
+            // WP1: Now proceed to mediation type selection
             setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
-            addClarenceMessage(message, MEDIATION_OPTIONS)
-        }, 500)
+            setTimeout(() => {
+                addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
+            }, 500)
+        }, 300)
     }
 
-    // WP1 CHANGE: Mediation type is now selected SECOND
-    const handleMediationSelect = (option: AssessmentOption) => {
-        const mediationType = option.value as MediationType
+    // WP1: Mediation is now selected SECOND
+    const handleMediationSelect = (mediationType: MediationType) => {
         setAssessment(prev => ({ ...prev, mediationType }))
-        addUserMessage(option.label)
-
-        const messageKey = `mediation_${option.value}_selected` as keyof typeof CLARENCE_MESSAGES
-        const message = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.template_source
+        const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Mediation'
+        addUserMessage(`I'd like ${label}`)
 
         const skipQuickIntake = shouldSkipQuickIntake(mediationType)
+        const messageKey = `mediation_${mediationType?.replace('_', '')?.substring(0, 3).toLowerCase()}_selected` as keyof typeof CLARENCE_MESSAGES
+        const selectedMessage = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.template_source
 
         setTimeout(() => {
+            addClarenceMessage(selectedMessage)
             if (skipQuickIntake) {
-                // STC: Skip quick intake, go straight to template source
                 setAssessment(prev => ({ ...prev, step: 'template_source' }))
-                addClarenceMessage(message, TEMPLATE_SOURCE_OPTIONS)
+                setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS) }, 500)
             } else {
-                // FM/PM: Go to quick intake first
                 setAssessment(prev => ({ ...prev, step: 'quick_intake' }))
-                addClarenceMessage(message)
-                // Add quick intake message after a brief delay
                 setTimeout(() => {
                     addClarenceMessage(CLARENCE_MESSAGES.quick_intake)
-                }, 1000)
+                }, 500)
             }
-        }, 500)
+        }, 300)
     }
 
-    const handleQuickIntakeComplete = () => {
-        addUserMessage('Deal context completed')
-        setTimeout(() => {
-            setAssessment(prev => ({ ...prev, step: 'template_source' }))
-            addClarenceMessage(CLARENCE_MESSAGES.quick_intake_complete, TEMPLATE_SOURCE_OPTIONS)
-        }, 500)
-    }
-
-    const handleTemplateSourceSelect = (option: AssessmentOption) => {
-        const templateSource = option.value as TemplateSource
+    const handleTemplateSourceSelect = (templateSource: TemplateSource) => {
         setAssessment(prev => ({ ...prev, templateSource }))
-        addUserMessage(option.label)
-
-        setTimeout(() => {
-            if (templateSource === 'existing_template' || templateSource === 'modified_template') {
-                setAssessment(prev => ({ ...prev, step: 'template_selection' }))
-            } else if (templateSource === 'uploaded') {
-                fileInputRef.current?.click()
-            } else {
-                setAssessment(prev => ({ ...prev, step: 'summary' }))
-                addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary)
-            }
-        }, 500)
+        const label = TEMPLATE_SOURCE_OPTIONS.find(o => o.value === templateSource)?.label || 'Template'
+        addUserMessage(`I'll ${label.toLowerCase()}`)
+        if (templateSource === 'existing_template' || templateSource === 'modified_template') {
+            setAssessment(prev => ({ ...prev, step: 'template_selection' }))
+        } else if (templateSource === 'uploaded') {
+            fileInputRef.current?.click()
+        } else if (templateSource === 'from_scratch') {
+            setAssessment(prev => ({ ...prev, step: 'summary' }))
+            addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary)
+        }
     }
 
     const handleTemplateSelect = (template: Template) => {
         setAssessment(prev => ({ ...prev, selectedTemplateId: template.templateId, selectedTemplateName: template.templateName, step: 'summary' }))
-        addUserMessage(`Selected: ${template.templateName}`)
-        setTimeout(() => addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary), 500)
+        addUserMessage(`I'll use "${template.templateName}"`)
+        addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary)
     }
 
     const handleUploadedContractClick = () => {
-        if (assessment.uploadedContractStatus !== 'ready' || !assessment.uploadedContractId) {
-            console.warn('[handleUploadedContractClick] Contract not ready or no ID')
-            return
-        }
         setAssessment(prev => ({ ...prev, step: 'summary' }))
-        setTimeout(() => addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary), 500)
+        addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.summary_training : CLARENCE_MESSAGES.summary)
     }
 
-    // WP1 CHANGE: Updated option select handler for new step order
     const handleOptionSelect = (option: AssessmentOption) => {
         switch (assessment.step) {
-            case 'contract_type': handleContractTypeSelect(option); break
-            case 'mediation_type': handleMediationSelect(option); break
-            case 'template_source': handleTemplateSourceSelect(option); break
+            case 'contract_type': handleContractTypeSelect(option.value as ContractType); break
+            case 'mediation_type': handleMediationSelect(option.value as MediationType); break
+            case 'template_source': handleTemplateSourceSelect(option.value as TemplateSource); break
         }
+    }
+
+    // WP3: Enhanced Quick Intake completion with tendering acknowledgment
+    const handleQuickIntakeComplete = () => {
+        const isMultiProvider = isMultiProviderScenario()
+        addUserMessage('Deal context complete')
+
+        // WP3: Use appropriate completion message based on tendering
+        const completionMessage = isMultiProvider
+            ? CLARENCE_MESSAGES.quick_intake_complete_tendering
+            : CLARENCE_MESSAGES.quick_intake_complete
+
+        setTimeout(() => {
+            addClarenceMessage(completionMessage, TEMPLATE_SOURCE_OPTIONS)
+            setAssessment(prev => ({ ...prev, step: 'template_source' }))
+        }, 300)
     }
 
     // ========================================================================
-    // SECTION 5H: CONTRACT CREATION (WITH TRANSITION MODAL)
+    // SECTION 5H: CREATE CONTRACT (WP3 UPDATED)
     // ========================================================================
 
     const createContract = async () => {
@@ -831,6 +880,22 @@ function ContractCreationContent() {
             const pathwayId = determinePathwayId(assessment.mediationType, assessment.templateSource)
             console.log('[CreateContract] Pathway ID:', pathwayId)
 
+            // WP3: Enhanced deal_context with tendering data
+            const dealContext = {
+                deal_value: assessment.quickIntake.dealValue,
+                service_criticality: assessment.quickIntake.serviceCriticality,
+                timeline_pressure: assessment.quickIntake.timelinePressure,
+                bidder_count: assessment.quickIntake.bidderCount,
+                batna_status: assessment.quickIntake.batnaStatus,
+                top_priorities: assessment.quickIntake.topPriorities,
+                // WP3: Add tendering configuration
+                tendering_config: isMultiProviderScenario() ? {
+                    qualification_threshold: assessment.quickIntake.qualificationThreshold,
+                    evaluation_priorities: assessment.quickIntake.evaluationPriorities,
+                    must_have_capabilities: assessment.quickIntake.mustHaveCapabilities
+                } : null
+            }
+
             const response = await fetch(`${API_BASE}/session-create`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -846,14 +911,7 @@ function ContractCreationContent() {
                     uploaded_contract_id: assessment.uploadedContractId,
                     pathway_id: pathwayId,
                     assessment_completed: true,
-                    deal_context: {
-                        deal_value: assessment.quickIntake.dealValue,
-                        service_criticality: assessment.quickIntake.serviceCriticality,
-                        timeline_pressure: assessment.quickIntake.timelinePressure,
-                        bidder_count: assessment.quickIntake.bidderCount,
-                        batna_status: assessment.quickIntake.batnaStatus,
-                        top_priorities: assessment.quickIntake.topPriorities
-                    }
+                    deal_context: dealContext  // WP3: Enhanced with tendering
                 })
             })
 
@@ -936,95 +994,41 @@ function ContractCreationContent() {
             : []
 
         const remainingSteps = [
-            { id: 'template_source', label: 'Template Source', icon: '📄' },
-            { id: 'template_selection', label: 'Select Template', icon: '✔', conditional: true },
-            { id: 'upload_processing', label: 'Upload Contract', icon: '📤', conditional: true },
-            { id: 'summary', label: 'Review & Create', icon: '✅' }
+            { id: 'template_source', label: 'Starting Point', icon: '📄' },
+            { id: 'summary', label: 'Review & Create', icon: '✔' }
         ]
 
         const steps = [...baseSteps, ...quickIntakeStep, ...remainingSteps]
 
-        const visibleSteps = steps.filter(step => {
-            if (step.id === 'template_selection') return assessment.templateSource === 'existing_template' || assessment.templateSource === 'modified_template'
-            if (step.id === 'upload_processing') return assessment.templateSource === 'uploaded'
-            return true
-        })
-
-        // WP1 CHANGE: Updated step order to match new flow
+        // WP1: Updated step order for comparison
         const stepOrder = ['welcome', 'contract_type', 'mediation_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
         const currentIndex = stepOrder.indexOf(assessment.step)
 
         return (
-            <div className={`h-full flex flex-col ${isTrainingMode ? 'bg-amber-50/50' : 'bg-emerald-50/30'} border-r border-slate-200`}>
+            <div className={`h-full ${isTrainingMode ? 'bg-amber-50/30' : 'bg-emerald-50/30'} border-r border-slate-200 flex flex-col`}>
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href={isTrainingMode ? "/auth/training" : "/auth/contracts-dashboard"} className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-3">
-                        ← {isTrainingMode ? 'Back to Training' : 'Back to Dashboard'}
-                    </Link>
-
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className={`w-10 h-10 ${colors.bgGradient} rounded-lg flex items-center justify-center`}>
-                            <span className="text-white font-bold text-lg">C</span>
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="font-semibold text-slate-800">CLARENCE</span>
-                                <span className={`font-semibold ${isTrainingMode ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                    {isTrainingMode ? 'Training' : 'Create'}
-                                </span>
-                            </div>
-                            <div className="text-xs text-slate-400">The Honest Broker</div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
-                        <div className="flex items-center gap-1">
-                            <div className={`w-2 h-2 rounded-full ${isTrainingMode ? 'bg-slate-300' : 'bg-emerald-500'}`} />
-                            <span className={`text-xs ${isTrainingMode ? 'text-slate-400' : 'text-emerald-600 font-medium'}`}>Create</span>
-                        </div>
-                        <div className="w-3 h-px bg-slate-300" />
-                        <div className="flex items-center gap-1">
-                            <div className={`w-2 h-2 rounded-full ${isTrainingMode ? 'bg-amber-500' : 'bg-slate-300'}`} />
-                            <span className={`text-xs ${isTrainingMode ? 'text-amber-600 font-medium' : 'text-slate-400'}`}>Negotiate</span>
-                        </div>
-                        <div className="w-3 h-px bg-slate-300" />
-                        <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full bg-slate-300" />
-                            <span className="text-xs text-slate-400">Agree</span>
-                        </div>
-                    </div>
+                    <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-2 mb-3">← {isTrainingMode ? 'Back to Training' : 'Back to Contracts'}</Link>
+                    <h2 className={`font-semibold ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-lg`}>{isTrainingMode ? 'Training Setup' : 'Create Contract'}</h2>
                 </div>
-
-                <div className="px-4 py-3 bg-white border-b border-slate-100">
-                    <h2 className="text-lg font-semibold text-slate-800">{isTrainingMode ? '🎓 Training Contract' : 'Contract Creation'}</h2>
-                    <p className="text-xs text-slate-500">Setup Assessment</p>
-                </div>
-
-                <div className="flex-1 overflow-auto p-4">
-                    <div className="space-y-2">
-                        {visibleSteps.map((step, index) => {
+                <nav className="flex-1 p-4">
+                    <ul className="space-y-2">
+                        {steps.map((step, index) => {
                             const stepIndex = stepOrder.indexOf(step.id)
-                            const isComplete = currentIndex > stepIndex
-                            const isCurrent = currentIndex === stepIndex || (assessment.step === 'creating' && step.id === 'summary')
-                            const isPending = !isComplete && !isCurrent
-
+                            const isComplete = currentIndex > stepIndex || assessment.step === 'creating'
+                            const isCurrent = currentIndex === stepIndex || (step.id === 'summary' && (assessment.step === 'summary' || assessment.step === 'creating'))
                             return (
-                                <div key={step.id} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isCurrent ? (isTrainingMode ? 'bg-amber-100 border border-amber-300' : 'bg-emerald-100 border border-emerald-300') : isComplete ? 'bg-white border border-slate-200' : 'bg-slate-50/50 border border-transparent'}`}>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isComplete ? (isTrainingMode ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white') : isCurrent ? (isTrainingMode ? 'bg-amber-200 text-amber-800' : 'bg-emerald-200 text-emerald-800') : 'bg-slate-200 text-slate-400'}`}>
-                                        {isComplete ? '✔' : step.icon}
-                                    </div>
-                                    <span className={`text-sm ${isCurrent ? (isTrainingMode ? 'text-amber-800 font-semibold' : 'text-emerald-800 font-semibold') : isComplete ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
-                                </div>
+                                <li key={step.id} className={`flex items-center gap-3 p-3 rounded-lg ${isCurrent ? `${colors.bgLight} ${colors.borderPrimary} border` : isComplete ? 'bg-slate-50' : ''}`}>
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isComplete ? `${colors.bgSolid} text-white` : isCurrent ? colors.bgMedium : 'bg-slate-100 text-slate-400'}`}>{isComplete ? '✔' : step.icon}</div>
+                                    <span className={`text-sm font-medium ${isCurrent ? colors.textDark : isComplete ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
+                                </li>
                             )
                         })}
-                    </div>
-                </div>
-
-                {assessment.mediationType && (
-                    <div className={`p-4 border-t ${isTrainingMode ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-                        <div className="text-xs text-slate-500 mb-1">Pathway</div>
-                        <div className={`text-sm font-medium ${isTrainingMode ? 'text-amber-700' : 'text-emerald-700'}`}>
-                            {determinePathwayId(assessment.mediationType, assessment.templateSource)}
-                        </div>
+                    </ul>
+                </nav>
+                {isTrainingMode && (
+                    <div className="p-4 border-t border-slate-200 bg-amber-50">
+                        <div className="flex items-center gap-2 text-amber-700"><span className="text-lg">🎓</span><span className="text-sm font-medium">Training Mode</span></div>
+                        <p className="text-xs text-amber-600 mt-1">Practice with AI opponents</p>
                     </div>
                 )}
             </div>
@@ -1032,63 +1036,55 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 7: RENDER - MAIN PANEL CONTENT (WP1 UPDATED)
+    // SECTION 7: RENDER - MAIN PANEL
     // ========================================================================
 
     const renderMainPanel = () => {
         if (trainingSessionCreated) return renderTrainingComplete()
-
         return (
-            <div className="h-full flex flex-col bg-white">
-                <div className="flex-1 overflow-auto">
-                    <div className="p-8">
-                        {assessment.step === 'welcome' && renderWelcome()}
-                        {/* WP1: Contract type now renders before mediation type */}
-                        {assessment.step === 'contract_type' && renderContractType()}
-                        {assessment.step === 'mediation_type' && renderMediationType()}
-                        {assessment.step === 'quick_intake' && renderQuickIntake()}
-                        {assessment.step === 'template_source' && renderTemplateSource()}
-                        {assessment.step === 'template_selection' && renderTemplateSelection()}
-                        {assessment.step === 'upload_processing' && renderUploadProcessing()}
-                        {assessment.step === 'summary' && renderSummary()}
-                        {assessment.step === 'creating' && renderCreating()}
+            <div className="h-full flex flex-col">
+                <div className={`h-14 ${isTrainingMode ? 'bg-amber-600' : 'bg-emerald-600'} flex items-center px-6`}>
+                    <div className="flex items-center gap-3 text-white">
+                        <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center"><span className="text-lg">C</span></div>
+                        <div><h1 className="font-semibold">{isTrainingMode ? 'Training Contract Setup' : 'New Contract'}</h1><p className="text-xs text-white/70">CLARENCE will guide you through the process</p></div>
                     </div>
                 </div>
-                <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt" onChange={handleFileSelect} className="hidden" />
+                <CreateProgressBar currentStage="create_contract" />
+                <div className="flex-1 overflow-auto p-6">
+                    {assessment.step === 'contract_type' && renderContractType()}
+                    {assessment.step === 'mediation_type' && renderMediationType()}
+                    {assessment.step === 'quick_intake' && renderQuickIntake()}
+                    {assessment.step === 'template_source' && renderTemplateSource()}
+                    {assessment.step === 'template_selection' && renderTemplateSelection()}
+                    {assessment.step === 'upload_processing' && renderUploadProcessing()}
+                    {assessment.step === 'summary' && renderSummary()}
+                    {assessment.step === 'creating' && renderCreating()}
+                </div>
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" />
             </div>
         )
     }
 
-    const renderWelcome = () => (
-        <div className="max-w-2xl mx-auto text-center">
-            <div className={`w-20 h-20 ${colors.bgGradient} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
-                <span className="text-white font-bold text-3xl">C</span>
-            </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">{isTrainingMode ? '🎓 Training Session' : 'Create a New Contract'}</h2>
-            <p className="text-slate-500">Just a moment while I prepare your assessment...</p>
-            <div className={`w-12 h-12 border-4 ${isTrainingMode ? 'border-amber-600' : 'border-emerald-600'} border-t-transparent rounded-full animate-spin mx-auto mt-8`}></div>
-        </div>
-    )
+    // ========================================================================
+    // SECTION 7A: RENDER STEPS (WP1 REORDERED)
+    // ========================================================================
 
-    // WP1 CHANGE: Contract type is now the first selection step
+    // WP1: Contract type renders first now
     const renderContractType = () => (
         <div className="max-w-2xl mx-auto">
             <h3 className="text-lg font-medium text-slate-800 mb-6">What type of contract are you creating?</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4">
                 {CONTRACT_TYPE_OPTIONS.map((option) => (
-                    <button key={option.id} onClick={() => handleOptionSelect(option)} className={`flex items-start gap-3 p-4 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
-                        <div className={`w-10 h-10 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-xl">{option.icon}</span></div>
-                        <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-slate-800 text-sm ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4>
-                            <p className="text-xs text-slate-500 mt-1">{option.description}</p>
-                        </div>
+                    <button key={option.id} onClick={() => handleOptionSelect(option)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
+                        <div className={`w-12 h-12 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">{option.icon}</span></div>
+                        <div className="flex-1"><h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4><p className="text-sm text-slate-500 mt-1">{option.description}</p></div>
                     </button>
                 ))}
             </div>
         </div>
     )
 
-    // WP1 CHANGE: Mediation type is now the second selection step
+    // WP1: Mediation type renders second now
     const renderMediationType = () => (
         <div className="max-w-2xl mx-auto">
             <h3 className="text-lg font-medium text-slate-800 mb-6">How much negotiation do you expect?</h3>
@@ -1096,15 +1092,16 @@ function ContractCreationContent() {
                 {MEDIATION_OPTIONS.map((option) => (
                     <button key={option.id} onClick={() => handleOptionSelect(option)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
                         <div className={`w-12 h-12 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">{option.icon}</span></div>
-                        <div className="flex-1">
-                            <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4>
-                            <p className="text-sm text-slate-500 mt-1">{option.description}</p>
-                        </div>
+                        <div className="flex-1"><h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{option.label}</h4><p className="text-sm text-slate-500 mt-1">{option.description}</p></div>
                     </button>
                 ))}
             </div>
         </div>
     )
+
+    // ========================================================================
+    // SECTION 7B: RENDER QUICK INTAKE (WP3 ENHANCED WITH TENDERING)
+    // ========================================================================
 
     const renderQuickIntake = () => {
         const { quickIntake } = assessment
@@ -1136,21 +1133,283 @@ function ContractCreationContent() {
             { value: 'many', label: 'Many', description: '4+ alternatives' }
         ]
 
+        // WP3: Check if tendering section should be shown
+        const isMultiProvider = quickIntake.bidderCount === 'few' || quickIntake.bidderCount === 'many'
+
+        // WP3: Basic validation - tendering fields optional but recommended
         const isComplete = quickIntake.dealValue && quickIntake.serviceCriticality && quickIntake.timelinePressure && quickIntake.bidderCount
+
+        // WP3: Handler for evaluation priority reordering
+        const handlePriorityToggle = (priority: EvaluationPriority) => {
+            setAssessment(prev => {
+                const current = prev.quickIntake.evaluationPriorities
+                if (current.includes(priority)) {
+                    // Remove priority
+                    return {
+                        ...prev,
+                        quickIntake: {
+                            ...prev.quickIntake,
+                            evaluationPriorities: current.filter(p => p !== priority)
+                        }
+                    }
+                } else {
+                    // Add priority
+                    return {
+                        ...prev,
+                        quickIntake: {
+                            ...prev.quickIntake,
+                            evaluationPriorities: [...current, priority]
+                        }
+                    }
+                }
+            })
+        }
+
+        // WP3: Handler for moving priorities up/down
+        const movePriority = (priority: EvaluationPriority, direction: 'up' | 'down') => {
+            setAssessment((prev): AssessmentState => {
+                const current = [...prev.quickIntake.evaluationPriorities]
+                const index = current.indexOf(priority)
+                if (index === -1) return prev
+
+                const newIndex = direction === 'up' ? index - 1 : index + 1
+                if (newIndex < 0 || newIndex >= current.length) return prev
+
+                // Swap using temp variable (avoids TypeScript inference issues)
+                const temp = current[index]
+                current[index] = current[newIndex]
+                current[newIndex] = temp
+
+                return {
+                    ...prev,
+                    quickIntake: {
+                        ...prev.quickIntake,
+                        evaluationPriorities: current
+                    }
+                }
+            })
+        }
 
         return (
             <div className="max-w-2xl mx-auto">
                 <h3 className="text-lg font-medium text-slate-800 mb-6">Deal Context</h3>
                 <div className="space-y-6">
-                    <div><label className="block text-sm font-medium text-slate-700 mb-2">Estimated Deal Value</label><div className="grid grid-cols-2 gap-2">{dealValueOptions.map(opt => (<button key={opt.value} onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, dealValue: opt.value as DealValueRange } }))} className={`p-3 rounded-lg border-2 text-sm ${quickIntake.dealValue === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}>{opt.label}</button>))}</div></div>
-                    <div><label className="block text-sm font-medium text-slate-700 mb-2">Service Criticality</label><div className="grid grid-cols-2 gap-2">{criticalityOptions.map(opt => (<button key={opt.value} onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, serviceCriticality: opt.value as ServiceCriticality } }))} className={`p-3 rounded-lg border-2 text-left ${quickIntake.serviceCriticality === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}><div className="font-medium text-sm">{opt.label}</div><div className="text-xs text-slate-500">{opt.description}</div></button>))}</div></div>
-                    <div><label className="block text-sm font-medium text-slate-700 mb-2">Timeline Pressure</label><div className="grid grid-cols-2 gap-2">{timelineOptions.map(opt => (<button key={opt.value} onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, timelinePressure: opt.value as TimelinePressure } }))} className={`p-3 rounded-lg border-2 text-left ${quickIntake.timelinePressure === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}><div className="font-medium text-sm">{opt.label}</div><div className="text-xs text-slate-500">{opt.description}</div></button>))}</div></div>
-                    <div><label className="block text-sm font-medium text-slate-700 mb-2">Number of Potential Providers</label><div className="grid grid-cols-3 gap-2">{bidderOptions.map(opt => (<button key={opt.value} onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, bidderCount: opt.value as BidderCount } }))} className={`p-3 rounded-lg border-2 text-left ${quickIntake.bidderCount === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}><div className="font-medium text-sm">{opt.label}</div><div className="text-xs text-slate-500">{opt.description}</div></button>))}</div></div>
-                    <button onClick={handleQuickIntakeComplete} disabled={!isComplete} className={`w-full py-3 rounded-lg ${colors.btnPrimary} text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed`}>Continue →</button>
+                    {/* Estimated Deal Value */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Estimated Deal Value</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {dealValueOptions.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, dealValue: opt.value as DealValueRange } }))}
+                                    className={`p-3 rounded-lg border-2 text-sm ${quickIntake.dealValue === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Service Criticality */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Service Criticality</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {criticalityOptions.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, serviceCriticality: opt.value as ServiceCriticality } }))}
+                                    className={`p-3 rounded-lg border-2 text-left ${quickIntake.serviceCriticality === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}
+                                >
+                                    <div className="font-medium text-sm">{opt.label}</div>
+                                    <div className="text-xs text-slate-500">{opt.description}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Timeline Pressure */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Timeline Pressure</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {timelineOptions.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, timelinePressure: opt.value as TimelinePressure } }))}
+                                    className={`p-3 rounded-lg border-2 text-left ${quickIntake.timelinePressure === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}
+                                >
+                                    <div className="font-medium text-sm">{opt.label}</div>
+                                    <div className="text-xs text-slate-500">{opt.description}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Number of Potential Providers */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Number of Potential Providers</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {bidderOptions.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setAssessment(prev => ({ ...prev, quickIntake: { ...prev.quickIntake, bidderCount: opt.value as BidderCount } }))}
+                                    className={`p-3 rounded-lg border-2 text-left ${quickIntake.bidderCount === opt.value ? `${colors.borderPrimary} ${colors.bgLight}` : 'border-slate-200 hover:border-slate-300'}`}
+                                >
+                                    <div className="font-medium text-sm">{opt.label}</div>
+                                    <div className="text-xs text-slate-500">{opt.description}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* ============================================================
+                        WP3: TENDERING CONFIGURATION SECTION
+                        Only shown when multiple providers are selected
+                    ============================================================ */}
+                    {isMultiProvider && (
+                        <div className={`mt-8 p-5 rounded-xl border-2 ${colors.borderLight} ${colors.bgLight}`}>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className={`w-10 h-10 rounded-lg ${colors.bgGradient} flex items-center justify-center`}>
+                                    <span className="text-white text-xl">📊</span>
+                                </div>
+                                <div>
+                                    <h4 className={`font-semibold ${colors.textDark}`}>Provider Evaluation</h4>
+                                    <p className="text-xs text-slate-500">Configure how CLARENCE evaluates provider alignment</p>
+                                </div>
+                            </div>
+
+                            {/* Qualification Threshold Slider */}
+                            <div className="mb-6">
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-sm font-medium text-slate-700">Minimum Qualification Threshold</label>
+                                    <span className={`text-lg font-bold ${colors.textPrimary}`}>{quickIntake.qualificationThreshold}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="50"
+                                    max="95"
+                                    step="5"
+                                    value={quickIntake.qualificationThreshold}
+                                    onChange={(e) => setAssessment(prev => ({
+                                        ...prev,
+                                        quickIntake: { ...prev.quickIntake, qualificationThreshold: parseInt(e.target.value) }
+                                    }))}
+                                    className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${isTrainingMode ? 'accent-amber-500' : 'accent-emerald-500'}`}
+                                />
+                                <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                    <span>50% (More inclusive)</span>
+                                    <span>95% (Highly selective)</span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Providers scoring below this threshold will be flagged as "Below Minimum Requirements"
+                                </p>
+                            </div>
+
+                            {/* Evaluation Priorities */}
+                            <div className="mb-4">
+                                <label className="text-sm font-medium text-slate-700 mb-2 block">Evaluation Priorities</label>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Select and order what matters most. Top priorities carry more weight in alignment scoring.
+                                </p>
+
+                                {/* Selected priorities (ordered) */}
+                                {quickIntake.evaluationPriorities.length > 0 && (
+                                    <div className="mb-3 space-y-2">
+                                        <div className="text-xs font-medium text-slate-500 mb-1">Your priorities (drag to reorder):</div>
+                                        {quickIntake.evaluationPriorities.map((priority, index) => {
+                                            const option = EVALUATION_PRIORITY_OPTIONS.find(o => o.value === priority)
+                                            if (!option) return null
+                                            return (
+                                                <div
+                                                    key={priority}
+                                                    className={`flex items-center gap-2 p-2 rounded-lg ${colors.bgMedium} border ${colors.borderPrimary}`}
+                                                >
+                                                    <span className={`w-6 h-6 rounded-full ${colors.bgSolid} text-white text-xs flex items-center justify-center font-bold`}>
+                                                        {index + 1}
+                                                    </span>
+                                                    <span className="text-lg">{option.icon}</span>
+                                                    <span className="flex-1 text-sm font-medium">{option.label}</span>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => movePriority(priority, 'up')}
+                                                            disabled={index === 0}
+                                                            className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-30"
+                                                        >
+                                                            ↑
+                                                        </button>
+                                                        <button
+                                                            onClick={() => movePriority(priority, 'down')}
+                                                            disabled={index === quickIntake.evaluationPriorities.length - 1}
+                                                            className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-30"
+                                                        >
+                                                            ↓
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handlePriorityToggle(priority)}
+                                                            className="p-1 text-red-400 hover:text-red-600"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Available priorities to add */}
+                                <div className="grid grid-cols-2 gap-2">
+                                    {EVALUATION_PRIORITY_OPTIONS.filter(opt => !quickIntake.evaluationPriorities.includes(opt.value)).map(opt => (
+                                        <button
+                                            key={opt.value}
+                                            onClick={() => handlePriorityToggle(opt.value)}
+                                            className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:border-slate-300 text-left"
+                                        >
+                                            <span className="text-lg">{opt.icon}</span>
+                                            <span className="text-sm">{opt.label}</span>
+                                            <span className="ml-auto text-slate-400">+</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Must-Have Capabilities (optional) */}
+                            <div>
+                                <label className="text-sm font-medium text-slate-700 mb-2 block">
+                                    Must-Have Requirements <span className="text-slate-400 font-normal">(optional)</span>
+                                </label>
+                                <textarea
+                                    value={quickIntake.mustHaveCapabilities}
+                                    onChange={(e) => setAssessment(prev => ({
+                                        ...prev,
+                                        quickIntake: { ...prev.quickIntake, mustHaveCapabilities: e.target.value }
+                                    }))}
+                                    placeholder="E.g., ISO 27001 certification, 24/7 support, UK data residency..."
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                                    rows={2}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    CLARENCE will highlight providers who don't meet these requirements
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Continue Button */}
+                    <button
+                        onClick={handleQuickIntakeComplete}
+                        disabled={!isComplete}
+                        className={`w-full py-3 rounded-lg ${colors.btnPrimary} text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                        Continue →
+                    </button>
                 </div>
             </div>
         )
     }
+
+    // ========================================================================
+    // SECTION 7C: REMAINING RENDER FUNCTIONS
+    // ========================================================================
 
     const renderTemplateSource = () => (
         <div className="max-w-2xl mx-auto">
@@ -1215,29 +1474,115 @@ function ContractCreationContent() {
         )
     }
 
-    // WP1: Summary now shows Contract Type before Mediation Type
-    const renderSummary = () => (
-        <div className="max-w-2xl mx-auto">
-            <h3 className="text-lg font-medium text-slate-800 mb-6">{isTrainingMode ? '🎓 Training Contract Summary' : 'Contract Setup Summary'}</h3>
-            <div className="space-y-4 mb-8">
-                {/* WP1: Show Contract Type first */}
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">📋</span><div><p className="text-sm text-slate-500">Contract Type</p><p className="font-medium text-slate-800">{getContractTypeLabel(assessment.contractType)}</p></div></div></div>
-                {/* WP1: Show Mediation Type second */}
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">⚖️</span><div><p className="text-sm text-slate-500">Mediation Type</p><p className="font-medium text-slate-800">{getMediationTypeLabel(assessment.mediationType)}</p></div></div></div>
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200"><div className="flex items-center gap-3"><span className="text-2xl">📄</span><div><p className="text-sm text-slate-500">Starting Point</p><p className="font-medium text-slate-800">{getTemplateSourceLabel(assessment.templateSource)}</p></div></div></div>
-                {assessment.selectedTemplateName && <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}><div className="flex items-center gap-3"><span className="text-2xl">✔</span><div><p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Selected Template</p><p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.selectedTemplateName}</p></div></div></div>}
-                {assessment.uploadedFileName && <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}><div className="flex items-center gap-3"><span className="text-2xl">📄</span><div><p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Uploaded Contract</p><p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.uploadedFileName}</p></div></div></div>}
-                {isTrainingMode && <div className="p-4 rounded-lg bg-amber-100 border border-amber-300"><div className="flex items-center gap-3"><span className="text-2xl">🎓</span><div><p className="text-sm text-amber-700 font-medium">Training Mode Active</p><p className="text-sm text-amber-600">This is for practice only.</p></div></div></div>}
+    // WP1 + WP3: Summary now shows Contract Type before Mediation Type and includes tendering
+    const renderSummary = () => {
+        const isMultiProvider = isMultiProviderScenario()
+
+        return (
+            <div className="max-w-2xl mx-auto">
+                <h3 className="text-lg font-medium text-slate-800 mb-6">{isTrainingMode ? '🎓 Training Contract Summary' : 'Contract Setup Summary'}</h3>
+                <div className="space-y-4 mb-8">
+                    {/* WP1: Show Contract Type first */}
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">📋</span>
+                            <div>
+                                <p className="text-sm text-slate-500">Contract Type</p>
+                                <p className="font-medium text-slate-800">{getContractTypeLabel(assessment.contractType)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {/* WP1: Show Mediation Type second */}
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">⚖️</span>
+                            <div>
+                                <p className="text-sm text-slate-500">Mediation Type</p>
+                                <p className="font-medium text-slate-800">{getMediationTypeLabel(assessment.mediationType)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">📄</span>
+                            <div>
+                                <p className="text-sm text-slate-500">Starting Point</p>
+                                <p className="font-medium text-slate-800">{getTemplateSourceLabel(assessment.templateSource)}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {assessment.selectedTemplateName && (
+                        <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">✔</span>
+                                <div>
+                                    <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Selected Template</p>
+                                    <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.selectedTemplateName}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {assessment.uploadedFileName && (
+                        <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">📄</span>
+                                <div>
+                                    <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Uploaded Contract</p>
+                                    <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.uploadedFileName}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* WP3: Tendering configuration summary */}
+                    {isMultiProvider && (
+                        <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
+                            <div className="flex items-center gap-3 mb-3">
+                                <span className="text-2xl">📊</span>
+                                <div>
+                                    <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Provider Evaluation</p>
+                                    <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>
+                                        Minimum {assessment.quickIntake.qualificationThreshold}% alignment required
+                                    </p>
+                                </div>
+                            </div>
+                            {assessment.quickIntake.evaluationPriorities.length > 0 && (
+                                <div className="ml-11 flex flex-wrap gap-2">
+                                    {assessment.quickIntake.evaluationPriorities.slice(0, 3).map((priority, index) => {
+                                        const option = EVALUATION_PRIORITY_OPTIONS.find(o => o.value === priority)
+                                        return (
+                                            <span key={priority} className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${isTrainingMode ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                <span className="font-bold">#{index + 1}</span> {option?.icon} {option?.label}
+                                            </span>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {isTrainingMode && (
+                        <div className="p-4 rounded-lg bg-amber-100 border border-amber-300">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">🎓</span>
+                                <div>
+                                    <p className="text-sm text-amber-700 font-medium">Training Mode Active</p>
+                                    <p className="text-sm text-amber-600">This is for practice only.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
+                <div className="flex gap-4">
+                    <button onClick={() => setAssessment(prev => ({ ...prev, step: assessment.uploadedContractId ? 'upload_processing' : assessment.selectedTemplateId ? 'template_selection' : 'template_source' }))} className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">← Back</button>
+                    <button onClick={createContract} disabled={isCreating} className={`flex-1 px-6 py-3 rounded-lg ${colors.btnPrimary} text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2`}>
+                        {isCreating ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : <>{isTrainingMode ? 'Create Training Session' : 'Create Contract'} →</>}
+                    </button>
+                </div>
             </div>
-            {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
-            <div className="flex gap-4">
-                <button onClick={() => setAssessment(prev => ({ ...prev, step: assessment.uploadedContractId ? 'upload_processing' : assessment.selectedTemplateId ? 'template_selection' : 'template_source' }))} className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">← Back</button>
-                <button onClick={createContract} disabled={isCreating} className={`flex-1 px-6 py-3 rounded-lg ${colors.btnPrimary} text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2`}>
-                    {isCreating ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : <>{isTrainingMode ? 'Create Training Session' : 'Create Contract'} →</>}
-                </button>
-            </div>
-        </div>
-    )
+        )
+    }
 
     const renderCreating = () => (
         <div className="max-w-2xl mx-auto text-center">
