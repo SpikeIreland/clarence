@@ -698,7 +698,7 @@ function ContractCreationContent() {
             if (!extractedText || extractedText.length < 100) throw new Error('Could not extract sufficient text')
             setUploadProgress('Uploading to CLARENCE...')
 
-            const response = await fetch(`${API_BASE}/parse-contract-v2`, {
+            const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

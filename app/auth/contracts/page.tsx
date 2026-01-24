@@ -467,7 +467,7 @@ export default function ContractStudioPage() {
                         {/* Center: Navigation Links */}
                         <div className="hidden md:flex items-center gap-6">
                             <Link
-                                href="/dashboard"
+                                href="/contracts-dashboard"
                                 className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
                             >
                                 Dashboard
@@ -514,7 +514,7 @@ export default function ContractStudioPage() {
                                         </div>
                                         <div className="py-2">
                                             <Link
-                                                href="/dashboard"
+                                                href="/contracts-dashboard"
                                                 className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                                             >
                                                 <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
