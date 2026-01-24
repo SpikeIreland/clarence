@@ -151,7 +151,80 @@ function formatCurrency(value: string, currency: string = 'GBP'): string {
 }
 
 // ============================================================================
-// SECTION 5: MOCK DATA GENERATOR (Replace with real API later)
+// SECTION 5: DATA LOADING FROM API
+// ============================================================================
+
+async function fetchTenderReviewData(sessionId: string): Promise<SessionData | null> {
+    try {
+        const response = await fetch(`${API_BASE}/tender-review-api?session_id=${sessionId}`)
+
+        if (!response.ok) {
+            console.error('Tender Review API error:', response.status)
+            return null
+        }
+
+        const result = await response.json()
+
+        if (!result.success || !result.data) {
+            console.error('Tender Review API returned error:', result.error)
+            return null
+        }
+
+        // Transform API response to match our interface
+        const apiData = result.data
+
+        return {
+            sessionId: apiData.sessionId,
+            sessionNumber: apiData.sessionNumber,
+            customerCompany: apiData.customerCompany,
+            serviceRequired: apiData.serviceRequired,
+            dealValue: apiData.dealValue,
+            currency: apiData.currency,
+            templateName: apiData.templateName,
+            clauseCount: apiData.clauseCount,
+            tenderingConfig: {
+                qualificationThreshold: apiData.tenderingConfig.qualificationThreshold,
+                evaluationPriorities: apiData.tenderingConfig.evaluationPriorities,
+                mustHaveCapabilities: apiData.tenderingConfig.mustHaveCapabilities,
+            },
+            providers: apiData.providers.map((p: any) => ({
+                bidId: p.bidId,
+                providerId: p.providerId,
+                providerCompany: p.providerCompany,
+                providerContactName: p.providerContactName,
+                providerContactEmail: p.providerContactEmail,
+                overallAlignmentScore: p.overallAlignmentScore,
+                qualificationStatus: p.qualificationStatus,
+                mustHavesMet: p.mustHavesMet,
+                mustHavesDetails: p.mustHavesDetails,
+                categories: p.categories.map((cat: any) => ({
+                    categoryId: cat.categoryId,
+                    categoryName: cat.categoryName,
+                    categoryIcon: cat.categoryIcon,
+                    overallScore: cat.overallScore,
+                    weight: cat.weight,
+                    clauses: cat.clauses.map((clause: any) => ({
+                        clauseId: clause.clauseId,
+                        clauseName: clause.clauseName,
+                        customerPosition: clause.customerPosition,
+                        providerPosition: clause.providerPosition,
+                        alignmentScore: clause.alignmentScore,
+                        weight: clause.weight,
+                        status: clause.status,
+                    })),
+                })),
+                submittedAt: p.submittedAt,
+                status: p.status,
+            })),
+        }
+    } catch (error) {
+        console.error('Failed to fetch tender review data:', error)
+        return null
+    }
+}
+
+// ============================================================================
+// SECTION 5B: MOCK DATA GENERATOR (Fallback when API unavailable)
 // ============================================================================
 
 function generateMockData(sessionId: string): SessionData {
@@ -380,23 +453,43 @@ function TenderReviewContent() {
 
         setLoading(true)
         try {
-            // TODO: Replace with real API call
-            // const response = await fetch(`${API_BASE}/tender-review?session_id=${sessionId}`)
-            // const data = await response.json()
+            // Try to fetch from real API first
+            const apiData = await fetchTenderReviewData(sessionId)
 
-            // Using mock data for now
-            await new Promise(resolve => setTimeout(resolve, 800))
+            if (apiData && apiData.providers.length > 0) {
+                // Use real API data
+                setSessionData(apiData)
+
+                // Auto-select all qualified providers
+                const qualifiedIds = apiData.providers
+                    .filter(p => p.qualificationStatus === 'qualified')
+                    .map(p => p.bidId)
+                setSelectedProviders(new Set(qualifiedIds))
+            } else {
+                // Fallback to mock data if API returns no data
+                console.log('Using mock data - API returned no providers')
+                await new Promise(resolve => setTimeout(resolve, 500))
+                const mockData = generateMockData(sessionId)
+                setSessionData(mockData)
+
+                // Auto-select all qualified providers
+                const qualifiedIds = mockData.providers
+                    .filter(p => p.qualificationStatus === 'qualified')
+                    .map(p => p.bidId)
+                setSelectedProviders(new Set(qualifiedIds))
+            }
+
+        } catch (error) {
+            console.error('Failed to load session data:', error)
+
+            // Fallback to mock data on error
             const mockData = generateMockData(sessionId)
             setSessionData(mockData)
 
-            // Auto-select all qualified providers
             const qualifiedIds = mockData.providers
                 .filter(p => p.qualificationStatus === 'qualified')
                 .map(p => p.bidId)
             setSelectedProviders(new Set(qualifiedIds))
-
-        } catch (error) {
-            console.error('Failed to load session data:', error)
         } finally {
             setLoading(false)
         }
