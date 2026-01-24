@@ -1156,11 +1156,19 @@ export default function TrainingStudioPage() {
                                                     <div className="p-6">
                                                         {/* Avatar */}
                                                         <div className="flex justify-center mb-4">
-                                                            <div className={`w-20 h-20 bg-gradient-to-br ${theme.gradient} rounded-full flex items-center justify-center`}>
-                                                                <span className="text-white font-bold text-2xl">
-                                                                    {character.avatarInitials}
-                                                                </span>
-                                                            </div>
+                                                            {character.avatarUrl ? (
+                                                                <img
+                                                                    src={character.avatarUrl}
+                                                                    alt={character.characterName}
+                                                                    className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg"
+                                                                />
+                                                            ) : (
+                                                                <div className={`w-20 h-20 bg-gradient-to-br ${theme.gradient} rounded-full flex items-center justify-center`}>
+                                                                    <span className="text-white font-bold text-2xl">
+                                                                        {character.avatarInitials}
+                                                                    </span>
+                                                                </div>
+                                                            )}
                                                         </div>
 
                                                         {/* Name & Title */}
@@ -1206,9 +1214,17 @@ export default function TrainingStudioPage() {
                                 <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 max-w-4xl mx-auto">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-12 bg-gradient-to-br ${THEME_COLORS[selectedCharacter.themeColor]?.gradient || 'from-amber-500 to-orange-500'} rounded-full flex items-center justify-center`}>
-                                                <span className="text-white font-bold">{selectedCharacter.avatarInitials}</span>
-                                            </div>
+                                            {selectedCharacter.avatarUrl ? (
+                                                <img
+                                                    src={selectedCharacter.avatarUrl}
+                                                    alt={selectedCharacter.characterName}
+                                                    className="w-12 h-12 rounded-full object-cover border-2 border-white shadow"
+                                                />
+                                            ) : (
+                                                <div className={`w-12 h-12 bg-gradient-to-br ${THEME_COLORS[selectedCharacter.themeColor]?.gradient || 'from-amber-500 to-orange-500'} rounded-full flex items-center justify-center`}>
+                                                    <span className="text-white font-bold">{selectedCharacter.avatarInitials}</span>
+                                                </div>
+                                            )}
                                             <div>
                                                 <p className="text-sm text-slate-500">Training with:</p>
                                                 <p className="font-semibold text-slate-800">
