@@ -1224,7 +1224,7 @@ export default function ContractsDashboard() {
                                   className="w-full text-center text-xs text-slate-500 hover:text-slate-700 py-2 transition-colors"
                                 >
                                   {isExpanded ? (
-                                    <>Show less â†‘</>
+                                    <>Show less ↑</>
                                   ) : (
                                     <>Show {providerBids.length - 2} more ↓</>
                                   )}
@@ -1244,7 +1244,24 @@ export default function ContractsDashboard() {
                       </div>
 
                       {/* Footer Actions */}
-                      <div className={`px-5 py-3 border-t flex justify-end gap-2 ${isTraining ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+                      <div className={`px-5 py-3 border-t flex justify-between items-center ${isTraining ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+                        {/* Left: Review Tender Button (shows when 2+ providers) */}
+                        <div>
+                          {providerBids.length >= 2 && !isTraining && (
+                            <button
+                              onClick={() => router.push(`/auth/tender-review?session_id=${session.sessionId}`)}
+                              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-medium rounded-lg transition-all flex items-center gap-2 shadow-sm hover:shadow"
+                              title="Compare provider alignment scores"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                              </svg>
+                              Review Tender
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Right: Ask CLARENCE */}
                         <button
                           onClick={() => continueWithClarence(session.sessionId)}
                           className="px-3 py-1.5 text-slate-600 hover:text-slate-800 text-xs font-medium transition-colors flex items-center gap-1"
