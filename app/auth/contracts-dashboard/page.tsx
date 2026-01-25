@@ -44,6 +44,7 @@ interface ProviderBid {
 interface Session {
   sessionId: string
   sessionNumber?: string
+  contractName?: string  // WP6: User-defined contract name
   customerCompany: string
   serviceRequired: string
   dealValue: string
@@ -1086,9 +1087,13 @@ export default function ContractsDashboard() {
                               <div className="flex items-center gap-2">
                                 {isTraining && <span>🎓</span>}
                                 <h3 className="text-lg font-semibold text-slate-800">
-                                  {session.sessionNumber || session.sessionId.substring(0, 8)}
+                                  {session.contractName || session.sessionNumber || session.sessionId.substring(0, 8)}
                                 </h3>
                               </div>
+                              {/* Show session number as subtitle if contract name exists */}
+                              {session.contractName && session.sessionNumber && (
+                                <p className="text-xs text-slate-400">{session.sessionNumber}</p>
+                              )}
                               <p className="text-slate-500 text-sm">{session.serviceRequired || 'Service type pending'}</p>
                             </div>
                           </div>
