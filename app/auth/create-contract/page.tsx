@@ -22,7 +22,7 @@
 // 5. Pass tendering data to session-create API
 // ============================================================================
 
-import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useCallback, Suspense, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
@@ -906,6 +906,7 @@ function ContractCreationContent() {
                     isTraining: isTrainingMode,
                     mediation_type: assessment.mediationType,
                     contract_type: assessment.contractType,
+                    contract_name: assessment.contractName,  // ADD THIS LINE
                     template_source: assessment.templateSource,
                     source_template_id: assessment.selectedTemplateId,
                     uploaded_contract_id: assessment.uploadedContractId,
@@ -1508,9 +1509,45 @@ function ContractCreationContent() {
     const renderSummary = () => {
         const isMultiProvider = isMultiProviderScenario()
 
+        // Generate suggested name if not set
+        const suggestedName = React.useMemo(() => {
+            const typeName = getContractTypeLabel(assessment.contractType) || 'Contract'
+            const date = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+            return `${typeName} - ${date}`
+        }, [assessment.contractType])
+
+        // Set default name if empty
+        useEffect(() => {
+            if (!assessment.contractName) {
+                setAssessment(prev => ({ ...prev, contractName: suggestedName }))
+            }
+        }, [suggestedName])
+
         return (
             <div className="max-w-2xl mx-auto">
                 <h3 className="text-lg font-medium text-slate-800 mb-6">{isTrainingMode ? '🎓 Training Contract Summary' : 'Contract Setup Summary'}</h3>
+
+                {/* Contract Name Input - Prominent at top */}
+                <div className={`p-5 rounded-xl mb-6 ${isTrainingMode ? 'bg-amber-50 border-2 border-amber-300' : 'bg-emerald-50 border-2 border-emerald-300'}`}>
+                    <label className={`block text-sm font-medium mb-2 ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>
+                        📝 Name Your Contract
+                    </label>
+                    <input
+                        type="text"
+                        value={assessment.contractName}
+                        onChange={(e) => setAssessment(prev => ({ ...prev, contractName: e.target.value }))}
+                        placeholder="e.g., SaaS Contract for XYZ Company"
+                        className={`w-full px-4 py-3 rounded-lg border-2 text-lg font-medium focus:outline-none transition-colors
+                        ${isTrainingMode
+                                ? 'border-amber-200 focus:border-amber-400 bg-white'
+                                : 'border-emerald-200 focus:border-emerald-400 bg-white'
+                            }`}
+                    />
+                    <p className="text-xs text-slate-500 mt-2">
+                        This name will appear on your dashboard and help you identify this contract
+                    </p>
+                </div>
+
                 <div className="space-y-4 mb-8">
                     {/* WP1: Show Contract Type first */}
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
