@@ -620,7 +620,7 @@ export default function TrainingStudioPage() {
             })
 
             // Call API to create training session
-            const response = await fetch(`${API_BASE}/training-start-session`, {
+            const response = await fetch(`${API_BASE}/training-start-scenario`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
