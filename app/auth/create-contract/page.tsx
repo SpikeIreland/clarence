@@ -328,7 +328,12 @@ Setting up your practice contract. This will just take a moment.`,
 
     training_complete: `**Your training session is ready!** 🎓
 
-Your practice contract has been created. You can now start negotiating against the AI opponent or continue with your training partner.`
+Your practice contract has been created. You can now start negotiating against the AI opponent or continue with your training partner.`,
+
+    // WP6: Pre-fill message from Contract Library
+    prefill_detected: `📚 **Template pre-selected from your library!**
+
+I've loaded your chosen template. Let's continue with the setup.`
 }
 
 // ============================================================================
@@ -396,6 +401,13 @@ function ContractCreationContent() {
 
     const isTrainingMode = searchParams.get('mode') === 'training'
 
+    // WP6: Check for pre-fill params from Contract Library
+    const prefillTemplateSource = searchParams.get('template_source') as TemplateSource
+    const prefillTemplateId = searchParams.get('source_template_id')
+    const prefillContractType = searchParams.get('contract_type') as ContractType
+    const prefillTemplateName = searchParams.get('template_name')
+    const hasPrefill = !!(prefillTemplateSource && prefillTemplateId)
+
     const colors = {
         primary: isTrainingMode ? 'amber' : 'emerald',
         bgLight: isTrainingMode ? 'bg-amber-50' : 'bg-emerald-50',
@@ -419,12 +431,12 @@ function ContractCreationContent() {
     const [assessment, setAssessment] = useState<AssessmentState>({
         step: 'welcome',
         mediationType: null,
-        contractType: null,
-        templateSource: null,
+        contractType: prefillContractType || null,  // WP6: Pre-fill from URL
+        templateSource: prefillTemplateSource || null,  // WP6: Pre-fill from URL
         contractName: '',
         contractDescription: '',
-        selectedTemplateId: null,
-        selectedTemplateName: null,
+        selectedTemplateId: prefillTemplateId || null,  // WP6: Pre-fill from URL
+        selectedTemplateName: prefillTemplateName || null,  // WP6: Pre-fill from URL
         uploadedContractId: null,
         uploadedContractStatus: null,
         uploadedFileName: null,
@@ -455,6 +467,9 @@ function ContractCreationContent() {
 
     // WP3: Track if tendering section is expanded
     const [showTenderingSection, setShowTenderingSection] = useState(false)
+
+    // WP6: Track if pre-fill has been processed
+    const [prefillProcessed, setPrefillProcessed] = useState(false)
 
     // Transition modal state
     const [transitionState, setTransitionState] = useState<TransitionState>({
@@ -490,8 +505,33 @@ function ContractCreationContent() {
 
     useEffect(() => { const user = loadUserInfo(); if (user) setUserInfo(user) }, [loadUserInfo])
 
-    // WP1 CHANGE: After welcome, go to contract_type first (not mediation_type)
+    // WP6: Handle pre-fill from Contract Library
     useEffect(() => {
+        if (hasPrefill && !prefillProcessed) {
+            setPrefillProcessed(true)
+
+            // Set welcome message with pre-fill notification
+            const welcomeMessage = isTrainingMode ? CLARENCE_MESSAGES.welcome_training : CLARENCE_MESSAGES.welcome
+            setChatMessages([
+                { id: 'welcome-1', role: 'clarence', content: welcomeMessage, timestamp: new Date() },
+                { id: 'prefill-1', role: 'clarence', content: CLARENCE_MESSAGES.prefill_detected, timestamp: new Date() }
+            ])
+
+            // Skip to mediation type since contract type and template are pre-selected
+            const timer = setTimeout(() => {
+                setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
+                addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
+            }, 1500)
+
+            return () => clearTimeout(timer)
+        }
+    }, [hasPrefill, prefillProcessed, isTrainingMode])
+
+    // WP1 CHANGE: After welcome, go to contract_type first (not mediation_type)
+    // WP6: Skip if we have pre-fill
+    useEffect(() => {
+        if (hasPrefill) return // Skip standard flow if pre-filled
+
         const welcomeMessage = isTrainingMode ? CLARENCE_MESSAGES.welcome_training : CLARENCE_MESSAGES.welcome
         setChatMessages([{ id: 'welcome-1', role: 'clarence', content: welcomeMessage, timestamp: new Date() }])
         const timer = setTimeout(() => {
@@ -500,7 +540,7 @@ function ContractCreationContent() {
             addClarenceMessage(CLARENCE_MESSAGES.contract_type, CONTRACT_TYPE_OPTIONS)
         }, 1500)
         return () => clearTimeout(timer)
-    }, [isTrainingMode])
+    }, [isTrainingMode, hasPrefill])
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages])
     useEffect(() => { if (assessment.step === 'template_selection') loadTemplates() }, [assessment.step])
@@ -1008,7 +1048,7 @@ function ContractCreationContent() {
         return (
             <div className={`h-full ${isTrainingMode ? 'bg-amber-50/30' : 'bg-emerald-50/30'} border-r border-slate-200 flex flex-col`}>
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-2 mb-3">← {isTrainingMode ? 'Back to Training' : 'Back to Contracts'}</Link>
+                    <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-2 mb-3">← {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
                     <h2 className={`font-semibold ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-lg`}>{isTrainingMode ? 'Training Setup' : 'Create Contract'}</h2>
                 </div>
                 <nav className="flex-1 p-4">
@@ -1119,6 +1159,19 @@ function ContractCreationContent() {
     const renderMediationType = () => (
         <div className="max-w-2xl mx-auto">
             <h3 className="text-lg font-medium text-slate-800 mb-6">How much negotiation do you expect?</h3>
+            {/* WP6: Show pre-filled info if applicable */}
+            {hasPrefill && (
+                <div className={`mb-6 p-4 rounded-xl ${colors.bgLight} border ${colors.borderLight}`}>
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl">📚</span>
+                        <div>
+                            <p className={`text-sm font-medium ${colors.textDark}`}>Template Pre-selected</p>
+                            <p className="text-sm text-slate-600">{prefillTemplateName || 'From Contract Library'}</p>
+                            <p className="text-xs text-slate-500 mt-1">Contract Type: {getContractTypeLabel(prefillContractType)}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="grid gap-4">
                 {MEDIATION_OPTIONS.map((option) => (
                     <button key={option.id} onClick={() => handleOptionSelect(option)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
