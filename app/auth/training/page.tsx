@@ -1668,11 +1668,6 @@ export default function TrainingStudioPage() {
                     </svg>
                 </button>
             )}
-
-            {/* ============================================================ */}
-            {/* SECTION 31: BETA FEEDBACK BUTTON */}
-            {/* ============================================================ */}
-            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
