@@ -654,7 +654,8 @@ function ContractCreationContent() {
     const buildRedirectUrl = (
         pathwayId: PathwayId | string,
         sessionId: string,
-        contractId?: string | null
+        contractId?: string | null,
+        trainingMode?: boolean
     ): string => {
         const params = new URLSearchParams()
         params.set('session_id', sessionId)
@@ -662,6 +663,11 @@ function ContractCreationContent() {
 
         if (contractId) {
             params.set('contract_id', contractId)
+        }
+
+        // Preserve training mode through the flow
+        if (trainingMode) {
+            params.set('mode', 'training')
         }
 
         // STC-EXISTING: True fast-track - skip assessment AND prep
@@ -985,17 +991,9 @@ function ContractCreationContent() {
                 throw new Error(result.error || 'No session ID returned')
             }
 
-            // Handle Training Mode (separate flow - no transition modal)
-            if (isTrainingMode) {
-                setTrainingSessionCreated(result.sessionId)
-                addClarenceMessage(CLARENCE_MESSAGES.training_complete)
-                setIsCreating(false)
-                return
-            }
-
-            // Build redirect URL
+            // Build redirect URL (training mode flag preserved via URL param)
             const contractId = result.contractId || result.contract_id || assessment.uploadedContractId
-            const redirectUrl = buildRedirectUrl(pathwayId, result.sessionId, contractId)
+            const redirectUrl = buildRedirectUrl(pathwayId, result.sessionId, contractId, isTrainingMode)
 
             // Get appropriate transition
             const transition = getTransitionForPathway(pathwayId)
