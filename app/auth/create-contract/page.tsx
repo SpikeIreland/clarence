@@ -1016,10 +1016,40 @@ function ContractCreationContent() {
                             const stepIndex = stepOrder.indexOf(step.id)
                             const isComplete = currentIndex > stepIndex || assessment.step === 'creating'
                             const isCurrent = currentIndex === stepIndex || (step.id === 'summary' && (assessment.step === 'summary' || assessment.step === 'creating'))
+                            const canNavigate = isComplete && assessment.step !== 'creating'
+
+                            const handleStepClick = () => {
+                                if (canNavigate) {
+                                    setAssessment(prev => ({ ...prev, step: step.id as AssessmentStep }))
+                                }
+                            }
+
                             return (
-                                <li key={step.id} className={`flex items-center gap-3 p-3 rounded-lg ${isCurrent ? `${colors.bgLight} ${colors.borderPrimary} border` : isComplete ? 'bg-slate-50' : ''}`}>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isComplete ? `${colors.bgSolid} text-white` : isCurrent ? colors.bgMedium : 'bg-slate-100 text-slate-400'}`}>{isComplete ? '✔' : step.icon}</div>
-                                    <span className={`text-sm font-medium ${isCurrent ? colors.textDark : isComplete ? 'text-slate-700' : 'text-slate-400'}`}>{step.label}</span>
+                                <li key={step.id}>
+                                    <button
+                                        onClick={handleStepClick}
+                                        disabled={!canNavigate}
+                                        className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-all
+                            ${isCurrent
+                                                ? `${colors.bgLight} ${colors.borderPrimary} border`
+                                                : isComplete
+                                                    ? 'bg-slate-50 hover:bg-slate-100 hover:shadow-sm cursor-pointer'
+                                                    : 'cursor-default'
+                                            }
+                        `}
+                                    >
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isComplete ? `${colors.bgSolid} text-white` : isCurrent ? colors.bgMedium : 'bg-slate-100 text-slate-400'}`}>
+                                            {isComplete ? '✓' : step.icon}
+                                        </div>
+                                        <div className="flex-1">
+                                            <span className={`text-sm font-medium ${isCurrent ? colors.textDark : isComplete ? 'text-slate-700' : 'text-slate-400'}`}>
+                                                {step.label}
+                                            </span>
+                                            {canNavigate && (
+                                                <span className="text-xs text-slate-400 ml-2">← edit</span>
+                                            )}
+                                        </div>
+                                    </button>
                                 </li>
                             )
                         })}
