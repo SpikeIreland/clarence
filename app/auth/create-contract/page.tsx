@@ -555,6 +555,25 @@ function ContractCreationContent() {
     }, [assessment.quickIntake.bidderCount])
 
     // ========================================================================
+    // SECTION 5D-1-FIX: SUGGESTED CONTRACT NAME (Moved from renderSummary)
+    // ========================================================================
+
+    // Generate suggested contract name based on contract type
+    // NOTE: Using CONTRACT_TYPE_OPTIONS directly since getContractTypeLabel is defined later
+    const suggestedContractName = useMemo(() => {
+        const typeName = CONTRACT_TYPE_OPTIONS.find(o => o.value === assessment.contractType)?.label || 'Contract'
+        const date = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+        return `${typeName} - ${date}`
+    }, [assessment.contractType])
+
+    // Set default contract name when reaching summary step (if empty)
+    useEffect(() => {
+        if (assessment.step === 'summary' && !assessment.contractName) {
+            setAssessment(prev => ({ ...prev, contractName: suggestedContractName }))
+        }
+    }, [assessment.step, assessment.contractName, suggestedContractName])
+
+    // ========================================================================
     // SECTION 5E: HELPER FUNCTIONS
     // ========================================================================
 
@@ -1557,24 +1576,10 @@ function ContractCreationContent() {
             </div>
         )
     }
-
     // WP1 + WP3: Summary now shows Contract Type before Mediation Type and includes tendering
+    // NOTE: useMemo/useEffect for contract name moved to component level (SECTION 5E-FIX)
     const renderSummary = () => {
         const isMultiProvider = isMultiProviderScenario()
-
-        // Generate suggested name if not set
-        const suggestedName = React.useMemo(() => {
-            const typeName = getContractTypeLabel(assessment.contractType) || 'Contract'
-            const date = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
-            return `${typeName} - ${date}`
-        }, [assessment.contractType])
-
-        // Set default name if empty
-        useEffect(() => {
-            if (!assessment.contractName) {
-                setAssessment(prev => ({ ...prev, contractName: suggestedName }))
-            }
-        }, [suggestedName])
 
         return (
             <div className="max-w-2xl mx-auto">
