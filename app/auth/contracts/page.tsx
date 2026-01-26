@@ -527,19 +527,19 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 8B: POLL FOR TEMPLATE COMPLETION
+    // SECTION 8B: POLL FOR UPLOAD COMPLETION
     // ==========================================================================
 
-    const startPollingForTemplate = (templateId: string) => {
-        console.log('Starting to poll for template:', templateId)
+    const startPollingForTemplate = (contractId: string) => {
+        console.log('Starting to poll for contract completion:', contractId)
         pollingCountRef.current = 0
         setIsProcessing(true)
-        setProcessingTemplateId(templateId)
+        setProcessingTemplateId(contractId)
         setUploadProgress('Processing contract clauses... This may take up to a minute.')
 
         pollingRef.current = setInterval(async () => {
             pollingCountRef.current++
-            console.log(`Polling attempt ${pollingCountRef.current} for template ${templateId}`)
+            console.log(`Polling attempt ${pollingCountRef.current} for contract ${contractId}`)
 
             // Timeout after 2 minutes (40 attempts at 3 second intervals)
             if (pollingCountRef.current > 40) {
@@ -551,83 +551,80 @@ export default function ContractLibraryPage() {
             }
 
             try {
-                // Check if template exists and has clauses
-                const { data, error } = await supabase
-                    .from('contract_templates')
-                    .select('template_id, template_name, clause_count')
-                    .eq('template_id', templateId)
+                // Poll the uploaded_contracts table for status
+                const { data: uploadData, error: uploadError } = await supabase
+                    .from('uploaded_contracts')
+                    .select('contract_id, status, contract_name')
+                    .eq('contract_id', contractId)
                     .single()
 
-                if (error) {
-                    console.log('Template not found yet:', error.message)
-                    // Update progress message periodically
-                    if (pollingCountRef.current % 5 === 0) {
-                        setUploadProgress(`Still processing... (${pollingCountRef.current * 3}s)`)
-                    }
+                if (uploadError) {
+                    console.log('Upload record not found:', uploadError.message)
                     return
                 }
 
-                if (data && data.clause_count && data.clause_count > 0) {
-                    // Template is ready!
-                    console.log('Template ready:', data)
-                    clearInterval(pollingRef.current!)
-                    pollingRef.current = null
-                    setIsProcessing(false)
-                    setUploadProgress('✅ Template created successfully!')
+                console.log('Upload status:', uploadData?.status)
+
+                if (uploadData?.status === 'completed' || uploadData?.status === 'ready') {
+                    // Parsing complete! Now check for the template
+                    console.log('Upload processing complete, checking for template...')
+
+                    // Give the workflow a moment to create the template record
+                    await new Promise(resolve => setTimeout(resolve, 1000))
 
                     // Refresh templates list
                     if (userInfo) {
                         await loadTemplates(userInfo)
                     }
 
+                    clearInterval(pollingRef.current!)
+                    pollingRef.current = null
+                    setIsProcessing(false)
+                    setUploadProgress('✅ Template created successfully!')
+
                     // Close modal after brief success message
                     setTimeout(() => {
                         setShowUploadModal(false)
-                        resetUploadState()
+                        // Reset state inline
+                        setUploadTemplateName('')
+                        setUploadContractType('custom')
+                        setUploadProgress('')
+                        setUploadError(null)
+                        setIsUploading(false)
+                        setIsProcessing(false)
+                        setProcessingTemplateId(null)
+                        setDragActive(false)
+                        if (fileInputRef.current) {
+                            fileInputRef.current.value = ''
+                        }
+                        pollingCountRef.current = 0
                     }, 1500)
+
+                } else if (uploadData?.status === 'failed' || uploadData?.status === 'error') {
+                    // Processing failed
+                    clearInterval(pollingRef.current!)
+                    pollingRef.current = null
+                    setIsProcessing(false)
+                    setUploadError('Failed to process contract. Please try again.')
+
                 } else {
-                    // Template exists but no clauses yet - still processing
-                    console.log('Template exists but still processing clauses')
-                    setUploadProgress(`Extracting clauses... (${pollingCountRef.current * 3}s)`)
+                    // Still processing - update progress message
+                    const elapsed = pollingCountRef.current * 3
+                    if (elapsed < 15) {
+                        setUploadProgress('Extracting text from document...')
+                    } else if (elapsed < 30) {
+                        setUploadProgress('Analyzing contract structure...')
+                    } else if (elapsed < 45) {
+                        setUploadProgress('Extracting and categorizing clauses...')
+                    } else {
+                        setUploadProgress(`Almost done... (${elapsed}s)`)
+                    }
                 }
 
             } catch (err) {
                 console.error('Polling error:', err)
             }
         }, 3000) // Poll every 3 seconds
-    }
-
-    // Cleanup polling on unmount
-    useEffect(() => {
-        return () => {
-            if (pollingRef.current) {
-                clearInterval(pollingRef.current)
-            }
-        }
-    }, [])
-
-    const resetUploadState = () => {
-        setUploadTemplateName('')
-        setUploadContractType('custom')
-        setUploadProgress('')
-        setUploadError(null)
-        setIsUploading(false)
-        setIsProcessing(false)
-        setProcessingTemplateId(null)
-        setDragActive(false)
-        if (fileInputRef.current) {
-            fileInputRef.current.value = ''
-        }
-        if (pollingRef.current) {
-            clearInterval(pollingRef.current)
-            pollingRef.current = null
-        }
-        pollingCountRef.current = 0
-    }
-
-    const openUploadModal = () => {
-        resetUploadState()
-        setShowUploadModal(true)
     }
 
     // ==========================================================================
@@ -668,7 +665,7 @@ export default function ContractLibraryPage() {
 
     const renderUploadCard = () => (
         <div
-            onClick={openUploadModal}
+            onClick={() => setShowUploadModal(true)}
             className="bg-white rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-400 hover:shadow-md transition-all overflow-hidden cursor-pointer group"
         >
             <div className="p-8 text-center">
@@ -837,7 +834,7 @@ export default function ContractLibraryPage() {
                             <>
                                 {section.canUpload && (
                                     <button
-                                        onClick={openUploadModal}
+                                        onClick={() => setShowUploadModal(true)}
                                         className="mb-4 w-full py-3 px-4 border-2 border-dashed border-emerald-300 hover:border-emerald-400 rounded-lg text-emerald-600 hover:text-emerald-700 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1057,7 +1054,15 @@ export default function ContractLibraryPage() {
                             onClick={() => {
                                 if (!isProcessing) {
                                     setShowUploadModal(false)
-                                    resetUploadState()
+                                    setUploadTemplateName('')
+                                    setUploadContractType('custom')
+                                    setUploadProgress('')
+                                    setUploadError(null)
+                                    setIsUploading(false)
+                                    setIsProcessing(false)
+                                    setProcessingTemplateId(null)
+                                    setDragActive(false)
+                                    pollingCountRef.current = 0
                                 }
                             }}
                             disabled={isProcessing}
