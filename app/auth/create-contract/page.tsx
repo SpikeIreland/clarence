@@ -520,7 +520,14 @@ function ContractCreationContent() {
             // Skip to mediation type since contract type and template are pre-selected
             const timer = setTimeout(() => {
                 setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
-                addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
+                // Inline the message add since addClarenceMessage isn't defined yet
+                setChatMessages(prev => [...prev, {
+                    id: `clarence-${Date.now()}`,
+                    role: 'clarence',
+                    content: CLARENCE_MESSAGES.mediation_selection,
+                    timestamp: new Date(),
+                    options: MEDIATION_OPTIONS
+                }])
             }, 1500)
 
             return () => clearTimeout(timer)
