@@ -441,7 +441,6 @@ function IntelligentQuestionnaireContent() {
   const [sessionNumber, setSessionNumber] = useState<string | null>(null)
   const [conversationComplete, setConversationComplete] = useState(false)
   const [leverageAssessment, setLeverageAssessment] = useState<LeverageAssessment | null>(null)
-  const [isSkipping, setIsSkipping] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // WP2: Fast-track mode state
@@ -994,67 +993,6 @@ Your data is saved and ready. Click below to continue.`)
     setIsSubmitting(false)
   }
 
-  const handleSkipAssessment = async () => {
-    if (!sessionId) return
-    setIsSkipping(true)
-
-    try {
-      await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          session_number: sessionNumber,
-          strategic_answers: {},
-          leverage_assessment: {
-            customerLeverage: 50,
-            providerLeverage: 50,
-            breakdown: {
-              marketDynamicsScore: 50,
-              economicFactorsScore: 50,
-              strategicPositionScore: 50,
-              batnaScore: 50
-            },
-            reasoning: 'Assessment skipped - using default values'
-          },
-          assessment_mode: 'skipped',
-          completed_at: new Date().toISOString()
-        })
-      })
-    } catch (error) {
-      console.error('Error saving skip status:', error)
-    }
-
-    setIsSkipping(false)
-
-    const params = new URLSearchParams()
-    params.set('session_id', sessionId)
-    if (contractId) params.set('contract_id', contractId)
-    if (pathwayId) params.set('pathway_id', pathwayId)
-
-    const redirectUrl = `/auth/contract-prep?${params.toString()}`
-
-    const transition: TransitionConfig = {
-      id: 'transition_to_prep',
-      fromStage: 'strategic_assessment',
-      toStage: 'contract_prep',
-      title: 'Proceeding to Contract Prep',
-      message: "No problem - you can always come back to complete the strategic assessment later. Let's move to Contract Preparation where you'll configure your clause positions.",
-      bulletPoints: [
-        'Review and configure each clause',
-        'Set your position ranges',
-        'Default leverage values will be used'
-      ],
-      buttonText: 'Continue to Contract Prep'
-    }
-
-    setTransitionState({
-      isOpen: true,
-      transition,
-      redirectUrl
-    })
-  }
-
   const handleTransitionContinue = () => {
     const { redirectUrl } = transitionState
     setTransitionState({ isOpen: false, transition: null, redirectUrl: null })
@@ -1215,14 +1153,15 @@ Your data is saved and ready. Click below to continue.`)
     const currentSectionId = getCurrentSectionId()
 
     return (
-      <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
+      <div className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-[104px] h-[calc(100vh-104px)]">
+        {/* 104px = 56px header + 48px progress bar */}
         <div className="p-4 border-b border-slate-200">
           <h3 className="font-semibold text-slate-800">{modeInfo.title}</h3>
           {/* WP2: Show mode badge */}
           <div className="flex items-center gap-2 mt-1">
             <span className={`text-xs px-2 py-0.5 rounded-full ${assessmentMode === 'fast-track' ? 'bg-emerald-100 text-emerald-700' :
-                assessmentMode === 'abbreviated' ? 'bg-blue-100 text-blue-700' :
-                  'bg-slate-100 text-slate-600'
+              assessmentMode === 'abbreviated' ? 'bg-blue-100 text-blue-700' :
+                'bg-slate-100 text-slate-600'
               }`}>
               {assessmentMode === 'fast-track' ? '⚡ Fast Track' :
                 assessmentMode === 'abbreviated' ? '📝 Focused' :
@@ -1266,13 +1205,7 @@ Your data is saved and ready. Click below to continue.`)
             )
           })}
         </div>
-        {!showFastTrackReview && (
-          <div className="p-4 border-t border-slate-200">
-            <button onClick={handleSkipAssessment} disabled={isSkipping} className="w-full px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">
-              {isSkipping ? 'Skipping...' : 'Skip → Contract Prep'}
-            </button>
-          </div>
-        )}
+        {/* SKIP BUTTON REMOVED */}
         <div className="p-4 border-t border-slate-200 bg-slate-50">
           <div className="text-xs text-slate-500">
             {sessionNumber && <div className="font-mono">{sessionNumber}</div>}
@@ -1304,143 +1237,148 @@ Your data is saved and ready. Click below to continue.`)
   // ========================================================================
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      <ProgressMenu />
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-14 bg-slate-800 flex items-center justify-between px-6 relative">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold">C</span>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* ================================================================ */}
+      {/* FULL-WIDTH HEADER */}
+      {/* ================================================================ */}
+      <header className="h-14 bg-slate-800 flex items-center justify-between px-6 relative sticky top-0 z-40">
+        {/* Left: CLARENCE Create branding */}
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold">C</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-white font-semibold">CLARENCE</span>
+              <span className="text-emerald-400 font-semibold">Create</span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-semibold">CLARENCE</span>
-                <span className="text-emerald-400 font-semibold">Create</span>
-              </div>
-              <span className="text-slate-500 text-xs">The Honest Broker</span>
+            <span className="text-slate-500 text-xs">The Honest Broker</span>
+          </div>
+        </div>
+
+        {/* Centre: Page Title */}
+        <div className="absolute left-1/2 transform -translate-x-1/2">
+          <h1 className="text-white font-medium">{modeInfo.title}</h1>
+        </div>
+
+        {/* Right: Feedback & Session Info */}
+        <div className="flex items-center gap-4">
+          <FeedbackButton position="header" />
+          {existingData && (
+            <div className="text-right text-sm">
+              <p className="font-medium text-slate-300">{existingData.companyName}</p>
+              <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
             </div>
-          </div>
+          )}
+        </div>
+      </header>
 
-          <div className="absolute left-1/2 transform -translate-x-1/2">
-            <h1 className="text-white font-medium">{modeInfo.title}</h1>
-          </div>
+      {/* ================================================================ */}
+      {/* FULL-WIDTH PROGRESS BAR */}
+      {/* ================================================================ */}
+      <CreateProgressBar currentStage="strategic_assessment" />
 
-          <div className="flex items-center gap-4">
-            {!showFastTrackReview && (
-              <button
-                onClick={handleSkipAssessment}
-                disabled={isSkipping}
-                className="px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {isSkipping ? 'Skipping...' : 'Skip →'}
-              </button>
-            )}
-            {existingData && (
-              <div className="text-right text-sm">
-                <p className="font-medium text-slate-300">{existingData.companyName}</p>
-                <p className="text-slate-500">{existingData.serviceRequired} • {formatCurrency(existingData.dealValue)}</p>
-              </div>
-            )}
-          </div>
-        </header>
-
-        <CreateProgressBar currentStage="strategic_assessment" />
-
-        {/* WP2: Conditional rendering based on mode */}
-        {showFastTrackReview ? (
-          <div className="flex-1 p-6 overflow-auto">
-            {renderFastTrackReview()}
-          </div>
-        ) : (
-          <>
-            {/* Question progress bar (mobile) */}
-            <div className="bg-white border-b border-slate-200 px-6 py-3 lg:hidden">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-slate-400">Question {Math.min(currentQuestionIndex + 1, activeQuestions.length)} of {activeQuestions.length}</span>
-                <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${(currentQuestionIndex / activeQuestions.length) * 100}%` }} />
+      {/* ================================================================ */}
+      {/* MAIN CONTENT WITH SIDEBAR */}
+      {/* ================================================================ */}
+      <div className="flex-1 flex">
+        <ProgressMenu />
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* WP2: Conditional rendering based on mode */}
+          {showFastTrackReview ? (
+            <div className="flex-1 p-6 overflow-auto">
+              {renderFastTrackReview()}
+            </div>
+          ) : (
+            <>
+              {/* Question progress bar (mobile) */}
+              <div className="bg-white border-b border-slate-200 px-6 py-3 lg:hidden">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-slate-400">Question {Math.min(currentQuestionIndex + 1, activeQuestions.length)} of {activeQuestions.length}</span>
+                  <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${(currentQuestionIndex / activeQuestions.length) * 100}%` }} />
+                  </div>
+                  {conversationComplete && <span className="text-green-600 font-medium">Complete ✓</span>}
                 </div>
-                {conversationComplete && <span className="text-green-600 font-medium">Complete ✓</span>}
               </div>
-            </div>
 
-            {/* Conversation panel */}
-            <div className="flex-1 p-6 overflow-hidden">
-              <div className="max-w-3xl mx-auto h-full">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
-                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                    {messages.map((message) => (
-                      <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg p-4 ${message.type === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'}`}>
-                          <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                            {message.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i}>{part}</strong> : part)}
+              {/* Conversation panel */}
+              <div className="flex-1 p-6 overflow-hidden">
+                <div className="max-w-3xl mx-auto h-full">
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                      {messages.map((message) => (
+                        <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[80%] rounded-lg p-4 ${message.type === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                            <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                              {message.content.split('**').map((part, i) => i % 2 === 1 ? <strong key={i}>{part}</strong> : part)}
+                            </div>
                           </div>
                         </div>
+                      ))}
+                      {isTyping && (
+                        <div className="flex justify-start">
+                          <div className="bg-slate-100 rounded-lg p-4">
+                            <div className="flex gap-1">
+                              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                              <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+                    {!conversationComplete ? (
+                      <div className="border-t border-slate-200 p-4">
+                        <form onSubmit={handleSubmit} className="flex gap-3">
+                          <input
+                            type="text"
+                            value={userInput}
+                            onChange={(e) => setUserInput(e.target.value)}
+                            placeholder="Type your response..."
+                            className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={isTyping}
+                          />
+                          <button
+                            type="submit"
+                            disabled={!userInput.trim() || isTyping}
+                            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Send
+                          </button>
+                        </form>
                       </div>
-                    ))}
-                    {isTyping && (
-                      <div className="flex justify-start">
-                        <div className="bg-slate-100 rounded-lg p-4">
-                          <div className="flex gap-1">
-                            <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                            <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                            <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                          </div>
-                        </div>
+                    ) : (
+                      <div className="border-t border-slate-200 p-4">
+                        <button
+                          onClick={handleProceedToContractPrep}
+                          disabled={isSubmitting}
+                          className="w-full py-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              Continue to Contract Prep
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </>
+                          )}
+                        </button>
+                        <p className="text-center text-sm text-slate-500 mt-3">Configure your clause positions before inviting providers</p>
                       </div>
                     )}
-                    <div ref={messagesEndRef} />
                   </div>
-                  {!conversationComplete ? (
-                    <div className="border-t border-slate-200 p-4">
-                      <form onSubmit={handleSubmit} className="flex gap-3">
-                        <input
-                          type="text"
-                          value={userInput}
-                          onChange={(e) => setUserInput(e.target.value)}
-                          placeholder="Type your response..."
-                          className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          disabled={isTyping}
-                        />
-                        <button
-                          type="submit"
-                          disabled={!userInput.trim() || isTyping}
-                          className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Send
-                        </button>
-                      </form>
-                    </div>
-                  ) : (
-                    <div className="border-t border-slate-200 p-4">
-                      <button
-                        onClick={handleProceedToContractPrep}
-                        disabled={isSubmitting}
-                        className="w-full py-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            Continue to Contract Prep
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </>
-                        )}
-                      </button>
-                      <p className="text-center text-sm text-slate-500 mt-3">Configure your clause positions before inviting providers</p>
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Beta Feedback Button */}
