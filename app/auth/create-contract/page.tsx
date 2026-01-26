@@ -429,9 +429,9 @@ function ContractCreationContent() {
     // ========================================================================
 
     const [assessment, setAssessment] = useState<AssessmentState>({
-        step: 'welcome',
+        step: hasPrefill ? 'mediation_type' : 'welcome',  // Skip welcome if pre-filled
         mediationType: null,
-        contractType: prefillContractType || null,  // WP6: Pre-fill from URL
+        contractType: prefillContractType || null,
         templateSource: prefillTemplateSource || null,  // WP6: Pre-fill from URL
         contractName: '',
         contractDescription: '',
@@ -510,27 +510,13 @@ function ContractCreationContent() {
         if (hasPrefill && !prefillProcessed) {
             setPrefillProcessed(true)
 
-            // Set welcome message with pre-fill notification
+            // Set all messages immediately (step is already at mediation_type)
             const welcomeMessage = isTrainingMode ? CLARENCE_MESSAGES.welcome_training : CLARENCE_MESSAGES.welcome
             setChatMessages([
                 { id: 'welcome-1', role: 'clarence', content: welcomeMessage, timestamp: new Date() },
-                { id: 'prefill-1', role: 'clarence', content: CLARENCE_MESSAGES.prefill_detected, timestamp: new Date() }
+                { id: 'prefill-1', role: 'clarence', content: CLARENCE_MESSAGES.prefill_detected, timestamp: new Date() },
+                { id: 'mediation-1', role: 'clarence', content: CLARENCE_MESSAGES.mediation_selection, timestamp: new Date(), options: MEDIATION_OPTIONS }
             ])
-
-            // Skip to mediation type since contract type and template are pre-selected
-            const timer = setTimeout(() => {
-                setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
-                // Inline the message add since addClarenceMessage isn't defined yet
-                setChatMessages(prev => [...prev, {
-                    id: `clarence-${Date.now()}`,
-                    role: 'clarence',
-                    content: CLARENCE_MESSAGES.mediation_selection,
-                    timestamp: new Date(),
-                    options: MEDIATION_OPTIONS
-                }])
-            }, 1500)
-
-            return () => clearTimeout(timer)
         }
     }, [hasPrefill, prefillProcessed, isTrainingMode])
 
