@@ -186,7 +186,7 @@ export default function ContractsDashboard() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState<string>('')
   const [isSavingName, setIsSavingName] = useState(false)
-  
+
   // ==========================================================================
   // SECTION 7: DATA LOADING FUNCTIONS
   // ==========================================================================
@@ -590,7 +590,7 @@ export default function ContractsDashboard() {
           ? 'bg-amber-500 hover:bg-amber-600 text-white'
           : 'bg-emerald-600 hover:bg-emerald-700 text-white',
         disabled: false,
-        action: () => router.push(`/auth/customer-requirements?session_id=${session.sessionId}`)
+        action: () => router.push(`/auth/strategic-assessment?session_id=${session.sessionId}`)
       }
     }
 
