@@ -857,10 +857,15 @@ function ContractCreationContent() {
         const selectedMessage = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.template_source
 
         setTimeout(() => {
-            addClarenceMessage(selectedMessage)
             if (skipQuickIntake) {
-                setAssessment(prev => ({ ...prev, step: 'template_source' }))
-                setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS) }, 500)
+                // WP6: Skip to summary if template already pre-selected from Contract Library
+                if (hasPrefill && assessment.selectedTemplateId) {
+                    setAssessment(prev => ({ ...prev, step: 'summary' }))
+                    setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.summary) }, 500)
+                } else {
+                    setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                    setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS) }, 500)
+                }
             } else {
                 setAssessment(prev => ({ ...prev, step: 'quick_intake' }))
                 setTimeout(() => {
@@ -905,18 +910,25 @@ function ContractCreationContent() {
 
     // WP3: Enhanced Quick Intake completion with tendering acknowledgment
     const handleQuickIntakeComplete = () => {
-        const isMultiProvider = isMultiProviderScenario()
-        addUserMessage('Deal context complete')
+        const qi = assessment.quickIntake
+        const summary = `Deal: ${qi.dealValue || 'Not specified'} | Timeline: ${qi.timelinePressure || 'Not specified'} | Providers: ${qi.bidderCount || 'Not specified'}`
+        addUserMessage(summary)
 
-        // WP3: Use appropriate completion message based on tendering
-        const completionMessage = isMultiProvider
-            ? CLARENCE_MESSAGES.quick_intake_complete_tendering
-            : CLARENCE_MESSAGES.quick_intake_complete
+        // WP3: Add tendering message if multi-provider
+        if (isMultiProviderScenario()) {
+            setTimeout(() => addClarenceMessage("📊 **Multiple providers detected!**\n\nI'll help you configure evaluation criteria to compare bids effectively."), 300)
+        }
 
         setTimeout(() => {
-            addClarenceMessage(completionMessage, TEMPLATE_SOURCE_OPTIONS)
-            setAssessment(prev => ({ ...prev, step: 'template_source' }))
-        }, 300)
+            // WP6: Skip to summary if template already pre-selected from Contract Library
+            if (hasPrefill && assessment.selectedTemplateId) {
+                setAssessment(prev => ({ ...prev, step: 'summary' }))
+                addClarenceMessage(CLARENCE_MESSAGES.summary)
+            } else {
+                setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS)
+            }
+        }, 500)
     }
 
     // ========================================================================
