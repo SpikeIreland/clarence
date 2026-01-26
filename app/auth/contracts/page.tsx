@@ -1,18 +1,16 @@
 'use client'
 
 // ============================================================================
-// CLARENCE CONTRACT LIBRARY PAGE - WP6
+// CLARENCE CONTRACT LIBRARY PAGE - WP6 v2
 // ============================================================================
 // File: /app/auth/contracts/page.tsx
 // Purpose: Template library for reusable contract configurations
 // 
-// WP6 CHANGES:
-// 1. Renamed from "Contract Studio" to "Contract Library"
-// 2. Three sections: System Templates, Company Templates, My Templates
-// 3. Data source changed from uploaded_contracts to contract_templates
-// 4. "Use Template" now pre-fills Create Contract flow
-// 5. Proper empty states for each section
-// 6. Upload moved to "My Templates" section
+// WP6 v2 CHANGES:
+// 1. Removed "New Contract" button (page is for templates only)
+// 2. Added "Upload Contract" card in My Templates section
+// 3. Added drag & drop upload modal
+// 4. Processes uploaded contracts into user templates
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -20,7 +18,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
-import AuthenticatedHeader from '@/components/AuthenticatedHeader'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -67,6 +64,7 @@ interface TemplateSection {
     isCollapsed: boolean
     canEdit: boolean
     canDelete: boolean
+    canUpload: boolean
     emptyMessage: string
     emptySubMessage: string
 }
@@ -76,6 +74,18 @@ interface TemplateSection {
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+const ALLOWED_FILE_TYPES = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+]
+
+const FILE_TYPE_LABELS: Record<string, string> = {
+    'application/pdf': 'PDF',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+    'text/plain': 'TXT'
+}
 
 const CONTRACT_TYPE_ICONS: Record<string, string> = {
     'bpo': '🏢',
@@ -99,6 +109,17 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
     'custom': 'Custom Contract',
 }
 
+const CONTRACT_TYPE_OPTIONS = [
+    { value: 'bpo', label: 'BPO / Outsourcing Agreement' },
+    { value: 'saas', label: 'SaaS Agreement' },
+    { value: 'nda', label: 'Non-Disclosure Agreement' },
+    { value: 'msa', label: 'Master Service Agreement' },
+    { value: 'employment', label: 'Employment Contract' },
+    { value: 'it_services', label: 'IT Services Agreement' },
+    { value: 'consulting', label: 'Consulting Agreement' },
+    { value: 'custom', label: 'Custom / Other' },
+]
+
 // ============================================================================
 // SECTION 3: MAIN COMPONENT
 // ============================================================================
@@ -106,6 +127,7 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 export default function ContractLibraryPage() {
     const router = useRouter()
     const supabase = createClient()
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // ==========================================================================
     // SECTION 4: STATE DECLARATIONS
@@ -113,6 +135,7 @@ export default function ContractLibraryPage() {
 
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [loading, setLoading] = useState(true)
+    const [showUserMenu, setShowUserMenu] = useState(false)
 
     // Template sections
     const [sections, setSections] = useState<TemplateSection[]>([
@@ -125,6 +148,7 @@ export default function ContractLibraryPage() {
             isCollapsed: false,
             canEdit: false,
             canDelete: false,
+            canUpload: false,
             emptyMessage: 'No system templates available',
             emptySubMessage: 'System templates will appear here when added by CLARENCE'
         },
@@ -137,6 +161,7 @@ export default function ContractLibraryPage() {
             isCollapsed: false,
             canEdit: false,
             canDelete: false,
+            canUpload: false,
             emptyMessage: 'No company templates yet',
             emptySubMessage: 'Your administrator can add company-wide templates from the Admin Panel'
         },
@@ -144,13 +169,14 @@ export default function ContractLibraryPage() {
             id: 'user',
             title: 'My Templates',
             icon: '👤',
-            description: 'Created from your completed negotiations',
+            description: 'Your personal templates from uploads and completed negotiations',
             templates: [],
             isCollapsed: false,
             canEdit: true,
             canDelete: true,
+            canUpload: true,
             emptyMessage: 'No templates yet',
-            emptySubMessage: 'When you complete a negotiation, you can save it as a reusable template'
+            emptySubMessage: 'Upload a contract or save from a completed negotiation'
         }
     ])
 
@@ -159,6 +185,15 @@ export default function ContractLibraryPage() {
     const [showTemplateModal, setShowTemplateModal] = useState(false)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [searchQuery, setSearchQuery] = useState('')
+
+    // Upload state
+    const [showUploadModal, setShowUploadModal] = useState(false)
+    const [isUploading, setIsUploading] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState<string>('')
+    const [uploadError, setUploadError] = useState<string | null>(null)
+    const [dragActive, setDragActive] = useState(false)
+    const [uploadTemplateName, setUploadTemplateName] = useState('')
+    const [uploadContractType, setUploadContractType] = useState('custom')
 
     // ==========================================================================
     // SECTION 5: AUTHENTICATION & DATA LOADING
@@ -330,7 +365,186 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 8: HELPER FUNCTIONS
+    // SECTION 8: FILE UPLOAD HANDLERS
+    // ==========================================================================
+
+    const handleDrag = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (e.type === 'dragenter' || e.type === 'dragover') {
+            setDragActive(true)
+        } else if (e.type === 'dragleave') {
+            setDragActive(false)
+        }
+    }
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setDragActive(false)
+
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleFileSelect(e.dataTransfer.files[0])
+        }
+    }
+
+    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            handleFileSelect(e.target.files[0])
+        }
+    }
+
+    const handleFileSelect = async (file: File) => {
+        // Validate file type
+        if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+            setUploadError('Please upload a PDF, DOCX, or TXT file')
+            return
+        }
+
+        // Validate file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            setUploadError('File size must be less than 10MB')
+            return
+        }
+
+        // Set default template name from filename
+        const defaultName = file.name.replace(/\.[^/.]+$/, '')
+        setUploadTemplateName(defaultName)
+
+        setUploadError(null)
+        setIsUploading(true)
+        setUploadProgress('Extracting text from document...')
+
+        eventLogger.started('contract_library', 'file_upload_started', {
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size
+        })
+
+        try {
+            // Step 1: Extract text client-side
+            const extractedText = await extractTextFromFile(file)
+            setUploadProgress('Processing contract...')
+
+            if (!extractedText || extractedText.length < 100) {
+                throw new Error('Could not extract sufficient text from the document')
+            }
+
+            // Step 2: Upload to API for processing
+            const response = await fetch(`${API_BASE}/parse-contract-document`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userInfo?.userId,
+                    company_id: userInfo?.companyId,
+                    file_name: file.name,
+                    file_type: file.type || 'application/octet-stream',
+                    file_size: file.size,
+                    document_text: extractedText,
+                    contract_type: uploadContractType,
+                    template_name: uploadTemplateName || defaultName,
+                    create_as_template: true  // Flag to create as user template
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to process contract')
+            }
+
+            const result = await response.json()
+
+            if (result.success) {
+                setUploadProgress('Template created successfully!')
+
+                eventLogger.completed('contract_library', 'file_upload_completed', {
+                    templateId: result.templateId,
+                    clauseCount: result.clauseCount
+                })
+
+                // Refresh templates
+                setTimeout(async () => {
+                    if (userInfo) {
+                        await loadTemplates(userInfo)
+                    }
+                    setShowUploadModal(false)
+                    resetUploadState()
+                }, 1500)
+
+            } else {
+                throw new Error(result.error || 'Processing failed')
+            }
+
+        } catch (error) {
+            console.error('Upload error:', error)
+            setUploadError(error instanceof Error ? error.message : 'Upload failed')
+            eventLogger.failed('contract_library', 'file_upload_failed',
+                error instanceof Error ? error.message : 'Unknown error'
+            )
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const extractTextFromFile = async (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = async (event) => {
+                try {
+                    if (file.type === 'text/plain') {
+                        resolve(event.target?.result as string)
+                    } else if (file.type === 'application/pdf') {
+                        const pdfjsLib = await import('pdfjs-dist')
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+                        const arrayBuffer = event.target?.result as ArrayBuffer
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+                        let fullText = ''
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i)
+                            const textContent = await page.getTextContent()
+                            const pageText = textContent.items.map((item: any) => item.str).join(' ')
+                            fullText += pageText + '\n'
+                        }
+                        resolve(fullText)
+                    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                        const mammoth = await import('mammoth')
+                        const arrayBuffer = event.target?.result as ArrayBuffer
+                        const result = await mammoth.extractRawText({ arrayBuffer })
+                        resolve(result.value)
+                    } else {
+                        reject(new Error('Unsupported file type'))
+                    }
+                } catch (error) {
+                    reject(error)
+                }
+            }
+            reader.onerror = () => reject(new Error('Failed to read file'))
+            if (file.type === 'text/plain') {
+                reader.readAsText(file)
+            } else {
+                reader.readAsArrayBuffer(file)
+            }
+        })
+    }
+
+    const resetUploadState = () => {
+        setUploadTemplateName('')
+        setUploadContractType('custom')
+        setUploadProgress('')
+        setUploadError(null)
+        setIsUploading(false)
+        setDragActive(false)
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
+    }
+
+    const openUploadModal = () => {
+        resetUploadState()
+        setShowUploadModal(true)
+    }
+
+    // ==========================================================================
+    // SECTION 9: HELPER FUNCTIONS
     // ==========================================================================
 
     const formatDate = (dateString: string | null) => {
@@ -362,7 +576,30 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 9: RENDER - TEMPLATE CARD
+    // SECTION 10: RENDER - UPLOAD CARD
+    // ==========================================================================
+
+    const renderUploadCard = () => (
+        <div
+            onClick={openUploadModal}
+            className="bg-white rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-400 hover:shadow-md transition-all overflow-hidden cursor-pointer group"
+        >
+            <div className="p-8 text-center">
+                <div className="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-emerald-200 transition-colors">
+                    <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                </div>
+                <h3 className="font-semibold text-emerald-700 mb-1">Upload Contract</h3>
+                <p className="text-sm text-slate-500">
+                    PDF, DOCX, or TXT
+                </p>
+            </div>
+        </div>
+    )
+
+    // ==========================================================================
+    // SECTION 11: RENDER - TEMPLATE CARD
     // ==========================================================================
 
     const renderTemplateCard = (template: ContractTemplate, section: TemplateSection) => (
@@ -454,12 +691,12 @@ export default function ContractLibraryPage() {
     )
 
     // ==========================================================================
-    // SECTION 10: RENDER - SECTION COMPONENT
+    // SECTION 12: RENDER - SECTION COMPONENT
     // ==========================================================================
 
     const renderSection = (section: TemplateSection) => {
         const filteredTemplates = filterTemplates(section.templates)
-        const isEmpty = filteredTemplates.length === 0
+        const isEmpty = filteredTemplates.length === 0 && !section.canUpload
 
         return (
             <div key={section.id} className="mb-8">
@@ -491,101 +728,116 @@ export default function ContractLibraryPage() {
                 {/* Section Content */}
                 {!section.isCollapsed && (
                     <div className="border border-t-0 border-slate-200 rounded-b-xl bg-slate-50/50 p-6">
-                        {isEmpty ? (
-                            /* Empty State */
+                        {isEmpty && !section.canUpload ? (
+                            /* Empty State (non-uploadable sections) */
                             <div className="text-center py-8">
                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                     <span className="text-xl opacity-50">{section.icon}</span>
                                 </div>
                                 <p className="text-slate-600 font-medium mb-1">{section.emptyMessage}</p>
                                 <p className="text-sm text-slate-400 mb-4">{section.emptySubMessage}</p>
-                                {section.id === 'user' && (
-                                    <Link
-                                        href="/auth/contracts-dashboard"
-                                        className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
-                                    >
-                                        Or start from a System Template →
-                                    </Link>
-                                )}
                             </div>
                         ) : viewMode === 'grid' ? (
                             /* Grid View */
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {/* Upload Card for User section */}
+                                {section.canUpload && renderUploadCard()}
+                                {/* Template Cards */}
                                 {filteredTemplates.map(template => renderTemplateCard(template, section))}
                             </div>
                         ) : (
                             /* List View */
-                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                                <table className="w-full">
-                                    <thead className="bg-slate-50 border-b border-slate-200">
-                                        <tr>
-                                            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Template</th>
-                                            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
-                                            <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Clauses</th>
-                                            <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Uses</th>
-                                            <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {filteredTemplates.map(template => (
-                                            <tr key={template.templateId} className="hover:bg-slate-50">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <span className="text-xl">{getContractTypeIcon(template.contractType)}</span>
-                                                        <div>
-                                                            <div className="font-medium text-slate-800 text-sm">{template.templateName}</div>
-                                                            {template.description && (
-                                                                <div className="text-xs text-slate-400 truncate max-w-xs">{template.description}</div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-sm text-slate-600">
-                                                    {getContractTypeLabel(template.contractType)}
-                                                </td>
-                                                <td className="px-6 py-4 text-center text-sm text-slate-600">{template.clauseCount || '—'}</td>
-                                                <td className="px-6 py-4 text-center text-sm text-slate-600">{template.timesUsed}</td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center justify-end gap-3">
-                                                        <button
-                                                            onClick={() => handleViewTemplate(template)}
-                                                            className="text-slate-500 hover:text-slate-700 text-sm font-medium"
-                                                        >
-                                                            Preview
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleUseTemplate(template)}
-                                                            className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
-                                                        >
-                                                            Use
-                                                        </button>
-                                                        {section.canEdit && (
-                                                            <button
-                                                                onClick={() => handleEditTemplate(template)}
-                                                                className="text-slate-400 hover:text-emerald-600"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                                </svg>
-                                                            </button>
-                                                        )}
-                                                        {section.canDelete && (
-                                                            <button
-                                                                onClick={() => handleDeleteTemplate(template.templateId)}
-                                                                className="text-slate-400 hover:text-red-600"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                </svg>
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <>
+                                {section.canUpload && (
+                                    <button
+                                        onClick={openUploadModal}
+                                        className="mb-4 w-full py-3 px-4 border-2 border-dashed border-emerald-300 hover:border-emerald-400 rounded-lg text-emerald-600 hover:text-emerald-700 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                        </svg>
+                                        Upload Contract
+                                    </button>
+                                )}
+                                {filteredTemplates.length > 0 && (
+                                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                        <table className="w-full">
+                                            <thead className="bg-slate-50 border-b border-slate-200">
+                                                <tr>
+                                                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Template</th>
+                                                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                                                    <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Clauses</th>
+                                                    <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Uses</th>
+                                                    <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {filteredTemplates.map(template => (
+                                                    <tr key={template.templateId} className="hover:bg-slate-50">
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-xl">{getContractTypeIcon(template.contractType)}</span>
+                                                                <div>
+                                                                    <div className="font-medium text-slate-800 text-sm">{template.templateName}</div>
+                                                                    {template.description && (
+                                                                        <div className="text-xs text-slate-400 truncate max-w-xs">{template.description}</div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                                            {getContractTypeLabel(template.contractType)}
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center text-sm text-slate-600">{template.clauseCount || '—'}</td>
+                                                        <td className="px-6 py-4 text-center text-sm text-slate-600">{template.timesUsed}</td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center justify-end gap-3">
+                                                                <button
+                                                                    onClick={() => handleViewTemplate(template)}
+                                                                    className="text-slate-500 hover:text-slate-700 text-sm font-medium"
+                                                                >
+                                                                    Preview
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleUseTemplate(template)}
+                                                                    className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+                                                                >
+                                                                    Use
+                                                                </button>
+                                                                {section.canEdit && (
+                                                                    <button
+                                                                        onClick={() => handleEditTemplate(template)}
+                                                                        className="text-slate-400 hover:text-emerald-600"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                        </svg>
+                                                                    </button>
+                                                                )}
+                                                                {section.canDelete && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteTemplate(template.templateId)}
+                                                                        className="text-slate-400 hover:text-red-600"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                        </svg>
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                                {filteredTemplates.length === 0 && section.canUpload && (
+                                    <p className="text-center text-slate-400 text-sm py-4">
+                                        No templates yet. Upload your first contract above.
+                                    </p>
+                                )}
+                            </>
                         )}
                     </div>
                 )}
@@ -594,7 +846,7 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 11: RENDER - TEMPLATE PREVIEW MODAL
+    // SECTION 13: RENDER - TEMPLATE PREVIEW MODAL
     // ==========================================================================
 
     const renderTemplateModal = () => {
@@ -702,42 +954,227 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 12: MAIN RENDER
+    // SECTION 14: RENDER - UPLOAD MODAL
+    // ==========================================================================
+
+    const renderUploadModal = () => {
+        if (!showUploadModal) return null
+
+        return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+                    {/* Modal Header */}
+                    <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-slate-800">Upload Contract</h2>
+                        <button
+                            onClick={() => {
+                                setShowUploadModal(false)
+                                resetUploadState()
+                            }}
+                            className="text-slate-400 hover:text-slate-600"
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {/* Modal Body */}
+                    <div className="p-6">
+                        {/* Template Name Input */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Template Name
+                            </label>
+                            <input
+                                type="text"
+                                value={uploadTemplateName}
+                                onChange={(e) => setUploadTemplateName(e.target.value)}
+                                placeholder="e.g., Standard NDA Template"
+                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        {/* Contract Type Select */}
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Contract Type
+                            </label>
+                            <select
+                                value={uploadContractType}
+                                onChange={(e) => setUploadContractType(e.target.value)}
+                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            >
+                                {CONTRACT_TYPE_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Drag & Drop Zone */}
+                        <div
+                            onDragEnter={handleDrag}
+                            onDragLeave={handleDrag}
+                            onDragOver={handleDrag}
+                            onDrop={handleDrop}
+                            onClick={() => !isUploading && fileInputRef.current?.click()}
+                            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
+                                ${dragActive
+                                    ? 'border-emerald-500 bg-emerald-50'
+                                    : 'border-slate-300 hover:border-emerald-400 hover:bg-slate-50'
+                                }
+                                ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
+                            `}
+                        >
+                            {isUploading ? (
+                                <>
+                                    <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                    <p className="text-emerald-600 font-medium">{uploadProgress}</p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                        </svg>
+                                    </div>
+                                    <p className="text-slate-600 font-medium mb-1">
+                                        {dragActive ? 'Drop your file here' : 'Click to upload or drag and drop'}
+                                    </p>
+                                    <p className="text-sm text-slate-400">PDF, DOCX, or TXT (max 10MB)</p>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Error Message */}
+                        {uploadError && (
+                            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                {uploadError}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Hidden File Input */}
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileInputChange}
+                        className="hidden"
+                        accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    />
+                </div>
+            </div>
+        )
+    }
+
+    // ==========================================================================
+    // SECTION 15: MAIN RENDER
     // ==========================================================================
 
     return (
         <div className="min-h-screen bg-slate-50">
             {/* ================================================================== */}
-            {/* SECTION 13: HEADER */}
+            {/* SECTION 16: HEADER */}
             {/* ================================================================== */}
+            <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <nav className="flex items-center justify-between h-16">
+                        {/* Left side - Logo */}
+                        <div className="flex items-center gap-8">
+                            <Link href="/auth/contracts-dashboard" className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                                    <span className="text-white font-bold text-sm">C</span>
+                                </div>
+                                <span className="font-semibold text-slate-800">CLARENCE</span>
+                            </Link>
+                            {/* Navigation Links */}
+                            <div className="hidden md:flex items-center gap-1">
+                                <Link
+                                    href="/auth/contracts-dashboard"
+                                    className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors"
+                                >
+                                    Dashboard
+                                </Link>
+                                <Link
+                                    href="/auth/contracts"
+                                    className="px-3 py-2 text-sm font-medium text-emerald-600 bg-emerald-50 rounded-lg"
+                                >
+                                    Contract Library
+                                </Link>
+                                <Link
+                                    href="/auth/training"
+                                    className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors"
+                                >
+                                    Training
+                                </Link>
+                            </div>
+                        </div>
 
-            <AuthenticatedHeader
-                userInfo={userInfo}
-                onSignOut={handleSignOut}
-            />
+                        {/* Right side - User Menu */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowUserMenu(!showUserMenu)}
+                                className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                            >
+                                <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                                    <span className="text-emerald-700 font-medium text-sm">
+                                        {userInfo?.firstName?.[0]}{userInfo?.lastName?.[0]}
+                                    </span>
+                                </div>
+                                <span className="hidden sm:block text-sm">{userInfo?.firstName}</span>
+                                <svg className={`w-4 h-4 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            {/* Dropdown Menu */}
+                            {showUserMenu && (
+                                <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+                                    <div className="px-4 py-3 border-b border-slate-100">
+                                        <div className="font-medium text-slate-800">{userInfo?.firstName} {userInfo?.lastName}</div>
+                                        <div className="text-sm text-slate-500">{userInfo?.email}</div>
+                                        <div className="text-xs text-slate-400 mt-1">{userInfo?.company}</div>
+                                    </div>
+                                    <div className="py-2">
+                                        <Link
+                                            href="/auth/contracts-dashboard"
+                                            className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                            </svg>
+                                            Dashboard
+                                        </Link>
+                                    </div>
+                                    <div className="border-t border-slate-100 pt-2">
+                                        <button
+                                            onClick={handleSignOut}
+                                            className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                            </svg>
+                                            Sign Out
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </nav>
+                </div>
+            </header>
 
             {/* ================================================================== */}
-            {/* SECTION 14: MAIN CONTENT */}
+            {/* SECTION 17: MAIN CONTENT */}
             {/* ================================================================== */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-                {/* Page Header */}
-                <div className="flex justify-between items-start mb-8">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-800 mb-1">📚 Contract Library</h1>
-                        <p className="text-slate-500 text-sm">
-                            Browse and use templates to start new negotiations
-                        </p>
-                    </div>
-                    <Link
-                        href="/auth/create-contract"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        New Contract
-                    </Link>
+                {/* Page Header - NO New Contract button */}
+                <div className="mb-8">
+                    <h1 className="text-2xl font-bold text-slate-800 mb-1">📚 Contract Library</h1>
+                    <p className="text-slate-500 text-sm">
+                        Browse templates or upload your own contracts
+                    </p>
                 </div>
 
                 {/* Search & View Toggle */}
@@ -796,6 +1233,16 @@ export default function ContractLibraryPage() {
             {/* Template Preview Modal */}
             {renderTemplateModal()}
 
+            {/* Upload Modal */}
+            {renderUploadModal()}
+
+            {/* Click outside to close user menu */}
+            {showUserMenu && (
+                <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setShowUserMenu(false)}
+                />
+            )}
         </div>
     )
 }
