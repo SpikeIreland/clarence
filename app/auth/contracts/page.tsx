@@ -189,11 +189,17 @@ export default function ContractLibraryPage() {
     // Upload state
     const [showUploadModal, setShowUploadModal] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
+    const [isProcessing, setIsProcessing] = useState(false)  // NEW: Background processing state
+    const [processingTemplateId, setProcessingTemplateId] = useState<string | null>(null)  // NEW
     const [uploadProgress, setUploadProgress] = useState<string>('')
     const [uploadError, setUploadError] = useState<string | null>(null)
     const [dragActive, setDragActive] = useState(false)
     const [uploadTemplateName, setUploadTemplateName] = useState('')
     const [uploadContractType, setUploadContractType] = useState('custom')
+
+    // Polling ref
+    const pollingRef = useRef<NodeJS.Timeout | null>(null)
+    const pollingCountRef = useRef<number>(0)
 
     // ==========================================================================
     // SECTION 5: AUTHENTICATION & DATA LOADING
@@ -453,25 +459,19 @@ export default function ContractLibraryPage() {
 
             const result = await response.json()
 
-            if (result.success) {
-                setUploadProgress('Template created successfully!')
+            if (result.success && result.contractId) {
+                setIsUploading(false)
 
-                eventLogger.completed('contract_library', 'file_upload_completed', {
-                    templateId: result.templateId,
-                    clauseCount: result.clauseCount
+                eventLogger.completed('contract_library', 'file_upload_started', {
+                    contractId: result.contractId
                 })
 
-                // Refresh templates
-                setTimeout(async () => {
-                    if (userInfo) {
-                        await loadTemplates(userInfo)
-                    }
-                    setShowUploadModal(false)
-                    resetUploadState()
-                }, 1500)
+                // Start polling for the template to be created
+                // The N8N workflow creates it after parsing completes
+                startPollingForTemplate(result.contractId)
 
             } else {
-                throw new Error(result.error || 'Processing failed')
+                throw new Error(result.error || 'Upload failed')
             }
 
         } catch (error) {
@@ -526,16 +526,103 @@ export default function ContractLibraryPage() {
         })
     }
 
+    // ==========================================================================
+    // SECTION 8B: POLL FOR TEMPLATE COMPLETION
+    // ==========================================================================
+
+    const startPollingForTemplate = (templateId: string) => {
+        console.log('Starting to poll for template:', templateId)
+        pollingCountRef.current = 0
+        setIsProcessing(true)
+        setProcessingTemplateId(templateId)
+        setUploadProgress('Processing contract clauses... This may take up to a minute.')
+
+        pollingRef.current = setInterval(async () => {
+            pollingCountRef.current++
+            console.log(`Polling attempt ${pollingCountRef.current} for template ${templateId}`)
+
+            // Timeout after 2 minutes (40 attempts at 3 second intervals)
+            if (pollingCountRef.current > 40) {
+                clearInterval(pollingRef.current!)
+                pollingRef.current = null
+                setIsProcessing(false)
+                setUploadError('Processing is taking longer than expected. Please refresh the page in a moment.')
+                return
+            }
+
+            try {
+                // Check if template exists and has clauses
+                const { data, error } = await supabase
+                    .from('contract_templates')
+                    .select('template_id, template_name, clause_count')
+                    .eq('template_id', templateId)
+                    .single()
+
+                if (error) {
+                    console.log('Template not found yet:', error.message)
+                    // Update progress message periodically
+                    if (pollingCountRef.current % 5 === 0) {
+                        setUploadProgress(`Still processing... (${pollingCountRef.current * 3}s)`)
+                    }
+                    return
+                }
+
+                if (data && data.clause_count && data.clause_count > 0) {
+                    // Template is ready!
+                    console.log('Template ready:', data)
+                    clearInterval(pollingRef.current!)
+                    pollingRef.current = null
+                    setIsProcessing(false)
+                    setUploadProgress('✅ Template created successfully!')
+
+                    // Refresh templates list
+                    if (userInfo) {
+                        await loadTemplates(userInfo)
+                    }
+
+                    // Close modal after brief success message
+                    setTimeout(() => {
+                        setShowUploadModal(false)
+                        resetUploadState()
+                    }, 1500)
+                } else {
+                    // Template exists but no clauses yet - still processing
+                    console.log('Template exists but still processing clauses')
+                    setUploadProgress(`Extracting clauses... (${pollingCountRef.current * 3}s)`)
+                }
+
+            } catch (err) {
+                console.error('Polling error:', err)
+            }
+        }, 3000) // Poll every 3 seconds
+    }
+
+    // Cleanup polling on unmount
+    useEffect(() => {
+        return () => {
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current)
+            }
+        }
+    }, [])
+
     const resetUploadState = () => {
         setUploadTemplateName('')
         setUploadContractType('custom')
         setUploadProgress('')
         setUploadError(null)
         setIsUploading(false)
+        setIsProcessing(false)
+        setProcessingTemplateId(null)
         setDragActive(false)
         if (fileInputRef.current) {
             fileInputRef.current.value = ''
         }
+        if (pollingRef.current) {
+            clearInterval(pollingRef.current)
+            pollingRef.current = null
+        }
+        pollingCountRef.current = 0
     }
 
     const openUploadModal = () => {
@@ -968,10 +1055,13 @@ export default function ContractLibraryPage() {
                         <h2 className="text-lg font-semibold text-slate-800">Upload Contract</h2>
                         <button
                             onClick={() => {
-                                setShowUploadModal(false)
-                                resetUploadState()
+                                if (!isProcessing) {
+                                    setShowUploadModal(false)
+                                    resetUploadState()
+                                }
                             }}
-                            className="text-slate-400 hover:text-slate-600"
+                            disabled={isProcessing}
+                            className={`text-slate-400 hover:text-slate-600 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1017,19 +1107,28 @@ export default function ContractLibraryPage() {
                             onDragLeave={handleDrag}
                             onDragOver={handleDrag}
                             onDrop={handleDrop}
-                            onClick={() => !isUploading && fileInputRef.current?.click()}
+                            onClick={() => !isUploading && !isProcessing && fileInputRef.current?.click()}
                             className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
                                 ${dragActive
                                     ? 'border-emerald-500 bg-emerald-50'
                                     : 'border-slate-300 hover:border-emerald-400 hover:bg-slate-50'
                                 }
-                                ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
+                                ${(isUploading || isProcessing) ? 'cursor-not-allowed' : ''}
                             `}
                         >
                             {isUploading ? (
                                 <>
                                     <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                                     <p className="text-emerald-600 font-medium">{uploadProgress}</p>
+                                </>
+                            ) : isProcessing ? (
+                                <>
+                                    <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+                                    </div>
+                                    <p className="text-emerald-700 font-semibold mb-2">Processing Your Contract</p>
+                                    <p className="text-emerald-600 text-sm">{uploadProgress}</p>
+                                    <p className="text-slate-400 text-xs mt-3">Extracting and categorizing clauses...</p>
                                 </>
                             ) : (
                                 <>
