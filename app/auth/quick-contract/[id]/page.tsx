@@ -331,6 +331,21 @@ function ViewQuickContractContent() {
     // ==========================================================================
 
     useEffect(() => {
+        // Guard: Redirect if someone lands here with "create" as the ID
+        // This happens when Next.js matches /create against [id] route
+        if (contractId === 'create') {
+            router.replace('/auth/quick-contract/create')
+            return
+        }
+
+        // Guard: Validate UUID format before attempting database query
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(contractId)) {
+            setError('Invalid contract ID')
+            setLoading(false)
+            return
+        }
+
         const init = async () => {
             const user = await loadUserInfo()
             if (user) {
@@ -338,7 +353,7 @@ function ViewQuickContractContent() {
             }
         }
         init()
-    }, [loadUserInfo, loadContract])
+    }, [contractId, router, loadUserInfo, loadContract])
 
     // ==========================================================================
     // SECTION 10: ACTION HANDLERS
@@ -777,8 +792,8 @@ function ViewQuickContractContent() {
                                                     type="button"
                                                     onClick={() => setEditedType(option.value as ContractType)}
                                                     className={`p-3 rounded-lg border-2 text-left transition-colors ${editedType === option.value
-                                                            ? 'border-teal-500 bg-teal-50'
-                                                            : 'border-slate-200 hover:border-slate-300'
+                                                        ? 'border-teal-500 bg-teal-50'
+                                                        : 'border-slate-200 hover:border-slate-300'
                                                         }`}
                                                 >
                                                     <div className="flex items-center gap-2">
