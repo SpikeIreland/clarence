@@ -285,11 +285,12 @@ function CreateQuickContractContent() {
 
                     if (!isMounted) return
 
-                    if (duplicateId) {
-                        console.log('🔄 Create page: Loading duplicate contract...')
-                        await loadDuplicateContract(duplicateId)
-                        console.log('🔄 Create page: Duplicate loaded')
-                    }
+                    // TEMPORARILY COMMENTED OUT
+                    // if (duplicateId) {
+                    //     console.log('🔄 Create page: Loading duplicate contract...')
+                    //     await loadDuplicateContract(duplicateId)
+                    //     console.log('🔄 Create page: Duplicate loaded')
+                    // }
                 }
             } catch (err) {
                 console.error('🔴 Create page: Initialization error:', err)
@@ -307,7 +308,7 @@ function CreateQuickContractContent() {
             isMounted = false
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [duplicateId])
+    }, [])  // Empty dependency array now
 
     // ==========================================================================
     // SECTION 11: NAVIGATION HANDLERS
