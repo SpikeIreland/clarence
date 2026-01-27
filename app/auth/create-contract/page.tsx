@@ -850,6 +850,19 @@ function ContractCreationContent() {
 
     // WP1: Mediation is now selected SECOND
     const handleMediationSelect = (mediationType: MediationType) => {
+        // Quick Contract redirect - STC now has its own dedicated product
+        if (mediationType === 'straight_to_contract') {
+            const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Quick Contract'
+            addUserMessage(`I'd like ${label}`)
+            setTimeout(() => {
+                addClarenceMessage("Great choice! Quick Contract is perfect for standard agreements. Let me take you to the Quick Contract studio...")
+                setTimeout(() => {
+                    router.push('/auth/quick-contract/create')
+                }, 1000)
+            }, 300)
+            return
+        }
+
         setAssessment(prev => ({ ...prev, mediationType }))
         const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Mediation'
         addUserMessage(`I'd like ${label}`)
@@ -1591,7 +1604,7 @@ function ContractCreationContent() {
                 {/* Contract Name Input - Prominent at top */}
                 <div className={`p-5 rounded-xl mb-6 ${isTrainingMode ? 'bg-amber-50 border-2 border-amber-300' : 'bg-emerald-50 border-2 border-emerald-300'}`}>
                     <label className={`block text-sm font-medium mb-2 ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>
-                        Name Your Contract
+                         Name Your Contract
                     </label>
                     <input
                         type="text"
