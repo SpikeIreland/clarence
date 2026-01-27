@@ -178,9 +178,9 @@ const RANGE_TYPE_CONFIG: Record<RangeType, {
         label: 'Currency',
         description: 'Monetary amounts with currency',
         units: [
-            { value: 'GBP', label: 'Â£ GBP' },
+            { value: 'GBP', label: ' GBP' },
             { value: 'USD', label: '$ USD' },
-            { value: 'EUR', label: 'â‚¬ EUR' }
+            { value: 'EUR', label: ' EUR' }
         ],
         placeholder: { min: '10000', max: '100000', target: '25000', walkaway: '50000' }
     },
@@ -255,9 +255,9 @@ const CLAUSE_STATUS = {
 } as const
 
 const CLAUSE_STATUS_DISPLAY = {
-    pending: { label: 'Not Configured', icon: 'â—‹', color: 'text-slate-400', bg: 'bg-slate-100' },
-    verified: { label: 'Configured', icon: 'âœ“', color: 'text-green-600', bg: 'bg-green-100' },
-    rejected: { label: 'Excluded', icon: 'âœ—', color: 'text-red-500', bg: 'bg-red-100' }
+    pending: { label: 'Not Configured', icon: '', color: 'text-slate-400', bg: 'bg-slate-100' },
+    verified: { label: 'Configured', icon: '', color: 'text-green-600', bg: 'bg-green-100' },
+    rejected: { label: 'Excluded', icon: '', color: 'text-red-500', bg: 'bg-red-100' }
 } as const
 
 // ============================================================================
@@ -314,21 +314,21 @@ This typically takes 1-2 minutes for larger documents.`,
     entity_detected: (count: number) =>
         `I've detected **${count} entities** in your contract that may need redaction:
 
-â€¢ Company names â†’ Replace with [PROVIDER], [CUSTOMER]
-â€¢ Person names â†’ Replace with [REPRESENTATIVE]
-â€¢ Specific dates â†’ Replace with [EFFECTIVE DATE]
+ Company names  Replace with [PROVIDER], [CUSTOMER]
+ Person names  Replace with [REPRESENTATIVE]
+ Specific dates  Replace with [EFFECTIVE DATE]
 
 Review and confirm the redactions in the Entities panel.`,
 
-    clause_verified: (name: string) => `âœ“ Verified: **${name}**`,
+    clause_verified: (name: string) => ` Verified: **${name}**`,
 
-    clause_rejected: (name: string) => `âœ• Rejected: **${name}**`,
+    clause_rejected: (name: string) => ` Rejected: **${name}**`,
 
-    clause_deleted: (name: string) => `ðŸ—‘ï¸ Deleted: **${name}**`,
+    clause_deleted: (name: string) => ` Deleted: **${name}**`,
 
-    clauses_deleted: (count: number) => `ðŸ—‘ï¸ Deleted **${count} clauses**`,
+    clauses_deleted: (count: number) => ` Deleted **${count} clauses**`,
 
-    clauses_reordered: `â†•ï¸ Clauses reordered successfully`,
+    clauses_reordered: ` Clauses reordered successfully`,
 
     all_verified: `Excellent! All clauses have been verified. You can now commit them to use in negotiations.`,
 
@@ -1234,7 +1234,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', `âœ… Verified ${clausesToVerify.length} clauses`)
+            addChatMessage('system', ` Verified ${clausesToVerify.length} clauses`)
             clearSelection()
 
         } catch (err) {
@@ -1279,7 +1279,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', `âŒ Rejected ${clausesToReject.length} clauses`)
+            addChatMessage('system', ` Rejected ${clausesToReject.length} clauses`)
             clearSelection()
 
         } catch (err) {
@@ -1423,7 +1423,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', `âœ— Excluded ${clausesToExclude.length} clauses from negotiation`)
+            addChatMessage('system', ` Excluded ${clausesToExclude.length} clauses from negotiation`)
             clearSelection()
 
         } catch (err) {
@@ -2126,7 +2126,7 @@ function ContractPrepContent() {
             buildCategoryGroups(updatedClauses)
 
             // Step 6: Success message
-            addChatMessage('system', `âœ“ **${clause.clauseName}** configured and ready for negotiation`)
+            addChatMessage('system', ` **${clause.clauseName}** configured and ready for negotiation`)
             setIsEditingRange(false)
 
         } catch (err) {
@@ -2170,7 +2170,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', `âœ— **${clause.clauseName}** excluded from negotiation`)
+            addChatMessage('system', ` **${clause.clauseName}** excluded from negotiation`)
 
             // Move to next clause if this was selected
             if (selectedClause?.clauseId === clause.clauseId) {
@@ -2188,7 +2188,7 @@ function ContractPrepContent() {
 
     // Format value with unit for display
     const formatRangeValue = (value: string, rangeType: RangeType, unit: string): string => {
-        if (!value) return 'â€”'
+        if (!value) return ''
 
         switch (rangeType) {
             case 'duration':
@@ -2196,7 +2196,7 @@ function ContractPrepContent() {
             case 'percentage':
                 return `${value}%`
             case 'currency':
-                const symbols: Record<string, string> = { GBP: 'Â£', USD: '$', EUR: 'â‚¬' }
+                const symbols: Record<string, string> = { GBP: '', USD: '$', EUR: '' }
                 return `${symbols[unit] || ''}${Number(value).toLocaleString()}`
             case 'count':
                 return `${value} ${unit.replace('_', ' ')}`
@@ -2336,7 +2336,7 @@ function ContractPrepContent() {
                                 disabled={isBulkProcessing || isBulkAIProcessing}
                                 className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                             >
-                                <span>ðŸ¤–</span> AI Configure ({unconfiguredSelectedCount})
+                                <span></span> AI Configure ({unconfiguredSelectedCount})
                             </button>
                         )}
                         <button
@@ -2344,14 +2344,14 @@ function ContractPrepContent() {
                             disabled={isBulkProcessing || isBulkAIProcessing}
                             className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
-                            <span>âœ—</span> Exclude
+                            <span></span> Exclude
                         </button>
                         <button
                             onClick={confirmBulkDelete}
                             disabled={isDeleting || isBulkAIProcessing}
                             className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
-                            <span>ðŸ—‘ï¸</span> Delete
+                            <span></span> Delete
                         </button>
                     </div>
 
@@ -2384,7 +2384,7 @@ function ContractPrepContent() {
                 <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
                     <div className="p-6 border-b border-slate-200">
                         <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
-                            <span>ðŸ¤–</span> AI Batch Configuration
+                            <span></span> AI Batch Configuration
                         </h2>
                     </div>
 
@@ -2423,10 +2423,10 @@ function ContractPrepContent() {
                                         >
                                             <span>
                                                 {idx < (bulkAIProgress?.current || 0) - 1
-                                                    ? 'âœ“'
+                                                    ? ''
                                                     : idx === (bulkAIProgress?.current || 0) - 1
-                                                        ? 'âŸ³'
-                                                        : 'â—‹'}
+                                                        ? ''
+                                                        : ''}
                                             </span>
                                             <span>{clause.clauseNumber}</span>
                                             <span className="truncate">{clause.clauseName}</span>
@@ -2442,7 +2442,7 @@ function ContractPrepContent() {
 
                                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                                     <p className="text-sm text-amber-800">
-                                        <strong>âš ï¸ Note:</strong> You'll be able to review and adjust each suggestion before finalizing.
+                                        <strong> Note:</strong> You'll be able to review and adjust each suggestion before finalizing.
                                     </p>
                                 </div>
 
@@ -2456,7 +2456,7 @@ function ContractPrepContent() {
                                             key={clause.clauseId}
                                             className="px-4 py-2 flex items-center gap-3 text-sm text-slate-600 border-b border-slate-100 last:border-0"
                                         >
-                                            <span className="text-slate-400">â—‹</span>
+                                            <span className="text-slate-400"></span>
                                             <span className="text-slate-400 font-mono">{clause.clauseNumber}</span>
                                             <span className="truncate">{clause.clauseName}</span>
                                         </div>
@@ -2479,7 +2479,7 @@ function ContractPrepContent() {
                                     onClick={handleBulkAIConfigure}
                                     className="px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                                 >
-                                    <span>ðŸ¤–</span> Start Processing
+                                    <span></span> Start Processing
                                 </button>
                             </>
                         )}
@@ -2505,7 +2505,7 @@ function ContractPrepContent() {
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
                     <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
-                        â† Back to Dashboard
+                        Back to Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800">Contract Prep</h2>
                     {contract && (
@@ -2552,7 +2552,7 @@ function ContractPrepContent() {
                                 : 'text-slate-600 hover:text-slate-800'
                                 }`}
                         >
-                            ðŸ“„ Document Order
+                            Document Order
                         </button>
                         <button
                             onClick={() => setViewMode('category')}
@@ -2561,7 +2561,7 @@ function ContractPrepContent() {
                                 : 'text-slate-600 hover:text-slate-800'
                                 }`}
                         >
-                            ðŸ“ By Category
+                            By Category
                         </button>
                     </div>
                 </div>
@@ -2580,9 +2580,9 @@ function ContractPrepContent() {
                         ) : (
                             /* Standard: Full stats */
                             <div className="flex items-center gap-2 text-xs">
-                                <span className="text-green-600">✓ {getConfiguredCount()}</span>
-                                <span className="text-slate-400">○ {getNotConfiguredCount()}</span>
-                                <span className="text-red-500">✗ {getExcludedCount()}</span>
+                                <span className="text-green-600"> {getConfiguredCount()}</span>
+                                <span className="text-slate-400"> {getNotConfiguredCount()}</span>
+                                <span className="text-red-500"> {getExcludedCount()}</span>
                             </div>
                         )}
                         <div className="flex items-center gap-1">
@@ -2659,7 +2659,7 @@ function ContractPrepContent() {
                                                             }`}
                                                     >
                                                         {isSelected && (
-                                                            <span className="text-white text-xs">âœ“</span>
+                                                            <span className="text-white text-xs"></span>
                                                         )}
                                                     </button>
 
@@ -2672,7 +2672,7 @@ function ContractPrepContent() {
                                                             }}
                                                             className={`transform transition-transform text-slate-400 hover:text-slate-600 ${isExpanded ? 'rotate-90' : ''}`}
                                                         >
-                                                            â–¶
+
                                                         </button>
                                                     ) : (
                                                         <span className="w-3" />
@@ -2711,7 +2711,7 @@ function ContractPrepContent() {
                                                     {/* Confidence indicator */}
                                                     {parent.aiConfidence && parent.aiConfidence < 0.8 && (
                                                         <span className="text-amber-500 text-xs" title="Low AI confidence">
-                                                            âš
+
                                                         </span>
                                                     )}
                                                 </div>
@@ -2742,7 +2742,7 @@ function ContractPrepContent() {
                                                                             }`}
                                                                     >
                                                                         {isChildSelected && (
-                                                                            <span className="text-white text-xs">âœ“</span>
+                                                                            <span className="text-white text-xs"></span>
                                                                         )}
                                                                     </button>
 
@@ -2772,7 +2772,7 @@ function ContractPrepContent() {
                                                                     {/* Confidence indicator */}
                                                                     {child.aiConfidence && child.aiConfidence < 0.8 && (
                                                                         <span className="text-amber-500 text-xs" title="Low AI confidence">
-                                                                            âš
+
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -2807,7 +2807,7 @@ function ContractPrepContent() {
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className={`transform transition-transform ${group.isExpanded ? 'rotate-90' : ''}`}>
-                                                    â–¶
+
                                                 </span>
                                                 <span className="font-medium text-sm text-slate-700">
                                                     {group.category}
@@ -2851,7 +2851,7 @@ function ContractPrepContent() {
                                                                     }`}
                                                             >
                                                                 {isSelected && (
-                                                                    <span className="text-white text-xs">âœ“</span>
+                                                                    <span className="text-white text-xs"></span>
                                                                 )}
                                                             </button>
 
@@ -2883,7 +2883,7 @@ function ContractPrepContent() {
                                                             {/* Confidence indicator */}
                                                             {clause.aiConfidence && clause.aiConfidence < 0.8 && (
                                                                 <span className="text-amber-500 text-xs" title="Low AI confidence">
-                                                                    âš
+
                                                                 </span>
                                                             )}
                                                         </div>
@@ -3046,7 +3046,7 @@ function ContractPrepContent() {
                             ) : (
                                 <>
                                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <span className="text-3xl">ðŸ“¤</span>
+                                        <span className="text-3xl"></span>
                                     </div>
                                     <h3 className="text-lg font-medium text-slate-800 mb-2">
                                         Upload Your Contract
@@ -3098,7 +3098,7 @@ function ContractPrepContent() {
                     {fileInput}
                     <div className="text-center">
                         <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-3xl">ðŸ“‹</span>
+                            <span className="text-3xl"></span>
                         </div>
                         <h3 className="text-lg font-medium text-slate-800 mb-2">
                             Select a Clause
@@ -3159,7 +3159,7 @@ function ContractPrepContent() {
                                 </span>
                                 {isRangeComplete && (
                                     <span className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
-                                        âœ“ Range Configured
+                                        Range Configured
                                     </span>
                                 )}
                                 {selectedClause.aiConfidence && (
@@ -3185,7 +3185,7 @@ function ContractPrepContent() {
                                     className="px-3 py-1.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shadow-sm flex items-center gap-1"
                                     title="Move up"
                                 >
-                                    <span>â†‘</span> Up
+                                    <span></span> Up
                                 </button>
                                 <button
                                     onClick={() => handleMoveClause(selectedClause, 'down')}
@@ -3193,7 +3193,7 @@ function ContractPrepContent() {
                                     className="px-3 py-1.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shadow-sm flex items-center gap-1"
                                     title="Move down"
                                 >
-                                    <span>â†“</span> Down
+                                    <span></span> Down
                                 </button>
                             </div>
 
@@ -3207,7 +3207,7 @@ function ContractPrepContent() {
                                 }}
                                 className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
                             >
-                                âœï¸ Edit
+                                Edit
                             </button>
 
                             {/* Exclude Button - Only for non-excluded clauses */}
@@ -3216,7 +3216,7 @@ function ContractPrepContent() {
                                     onClick={() => excludeClause(selectedClause)}
                                     className="px-4 py-2 rounded-lg bg-amber-100 text-amber-700 font-medium hover:bg-amber-200 transition-colors flex items-center gap-2"
                                 >
-                                    âœ— Exclude
+                                    Exclude
                                 </button>
                             )}
 
@@ -3227,7 +3227,7 @@ function ContractPrepContent() {
                                 className="px-4 py-2 rounded-lg bg-red-100 text-red-700 font-medium hover:bg-red-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                                 title="Delete clause"
                             >
-                                ðŸ—‘ï¸
+
                             </button>
                         </div>
                     </div>
@@ -3248,7 +3248,7 @@ function ContractPrepContent() {
                                 }}
                                 className="text-xs text-blue-600 hover:text-blue-800"
                             >
-                                Edit text â†’
+                                Edit text
                             </button>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 max-h-40 overflow-auto">
@@ -3338,7 +3338,7 @@ function ContractPrepContent() {
                                         <div className="grid grid-cols-2 gap-4 mb-6">
                                             <div>
                                                 <label className="block text-sm font-medium text-emerald-700 mb-2">
-                                                    ðŸŽ¯ Our Preferred Position
+                                                    Our Preferred Position
                                                 </label>
                                                 <div className="flex gap-2">
                                                     <button
@@ -3363,7 +3363,7 @@ function ContractPrepContent() {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-amber-700 mb-2">
-                                                    âš ï¸ Would Accept (Walkaway)
+                                                    Would Accept (Walkaway)
                                                 </label>
                                                 <div className="flex gap-2">
                                                     <button
@@ -3392,7 +3392,7 @@ function ContractPrepContent() {
                                         <div className="grid grid-cols-2 gap-4 mb-6">
                                             <div>
                                                 <label className="block text-sm font-medium text-emerald-700 mb-2">
-                                                    ðŸŽ¯ Our Preferred Position
+                                                    Our Preferred Position
                                                 </label>
                                                 <input
                                                     type="text"
@@ -3404,7 +3404,7 @@ function ContractPrepContent() {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-amber-700 mb-2">
-                                                    âš ï¸ Would Accept (Walkaway)
+                                                    Would Accept (Walkaway)
                                                 </label>
                                                 <input
                                                     type="text"
@@ -3421,7 +3421,7 @@ function ContractPrepContent() {
                                             {/* Industry Range */}
                                             <div className="mb-6">
                                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                                    ðŸ“Š Typical Industry Range
+                                                    Typical Industry Range
                                                 </label>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
@@ -3465,7 +3465,7 @@ function ContractPrepContent() {
                                             <div className="grid grid-cols-2 gap-4 mb-6">
                                                 <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
                                                     <label className="block text-sm font-semibold text-emerald-700 mb-2">
-                                                        ðŸŽ¯ Our Target
+                                                        Our Target
                                                     </label>
                                                     <p className="text-xs text-emerald-600 mb-2">What we're aiming for</p>
                                                     <div className="relative">
@@ -3480,7 +3480,7 @@ function ContractPrepContent() {
                                                 </div>
                                                 <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                                                     <label className="block text-sm font-semibold text-amber-700 mb-2">
-                                                        âš ï¸ Our Walkaway
+                                                        Our Walkaway
                                                     </label>
                                                     <p className="text-xs text-amber-600 mb-2">Bottom line we'd accept</p>
                                                     <div className="relative">
@@ -3543,19 +3543,19 @@ function ContractPrepContent() {
                                         <div className="text-sm text-slate-500">
                                             {selectedClause.status === 'verified' ? (
                                                 <span className="text-green-600 flex items-center gap-1">
-                                                    <span>âœ“</span> Clause configured and ready
+                                                    <span></span> Clause configured and ready
                                                 </span>
                                             ) : selectedClause.status === 'rejected' ? (
                                                 <span className="text-red-500 flex items-center gap-1">
-                                                    <span>âœ—</span> Clause excluded from negotiation
+                                                    <span></span> Clause excluded from negotiation
                                                 </span>
                                             ) : isRangeComplete ? (
                                                 <span className="text-blue-600 flex items-center gap-1">
-                                                    <span>â—</span> Range complete - ready to configure
+                                                    <span></span> Range complete - ready to configure
                                                 </span>
                                             ) : (
                                                 <span className="text-amber-600 flex items-center gap-1">
-                                                    <span>âš </span> Please complete the range values
+                                                    <span></span> Please complete the range values
                                                 </span>
                                             )}
                                         </div>
@@ -3566,9 +3566,9 @@ function ContractPrepContent() {
                                                 className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                                             >
                                                 {selectedClause.status === 'verified' ? (
-                                                    <>âœ“ Configured</>
+                                                    <> Configured</>
                                                 ) : (
-                                                    <>âœ“ Save & Configure</>
+                                                    <> Save & Configure</>
                                                 )}
                                             </button>
                                         )}
@@ -3622,7 +3622,7 @@ function ContractPrepContent() {
                                 {selectedClause.aiSuggestion && (
                                     <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
                                         <h4 className="text-sm font-medium text-purple-800 mb-2 flex items-center gap-2">
-                                            <span>ðŸ¤–</span> AI Suggestion
+                                            <span></span> AI Suggestion
                                         </h4>
                                         <p className="text-sm text-purple-700">{selectedClause.aiSuggestion}</p>
                                     </div>
@@ -3676,7 +3676,7 @@ function ContractPrepContent() {
                 {error && (
                     <div className="p-4 m-4 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-center justify-between">
                         <span>{error}</span>
-                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">âœ•</button>
+                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700"></button>
                     </div>
                 )}
             </div>
@@ -3701,7 +3701,7 @@ function ContractPrepContent() {
                             : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
-                        ðŸ’¬ Clarence
+                        Clarence
                     </button>
                     <button
                         onClick={() => setShowEntitiesPanel(true)}
@@ -3710,7 +3710,7 @@ function ContractPrepContent() {
                             : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
-                        ðŸ”’ Entities {detectedEntities.length > 0 && `(${detectedEntities.length})`}
+                        Entities {detectedEntities.length > 0 && `(${detectedEntities.length})`}
                     </button>
                 </div>
 
@@ -3719,7 +3719,7 @@ function ContractPrepContent() {
                         {detectedEntities.length === 0 ? (
                             <div className="text-center py-8">
                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <span className="text-2xl">ðŸ”</span>
+                                    <span className="text-2xl"></span>
                                 </div>
                                 <p className="text-slate-500 text-sm">No entities detected</p>
                                 <p className="text-slate-400 text-xs mt-1">
@@ -3746,7 +3746,7 @@ function ContractPrepContent() {
                                                     <p className="font-medium text-slate-800">{entity.value}</p>
                                                 </div>
                                                 {entity.confirmed && (
-                                                    <span className="text-green-600 text-sm">âœ“</span>
+                                                    <span className="text-green-600 text-sm"></span>
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -3858,7 +3858,7 @@ function ContractPrepContent() {
                             onClick={() => setEditingClause(null)}
                             className="text-slate-400 hover:text-slate-600"
                         >
-                            âœ•
+
                         </button>
                     </div>
 
@@ -3939,7 +3939,7 @@ function ContractPrepContent() {
                 <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
                     <div className="p-6">
                         <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-2xl">ðŸ—‘ï¸</span>
+                            <span className="text-2xl"></span>
                         </div>
                         <h3 className="text-lg font-semibold text-slate-800 text-center mb-2">
                             Delete {isBulk ? `${deleteCount} Clauses` : 'Clause'}?
@@ -4028,7 +4028,7 @@ function ContractPrepContent() {
                                 placeholder="Search clauses by name, category, or description..."
                                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">ðŸ”</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></span>
                         </div>
                     </div>
 
@@ -4040,7 +4040,7 @@ function ContractPrepContent() {
                             </div>
                         ) : sortedCategories.length === 0 ? (
                             <div className="text-center py-12 text-slate-500">
-                                <p className="text-4xl mb-2">ðŸ“‹</p>
+                                <p className="text-4xl mb-2"></p>
                                 <p>No clauses found matching your search</p>
                             </div>
                         ) : (
@@ -4053,7 +4053,7 @@ function ContractPrepContent() {
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className={`transform transition-transform ${libraryExpandedCategories.has(category) ? 'rotate-90' : ''}`}>
-                                                    â–¶
+
                                                 </span>
                                                 <span className="font-medium text-slate-700">{category}</span>
                                                 <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
@@ -4092,7 +4092,7 @@ function ContractPrepContent() {
                                                                     }`}
                                                             >
                                                                 {(isSelected || isAlreadyInContract) && (
-                                                                    <span className="text-white text-xs">âœ“</span>
+                                                                    <span className="text-white text-xs"></span>
                                                                 )}
                                                             </button>
 
