@@ -167,7 +167,7 @@ export default function CreateQuickContractPage() {
 function CreateQuickContractContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
-    const supabase = createClient()
+    const supabase = React.useMemo(() => createClient(), [])  // Memoize!
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // ==========================================================================
@@ -628,8 +628,8 @@ function CreateQuickContractContent() {
                                 <React.Fragment key={stepConfig.id}>
                                     <div className="flex items-center gap-2">
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${isComplete ? 'bg-teal-600 text-white' :
-                                                isActive ? 'bg-teal-600 text-white' :
-                                                    'bg-slate-200 text-slate-500'
+                                            isActive ? 'bg-teal-600 text-white' :
+                                                'bg-slate-200 text-slate-500'
                                             }`}>
                                             {isComplete ? (
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -962,8 +962,8 @@ function CreateQuickContractContent() {
                                             key={option.value}
                                             onClick={() => setState(prev => ({ ...prev, contractType: option.value as ContractType }))}
                                             className={`p-3 rounded-lg border-2 text-left transition-colors ${state.contractType === option.value
-                                                    ? 'border-teal-500 bg-teal-50'
-                                                    : 'border-slate-200 hover:border-slate-300'
+                                                ? 'border-teal-500 bg-teal-50'
+                                                : 'border-slate-200 hover:border-slate-300'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
