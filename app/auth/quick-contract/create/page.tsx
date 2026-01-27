@@ -306,11 +306,18 @@ function CreateQuickContractContent() {
     // ==========================================================================
 
     function handleSourceSelect(source: SourceType) {
+        console.log('📍 Source selected:', source)
+
         setState(prev => ({
             ...prev,
             sourceType: source,
             step: source === 'template' ? 'template_select' : 'details'
         }))
+
+        // If upload selected, trigger file picker after state updates
+        if (source === 'upload') {
+            console.log('📂 Upload selected, will show upload area on details step')
+        }
 
         eventLogger.completed('quick_contract_create', 'source_selected', { source })
     }
@@ -398,16 +405,29 @@ function CreateQuickContractContent() {
     // ==========================================================================
 
     async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
-        const file = event.target.files?.[0]
-        if (!file) return
+        console.log('📄 handleFileUpload triggered')
+        console.log('Event:', event)
+        console.log('Files:', event.target.files)
 
+        const file = event.target.files?.[0]
+        if (!file) {
+            console.log('❌ No file selected')
+            return
+        }
+
+        console.log('📄 File selected:', file.name, file.type, file.size)
         setUploading(true)
         setError(null)
 
         try {
             // Validate file type
             const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
-            if (!allowedTypes.includes(file.type)) {
+            const fileExtension = file.name.split('.').pop()?.toLowerCase()
+            const allowedExtensions = ['pdf', 'docx', 'txt']
+
+            console.log('📄 File type:', file.type, 'Extension:', fileExtension)
+
+            if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension || '')) {
                 throw new Error('Please upload a PDF, DOCX, or TXT file')
             }
 
@@ -416,16 +436,28 @@ function CreateQuickContractContent() {
                 throw new Error('File size must be less than 10MB')
             }
 
+            console.log('✅ File validation passed')
+            console.log('👤 User info:', userInfo)
+
+            if (!userInfo?.companyId) {
+                throw new Error('User not authenticated - missing company ID')
+            }
+
             // Upload to Supabase storage
             const fileName = `${Date.now()}-${file.name}`
-            const filePath = `quick-contracts/${userInfo?.companyId}/${fileName}`
+            const filePath = `quick-contracts/${userInfo.companyId}/${fileName}`
 
-            const { error: uploadError } = await supabase.storage
+            console.log('📤 Uploading to path:', filePath)
+
+            const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('documents')
                 .upload(filePath, file)
 
+            console.log('📤 Upload result:', { uploadData, uploadError })
+
             if (uploadError) {
-                throw new Error('Failed to upload file')
+                console.error('❌ Supabase upload error:', uploadError)
+                throw new Error(`Failed to upload file: ${uploadError.message}`)
             }
 
             // Get public URL
@@ -433,13 +465,15 @@ function CreateQuickContractContent() {
                 .from('documents')
                 .getPublicUrl(filePath)
 
+            console.log('🔗 Public URL:', publicUrl)
+
             // Extract text content (simplified - in production use N8N workflow)
             let content = ''
-            if (file.type === 'text/plain') {
+            if (file.type === 'text/plain' || fileExtension === 'txt') {
                 content = await file.text()
+                console.log('📝 Extracted text content, length:', content.length)
             } else {
-                // For PDF/DOCX, we'd use N8N workflow to extract text
-                // For MVP, show placeholder
+                // For PDF/DOCX, show placeholder
                 content = `<p><em>Document uploaded: ${file.name}</em></p>
 <p><em>Content extraction in progress...</em></p>
 <p>---</p>
@@ -455,6 +489,8 @@ function CreateQuickContractContent() {
                 step: 'details'
             }))
 
+            console.log('✅ Upload complete, state updated')
+
             eventLogger.completed('quick_contract_create', 'file_uploaded', {
                 fileName: file.name,
                 fileType: file.type,
@@ -462,6 +498,7 @@ function CreateQuickContractContent() {
             })
 
         } catch (err) {
+            console.error('❌ Upload error:', err)
             setError(err instanceof Error ? err.message : 'Failed to upload file')
         } finally {
             setUploading(false)
@@ -900,7 +937,11 @@ function CreateQuickContractContent() {
                         {state.sourceType === 'upload' && !state.uploadedFileName && (
                             <div className="mb-6">
                                 <div
-                                    onClick={() => fileInputRef.current?.click()}
+                                    onClick={() => {
+                                        console.log('🖱️ Dropzone clicked')
+                                        console.log('File input ref:', fileInputRef.current)
+                                        fileInputRef.current?.click()
+                                    }}
                                     className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center cursor-pointer hover:border-teal-500 hover:bg-teal-50/30 transition-colors"
                                 >
                                     {uploading ? (
