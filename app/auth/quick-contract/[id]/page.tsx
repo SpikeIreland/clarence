@@ -331,12 +331,11 @@ function ViewQuickContractContent() {
     // ==========================================================================
 
     useEffect(() => {
-        // Guard: Redirect if someone lands here with "create" as the ID
-        // This happens when Next.js matches /create against [id] route
-        if (contractId === 'create') {
-            router.replace('/auth/quick-contract/create')
-            return
-        }
+        // COMMENTED OUT - causing infinite loop
+        // if (contractId === 'create') {
+        //     router.replace('/auth/quick-contract/create')
+        //     return
+        // }
 
         // Guard: Validate UUID format before attempting database query
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
