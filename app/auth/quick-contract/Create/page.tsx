@@ -168,7 +168,7 @@ function CreateQuickContractContent() {
     console.log('🚀 CreateQuickContractContent MOUNTING')  // Add this FIRST
 
     const router = useRouter()
-    const searchParams = useSearchParams()
+    // const searchParams = useSearchParams()
     const supabase = React.useMemo(() => createClient(), [])
     const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -185,7 +185,7 @@ function CreateQuickContractContent() {
     const [error, setError] = useState<string | null>(null)
 
     // Duplicate mode
-    const duplicateId = searchParams.get('duplicate')
+    // const duplicateId = searchParams.get('duplicate')
 
     // ==========================================================================
     // SECTION 9: DATA LOADING
