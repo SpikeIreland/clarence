@@ -1604,7 +1604,7 @@ function ContractCreationContent() {
                 {/* Contract Name Input - Prominent at top */}
                 <div className={`p-5 rounded-xl mb-6 ${isTrainingMode ? 'bg-amber-50 border-2 border-amber-300' : 'bg-emerald-50 border-2 border-emerald-300'}`}>
                     <label className={`block text-sm font-medium mb-2 ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>
-                         Name Your Contract
+                        Name Your Contract
                     </label>
                     <input
                         type="text"
