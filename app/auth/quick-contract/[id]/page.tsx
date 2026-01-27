@@ -331,13 +331,8 @@ function ViewQuickContractContent() {
     // ==========================================================================
 
     useEffect(() => {
-        // COMMENTED OUT - causing infinite loop
-        // if (contractId === 'create') {
-        //     router.replace('/auth/quick-contract/create')
-        //     return
-        // }
-
         // Guard: Validate UUID format before attempting database query
+        // Note: We don't redirect to /create anymore as it caused infinite loops
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
         if (!uuidRegex.test(contractId)) {
             setError('Invalid contract ID')
