@@ -59,9 +59,20 @@ interface VariableField {
     default?: string
 }
 
-type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content' | 'review'
+interface ParsedClause {
+    clauseNumber: string
+    clauseName: string
+    category: string
+    clauseText: string
+    level: number
+    parentClauseNumber: string | null
+    displayOrder: number
+}
+
+type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content' | 'parsing' | 'invite'
 type SourceType = 'template' | 'upload' | 'blank' | null
 type ContractType = 'nda' | 'service_agreement' | 'lease' | 'employment' | 'contractor' | 'vendor' | 'other' | null
+type ParsingStatus = 'idle' | 'parsing' | 'complete' | 'error'
 
 interface CreateState {
     step: CreateStep
@@ -75,29 +86,31 @@ interface CreateState {
     documentContent: string
     uploadedFileName: string | null
     uploadedFileUrl: string | null
+    // Parsing state
+    uploadedContractId: string | null
+    parsedClauses: ParsedClause[]
+    parsingStatus: ParsingStatus
+    parsingError: string | null
+    // Session state
+    sessionId: string | null
 }
 
 // ============================================================================
 // SECTION 3: CONSTANTS
 // ============================================================================
 
+const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
 const CONTRACT_TYPE_OPTIONS = [
     { value: 'nda', label: 'Non-Disclosure Agreement', icon: '🔒', description: 'Protect confidential information' },
     { value: 'service_agreement', label: 'Service Agreement', icon: '📋', description: 'Define service terms and deliverables' },
     { value: 'lease', label: 'Lease Agreement', icon: '🏠', description: 'Property or equipment rental terms' },
-    { value: 'employment', label: 'Employment Contract', icon: '👤', description: 'Employment terms and conditions' },
     { value: 'contractor', label: 'Contractor Agreement', icon: '🔧', description: 'Independent contractor terms' },
     { value: 'vendor', label: 'Vendor Agreement', icon: '🤝', description: 'Supplier and vendor terms' },
     { value: 'other', label: 'Other', icon: '📄', description: 'Custom contract type' }
 ]
 
 const SOURCE_OPTIONS = [
-    {
-        value: 'template',
-        label: 'Start from Template',
-        icon: '📑',
-        description: 'Choose from pre-built templates with variable placeholders'
-    },
     {
         value: 'upload',
         label: 'Upload Document',
@@ -116,7 +129,26 @@ const STEPS_CONFIG = [
     { id: 'source', label: 'Source', number: 1 },
     { id: 'details', label: 'Details', number: 2 },
     { id: 'content', label: 'Content', number: 3 },
-    { id: 'review', label: 'Review', number: 4 }
+    { id: 'parsing', label: 'Review Clauses', number: 4 },
+    { id: 'invite', label: 'Invite', number: 5 }
+]
+
+const CLAUSE_CATEGORIES = [
+    'Definitions',
+    'Scope of Services',
+    'Payment Terms',
+    'Liability',
+    'Indemnification',
+    'Intellectual Property',
+    'Confidentiality',
+    'Term and Termination',
+    'Dispute Resolution',
+    'General Provisions',
+    'Data Protection',
+    'Insurance',
+    'Warranties',
+    'Force Majeure',
+    'Other'
 ]
 
 // ============================================================================
@@ -134,7 +166,14 @@ const initialState: CreateState = {
     variableValues: {},
     documentContent: '',
     uploadedFileName: null,
-    uploadedFileUrl: null
+    uploadedFileUrl: null,
+    // Parsing state
+    uploadedContractId: null,
+    parsedClauses: [],
+    parsingStatus: 'idle',
+    parsingError: null,
+    // Session state
+    sessionId: null
 }
 
 // ============================================================================
@@ -185,6 +224,12 @@ function CreateQuickContractContent() {
     const [saving, setSaving] = useState(false)
     const [uploading, setUploading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Invite step state
+    const [inviteEmail, setInviteEmail] = useState('')
+    const [inviteName, setInviteName] = useState('')
+    const [inviteCompany, setInviteCompany] = useState('')
+    const [sendingInvite, setSendingInvite] = useState(false)
 
     // Duplicate mode
     const duplicateId = searchParams.get('duplicate')
@@ -379,11 +424,11 @@ function CreateQuickContractContent() {
         }
 
         setError(null)
-        setState(prev => ({ ...prev, step: 'review' }))
+        setState(prev => ({ ...prev, step: 'invite' }))
     }
 
     function handleBack() {
-        const stepOrder: CreateStep[] = ['source', 'template_select', 'variables', 'details', 'content', 'review']
+        const stepOrder: CreateStep[] = ['source', 'template_select', 'variables', 'details', 'content', 'parsing', 'invite']
         const currentIndex = stepOrder.indexOf(state.step)
 
         if (currentIndex > 0) {
@@ -397,6 +442,17 @@ function CreateQuickContractContent() {
             // Skip variables if template has no variables
             if (prevStep === 'variables' && (!state.selectedTemplate?.variableSchema.length)) {
                 prevStep = 'template_select'
+            }
+
+            // Reset parsing state when going back from parsing
+            if (state.step === 'parsing') {
+                setState(prev => ({
+                    ...prev,
+                    step: prevStep,
+                    parsingStatus: 'idle',
+                    parsingError: null
+                }))
+                return
             }
 
             setState(prev => ({ ...prev, step: prevStep }))
@@ -567,8 +623,244 @@ function CreateQuickContractContent() {
     }
 
     // ==========================================================================
-    // SECTION 13: SAVE HANDLERS
+    // SECTION 13: PARSING HANDLERS
     // ==========================================================================
+
+    async function handleStartParsing() {
+        if (!userInfo || !state.documentContent) {
+            setError('Missing document content')
+            return
+        }
+
+        setState(prev => ({
+            ...prev,
+            step: 'parsing',
+            parsingStatus: 'parsing',
+            parsingError: null
+        }))
+
+        try {
+            console.log('🔄 Starting document parsing...')
+
+            const response = await fetch(`${API_BASE}/parse-contract-document`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userInfo.userId,
+                    company_id: userInfo.companyId,
+                    file_name: state.uploadedFileName || `${state.contractName}.txt`,
+                    file_type: 'text/plain',
+                    file_size: state.documentContent.length,
+                    raw_text: state.documentContent.replace(/<[^>]*>/g, '\n'), // Strip HTML tags
+                    contract_type: state.contractType,
+                    mediation_type: 'stc',
+                    template_source: state.uploadedFileName ? 'uploaded' : 'manual'
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || `Parsing failed with status ${response.status}`)
+            }
+
+            const result = await response.json()
+            console.log('📄 Parsing result:', result)
+
+            if (result.success && result.contractId) {
+                // Start polling for parsing completion
+                await pollForParsingComplete(result.contractId)
+            } else {
+                throw new Error(result.error || 'Parsing failed')
+            }
+
+        } catch (err) {
+            console.error('❌ Parsing error:', err)
+            setState(prev => ({
+                ...prev,
+                parsingStatus: 'error',
+                parsingError: err instanceof Error ? err.message : 'Failed to parse document'
+            }))
+        }
+    }
+
+    async function pollForParsingComplete(contractId: string) {
+        const maxAttempts = 30 // 30 attempts * 2 seconds = 60 seconds max
+        let attempts = 0
+
+        const poll = async () => {
+            attempts++
+            console.log(`🔄 Polling attempt ${attempts}/${maxAttempts}...`)
+
+            try {
+                // Check contract status
+                const { data: contractData, error: contractError } = await supabase
+                    .from('uploaded_contracts')
+                    .select('status, clause_count')
+                    .eq('contract_id', contractId)
+                    .single()
+
+                if (contractError) {
+                    throw new Error('Failed to check parsing status')
+                }
+
+                console.log('📄 Contract status:', contractData.status)
+
+                if (contractData.status === 'ready') {
+                    // Fetch the parsed clauses
+                    const { data: clausesData, error: clausesError } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('*')
+                        .eq('contract_id', contractId)
+                        .order('display_order', { ascending: true })
+
+                    if (clausesError) {
+                        throw new Error('Failed to fetch parsed clauses')
+                    }
+
+                    const parsedClauses: ParsedClause[] = (clausesData || []).map(c => ({
+                        clauseNumber: c.clause_number,
+                        clauseName: c.clause_name,
+                        category: c.category,
+                        clauseText: c.clause_text,
+                        level: c.level || 1,
+                        parentClauseNumber: c.parent_clause_number,
+                        displayOrder: c.display_order
+                    }))
+
+                    console.log(`✅ Parsing complete! Found ${parsedClauses.length} clauses`)
+
+                    setState(prev => ({
+                        ...prev,
+                        uploadedContractId: contractId,
+                        parsedClauses,
+                        parsingStatus: 'complete'
+                    }))
+
+                    return
+                }
+
+                if (contractData.status === 'failed') {
+                    throw new Error('Document parsing failed. Please try again.')
+                }
+
+                // Still processing, continue polling
+                if (attempts < maxAttempts) {
+                    setTimeout(poll, 2000)
+                } else {
+                    throw new Error('Parsing timed out. Please try again.')
+                }
+
+            } catch (err) {
+                console.error('❌ Polling error:', err)
+                setState(prev => ({
+                    ...prev,
+                    parsingStatus: 'error',
+                    parsingError: err instanceof Error ? err.message : 'Failed to check parsing status'
+                }))
+            }
+        }
+
+        poll()
+    }
+
+    function handleClauseNameChange(index: number, newName: string) {
+        setState(prev => ({
+            ...prev,
+            parsedClauses: prev.parsedClauses.map((clause, i) =>
+                i === index ? { ...clause, clauseName: newName } : clause
+            )
+        }))
+    }
+
+    function handleClauseCategoryChange(index: number, newCategory: string) {
+        setState(prev => ({
+            ...prev,
+            parsedClauses: prev.parsedClauses.map((clause, i) =>
+                i === index ? { ...clause, category: newCategory } : clause
+            )
+        }))
+    }
+
+    function handleRetryParsing() {
+        setState(prev => ({
+            ...prev,
+            step: 'content',
+            parsingStatus: 'idle',
+            parsingError: null,
+            parsedClauses: []
+        }))
+    }
+
+    // ==========================================================================
+    // SECTION 14: SESSION AND INVITE HANDLERS
+    // ==========================================================================
+
+    async function handleCreateSessionAndInvite() {
+        if (!userInfo || !state.uploadedContractId) {
+            setError('Missing required data')
+            return
+        }
+
+        if (!inviteEmail.trim() || !inviteName.trim()) {
+            setError('Please enter recipient name and email')
+            return
+        }
+
+        setSendingInvite(true)
+        setError(null)
+
+        try {
+            console.log('🚀 Creating session and sending invite...')
+
+            // Create session via N8N workflow
+            const response = await fetch(`${API_BASE}/0-1-session-create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userInfo.userId,
+                    company_id: userInfo.companyId,
+                    user_email: userInfo.email,
+                    user_name: `${userInfo.firstName} ${userInfo.lastName}`,
+                    company_name: userInfo.company,
+                    contract_name: state.contractName,
+                    contract_type: state.contractType || 'other',
+                    mediation_type: 'stc',
+                    template_source: 'uploaded',
+                    uploaded_contract_id: state.uploadedContractId,
+                    // Provider details for invitation
+                    provider_email: inviteEmail,
+                    provider_name: inviteName,
+                    provider_company: inviteCompany || 'Not specified'
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || 'Failed to create session')
+            }
+
+            const result = await response.json()
+            console.log('✅ Session created:', result)
+
+            if (result.success && result.sessionId) {
+                setState(prev => ({
+                    ...prev,
+                    sessionId: result.sessionId
+                }))
+
+                // Redirect to the contract studio
+                router.push(`/auth/contract-studio/${result.sessionId}`)
+            } else {
+                throw new Error(result.error || 'Failed to create session')
+            }
+
+        } catch (err) {
+            console.error('❌ Session creation error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to create session')
+        } finally {
+            setSendingInvite(false)
+        }
+    }
 
     async function handleSaveDraft() {
         if (!userInfo) return
@@ -577,83 +869,62 @@ function CreateQuickContractContent() {
         setError(null)
 
         try {
-            const { data, error } = await supabase
-                .from('quick_contracts')
-                .insert({
-                    company_id: userInfo.companyId,
-                    created_by_user_id: userInfo.userId,
-                    contract_name: state.contractName,
-                    contract_type: state.contractType,
-                    description: state.description,
-                    reference_number: state.referenceNumber || null,
-                    document_content: state.documentContent,
-                    document_format: 'html',
-                    original_file_name: state.uploadedFileName,
-                    original_file_url: state.uploadedFileUrl,
-                    source_template_id: state.selectedTemplate?.templateId || null,
-                    variables: state.variableValues,
-                    status: 'draft'
+            // If we have parsed clauses, save to uploaded_contracts
+            // Otherwise save to quick_contracts for simple drafts
+
+            if (state.uploadedContractId) {
+                // Already saved during parsing - just update name/description
+                const { error: updateError } = await supabase
+                    .from('uploaded_contracts')
+                    .update({
+                        contract_name: state.contractName,
+                        contract_type: state.contractType
+                    })
+                    .eq('contract_id', state.uploadedContractId)
+
+                if (updateError) {
+                    throw new Error('Failed to update contract')
+                }
+
+                eventLogger.completed('quick_contract_create', 'draft_saved', {
+                    contractId: state.uploadedContractId,
+                    contractName: state.contractName
                 })
-                .select('quick_contract_id')
-                .single()
 
-            if (error) {
-                throw new Error('Failed to save contract')
-            }
+                // Redirect to contracts list
+                router.push('/auth/quick-contract')
+            } else {
+                // Save as quick_contract draft (pre-parsing)
+                const { data, error } = await supabase
+                    .from('quick_contracts')
+                    .insert({
+                        company_id: userInfo.companyId,
+                        created_by_user_id: userInfo.userId,
+                        contract_name: state.contractName,
+                        contract_type: state.contractType,
+                        description: state.description,
+                        reference_number: state.referenceNumber || null,
+                        document_content: state.documentContent,
+                        document_format: 'html',
+                        original_file_name: state.uploadedFileName,
+                        original_file_url: state.uploadedFileUrl,
+                        variables: state.variableValues,
+                        status: 'draft'
+                    })
+                    .select('quick_contract_id')
+                    .single()
 
-            eventLogger.completed('quick_contract_create', 'draft_saved', {
-                contractId: data.quick_contract_id,
-                contractName: state.contractName
-            })
+                if (error) {
+                    throw new Error('Failed to save contract')
+                }
 
-            // Redirect to the contract view
-            router.push(`/auth/quick-contract/${data.quick_contract_id}`)
-
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to save contract')
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    async function handleSaveAndSend() {
-        if (!userInfo) return
-
-        setSaving(true)
-        setError(null)
-
-        try {
-            const { data, error } = await supabase
-                .from('quick_contracts')
-                .insert({
-                    company_id: userInfo.companyId,
-                    created_by_user_id: userInfo.userId,
-                    contract_name: state.contractName,
-                    contract_type: state.contractType,
-                    description: state.description,
-                    reference_number: state.referenceNumber || null,
-                    document_content: state.documentContent,
-                    document_format: 'html',
-                    original_file_name: state.uploadedFileName,
-                    original_file_url: state.uploadedFileUrl,
-                    source_template_id: state.selectedTemplate?.templateId || null,
-                    variables: state.variableValues,
-                    status: 'ready'
+                eventLogger.completed('quick_contract_create', 'draft_saved', {
+                    contractId: data.quick_contract_id,
+                    contractName: state.contractName
                 })
-                .select('quick_contract_id')
-                .single()
 
-            if (error) {
-                throw new Error('Failed to save contract')
+                router.push(`/auth/quick-contract/${data.quick_contract_id}`)
             }
-
-            eventLogger.completed('quick_contract_create', 'contract_created', {
-                contractId: data.quick_contract_id,
-                contractName: state.contractName
-            })
-
-            // Redirect to send page
-            router.push(`/auth/quick-contract/${data.quick_contract_id}/send`)
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to save contract')
@@ -663,7 +934,7 @@ function CreateQuickContractContent() {
     }
 
     // ==========================================================================
-    // SECTION 14: HELPER FUNCTIONS
+    // SECTION 15: HELPER FUNCTIONS
     // ==========================================================================
 
     function getStepNumber(): number {
@@ -676,8 +947,10 @@ function CreateQuickContractContent() {
                 return 2
             case 'content':
                 return 3
-            case 'review':
+            case 'parsing':
                 return 4
+            case 'invite':
+                return 5
             default:
                 return 1
         }
@@ -688,8 +961,28 @@ function CreateQuickContractContent() {
         return option?.label || 'Other'
     }
 
+    function getCategoryColor(category: string): string {
+        const colors: Record<string, string> = {
+            'Definitions': 'bg-slate-100 text-slate-700',
+            'Scope of Services': 'bg-blue-100 text-blue-700',
+            'Payment Terms': 'bg-emerald-100 text-emerald-700',
+            'Liability': 'bg-red-100 text-red-700',
+            'Indemnification': 'bg-orange-100 text-orange-700',
+            'Intellectual Property': 'bg-purple-100 text-purple-700',
+            'Confidentiality': 'bg-amber-100 text-amber-700',
+            'Term and Termination': 'bg-rose-100 text-rose-700',
+            'Dispute Resolution': 'bg-indigo-100 text-indigo-700',
+            'General Provisions': 'bg-gray-100 text-gray-700',
+            'Data Protection': 'bg-cyan-100 text-cyan-700',
+            'Insurance': 'bg-teal-100 text-teal-700',
+            'Warranties': 'bg-lime-100 text-lime-700',
+            'Force Majeure': 'bg-yellow-100 text-yellow-700'
+        }
+        return colors[category] || 'bg-slate-100 text-slate-600'
+    }
+
     // ==========================================================================
-    // SECTION 15: RENDER - LOADING STATE
+    // SECTION 16: RENDER - LOADING STATE
     // ==========================================================================
 
     if (loading) {
@@ -697,14 +990,14 @@ function CreateQuickContractContent() {
     }
 
     // ==========================================================================
-    // SECTION 16: RENDER - MAIN LAYOUT
+    // SECTION 17: RENDER - MAIN LAYOUT
     // ==========================================================================
 
     return (
         <div className="min-h-screen bg-slate-50">
 
             {/* ================================================================== */}
-            {/* SECTION 17: HEADER */}
+            {/* SECTION 18: HEADER */}
             {/* ================================================================== */}
             <header className="bg-slate-800 text-white">
                 <div className="container mx-auto px-6">
@@ -733,7 +1026,7 @@ function CreateQuickContractContent() {
             </header>
 
             {/* ================================================================== */}
-            {/* SECTION 18: PROGRESS BAR */}
+            {/* SECTION 19: PROGRESS BAR */}
             {/* ================================================================== */}
             <div className="bg-white border-b border-slate-200">
                 <div className="max-w-4xl mx-auto px-6 py-4">
@@ -772,7 +1065,7 @@ function CreateQuickContractContent() {
             </div>
 
             {/* ================================================================== */}
-            {/* SECTION 19: MAIN CONTENT */}
+            {/* SECTION 20: MAIN CONTENT */}
             {/* ================================================================== */}
             <main className="max-w-4xl mx-auto px-6 py-8">
 
@@ -787,7 +1080,7 @@ function CreateQuickContractContent() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 20: STEP - SOURCE SELECTION */}
+                {/* SECTION 21: STEP - SOURCE SELECTION */}
                 {/* ============================================================== */}
                 {state.step === 'source' && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
@@ -824,7 +1117,7 @@ function CreateQuickContractContent() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 21: STEP - TEMPLATE SELECTION */}
+                {/* SECTION 22: STEP - TEMPLATE SELECTION */}
                 {/* ============================================================== */}
                 {state.step === 'template_select' && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
@@ -903,7 +1196,7 @@ function CreateQuickContractContent() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 22: STEP - VARIABLES (TEMPLATE FIELDS) */}
+                {/* SECTION 23: STEP - VARIABLES (TEMPLATE FIELDS) */}
                 {/* ============================================================== */}
                 {state.step === 'variables' && state.selectedTemplate && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
@@ -971,7 +1264,7 @@ function CreateQuickContractContent() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 23: STEP - CONTRACT DETAILS */}
+                {/* SECTION 24: STEP - CONTRACT DETAILS */}
                 {/* ============================================================== */}
                 {state.step === 'details' && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
@@ -1138,14 +1431,15 @@ function CreateQuickContractContent() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 24: STEP - CONTENT EDITOR */}
+                {/* SECTION 25: STEP - CONTENT EDITOR */}
                 {/* ============================================================== */}
+
                 {state.step === 'content' && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
                         <div className="flex items-center justify-between mb-6">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-800">Contract Content</h2>
-                                <p className="text-slate-500 text-sm">Review and edit your contract content</p>
+                                <p className="text-slate-500 text-sm">Review the extracted text, then parse into clauses</p>
                             </div>
                             <button
                                 onClick={handleBack}
@@ -1158,54 +1452,235 @@ function CreateQuickContractContent() {
                             </button>
                         </div>
 
-                        {/* Simple Text Editor */}
-                        <div className="border border-slate-200 rounded-lg overflow-hidden">
-                            {/* Toolbar */}
-                            <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center gap-2">
-                                <span className="text-xs text-slate-500">Basic editor - formatting will be preserved</span>
+                        {/* Content Preview/Editor */}
+                        <div className="border border-slate-200 rounded-lg overflow-hidden mb-6">
+                            <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between">
+                                <span className="text-xs text-slate-500">Document content</span>
+                                <span className="text-xs text-slate-400">
+                                    {state.documentContent.replace(/<[^>]*>/g, '').length.toLocaleString()} characters
+                                </span>
                             </div>
 
-                            {/* Editor Area */}
                             <textarea
-                                value={state.documentContent}
+                                value={state.documentContent.replace(/<[^>]*>/g, '\n').replace(/\n{3,}/g, '\n\n')}
                                 onChange={(e) => setState(prev => ({ ...prev, documentContent: e.target.value }))}
-                                className="w-full h-96 p-4 text-sm font-mono focus:outline-none resize-none"
-                                placeholder={`Enter your contract content here...
-
-You can use HTML formatting:
-<h1>Heading 1</h1>
-<h2>Heading 2</h2>
-<p>Paragraph text</p>
-<ul><li>List item</li></ul>
-<strong>Bold text</strong>
-<em>Italic text</em>`}
+                                className="w-full h-96 p-4 text-sm focus:outline-none resize-none"
+                                placeholder="Your contract content will appear here..."
                             />
                         </div>
 
-                        <div className="mt-8 flex justify-end">
+                        {/* Info Box */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                            <div className="flex items-start gap-3">
+                                <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>
+                                    <p className="text-sm text-blue-800 font-medium">What happens next?</p>
+                                    <p className="text-sm text-blue-700 mt-1">
+                                        CLARENCE will analyze this document and extract individual clauses.
+                                        You&apos;ll be able to review and adjust the extracted clauses before inviting the other party.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
                             <button
-                                onClick={handleContentComplete}
-                                className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors"
+                                onClick={handleSaveDraft}
+                                disabled={saving}
+                                className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
                             >
-                                Continue to Review
+                                {saving ? 'Saving...' : 'Save as Draft'}
+                            </button>
+
+                            <button
+                                onClick={handleStartParsing}
+                                disabled={!state.documentContent.trim()}
+                                className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                Parse into Clauses
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
                             </button>
                         </div>
                     </div>
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 25: STEP - REVIEW */}
+                {/* SECTION 26: STEP - PARSING */}
                 {/* ============================================================== */}
-                {state.step === 'review' && (
-                    <div className="space-y-6">
-                        {/* Summary Card */}
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                            <h2 className="text-xl font-bold text-slate-800 mb-6">Review Your Contract</h2>
+                {state.step === 'parsing' && (
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        {/* Parsing In Progress */}
+                        {state.parsingStatus === 'parsing' && (
+                            <div className="text-center py-16">
+                                <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+                                <h2 className="text-xl font-bold text-slate-800 mb-2">Analyzing Your Contract</h2>
+                                <p className="text-slate-500 mb-2">CLARENCE is identifying and extracting clauses...</p>
+                                <p className="text-sm text-slate-400">This typically takes 15-30 seconds</p>
+                            </div>
+                        )}
+
+                        {/* Parsing Error */}
+                        {state.parsingStatus === 'error' && (
+                            <div className="text-center py-16">
+                                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                <h2 className="text-xl font-bold text-slate-800 mb-2">Parsing Failed</h2>
+                                <p className="text-slate-500 mb-6">{state.parsingError || 'Something went wrong while parsing the document.'}</p>
+                                <div className="flex justify-center gap-3">
+                                    <button
+                                        onClick={handleRetryParsing}
+                                        className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors"
+                                    >
+                                        Go Back & Edit
+                                    </button>
+                                    <button
+                                        onClick={handleStartParsing}
+                                        className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors"
+                                    >
+                                        Try Again
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Parsing Complete - Show Clauses */}
+                        {state.parsingStatus === 'complete' && (
+                            <>
+                                <div className="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-slate-800">Review Extracted Clauses</h2>
+                                        <p className="text-slate-500 text-sm">
+                                            Found {state.parsedClauses.length} clauses. You can adjust names and categories before proceeding.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={handleRetryParsing}
+                                        className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                        </svg>
+                                        Back to Content
+                                    </button>
+                                </div>
+
+                                {/* Clauses List */}
+                                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 mb-6">
+                                    {state.parsedClauses.map((clause, index) => (
+                                        <div
+                                            key={`clause-${index}`}
+                                            className="border border-slate-200 rounded-lg p-4 hover:border-slate-300 transition-colors"
+                                            style={{ marginLeft: `${(clause.level - 1) * 24}px` }}
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                {/* Clause Number */}
+                                                <div className="w-14 flex-shrink-0">
+                                                    <span className="text-sm font-mono font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                                        {clause.clauseNumber}
+                                                    </span>
+                                                </div>
+
+                                                {/* Clause Content */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                        {/* Editable Name */}
+                                                        <input
+                                                            type="text"
+                                                            value={clause.clauseName}
+                                                            onChange={(e) => handleClauseNameChange(index, e.target.value)}
+                                                            className="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                        />
+
+                                                        {/* Category Dropdown */}
+                                                        <select
+                                                            value={clause.category}
+                                                            onChange={(e) => handleClauseCategoryChange(index, e.target.value)}
+                                                            className={`px-3 py-1.5 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 border-0 ${getCategoryColor(clause.category)}`}
+                                                        >
+                                                            {CLAUSE_CATEGORIES.map(cat => (
+                                                                <option key={cat} value={cat}>{cat}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Clause Text Preview */}
+                                                    <p className="text-sm text-slate-600 line-clamp-2">
+                                                        {clause.clauseText}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Summary */}
+                                <div className="bg-slate-50 rounded-lg p-4 mb-6">
+                                    <div className="flex flex-wrap gap-4 text-sm">
+                                        <div>
+                                            <span className="text-slate-500">Total Clauses:</span>
+                                            <span className="ml-2 font-medium text-slate-800">{state.parsedClauses.length}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-500">Top-Level:</span>
+                                            <span className="ml-2 font-medium text-slate-800">
+                                                {state.parsedClauses.filter(c => c.level === 1).length}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-500">Sub-Clauses:</span>
+                                            <span className="ml-2 font-medium text-slate-800">
+                                                {state.parsedClauses.filter(c => c.level > 1).length}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+                                    <button
+                                        onClick={handleSaveDraft}
+                                        disabled={saving}
+                                        className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                                    >
+                                        {saving ? 'Saving...' : 'Save as Draft'}
+                                    </button>
+
+                                    <button
+                                        onClick={() => setState(prev => ({ ...prev, step: 'invite' }))}
+                                        className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
+                                    >
+                                        Continue to Invite
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* ============================================================== */}
+                {/* SECTION 27: STEP - REVIEW */}
+                {/* ============================================================== */}
+
+                {state.step === 'invite' && (
+                    <div className="space-y-6">
+                        {/* Contract Summary */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                            <h3 className="font-semibold text-slate-800 mb-4">Contract Summary</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div>
-                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Contract Name</span>
-                                    <p className="font-medium text-slate-800 mt-1">{state.contractName}</p>
+                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Name</span>
+                                    <p className="font-medium text-slate-800 mt-1 truncate">{state.contractName}</p>
                                 </div>
                                 <div>
                                     <span className="text-xs text-slate-400 uppercase tracking-wider">Type</span>
@@ -1213,36 +1688,94 @@ You can use HTML formatting:
                                         {state.contractType ? getContractTypeLabel(state.contractType) : 'Not specified'}
                                     </p>
                                 </div>
-                                {state.description && (
-                                    <div className="md:col-span-2">
-                                        <span className="text-xs text-slate-400 uppercase tracking-wider">Description</span>
-                                        <p className="text-slate-600 mt-1">{state.description}</p>
-                                    </div>
-                                )}
-                                {state.referenceNumber && (
-                                    <div>
-                                        <span className="text-xs text-slate-400 uppercase tracking-wider">Reference</span>
-                                        <p className="font-medium text-slate-800 mt-1">{state.referenceNumber}</p>
-                                    </div>
-                                )}
                                 <div>
-                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Source</span>
-                                    <p className="font-medium text-slate-800 mt-1">
-                                        {state.selectedTemplate ? `Template: ${state.selectedTemplate.templateName}` :
-                                            state.uploadedFileName ? `Upload: ${state.uploadedFileName}` :
-                                                'Created from scratch'}
-                                    </p>
+                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Clauses</span>
+                                    <p className="font-medium text-slate-800 mt-1">{state.parsedClauses.length}</p>
+                                </div>
+                                <div>
+                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Mode</span>
+                                    <p className="font-medium text-teal-600 mt-1">Quick Contract</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Invite Form */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">Invite Counterparty</h2>
+                                    <p className="text-slate-500 text-sm">Enter the details of the person you want to review this contract</p>
+                                </div>
+                                <button
+                                    onClick={() => setState(prev => ({ ...prev, step: 'parsing' }))}
+                                    className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Back
+                                </button>
+                            </div>
+
+                            <div className="max-w-md space-y-5">
+                                {/* Recipient Name */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Recipient Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inviteName}
+                                        onChange={(e) => setInviteName(e.target.value)}
+                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                        placeholder="e.g., John Smith"
+                                    />
+                                </div>
+
+                                {/* Recipient Email */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Recipient Email <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={inviteEmail}
+                                        onChange={(e) => setInviteEmail(e.target.value)}
+                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                        placeholder="e.g., john@company.com"
+                                    />
+                                </div>
+
+                                {/* Recipient Company */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Company Name <span className="text-slate-400 font-normal">(optional)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inviteCompany}
+                                        onChange={(e) => setInviteCompany(e.target.value)}
+                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                        placeholder="e.g., Acme Corporation"
+                                    />
                                 </div>
                             </div>
 
-                            {/* Content Preview */}
-                            <div>
-                                <span className="text-xs text-slate-400 uppercase tracking-wider">Content Preview</span>
-                                <div className="mt-2 p-4 bg-slate-50 rounded-lg border border-slate-200 max-h-64 overflow-y-auto">
-                                    <div
-                                        className="prose prose-sm max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: state.documentContent }}
-                                    />
+                            {/* What They'll See */}
+                            <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm text-blue-800 font-medium">What the recipient will see</p>
+                                        <ul className="text-sm text-blue-700 mt-2 space-y-1">
+                                            <li>• Contract clauses in a read-only view</li>
+                                            <li>• Ability to discuss via party chat</li>
+                                            <li>• Chat with CLARENCE for questions</li>
+                                            <li>• Accept or request changes button</li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1251,43 +1784,32 @@ You can use HTML formatting:
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                             <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
                                 <button
-                                    onClick={handleBack}
-                                    className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1"
+                                    onClick={handleSaveDraft}
+                                    disabled={saving}
+                                    className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
                                 >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                    Back to Edit
+                                    {saving ? 'Saving...' : 'Save as Draft'}
                                 </button>
 
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={handleSaveDraft}
-                                        disabled={saving}
-                                        className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                                    >
-                                        {saving ? 'Saving...' : 'Save as Draft'}
-                                    </button>
-                                    <button
-                                        onClick={handleSaveAndSend}
-                                        disabled={saving}
-                                        className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
-                                    >
-                                        {saving ? (
-                                            <>
-                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                Saving...
-                                            </>
-                                        ) : (
-                                            <>
-                                                Save &amp; Send
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                                </svg>
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={handleCreateSessionAndInvite}
+                                    disabled={sendingInvite || !inviteEmail.trim() || !inviteName.trim()}
+                                    className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {sendingInvite ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Creating Session...
+                                        </>
+                                    ) : (
+                                        <>
+                                            Create Session & Send Invite
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                            </svg>
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </div>
                     </div>
