@@ -339,9 +339,7 @@ Review and confirm the redactions in the Entities panel.`,
 
 All clauses use your standard terms - no negotiation ranges needed. Simply review the content, then proceed to invite the other party to accept.`,
 
-    quick_contract_ready: `Your Quick Contract is ready! Click **Proceed to Invite** to bring in the other party for review and acceptance.
-
-💡 If any clause needs discussion later, you can unlock it in the Contract Studio.`
+    quick_contract_ready: `Your Quick Contract is ready! Click **Proceed to Invite** to bring in the other party for review and acceptance.`
 }
 
 // ============================================================================
@@ -2338,7 +2336,7 @@ function ContractPrepContent() {
                                 disabled={isBulkProcessing || isBulkAIProcessing}
                                 className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                             >
-                                <span>🤖</span> AI Configure ({unconfiguredSelectedCount})
+                                <span>ðŸ¤–</span> AI Configure ({unconfiguredSelectedCount})
                             </button>
                         )}
                         <button
@@ -2574,9 +2572,9 @@ function ContractPrepContent() {
                         {isQuickContract ? (
                             /* Quick Contract: Simplified stats */
                             <div className="flex items-center gap-2 text-xs">
-                                <span className="text-emerald-600">🔒 {clauses.filter(c => c.status !== 'rejected').length} locked</span>
+                                <span className="text-emerald-600">Locked: {clauses.filter(c => c.status !== 'rejected').length}</span>
                                 {getExcludedCount() > 0 && (
-                                    <span className="text-red-500">✗ {getExcludedCount()}</span>
+                                    <span className="text-red-500">Excluded: {getExcludedCount()}</span>
                                 )}
                             </div>
                         ) : (
@@ -2908,7 +2906,7 @@ function ContractPrepContent() {
                             onClick={openClauseLibrary}
                             className="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
                         >
-                            ➕ Add Clause from Library
+                            + Add Clause from Library
                         </button>
                     )}
 
@@ -2917,7 +2915,7 @@ function ContractPrepContent() {
                             onClick={() => setShowEntitiesPanel(!showEntitiesPanel)}
                             className="w-full px-4 py-2 rounded-lg bg-amber-100 text-amber-800 font-medium text-sm hover:bg-amber-200 transition-colors flex items-center justify-center gap-2"
                         >
-                            🔑 Review Entities ({detectedEntities.length})
+                            Review Entities ({detectedEntities.length})
                         </button>
                     )}
 
@@ -2936,7 +2934,7 @@ function ContractPrepContent() {
                             ) : (
                                 <>
                                     Proceed to Invite
-                                    <span>→</span>
+                                    <span>&rarr;</span>
                                 </>
                             )}
                         </button>
@@ -2956,7 +2954,7 @@ function ContractPrepContent() {
                                 ) : (
                                     <>
                                         Commit {stats.verified} Clauses
-                                        <span>→</span>
+                                        <span>&rarr;</span>
                                     </>
                                 )}
                             </button>
@@ -3262,7 +3260,7 @@ function ContractPrepContent() {
                         </div>
                     </div>
 
-                    {/* Range Configuration Section - Hidden for Quick Contract */}
+                    {/* Range Configuration Section - Conditional for Quick Contract */}
                     {!isQuickContract ? (
                         /* Standard Mode: Full Range Configuration */
                         <div className="p-6 relative">
@@ -3632,39 +3630,43 @@ function ContractPrepContent() {
                             </div>{/* End of opacity wrapper */}
                         </div>
                     ) : (
-                        /* Quick Contract Mode - Simplified View */
+                        /* Quick Contract Mode - Show Clause Content Only */
                         <div className="p-6">
-                            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-200">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-                                        <span className="text-xl">🔒</span>
+                            {/* Quick Contract Info Banner */}
+                            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200 mb-6">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-bold">
+                                        QC
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-emerald-800">Quick Contract Mode</h3>
-                                        <p className="text-sm text-emerald-600">Standard terms - no negotiation configuration needed</p>
+                                        <p className="text-sm text-emerald-600">Standard terms - ready for review</p>
                                     </div>
                                 </div>
+                                <div className="text-sm text-slate-600 space-y-1">
+                                    <p>&#10003; This clause uses your standard terms</p>
+                                    <p>&#10003; No position or range configuration needed</p>
+                                    <p>&#10003; The other party will review and accept</p>
+                                </div>
+                            </div>
 
-                                <div className="space-y-3 mb-4">
-                                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                                        <span className="text-emerald-500">✓</span>
-                                        <span>This clause uses your standard terms</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                                        <span className="text-emerald-500">✓</span>
-                                        <span>The other party will review and accept</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                                        <span className="text-emerald-500">✓</span>
-                                        <span>No position or range setting required</span>
+                            {/* Clause Content Display */}
+                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">
+                                    Full Clause Text
+                                </h4>
+                                <div className="prose prose-sm max-w-none">
+                                    <div className="text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-100 max-h-96 overflow-auto">
+                                        {selectedClause.content}
                                     </div>
                                 </div>
+                            </div>
 
-                                <div className="pt-4 border-t border-emerald-200">
-                                    <p className="text-xs text-emerald-600">
-                                        💡 If negotiation becomes necessary, you can unlock specific clauses in the Contract Studio.
-                                    </p>
-                                </div>
+                            {/* Tip about unlocking */}
+                            <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                                <p className="text-xs text-amber-700">
+                                    <strong>Tip:</strong> If negotiation becomes necessary, you can unlock specific clauses in the Contract Studio after inviting the other party.
+                                </p>
                             </div>
                         </div>
                     )}

@@ -144,48 +144,48 @@ const MEDIATION_OPTIONS: AssessmentOption[] = [
         label: 'Straight to Contract',
         description: 'Standard template with minimal or no negotiation. Perfect for routine agreements like NDAs or standard service terms.',
         value: 'straight_to_contract',
-        icon: '⚡'
+        icon: 'âš¡'
     },
     {
         id: 'partial',
         label: 'Partial Mediation',
         description: 'Most terms are fixed (~85%) with specific clauses open for negotiation. Ideal when you have standard terms but need flexibility on key points.',
         value: 'partial_mediation',
-        icon: '⚖️'
+        icon: 'âš–ï¸'
     },
     {
         id: 'full',
         label: 'Full Mediation',
         description: 'All contract terms are negotiable. Best for complex deals, strategic partnerships, or bespoke agreements.',
         value: 'full_mediation',
-        icon: '🤝'
+        icon: 'ðŸ¤'
     }
 ]
 
 const CONTRACT_TYPE_OPTIONS: AssessmentOption[] = [
-    { id: 'nda', label: 'Non-Disclosure Agreement (NDA)', description: 'Confidentiality and information protection agreement', value: 'nda', icon: '🔒' },
-    { id: 'saas', label: 'SaaS Agreement', description: 'Software as a Service subscription terms', value: 'saas', icon: '☁️' },
-    { id: 'bpo', label: 'BPO / Outsourcing Agreement', description: 'Business process outsourcing and managed services', value: 'bpo', icon: '🏢' },
-    { id: 'msa', label: 'Master Services Agreement', description: 'Umbrella agreement for ongoing service relationships', value: 'msa', icon: '📋' },
-    { id: 'employment', label: 'Employment Contract', description: 'Employment terms and conditions', value: 'employment', icon: '👤' },
-    { id: 'custom', label: 'Custom / Other', description: 'Build a custom contract type', value: 'custom', icon: '✏️' }
+    { id: 'nda', label: 'Non-Disclosure Agreement (NDA)', description: 'Confidentiality and information protection agreement', value: 'nda', icon: 'ðŸ”’' },
+    { id: 'saas', label: 'SaaS Agreement', description: 'Software as a Service subscription terms', value: 'saas', icon: 'â˜ï¸' },
+    { id: 'bpo', label: 'BPO / Outsourcing Agreement', description: 'Business process outsourcing and managed services', value: 'bpo', icon: 'ðŸ¢' },
+    { id: 'msa', label: 'Master Services Agreement', description: 'Umbrella agreement for ongoing service relationships', value: 'msa', icon: 'ðŸ“‹' },
+    { id: 'employment', label: 'Employment Contract', description: 'Employment terms and conditions', value: 'employment', icon: 'ðŸ‘¤' },
+    { id: 'custom', label: 'Custom / Other', description: 'Build a custom contract type', value: 'custom', icon: 'âœï¸' }
 ]
 
 const TEMPLATE_SOURCE_OPTIONS: AssessmentOption[] = [
-    { id: 'existing', label: 'Use Existing Template', description: 'Start with a pre-built template from the library', value: 'existing_template', icon: '📄' },
-    { id: 'modify', label: 'Modify Existing Template', description: 'Start with a template and customize it', value: 'modified_template', icon: '✏️' },
-    { id: 'upload', label: 'Upload a Contract', description: 'Upload an existing contract document (PDF/DOCX) and convert it', value: 'uploaded', icon: '📤' },
-    { id: 'scratch', label: 'Build from Scratch', description: 'Create a new contract clause by clause', value: 'from_scratch', icon: '🔨' }
+    { id: 'existing', label: 'Use Existing Template', description: 'Start with a pre-built template from the library', value: 'existing_template', icon: 'ðŸ“„' },
+    { id: 'modify', label: 'Modify Existing Template', description: 'Start with a template and customize it', value: 'modified_template', icon: 'âœï¸' },
+    { id: 'upload', label: 'Upload a Contract', description: 'Upload an existing contract document (PDF/DOCX) and convert it', value: 'uploaded', icon: 'ðŸ“¤' },
+    { id: 'scratch', label: 'Build from Scratch', description: 'Create a new contract clause by clause', value: 'from_scratch', icon: 'ðŸ”¨' }
 ]
 
 // WP3: Evaluation priority options for tendering
 const EVALUATION_PRIORITY_OPTIONS: { value: EvaluationPriority; label: string; icon: string }[] = [
-    { value: 'cost', label: 'Cost Optimization', icon: '💰' },
-    { value: 'quality', label: 'Quality & Standards', icon: '⭐' },
-    { value: 'speed', label: 'Speed of Delivery', icon: '⚡' },
-    { value: 'innovation', label: 'Innovation & Technology', icon: '💡' },
-    { value: 'risk_mitigation', label: 'Risk Mitigation', icon: '🛡️' },
-    { value: 'relationship', label: 'Partnership Potential', icon: '🤝' }
+    { value: 'cost', label: 'Cost Optimization', icon: 'ðŸ’°' },
+    { value: 'quality', label: 'Quality & Standards', icon: 'â­' },
+    { value: 'speed', label: 'Speed of Delivery', icon: 'âš¡' },
+    { value: 'innovation', label: 'Innovation & Technology', icon: 'ðŸ’¡' },
+    { value: 'risk_mitigation', label: 'Risk Mitigation', icon: 'ðŸ›¡ï¸' },
+    { value: 'relationship', label: 'Partnership Potential', icon: 'ðŸ¤' }
 ]
 
 const POLLING_INTERVAL = 5000
@@ -203,7 +203,7 @@ I'll help you set up your new contract in just a few steps. Let's start with the
 
 **What type of contract are you creating today?**`,
 
-    welcome_training: `Hello! I'm Clarence, your training assistant. 🎓
+    welcome_training: `Hello! I'm Clarence, your training assistant. ðŸŽ“
 
 I'll help you set up a **practice contract** for your training session. This works exactly like the real thing, but with no real-world consequences.
 
@@ -288,9 +288,9 @@ These are pre-configured with industry-standard clauses. You can modify any clau
 You'll be able to modify any clause, add new ones, or remove those you don't need.`,
 
     no_templates: `I couldn't find any templates matching your criteria. You can either:
-• Try a different contract type
-• Build your contract from scratch
-• Upload an existing document`,
+â€¢ Try a different contract type
+â€¢ Build your contract from scratch
+â€¢ Upload an existing document`,
 
     upload_started: `**Uploading your contract...**
 
@@ -314,7 +314,7 @@ Please try uploading again or choose a different source option.`,
 
 I'll create your contract with these settings. Once you confirm, you'll proceed to review and configure the clauses before inviting providers.`,
 
-    summary_training: `**Great! Here's a summary of your training contract setup:** 🎓
+    summary_training: `**Great! Here's a summary of your training contract setup:** ðŸŽ“
 
 I'll create your practice contract with these settings. Once you confirm, you'll be ready to start your training session.`,
 
@@ -322,16 +322,16 @@ I'll create your practice contract with these settings. Once you confirm, you'll
 
 Setting up your contract workspace. This will just take a moment.`,
 
-    creating_training: `**Creating your training session...** 🎓
+    creating_training: `**Creating your training session...** ðŸŽ“
 
 Setting up your practice contract. This will just take a moment.`,
 
-    training_complete: `**Your training session is ready!** 🎓
+    training_complete: `**Your training session is ready!** ðŸŽ“
 
 Your practice contract has been created. You can now start negotiating against the AI opponent or continue with your training partner.`,
 
     // WP6: Pre-fill message from Contract Library
-    prefill_detected: `📚 **Template pre-selected from your library!**
+    prefill_detected: `ðŸ“š **Template pre-selected from your library!**
 
 I've loaded your chosen template. Let's continue with the setup.`
 }
@@ -429,9 +429,9 @@ function ContractCreationContent() {
     // ========================================================================
 
     const [assessment, setAssessment] = useState<AssessmentState>({
-        step: hasPrefill ? 'mediation_type' : 'welcome',  // Skip welcome if pre-filled
+        step: 'welcome',
         mediationType: null,
-        contractType: prefillContractType || null,
+        contractType: prefillContractType || null,  // WP6: Pre-fill from URL
         templateSource: prefillTemplateSource || null,  // WP6: Pre-fill from URL
         contractName: '',
         contractDescription: '',
@@ -510,13 +510,20 @@ function ContractCreationContent() {
         if (hasPrefill && !prefillProcessed) {
             setPrefillProcessed(true)
 
-            // Set all messages immediately (step is already at mediation_type)
+            // Set welcome message with pre-fill notification
             const welcomeMessage = isTrainingMode ? CLARENCE_MESSAGES.welcome_training : CLARENCE_MESSAGES.welcome
             setChatMessages([
                 { id: 'welcome-1', role: 'clarence', content: welcomeMessage, timestamp: new Date() },
-                { id: 'prefill-1', role: 'clarence', content: CLARENCE_MESSAGES.prefill_detected, timestamp: new Date() },
-                { id: 'mediation-1', role: 'clarence', content: CLARENCE_MESSAGES.mediation_selection, timestamp: new Date(), options: MEDIATION_OPTIONS }
+                { id: 'prefill-1', role: 'clarence', content: CLARENCE_MESSAGES.prefill_detected, timestamp: new Date() }
             ])
+
+            // Skip to mediation type since contract type and template are pre-selected
+            const timer = setTimeout(() => {
+                setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
+                addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
+            }, 1500)
+
+            return () => clearTimeout(timer)
         }
     }, [hasPrefill, prefillProcessed, isTrainingMode])
 
@@ -546,25 +553,6 @@ function ContractCreationContent() {
             setShowTenderingSection(true)
         }
     }, [assessment.quickIntake.bidderCount])
-
-    // ========================================================================
-    // SECTION 5D-1-FIX: SUGGESTED CONTRACT NAME (Moved from renderSummary)
-    // ========================================================================
-
-    // Generate suggested contract name based on contract type
-    // NOTE: Using CONTRACT_TYPE_OPTIONS directly since getContractTypeLabel is defined later
-    const suggestedContractName = useMemo(() => {
-        const typeName = CONTRACT_TYPE_OPTIONS.find(o => o.value === assessment.contractType)?.label || 'Contract'
-        const date = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
-        return `${typeName} - ${date}`
-    }, [assessment.contractType])
-
-    // Set default contract name when reaching summary step (if empty)
-    useEffect(() => {
-        if (assessment.step === 'summary' && !assessment.contractName) {
-            setAssessment(prev => ({ ...prev, contractName: suggestedContractName }))
-        }
-    }, [assessment.step, assessment.contractName, suggestedContractName])
 
     // ========================================================================
     // SECTION 5E: HELPER FUNCTIONS
@@ -640,15 +628,14 @@ function ContractCreationContent() {
 
     /**
      * Build redirect URL based on pathway
-     * - STC-EXISTING: → invite-provider (true fast-track)
-     * - Other STC: → contract-prep (need to configure positions)
-     * - FM/PM: → strategic-assessment (assessment first, THEN prep)
+     * - STC-EXISTING: â†’ invite-provider (true fast-track)
+     * - Other STC: â†’ contract-prep (need to configure positions)
+     * - FM/PM: â†’ strategic-assessment (assessment first, THEN prep)
      */
     const buildRedirectUrl = (
         pathwayId: PathwayId | string,
         sessionId: string,
-        contractId?: string | null,
-        trainingMode?: boolean
+        contractId?: string | null
     ): string => {
         const params = new URLSearchParams()
         params.set('session_id', sessionId)
@@ -656,11 +643,6 @@ function ContractCreationContent() {
 
         if (contractId) {
             params.set('contract_id', contractId)
-        }
-
-        // Preserve training mode through the flow
-        if (trainingMode) {
-            params.set('mode', 'training')
         }
 
         // STC-EXISTING: True fast-track - skip assessment AND prep
@@ -705,14 +687,14 @@ function ContractCreationContent() {
                 id: 'transition_to_prep',
                 fromStage: 'pathway_review',
                 toStage: 'contract_prep',
-                title: 'Session Created',
-                message: "Your contract session is ready! Let's prepare your contract positions before inviting providers.",
+                title: 'Quick Contract Ready',
+                message: "Your Quick Contract session is ready! Let's review your clauses before inviting the other party to accept.",
                 bulletPoints: [
-                    'Review and configure each clause',
-                    'Set your ideal positions and ranges',
-                    'Weight clauses by importance'
+                    'Review your standard contract clauses',
+                    'Verify party details and dates',
+                    'Proceed to invite when ready'
                 ],
-                buttonText: 'Continue to Contract Prep'
+                buttonText: 'Continue to Review'
             }
         }
 
@@ -857,15 +839,10 @@ function ContractCreationContent() {
         const selectedMessage = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.template_source
 
         setTimeout(() => {
+            addClarenceMessage(selectedMessage)
             if (skipQuickIntake) {
-                // WP6: Skip to summary if template already pre-selected from Contract Library
-                if (hasPrefill && assessment.selectedTemplateId) {
-                    setAssessment(prev => ({ ...prev, step: 'summary' }))
-                    setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.summary) }, 500)
-                } else {
-                    setAssessment(prev => ({ ...prev, step: 'template_source' }))
-                    setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS) }, 500)
-                }
+                setAssessment(prev => ({ ...prev, step: 'template_source' }))
+                setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS) }, 500)
             } else {
                 setAssessment(prev => ({ ...prev, step: 'quick_intake' }))
                 setTimeout(() => {
@@ -910,25 +887,18 @@ function ContractCreationContent() {
 
     // WP3: Enhanced Quick Intake completion with tendering acknowledgment
     const handleQuickIntakeComplete = () => {
-        const qi = assessment.quickIntake
-        const summary = `Deal: ${qi.dealValue || 'Not specified'} | Timeline: ${qi.timelinePressure || 'Not specified'} | Providers: ${qi.bidderCount || 'Not specified'}`
-        addUserMessage(summary)
+        const isMultiProvider = isMultiProviderScenario()
+        addUserMessage('Deal context complete')
 
-        // WP3: Add tendering message if multi-provider
-        if (isMultiProviderScenario()) {
-            setTimeout(() => addClarenceMessage("📊 **Multiple providers detected!**\n\nI'll help you configure evaluation criteria to compare bids effectively."), 300)
-        }
+        // WP3: Use appropriate completion message based on tendering
+        const completionMessage = isMultiProvider
+            ? CLARENCE_MESSAGES.quick_intake_complete_tendering
+            : CLARENCE_MESSAGES.quick_intake_complete
 
         setTimeout(() => {
-            // WP6: Skip to summary if template already pre-selected from Contract Library
-            if (hasPrefill && assessment.selectedTemplateId) {
-                setAssessment(prev => ({ ...prev, step: 'summary' }))
-                addClarenceMessage(CLARENCE_MESSAGES.summary)
-            } else {
-                setAssessment(prev => ({ ...prev, step: 'template_source' }))
-                addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS)
-            }
-        }, 500)
+            addClarenceMessage(completionMessage, TEMPLATE_SOURCE_OPTIONS)
+            setAssessment(prev => ({ ...prev, step: 'template_source' }))
+        }, 300)
     }
 
     // ========================================================================
@@ -996,9 +966,17 @@ function ContractCreationContent() {
                 throw new Error(result.error || 'No session ID returned')
             }
 
-            // Build redirect URL (training mode flag preserved via URL param)
+            // Handle Training Mode (separate flow - no transition modal)
+            if (isTrainingMode) {
+                setTrainingSessionCreated(result.sessionId)
+                addClarenceMessage(CLARENCE_MESSAGES.training_complete)
+                setIsCreating(false)
+                return
+            }
+
+            // Build redirect URL
             const contractId = result.contractId || result.contract_id || assessment.uploadedContractId
-            const redirectUrl = buildRedirectUrl(pathwayId, result.sessionId, contractId, isTrainingMode)
+            const redirectUrl = buildRedirectUrl(pathwayId, result.sessionId, contractId)
 
             // Get appropriate transition
             const transition = getTransitionForPathway(pathwayId)
@@ -1048,17 +1026,17 @@ function ContractCreationContent() {
     const renderProgressPanel = () => {
         // WP1 CHANGE: Reordered steps - contract_type now comes before mediation_type
         const baseSteps = [
-            { id: 'contract_type', label: 'Contract Type', icon: '📋' },
-            { id: 'mediation_type', label: 'Mediation Type', icon: '⚖️' },
+            { id: 'contract_type', label: 'Contract Type', icon: 'ðŸ“‹' },
+            { id: 'mediation_type', label: 'Mediation Type', icon: 'âš–ï¸' },
         ]
 
         const quickIntakeStep = !shouldSkipQuickIntake(assessment.mediationType)
-            ? [{ id: 'quick_intake', label: 'Deal Context', icon: '📊' }]
+            ? [{ id: 'quick_intake', label: 'Deal Context', icon: 'ðŸ“Š' }]
             : []
 
         const remainingSteps = [
-            { id: 'template_source', label: 'Starting Point', icon: '📄' },
-            { id: 'summary', label: 'Review & Create', icon: '✔' }
+            { id: 'template_source', label: 'Starting Point', icon: 'ðŸ“„' },
+            { id: 'summary', label: 'Review & Create', icon: 'âœ”' }
         ]
 
         const steps = [...baseSteps, ...quickIntakeStep, ...remainingSteps]
@@ -1070,7 +1048,7 @@ function ContractCreationContent() {
         return (
             <div className={`h-full ${isTrainingMode ? 'bg-amber-50/30' : 'bg-emerald-50/30'} border-r border-slate-200 flex flex-col`}>
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-2 mb-3">← {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
+                    <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-2 mb-3">â† {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
                     <h2 className={`font-semibold ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-lg`}>{isTrainingMode ? 'Training Setup' : 'Create Contract'}</h2>
                 </div>
                 <nav className="flex-1 p-4">
@@ -1102,14 +1080,14 @@ function ContractCreationContent() {
                         `}
                                     >
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isComplete ? `${colors.bgSolid} text-white` : isCurrent ? colors.bgMedium : 'bg-slate-100 text-slate-400'}`}>
-                                            {isComplete ? '✓' : step.icon}
+                                            {isComplete ? 'âœ“' : step.icon}
                                         </div>
                                         <div className="flex-1">
                                             <span className={`text-sm font-medium ${isCurrent ? colors.textDark : isComplete ? 'text-slate-700' : 'text-slate-400'}`}>
                                                 {step.label}
                                             </span>
                                             {canNavigate && (
-                                                <span className="text-xs text-slate-400 ml-2">← edit</span>
+                                                <span className="text-xs text-slate-400 ml-2">â† edit</span>
                                             )}
                                         </div>
                                     </button>
@@ -1120,7 +1098,7 @@ function ContractCreationContent() {
                 </nav>
                 {isTrainingMode && (
                     <div className="p-4 border-t border-slate-200 bg-amber-50">
-                        <div className="flex items-center gap-2 text-amber-700"><span className="text-lg">🎓</span><span className="text-sm font-medium">Training Mode</span></div>
+                        <div className="flex items-center gap-2 text-amber-700"><span className="text-lg">ðŸŽ“</span><span className="text-sm font-medium">Training Mode</span></div>
                         <p className="text-xs text-amber-600 mt-1">Practice with AI opponents</p>
                     </div>
                 )}
@@ -1185,7 +1163,7 @@ function ContractCreationContent() {
             {hasPrefill && (
                 <div className={`mb-6 p-4 rounded-xl ${colors.bgLight} border ${colors.borderLight}`}>
                     <div className="flex items-center gap-3">
-                        <span className="text-2xl">📚</span>
+                        <span className="text-2xl">ðŸ“š</span>
                         <div>
                             <p className={`text-sm font-medium ${colors.textDark}`}>Template Pre-selected</p>
                             <p className="text-sm text-slate-600">{prefillTemplateName || 'From Contract Library'}</p>
@@ -1213,10 +1191,10 @@ function ContractCreationContent() {
         const { quickIntake } = assessment
 
         const dealValueOptions = [
-            { value: 'under_50k', label: 'Under £50,000' },
-            { value: '50k_250k', label: '£50,000 - £250,000' },
-            { value: '250k_1m', label: '£250,000 - £1,000,000' },
-            { value: 'over_1m', label: 'Over £1,000,000' }
+            { value: 'under_50k', label: 'Under Â£50,000' },
+            { value: '50k_250k', label: 'Â£50,000 - Â£250,000' },
+            { value: '250k_1m', label: 'Â£250,000 - Â£1,000,000' },
+            { value: 'over_1m', label: 'Over Â£1,000,000' }
         ]
 
         const criticalityOptions = [
@@ -1375,7 +1353,7 @@ function ContractCreationContent() {
                         <div className={`mt-8 p-5 rounded-xl border-2 ${colors.borderLight} ${colors.bgLight}`}>
                             <div className="flex items-center gap-3 mb-4">
                                 <div className={`w-10 h-10 rounded-lg ${colors.bgGradient} flex items-center justify-center`}>
-                                    <span className="text-white text-xl">📊</span>
+                                    <span className="text-white text-xl">ðŸ“Š</span>
                                 </div>
                                 <div>
                                     <h4 className={`font-semibold ${colors.textDark}`}>Provider Evaluation</h4>
@@ -1440,20 +1418,20 @@ function ContractCreationContent() {
                                                             disabled={index === 0}
                                                             className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-30"
                                                         >
-                                                            ↑
+                                                            â†‘
                                                         </button>
                                                         <button
                                                             onClick={() => movePriority(priority, 'down')}
                                                             disabled={index === quickIntake.evaluationPriorities.length - 1}
                                                             className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-30"
                                                         >
-                                                            ↓
+                                                            â†“
                                                         </button>
                                                         <button
                                                             onClick={() => handlePriorityToggle(priority)}
                                                             className="p-1 text-red-400 hover:text-red-600"
                                                         >
-                                                            ×
+                                                            Ã—
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1506,7 +1484,7 @@ function ContractCreationContent() {
                         disabled={!isComplete}
                         className={`w-full py-3 rounded-lg ${colors.btnPrimary} text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
-                        Continue →
+                        Continue â†’
                     </button>
                 </div>
             </div>
@@ -1542,13 +1520,13 @@ function ContractCreationContent() {
                 <div className={`p-6 rounded-xl border-2 ${status === 'ready' ? `${colors.borderPrimary} ${colors.bgLight}` : status === 'failed' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
                     <div className="flex items-center gap-4">
                         {status === 'processing' && <div className={`w-10 h-10 border-4 ${isTrainingMode ? 'border-amber-600' : 'border-emerald-600'} border-t-transparent rounded-full animate-spin`}></div>}
-                        {status === 'ready' && <div className={`w-10 h-10 rounded-full ${colors.bgSolid} flex items-center justify-center`}><span className="text-white text-xl">✔</span></div>}
-                        {status === 'failed' && <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center"><span className="text-white text-xl">✗</span></div>}
+                        {status === 'ready' && <div className={`w-10 h-10 rounded-full ${colors.bgSolid} flex items-center justify-center`}><span className="text-white text-xl">âœ”</span></div>}
+                        {status === 'failed' && <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center"><span className="text-white text-xl">âœ—</span></div>}
                         <div className="flex-1">
                             <p className="font-medium text-slate-800">{assessment.uploadedFileName}</p>
                             <p className="text-sm text-slate-500">{status === 'processing' ? 'Analyzing document structure...' : status === 'ready' ? 'Ready to review' : 'Processing failed'}</p>
                         </div>
-                        {status === 'ready' && <button onClick={handleUploadedContractClick} className={`px-4 py-2 rounded-lg ${colors.btnPrimary} text-white text-sm`}>Continue →</button>}
+                        {status === 'ready' && <button onClick={handleUploadedContractClick} className={`px-4 py-2 rounded-lg ${colors.btnPrimary} text-white text-sm`}>Continue â†’</button>}
                     </div>
                 </div>
                 {error && <div className="mt-4 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
@@ -1566,32 +1544,46 @@ function ContractCreationContent() {
                 <div className="grid gap-4">
                     {templates.map((template) => (
                         <button key={template.templateId} onClick={() => handleTemplateSelect(template)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
-                            <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">📋</span></div>
+                            <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">ðŸ“‹</span></div>
                             <div className="flex-1 min-w-0">
                                 <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{template.templateName}</h4>
                                 <p className="text-sm text-slate-500 mb-2">{template.description || `Standard ${template.contractType} template`}</p>
-                                <div className="flex items-center gap-4 text-xs text-slate-400"><span>📄 {template.clauseCount} clauses</span><span>🏢 {template.industry}</span></div>
+                                <div className="flex items-center gap-4 text-xs text-slate-400"><span>ðŸ“„ {template.clauseCount} clauses</span><span>ðŸ¢ {template.industry}</span></div>
                             </div>
-                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center text-xl`}>→</div>
+                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center text-xl`}>â†’</div>
                         </button>
                     ))}
                 </div>
             </div>
         )
     }
+
     // WP1 + WP3: Summary now shows Contract Type before Mediation Type and includes tendering
-    // NOTE: useMemo/useEffect for contract name moved to component level (SECTION 5E-FIX)
     const renderSummary = () => {
         const isMultiProvider = isMultiProviderScenario()
 
+        // Generate suggested name if not set
+        const suggestedName = React.useMemo(() => {
+            const typeName = getContractTypeLabel(assessment.contractType) || 'Contract'
+            const date = new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
+            return `${typeName} - ${date}`
+        }, [assessment.contractType])
+
+        // Set default name if empty
+        useEffect(() => {
+            if (!assessment.contractName) {
+                setAssessment(prev => ({ ...prev, contractName: suggestedName }))
+            }
+        }, [suggestedName])
+
         return (
             <div className="max-w-2xl mx-auto">
-                <h3 className="text-lg font-medium text-slate-800 mb-6">{isTrainingMode ? '🎓 Training Contract Summary' : 'Contract Setup Summary'}</h3>
+                <h3 className="text-lg font-medium text-slate-800 mb-6">{isTrainingMode ? 'ðŸŽ“ Training Contract Summary' : 'Contract Setup Summary'}</h3>
 
                 {/* Contract Name Input - Prominent at top */}
                 <div className={`p-5 rounded-xl mb-6 ${isTrainingMode ? 'bg-amber-50 border-2 border-amber-300' : 'bg-emerald-50 border-2 border-emerald-300'}`}>
                     <label className={`block text-sm font-medium mb-2 ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>
-                        📝 Name Your Contract
+                        ðŸ“ Name Your Contract
                     </label>
                     <input
                         type="text"
@@ -1613,7 +1605,7 @@ function ContractCreationContent() {
                     {/* WP1: Show Contract Type first */}
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl">📋</span>
+                            <span className="text-2xl">ðŸ“‹</span>
                             <div>
                                 <p className="text-sm text-slate-500">Contract Type</p>
                                 <p className="font-medium text-slate-800">{getContractTypeLabel(assessment.contractType)}</p>
@@ -1623,7 +1615,7 @@ function ContractCreationContent() {
                     {/* WP1: Show Mediation Type second */}
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl">⚖️</span>
+                            <span className="text-2xl">âš–ï¸</span>
                             <div>
                                 <p className="text-sm text-slate-500">Mediation Type</p>
                                 <p className="font-medium text-slate-800">{getMediationTypeLabel(assessment.mediationType)}</p>
@@ -1632,7 +1624,7 @@ function ContractCreationContent() {
                     </div>
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl">📄</span>
+                            <span className="text-2xl">ðŸ“„</span>
                             <div>
                                 <p className="text-sm text-slate-500">Starting Point</p>
                                 <p className="font-medium text-slate-800">{getTemplateSourceLabel(assessment.templateSource)}</p>
@@ -1642,7 +1634,7 @@ function ContractCreationContent() {
                     {assessment.selectedTemplateName && (
                         <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">✔</span>
+                                <span className="text-2xl">âœ”</span>
                                 <div>
                                     <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Selected Template</p>
                                     <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.selectedTemplateName}</p>
@@ -1653,7 +1645,7 @@ function ContractCreationContent() {
                     {assessment.uploadedFileName && (
                         <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">📄</span>
+                                <span className="text-2xl">ðŸ“„</span>
                                 <div>
                                     <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Uploaded Contract</p>
                                     <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>{assessment.uploadedFileName}</p>
@@ -1666,7 +1658,7 @@ function ContractCreationContent() {
                     {isMultiProvider && (
                         <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
                             <div className="flex items-center gap-3 mb-3">
-                                <span className="text-2xl">📊</span>
+                                <span className="text-2xl">ðŸ“Š</span>
                                 <div>
                                     <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Provider Evaluation</p>
                                     <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>
@@ -1692,7 +1684,7 @@ function ContractCreationContent() {
                     {isTrainingMode && (
                         <div className="p-4 rounded-lg bg-amber-100 border border-amber-300">
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">🎓</span>
+                                <span className="text-2xl">ðŸŽ“</span>
                                 <div>
                                     <p className="text-sm text-amber-700 font-medium">Training Mode Active</p>
                                     <p className="text-sm text-amber-600">This is for practice only.</p>
@@ -1703,9 +1695,9 @@ function ContractCreationContent() {
                 </div>
                 {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
                 <div className="flex gap-4">
-                    <button onClick={() => setAssessment(prev => ({ ...prev, step: assessment.uploadedContractId ? 'upload_processing' : assessment.selectedTemplateId ? 'template_selection' : 'template_source' }))} className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">← Back</button>
+                    <button onClick={() => setAssessment(prev => ({ ...prev, step: assessment.uploadedContractId ? 'upload_processing' : assessment.selectedTemplateId ? 'template_selection' : 'template_source' }))} className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">â† Back</button>
                     <button onClick={createContract} disabled={isCreating} className={`flex-1 px-6 py-3 rounded-lg ${colors.btnPrimary} text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2`}>
-                        {isCreating ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : <>{isTrainingMode ? 'Create Training Session' : 'Create Contract'} →</>}
+                        {isCreating ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : <>{isTrainingMode ? 'Create Training Session' : 'Create Contract'} â†’</>}
                     </button>
                 </div>
             </div>
@@ -1724,12 +1716,12 @@ function ContractCreationContent() {
 
     const renderTrainingComplete = () => (
         <div className="max-w-2xl mx-auto text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><span className="text-4xl">🎉</span></div>
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><span className="text-4xl">ðŸŽ‰</span></div>
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Training Session Created!</h2>
             <p className="text-slate-500 mb-8">Your practice contract is ready.</p>
             <div className="flex gap-4">
                 <button onClick={() => router.push('/auth/training')} className="flex-1 px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">Back to Training</button>
-                <button onClick={() => router.push(`/auth/training/${trainingSessionCreated}`)} className="flex-1 px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium">Start Training →</button>
+                <button onClick={() => router.push(`/auth/training/${trainingSessionCreated}`)} className="flex-1 px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium">Start Training â†’</button>
             </div>
         </div>
     )
@@ -1764,7 +1756,7 @@ function ContractCreationContent() {
                 ))}
                 <div ref={chatEndRef} />
             </div>
-            <div className="p-4 border-t border-slate-200 bg-white"><div className="text-xs text-slate-500 text-center">{isTrainingMode ? '🎓 Guiding your training setup' : 'Guiding you through contract setup'}</div></div>
+            <div className="p-4 border-t border-slate-200 bg-white"><div className="text-xs text-slate-500 text-center">{isTrainingMode ? 'ðŸŽ“ Guiding your training setup' : 'Guiding you through contract setup'}</div></div>
         </div>
     )
 
