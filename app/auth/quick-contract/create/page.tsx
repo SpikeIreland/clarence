@@ -22,6 +22,9 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import mammoth from 'mammoth'
+
+// Note: pdfjs-dist is imported dynamically in extractTextFromPDF to avoid SSR issues
 
 // ============================================================================
 // SECTION 2: TYPE DEFINITIONS
@@ -406,8 +409,6 @@ function CreateQuickContractContent() {
 
     async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
         console.log('📄 handleFileUpload triggered')
-        console.log('Event:', event)
-        console.log('Files:', event.target.files)
 
         const file = event.target.files?.[0]
         if (!file) {
@@ -425,8 +426,6 @@ function CreateQuickContractContent() {
             const fileExtension = file.name.split('.').pop()?.toLowerCase()
             const allowedExtensions = ['pdf', 'docx', 'txt']
 
-            console.log('📄 File type:', file.type, 'Extension:', fileExtension)
-
             if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension || '')) {
                 throw new Error('Please upload a PDF, DOCX, or TXT file')
             }
@@ -436,14 +435,29 @@ function CreateQuickContractContent() {
                 throw new Error('File size must be less than 10MB')
             }
 
-            console.log('✅ File validation passed')
-            console.log('👤 User info:', userInfo)
-
             if (!userInfo?.companyId) {
                 throw new Error('User not authenticated - missing company ID')
             }
 
-            // Upload to Supabase storage
+            // Extract text based on file type
+            console.log('📝 Extracting text from document...')
+            let extractedText = ''
+
+            if (file.type === 'application/pdf' || fileExtension === 'pdf') {
+                extractedText = await extractTextFromPDF(file)
+            } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || fileExtension === 'docx') {
+                extractedText = await extractTextFromDOCX(file)
+            } else if (file.type === 'text/plain' || fileExtension === 'txt') {
+                extractedText = await file.text()
+            }
+
+            console.log('📝 Extracted text length:', extractedText.length)
+
+            if (!extractedText || extractedText.length < 50) {
+                throw new Error('Could not extract sufficient text from document. Please try a different file.')
+            }
+
+            // Upload original file to Supabase storage
             const fileName = `${Date.now()}-${file.name}`
             const filePath = `quick-contracts/${userInfo.companyId}/${fileName}`
 
@@ -452,8 +466,6 @@ function CreateQuickContractContent() {
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('documents')
                 .upload(filePath, file)
-
-            console.log('📤 Upload result:', { uploadData, uploadError })
 
             if (uploadError) {
                 console.error('❌ Supabase upload error:', uploadError)
@@ -467,34 +479,29 @@ function CreateQuickContractContent() {
 
             console.log('🔗 Public URL:', publicUrl)
 
-            // Extract text content (simplified - in production use N8N workflow)
-            let content = ''
-            if (file.type === 'text/plain' || fileExtension === 'txt') {
-                content = await file.text()
-                console.log('📝 Extracted text content, length:', content.length)
-            } else {
-                // For PDF/DOCX, show placeholder
-                content = `<p><em>Document uploaded: ${file.name}</em></p>
-<p><em>Content extraction in progress...</em></p>
-<p>---</p>
-<p>You can edit this content below or the full text will be available shortly.</p>`
-            }
+            // Format extracted text as HTML paragraphs
+            const formattedContent = extractedText
+                .split('\n\n')
+                .filter(para => para.trim())
+                .map(para => `<p>${para.trim()}</p>`)
+                .join('\n')
 
             setState(prev => ({
                 ...prev,
                 uploadedFileName: file.name,
                 uploadedFileUrl: publicUrl,
-                documentContent: content,
-                contractName: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
+                documentContent: formattedContent,
+                contractName: file.name.replace(/\.[^/.]+$/, ''),
                 step: 'details'
             }))
 
-            console.log('✅ Upload complete, state updated')
+            console.log('✅ Upload and extraction complete')
 
             eventLogger.completed('quick_contract_create', 'file_uploaded', {
                 fileName: file.name,
                 fileType: file.type,
-                fileSize: file.size
+                fileSize: file.size,
+                extractedLength: extractedText.length
             })
 
         } catch (err) {
@@ -505,6 +512,57 @@ function CreateQuickContractContent() {
             if (fileInputRef.current) {
                 fileInputRef.current.value = ''
             }
+        }
+    }
+
+    // ==========================================================================
+    // SECTION 12A: TEXT EXTRACTION FUNCTIONS
+    // ==========================================================================
+
+    async function extractTextFromPDF(file: File): Promise<string> {
+        try {
+            console.log('📄 Starting PDF extraction...')
+
+            // Dynamic import to avoid SSR issues
+            const pdfjsLib = await import('pdfjs-dist')
+
+            // Set worker source
+            pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+
+            const arrayBuffer = await file.arrayBuffer()
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+            console.log(`📄 PDF has ${pdf.numPages} pages`)
+
+            let fullText = ''
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i)
+                const textContent = await page.getTextContent()
+                const pageText = textContent.items
+                    .map((item: any) => item.str)
+                    .join(' ')
+                fullText += pageText + '\n\n'
+                console.log(`📄 Extracted page ${i}/${pdf.numPages}`)
+            }
+
+            console.log('📄 PDF extraction complete, total length:', fullText.length)
+            return fullText.trim()
+        } catch (err) {
+            console.error('PDF extraction error:', err)
+            throw new Error('Failed to extract text from PDF')
+        }
+    }
+
+    async function extractTextFromDOCX(file: File): Promise<string> {
+        try {
+            console.log('📄 Starting DOCX extraction...')
+            const arrayBuffer = await file.arrayBuffer()
+            const result = await mammoth.extractRawText({ arrayBuffer })
+            console.log('📄 DOCX extraction complete, length:', result.value.length)
+            return result.value
+        } catch (err) {
+            console.error('DOCX extraction error:', err)
+            throw new Error('Failed to extract text from DOCX')
         }
     }
 
