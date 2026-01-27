@@ -178,9 +178,9 @@ const RANGE_TYPE_CONFIG: Record<RangeType, {
         label: 'Currency',
         description: 'Monetary amounts with currency',
         units: [
-            { value: 'GBP', label: ' GBP' },
+            { value: 'GBP', label: 'Â£ GBP' },
             { value: 'USD', label: '$ USD' },
-            { value: 'EUR', label: ' EUR' }
+            { value: 'EUR', label: 'â‚¬ EUR' }
         ],
         placeholder: { min: '10000', max: '100000', target: '25000', walkaway: '50000' }
     },
@@ -255,9 +255,9 @@ const CLAUSE_STATUS = {
 } as const
 
 const CLAUSE_STATUS_DISPLAY = {
-    pending: { label: 'Not Configured', icon: '', color: 'text-slate-400', bg: 'bg-slate-100' },
-    verified: { label: 'Configured', icon: '', color: 'text-green-600', bg: 'bg-green-100' },
-    rejected: { label: 'Excluded', icon: '', color: 'text-red-500', bg: 'bg-red-100' }
+    pending: { label: 'Not Configured', icon: 'â—‹', color: 'text-slate-400', bg: 'bg-slate-100' },
+    verified: { label: 'Configured', icon: 'âœ“', color: 'text-green-600', bg: 'bg-green-100' },
+    rejected: { label: 'Excluded', icon: 'âœ—', color: 'text-red-500', bg: 'bg-red-100' }
 } as const
 
 // ============================================================================
@@ -314,32 +314,25 @@ This typically takes 1-2 minutes for larger documents.`,
     entity_detected: (count: number) =>
         `I've detected **${count} entities** in your contract that may need redaction:
 
- Company names  Replace with [PROVIDER], [CUSTOMER]
- Person names  Replace with [REPRESENTATIVE]
- Specific dates  Replace with [EFFECTIVE DATE]
+â€¢ Company names â†’ Replace with [PROVIDER], [CUSTOMER]
+â€¢ Person names â†’ Replace with [REPRESENTATIVE]
+â€¢ Specific dates â†’ Replace with [EFFECTIVE DATE]
 
 Review and confirm the redactions in the Entities panel.`,
 
-    clause_verified: (name: string) => ` Verified: **${name}**`,
+    clause_verified: (name: string) => `âœ“ Verified: **${name}**`,
 
-    clause_rejected: (name: string) => ` Rejected: **${name}**`,
+    clause_rejected: (name: string) => `âœ• Rejected: **${name}**`,
 
-    clause_deleted: (name: string) => ` Deleted: **${name}**`,
+    clause_deleted: (name: string) => `ðŸ—‘ï¸ Deleted: **${name}**`,
 
-    clauses_deleted: (count: number) => ` Deleted **${count} clauses**`,
+    clauses_deleted: (count: number) => `ðŸ—‘ï¸ Deleted **${count} clauses**`,
 
-    clauses_reordered: ` Clauses reordered successfully`,
+    clauses_reordered: `â†•ï¸ Clauses reordered successfully`,
 
     all_verified: `Excellent! All clauses have been verified. You can now commit them to use in negotiations.`,
 
-    committed: (count: number) => `Successfully committed **${count} clauses**. Your contract template is ready for negotiations!`,
-
-    // Quick Contract specific messages
-    quick_contract_welcome: (clauseCount: number) => `Welcome! This is a **Quick Contract** with **${clauseCount} clauses** ready for review.
-
-All clauses use your standard terms - no negotiation ranges needed. Simply review the content, then proceed to invite the other party to accept.`,
-
-    quick_contract_ready: `Your Quick Contract is ready! Click **Proceed to Invite** to bring in the other party for review and acceptance.`
+    committed: (count: number) => `Successfully committed **${count} clauses**. Your contract template is ready for negotiations!`
 }
 
 // ============================================================================
@@ -501,13 +494,6 @@ function ContractPrepContent() {
 
     // Also get pathway_id from URL params (add near line 401-402):
     const pathwayId = searchParams.get('pathway_id')
-
-    // ========================================================================
-    // SECTION 5A-QC: QUICK CONTRACT MODE DETECTION
-    // ========================================================================
-
-    // Derived state for Quick Contract mode - hides negotiation elements
-    const isQuickContract = sessionData?.mediationType === 'straight_to_contract'
 
     // ========================================================================
     // SECTION 5B: INITIALIZE & LOAD USER
@@ -873,16 +859,11 @@ function ContractPrepContent() {
 
     useEffect(() => {
         if (contract && contract.status === 'ready' && clauses.length > 0 && chatMessages.length <= 1) {
-            // Show different message for Quick Contract
-            if (isQuickContract) {
-                addChatMessage('clarence', CLARENCE_MESSAGES.quick_contract_welcome(clauses.length))
-            } else {
-                addChatMessage('clarence', CLARENCE_MESSAGES.contract_loaded(
-                    contract.contractName,
-                    clauses.length,
-                    detectedEntities.length
-                ))
-            }
+            addChatMessage('clarence', CLARENCE_MESSAGES.contract_loaded(
+                contract.contractName,
+                clauses.length,
+                detectedEntities.length
+            ))
 
             if (detectedEntities.length > 0) {
                 setTimeout(() => {
@@ -890,7 +871,7 @@ function ContractPrepContent() {
                 }, 2000)
             }
         }
-    }, [contract, clauses, detectedEntities, chatMessages.length, addChatMessage, isQuickContract])
+    }, [contract, clauses, detectedEntities, chatMessages.length, addChatMessage])
 
     // ========================================================================
     // SECTION 5F: FILE UPLOAD HANDLERS
@@ -1234,7 +1215,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', ` Verified ${clausesToVerify.length} clauses`)
+            addChatMessage('system', `âœ… Verified ${clausesToVerify.length} clauses`)
             clearSelection()
 
         } catch (err) {
@@ -1279,7 +1260,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', ` Rejected ${clausesToReject.length} clauses`)
+            addChatMessage('system', `âŒ Rejected ${clausesToReject.length} clauses`)
             clearSelection()
 
         } catch (err) {
@@ -1423,7 +1404,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', ` Excluded ${clausesToExclude.length} clauses from negotiation`)
+            addChatMessage('system', `âœ— Excluded ${clausesToExclude.length} clauses from negotiation`)
             clearSelection()
 
         } catch (err) {
@@ -1778,17 +1759,8 @@ function ContractPrepContent() {
     const handleCommitClauses = async () => {
         if (!userInfo || !contract) return
 
-        // For Quick Contract, commit all non-rejected clauses; for standard, only verified
-        const clausesToCommit = isQuickContract
-            ? clauses.filter(c => c.status !== 'rejected')
-            : clauses.filter(c => c.status === 'verified')
-
-        if (clausesToCommit.length === 0) {
-            if (isQuickContract) {
-                setError('No clauses to proceed with.')
-            }
-            return
-        }
+        const verifiedClauses = clauses.filter(c => c.status === 'verified')
+        if (verifiedClauses.length === 0) return
 
         setIsCommitting(true)
 
@@ -1809,23 +1781,13 @@ function ContractPrepContent() {
                     contract_id: contract.contractId,
                     session_id: effectiveSessionId,
                     user_id: userInfo.userId,
-                    clause_ids: clausesToCommit.map(c => c.clauseId),
-                    // For Quick Contract, don't send positions (they're not configured)
-                    clause_positions: isQuickContract
-                        ? clausesToCommit.map(c => ({
-                            clause_id: c.clauseId,
-                            customer_position: null,
-                            provider_position: null,
-                            importance: null,
-                            is_locked: true  // All clauses locked for Quick Contract
-                        }))
-                        : clausesToCommit.map(c => ({
-                            clause_id: c.clauseId,
-                            customer_position: clausePositions[c.clauseId]?.customerPosition || null,
-                            provider_position: clausePositions[c.clauseId]?.providerPosition || null,
-                            importance: clausePositions[c.clauseId]?.importance || null
-                        })),
-                    mediation_type: sessionData?.mediationType || 'full_mediation'
+                    clause_ids: verifiedClauses.map(c => c.clauseId),
+                    clause_positions: verifiedClauses.map(c => ({
+                        clause_id: c.clauseId,
+                        customer_position: clausePositions[c.clauseId]?.customerPosition || null,
+                        provider_position: clausePositions[c.clauseId]?.providerPosition || null,
+                        importance: clausePositions[c.clauseId]?.importance || null
+                    }))
                 })
             })
 
@@ -1833,12 +1795,7 @@ function ContractPrepContent() {
 
             const result = await response.json()
 
-            // Show appropriate message based on mode
-            if (isQuickContract) {
-                addChatMessage('clarence', CLARENCE_MESSAGES.quick_contract_ready)
-            } else {
-                addChatMessage('clarence', CLARENCE_MESSAGES.committed(clausesToCommit.length))
-            }
+            addChatMessage('clarence', CLARENCE_MESSAGES.committed(verifiedClauses.length))
 
             const targetSessionId = result.sessionId || effectiveSessionId
             const targetContractId = contract.contractId
@@ -1851,34 +1808,20 @@ function ContractPrepContent() {
 
             const redirectUrl = `/auth/invite-providers?${params.toString()}`
 
-            // Create transition config - different messaging for Quick Contract
-            const transition: TransitionConfig = isQuickContract
-                ? {
-                    id: 'transition_to_invite',
-                    fromStage: 'contract_prep',
-                    toStage: 'invite_providers',
-                    title: 'Quick Contract Ready!',
-                    message: `Your Quick Contract with ${clausesToCommit.length} clauses is ready for review. The next step is to invite the other party who will:`,
-                    bulletPoints: [
-                        'Review the contract terms',
-                        'Accept the standard terms',
-                        'Request discussion on any concerns'
-                    ],
-                    buttonText: 'Continue to Invite'
-                }
-                : {
-                    id: 'transition_to_invite',
-                    fromStage: 'contract_prep',
-                    toStage: 'invite_providers',
-                    title: 'Positions Locked In',
-                    message: "Your contract positions are locked in. Now it's time to invite your provider(s) to the negotiation. They'll receive an email with a secure link to:",
-                    bulletPoints: [
-                        'Enter their company details',
-                        'Set their own clause positions',
-                        'Submit their negotiation parameters'
-                    ],
-                    buttonText: 'Continue to Invite'
-                }
+            // Create transition config
+            const transition: TransitionConfig = {
+                id: 'transition_to_invite',
+                fromStage: 'contract_prep',
+                toStage: 'invite_providers',
+                title: 'Positions Locked In',
+                message: "Your contract positions are locked in. Now it's time to invite your provider(s) to the negotiation. They'll receive an email with a secure link to:",
+                bulletPoints: [
+                    'Enter their company details',
+                    'Set their own clause positions',
+                    'Submit their negotiation parameters'
+                ],
+                buttonText: 'Continue to Invite'
+            }
 
             // Show transition modal instead of immediate redirect
             setTimeout(() => {
@@ -2126,7 +2069,7 @@ function ContractPrepContent() {
             buildCategoryGroups(updatedClauses)
 
             // Step 6: Success message
-            addChatMessage('system', ` **${clause.clauseName}** configured and ready for negotiation`)
+            addChatMessage('system', `âœ“ **${clause.clauseName}** configured and ready for negotiation`)
             setIsEditingRange(false)
 
         } catch (err) {
@@ -2170,7 +2113,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', ` **${clause.clauseName}** excluded from negotiation`)
+            addChatMessage('system', `âœ— **${clause.clauseName}** excluded from negotiation`)
 
             // Move to next clause if this was selected
             if (selectedClause?.clauseId === clause.clauseId) {
@@ -2188,7 +2131,7 @@ function ContractPrepContent() {
 
     // Format value with unit for display
     const formatRangeValue = (value: string, rangeType: RangeType, unit: string): string => {
-        if (!value) return ''
+        if (!value) return 'â€”'
 
         switch (rangeType) {
             case 'duration':
@@ -2196,7 +2139,7 @@ function ContractPrepContent() {
             case 'percentage':
                 return `${value}%`
             case 'currency':
-                const symbols: Record<string, string> = { GBP: '', USD: '$', EUR: '' }
+                const symbols: Record<string, string> = { GBP: 'Â£', USD: '$', EUR: 'â‚¬' }
                 return `${symbols[unit] || ''}${Number(value).toLocaleString()}`
             case 'count':
                 return `${value} ${unit.replace('_', ' ')}`
@@ -2329,14 +2272,13 @@ function ContractPrepContent() {
                     <div className="w-px h-6 bg-slate-600" />
 
                     <div className="flex items-center gap-2">
-                        {/* AI Configure - Hidden for Quick Contract */}
-                        {!isQuickContract && unconfiguredSelectedCount > 0 && (
+                        {unconfiguredSelectedCount > 0 && (
                             <button
                                 onClick={() => setShowBulkAIModal(true)}
                                 disabled={isBulkProcessing || isBulkAIProcessing}
                                 className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                             >
-                                <span></span> AI Configure ({unconfiguredSelectedCount})
+                                <span>ðŸ¤–</span> AI Configure ({unconfiguredSelectedCount})
                             </button>
                         )}
                         <button
@@ -2344,14 +2286,14 @@ function ContractPrepContent() {
                             disabled={isBulkProcessing || isBulkAIProcessing}
                             className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
-                            <span></span> Exclude
+                            <span>âœ—</span> Exclude
                         </button>
                         <button
                             onClick={confirmBulkDelete}
                             disabled={isDeleting || isBulkAIProcessing}
                             className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
-                            <span></span> Delete
+                            <span>ðŸ—‘ï¸</span> Delete
                         </button>
                     </div>
 
@@ -2384,7 +2326,7 @@ function ContractPrepContent() {
                 <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden">
                     <div className="p-6 border-b border-slate-200">
                         <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
-                            <span></span> AI Batch Configuration
+                            <span>ðŸ¤–</span> AI Batch Configuration
                         </h2>
                     </div>
 
@@ -2423,10 +2365,10 @@ function ContractPrepContent() {
                                         >
                                             <span>
                                                 {idx < (bulkAIProgress?.current || 0) - 1
-                                                    ? ''
+                                                    ? 'âœ“'
                                                     : idx === (bulkAIProgress?.current || 0) - 1
-                                                        ? ''
-                                                        : ''}
+                                                        ? 'âŸ³'
+                                                        : 'â—‹'}
                                             </span>
                                             <span>{clause.clauseNumber}</span>
                                             <span className="truncate">{clause.clauseName}</span>
@@ -2442,7 +2384,7 @@ function ContractPrepContent() {
 
                                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                                     <p className="text-sm text-amber-800">
-                                        <strong> Note:</strong> You'll be able to review and adjust each suggestion before finalizing.
+                                        <strong>âš ï¸ Note:</strong> You'll be able to review and adjust each suggestion before finalizing.
                                     </p>
                                 </div>
 
@@ -2456,7 +2398,7 @@ function ContractPrepContent() {
                                             key={clause.clauseId}
                                             className="px-4 py-2 flex items-center gap-3 text-sm text-slate-600 border-b border-slate-100 last:border-0"
                                         >
-                                            <span className="text-slate-400"></span>
+                                            <span className="text-slate-400">â—‹</span>
                                             <span className="text-slate-400 font-mono">{clause.clauseNumber}</span>
                                             <span className="truncate">{clause.clauseName}</span>
                                         </div>
@@ -2479,7 +2421,7 @@ function ContractPrepContent() {
                                     onClick={handleBulkAIConfigure}
                                     className="px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
                                 >
-                                    <span></span> Start Processing
+                                    <span>ðŸ¤–</span> Start Processing
                                 </button>
                             </>
                         )}
@@ -2505,7 +2447,7 @@ function ContractPrepContent() {
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 bg-white">
                     <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
-                        Back to Dashboard
+                        â† Back to Dashboard
                     </Link>
                     <h2 className="text-lg font-semibold text-slate-800">Contract Prep</h2>
                     {contract && (
@@ -2552,7 +2494,7 @@ function ContractPrepContent() {
                                 : 'text-slate-600 hover:text-slate-800'
                                 }`}
                         >
-                            Document Order
+                            ðŸ“„ Document Order
                         </button>
                         <button
                             onClick={() => setViewMode('category')}
@@ -2561,7 +2503,7 @@ function ContractPrepContent() {
                                 : 'text-slate-600 hover:text-slate-800'
                                 }`}
                         >
-                            By Category
+                            ðŸ“ By Category
                         </button>
                     </div>
                 </div>
@@ -2569,22 +2511,11 @@ function ContractPrepContent() {
                 {/* Selection Controls */}
                 {clauses.length > 0 && (
                     <div className="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center justify-between">
-                        {isQuickContract ? (
-                            /* Quick Contract: Simplified stats */
-                            <div className="flex items-center gap-2 text-xs">
-                                <span className="text-emerald-600">Locked: {clauses.filter(c => c.status !== 'rejected').length}</span>
-                                {getExcludedCount() > 0 && (
-                                    <span className="text-red-500">Excluded: {getExcludedCount()}</span>
-                                )}
-                            </div>
-                        ) : (
-                            /* Standard: Full stats */
-                            <div className="flex items-center gap-2 text-xs">
-                                <span className="text-green-600"> {getConfiguredCount()}</span>
-                                <span className="text-slate-400"> {getNotConfiguredCount()}</span>
-                                <span className="text-red-500"> {getExcludedCount()}</span>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="text-green-600">âœ“ {getConfiguredCount()}</span>
+                            <span className="text-slate-400">â—‹ {getNotConfiguredCount()}</span>
+                            <span className="text-red-500">âœ— {getExcludedCount()}</span>
+                        </div>
                         <div className="flex items-center gap-1">
                             <button
                                 onClick={selectAllClauses}
@@ -2593,16 +2524,13 @@ function ContractPrepContent() {
                             >
                                 All
                             </button>
-                            {/* Hide Unconfigured button for Quick Contract */}
-                            {!isQuickContract && (
-                                <button
-                                    onClick={selectAllUnconfigured}
-                                    className="text-xs text-slate-600 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100"
-                                    title="Select unconfigured"
-                                >
-                                    Unconfigured
-                                </button>
-                            )}
+                            <button
+                                onClick={selectAllUnconfigured}
+                                className="text-xs text-slate-600 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100"
+                                title="Select unconfigured"
+                            >
+                                Unconfigured
+                            </button>
                             {selectedClauseIds.size > 0 && (
                                 <button
                                     onClick={clearSelection}
@@ -2659,7 +2587,7 @@ function ContractPrepContent() {
                                                             }`}
                                                     >
                                                         {isSelected && (
-                                                            <span className="text-white text-xs"></span>
+                                                            <span className="text-white text-xs">âœ“</span>
                                                         )}
                                                     </button>
 
@@ -2672,7 +2600,7 @@ function ContractPrepContent() {
                                                             }}
                                                             className={`transform transition-transform text-slate-400 hover:text-slate-600 ${isExpanded ? 'rotate-90' : ''}`}
                                                         >
-
+                                                            â–¶
                                                         </button>
                                                     ) : (
                                                         <span className="w-3" />
@@ -2711,7 +2639,7 @@ function ContractPrepContent() {
                                                     {/* Confidence indicator */}
                                                     {parent.aiConfidence && parent.aiConfidence < 0.8 && (
                                                         <span className="text-amber-500 text-xs" title="Low AI confidence">
-
+                                                            âš
                                                         </span>
                                                     )}
                                                 </div>
@@ -2742,7 +2670,7 @@ function ContractPrepContent() {
                                                                             }`}
                                                                     >
                                                                         {isChildSelected && (
-                                                                            <span className="text-white text-xs"></span>
+                                                                            <span className="text-white text-xs">âœ“</span>
                                                                         )}
                                                                     </button>
 
@@ -2772,7 +2700,7 @@ function ContractPrepContent() {
                                                                     {/* Confidence indicator */}
                                                                     {child.aiConfidence && child.aiConfidence < 0.8 && (
                                                                         <span className="text-amber-500 text-xs" title="Low AI confidence">
-
+                                                                            âš
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -2807,7 +2735,7 @@ function ContractPrepContent() {
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className={`transform transition-transform ${group.isExpanded ? 'rotate-90' : ''}`}>
-
+                                                    â–¶
                                                 </span>
                                                 <span className="font-medium text-sm text-slate-700">
                                                     {group.category}
@@ -2851,7 +2779,7 @@ function ContractPrepContent() {
                                                                     }`}
                                                             >
                                                                 {isSelected && (
-                                                                    <span className="text-white text-xs"></span>
+                                                                    <span className="text-white text-xs">âœ“</span>
                                                                 )}
                                                             </button>
 
@@ -2883,7 +2811,7 @@ function ContractPrepContent() {
                                                             {/* Confidence indicator */}
                                                             {clause.aiConfidence && clause.aiConfidence < 0.8 && (
                                                                 <span className="text-amber-500 text-xs" title="Low AI confidence">
-
+                                                                    âš
                                                                 </span>
                                                             )}
                                                         </div>
@@ -2900,65 +2828,41 @@ function ContractPrepContent() {
 
                 {/* Actions */}
                 <div className="p-4 border-t border-slate-200 bg-white space-y-2">
-                    {/* Add Clause Button - Hidden for Quick Contract */}
-                    {!isQuickContract && (
-                        <button
-                            onClick={openClauseLibrary}
-                            className="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
-                        >
-                            + Add Clause from Library
-                        </button>
-                    )}
+                    {/* Add Clause Button */}
+                    <button
+                        onClick={openClauseLibrary}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+                    >
+                        âž• Add Clause from Library
+                    </button>
 
                     {detectedEntities.length > 0 && (
                         <button
                             onClick={() => setShowEntitiesPanel(!showEntitiesPanel)}
                             className="w-full px-4 py-2 rounded-lg bg-amber-100 text-amber-800 font-medium text-sm hover:bg-amber-200 transition-colors flex items-center justify-center gap-2"
                         >
-                            Review Entities ({detectedEntities.length})
+                            ðŸ”’ Review Entities ({detectedEntities.length})
                         </button>
                     )}
 
-                    {/* Quick Contract: Always show Proceed button */}
-                    {isQuickContract ? (
+                    {stats.verified > 0 && (
                         <button
                             onClick={handleCommitClauses}
-                            disabled={isCommitting || clauses.length === 0}
-                            className="w-full px-4 py-3 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            disabled={isCommitting}
+                            className="w-full px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                             {isCommitting ? (
                                 <>
                                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                    Processing...
+                                    Committing...
                                 </>
                             ) : (
                                 <>
-                                    Proceed to Invite
-                                    <span>&rarr;</span>
+                                    Commit {stats.verified} Clauses
+                                    <span>â†’</span>
                                 </>
                             )}
                         </button>
-                    ) : (
-                        /* Standard Mode: Show commit button when clauses are verified */
-                        stats.verified > 0 && (
-                            <button
-                                onClick={handleCommitClauses}
-                                disabled={isCommitting}
-                                className="w-full px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                {isCommitting ? (
-                                    <>
-                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                        Committing...
-                                    </>
-                                ) : (
-                                    <>
-                                        Commit {stats.verified} Clauses
-                                        <span>&rarr;</span>
-                                    </>
-                                )}
-                            </button>
-                        )
                     )}
                 </div>
             </div>
@@ -3046,7 +2950,7 @@ function ContractPrepContent() {
                             ) : (
                                 <>
                                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <span className="text-3xl"></span>
+                                        <span className="text-3xl">ðŸ“¤</span>
                                     </div>
                                     <h3 className="text-lg font-medium text-slate-800 mb-2">
                                         Upload Your Contract
@@ -3098,7 +3002,7 @@ function ContractPrepContent() {
                     {fileInput}
                     <div className="text-center">
                         <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-3xl"></span>
+                            <span className="text-3xl">ðŸ“‹</span>
                         </div>
                         <h3 className="text-lg font-medium text-slate-800 mb-2">
                             Select a Clause
@@ -3159,7 +3063,7 @@ function ContractPrepContent() {
                                 </span>
                                 {isRangeComplete && (
                                     <span className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
-                                        Range Configured
+                                        âœ“ Range Configured
                                     </span>
                                 )}
                                 {selectedClause.aiConfidence && (
@@ -3185,7 +3089,7 @@ function ContractPrepContent() {
                                     className="px-3 py-1.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shadow-sm flex items-center gap-1"
                                     title="Move up"
                                 >
-                                    <span></span> Up
+                                    <span>â†‘</span> Up
                                 </button>
                                 <button
                                     onClick={() => handleMoveClause(selectedClause, 'down')}
@@ -3193,7 +3097,7 @@ function ContractPrepContent() {
                                     className="px-3 py-1.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shadow-sm flex items-center gap-1"
                                     title="Move down"
                                 >
-                                    <span></span> Down
+                                    <span>â†“</span> Down
                                 </button>
                             </div>
 
@@ -3207,7 +3111,7 @@ function ContractPrepContent() {
                                 }}
                                 className="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-medium hover:bg-slate-300 transition-colors flex items-center gap-2"
                             >
-                                Edit
+                                âœï¸ Edit
                             </button>
 
                             {/* Exclude Button - Only for non-excluded clauses */}
@@ -3216,7 +3120,7 @@ function ContractPrepContent() {
                                     onClick={() => excludeClause(selectedClause)}
                                     className="px-4 py-2 rounded-lg bg-amber-100 text-amber-700 font-medium hover:bg-amber-200 transition-colors flex items-center gap-2"
                                 >
-                                    Exclude
+                                    âœ— Exclude
                                 </button>
                             )}
 
@@ -3227,7 +3131,7 @@ function ContractPrepContent() {
                                 className="px-4 py-2 rounded-lg bg-red-100 text-red-700 font-medium hover:bg-red-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                                 title="Delete clause"
                             >
-
+                                ðŸ—‘ï¸
                             </button>
                         </div>
                     </div>
@@ -3248,7 +3152,7 @@ function ContractPrepContent() {
                                 }}
                                 className="text-xs text-blue-600 hover:text-blue-800"
                             >
-                                Edit text
+                                Edit text â†’
                             </button>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 max-h-40 overflow-auto">
@@ -3260,423 +3164,380 @@ function ContractPrepContent() {
                         </div>
                     </div>
 
-                    {/* Range Configuration Section - Conditional for Quick Contract */}
-                    {!isQuickContract ? (
-                        /* Standard Mode: Full Range Configuration */
-                        <div className="p-6 relative">
-                            {/* AI Suggestion Loading Overlay */}
-                            {renderSuggestionLoadingOverlay()}
+                    {/* Range Configuration Section */}
+                    <div className="p-6 relative">
+                        {/* AI Suggestion Loading Overlay */}
+                        {renderSuggestionLoadingOverlay()}
 
-                            <div className={`transition-opacity duration-200 ${isLoadingSuggestion ? 'opacity-30 pointer-events-none' : ''}`}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-slate-800">Range Configuration</h3>
-                                        <p className="text-sm text-slate-500 mt-1">
-                                            Define the acceptable range for this clause in your negotiation
-                                        </p>
+                        <div className={`transition-opacity duration-200 ${isLoadingSuggestion ? 'opacity-30 pointer-events-none' : ''}`}>
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-800">Range Configuration</h3>
+                                    <p className="text-sm text-slate-500 mt-1">
+                                        Define the acceptable range for this clause in your negotiation
+                                    </p>
+                                </div>
+                                {!isEditingRange && isRangeComplete && (
+                                    <button
+                                        onClick={() => setIsEditingRange(true)}
+                                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                    >
+                                        Edit Range
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Range Type Selector */}
+                            <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-6 border border-slate-200">
+                                {/* Range Type */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Range Type
+                                    </label>
+                                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                                        {(Object.keys(RANGE_TYPE_CONFIG) as RangeType[]).map((type) => (
+                                            <button
+                                                key={type}
+                                                onClick={() => updateClauseRange(selectedClause.clauseId, {
+                                                    rangeType: type,
+                                                    unit: RANGE_TYPE_CONFIG[type].units[0].value
+                                                })}
+                                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${currentRange.rangeType === type
+                                                    ? 'bg-blue-600 text-white shadow-md'
+                                                    : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-300 hover:bg-blue-50'
+                                                    }`}
+                                            >
+                                                {RANGE_TYPE_CONFIG[type].label}
+                                            </button>
+                                        ))}
                                     </div>
-                                    {!isEditingRange && isRangeComplete && (
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        {rangeConfig.description}
+                                    </p>
+                                </div>
+
+                                {/* Unit Selector */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Unit
+                                    </label>
+                                    <select
+                                        value={currentRange.unit}
+                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { unit: e.target.value })}
+                                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                    >
+                                        {rangeConfig.units.map((unit) => (
+                                            <option key={unit.value} value={unit.value}>
+                                                {unit.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Value Inputs - Conditional based on range type */}
+                                {currentRange.rangeType === 'boolean' ? (
+                                    /* Boolean Range */
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-emerald-700 mb-2">
+                                                ðŸŽ¯ Our Preferred Position
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'Yes' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'Yes'
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
+                                                        }`}
+                                                >
+                                                    Yes / Allowed
+                                                </button>
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'No' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'No'
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
+                                                        }`}
+                                                >
+                                                    No / Prohibited
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-amber-700 mb-2">
+                                                âš ï¸ Would Accept (Walkaway)
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'Yes' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'Yes'
+                                                        ? 'bg-amber-500 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
+                                                        }`}
+                                                >
+                                                    Yes / Allowed
+                                                </button>
+                                                <button
+                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'No' })}
+                                                    className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'No'
+                                                        ? 'bg-amber-500 text-white'
+                                                        : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
+                                                        }`}
+                                                >
+                                                    No / Prohibited
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : currentRange.rangeType === 'text' ? (
+                                    /* Text Range */
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div>
+                                            <label className="block text-sm font-medium text-emerald-700 mb-2">
+                                                ðŸŽ¯ Our Preferred Position
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={currentRange.targetValue}
+                                                onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
+                                                placeholder="e.g., England & Wales"
+                                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-amber-700 mb-2">
+                                                âš ï¸ Would Accept (Walkaway)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={currentRange.walkawayValue}
+                                                onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
+                                                placeholder="e.g., Any EU jurisdiction"
+                                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* Numeric Ranges (Duration, Percentage, Currency, Count) */
+                                    <>
+                                        {/* Industry Range */}
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                                ðŸ“Š Typical Industry Range
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs text-slate-500 mb-1">Minimum</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={currentRange.minValue}
+                                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { minValue: e.target.value })}
+                                                            placeholder={rangeConfig.placeholder.min}
+                                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                                                            {currentRange.rangeType === 'percentage' ? '%' :
+                                                                currentRange.rangeType === 'currency' ? currentRange.unit :
+                                                                    currentRange.unit}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-slate-500 mb-1">Maximum</label>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            value={currentRange.maxValue}
+                                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { maxValue: e.target.value })}
+                                                            placeholder={rangeConfig.placeholder.max}
+                                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
+                                                        />
+                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                                                            {currentRange.rangeType === 'percentage' ? '%' :
+                                                                currentRange.rangeType === 'currency' ? currentRange.unit :
+                                                                    currentRange.unit}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Target and Walkaway */}
+                                        <div className="grid grid-cols-2 gap-4 mb-6">
+                                            <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                                                <label className="block text-sm font-semibold text-emerald-700 mb-2">
+                                                    ðŸŽ¯ Our Target
+                                                </label>
+                                                <p className="text-xs text-emerald-600 mb-2">What we're aiming for</p>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={currentRange.targetValue}
+                                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
+                                                        placeholder={rangeConfig.placeholder.target}
+                                                        className="w-full px-4 py-2.5 bg-white border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                                                <label className="block text-sm font-semibold text-amber-700 mb-2">
+                                                    âš ï¸ Our Walkaway
+                                                </label>
+                                                <p className="text-xs text-amber-600 mb-2">Bottom line we'd accept</p>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={currentRange.walkawayValue}
+                                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
+                                                        placeholder={rangeConfig.placeholder.walkaway}
+                                                        className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Importance Level */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Clause Importance
+                                    </label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {(['low', 'medium', 'high', 'critical'] as const).map((level) => (
+                                            <button
+                                                key={level}
+                                                onClick={() => updateClauseRange(selectedClause.clauseId, { importance: level })}
+                                                className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${currentRange.importance === level
+                                                    ? level === 'critical'
+                                                        ? 'bg-red-600 text-white shadow-md'
+                                                        : level === 'high'
+                                                            ? 'bg-amber-500 text-white shadow-md'
+                                                            : level === 'medium'
+                                                                ? 'bg-blue-500 text-white shadow-md'
+                                                                : 'bg-slate-500 text-white shadow-md'
+                                                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                {level.charAt(0).toUpperCase() + level.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Rationale */}
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Rationale / Notes
+                                    </label>
+                                    <textarea
+                                        value={currentRange.rationale}
+                                        onChange={(e) => updateClauseRange(selectedClause.clauseId, { rationale: e.target.value })}
+                                        placeholder="Why is this range important? Any context for the negotiation..."
+                                        rows={3}
+                                        className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
+                                    />
+                                </div>
+
+                                {/* Save & Configure Button */}
+                                <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+                                    <div className="text-sm text-slate-500">
+                                        {selectedClause.status === 'verified' ? (
+                                            <span className="text-green-600 flex items-center gap-1">
+                                                <span>âœ“</span> Clause configured and ready
+                                            </span>
+                                        ) : selectedClause.status === 'rejected' ? (
+                                            <span className="text-red-500 flex items-center gap-1">
+                                                <span>âœ—</span> Clause excluded from negotiation
+                                            </span>
+                                        ) : isRangeComplete ? (
+                                            <span className="text-blue-600 flex items-center gap-1">
+                                                <span>â—</span> Range complete - ready to configure
+                                            </span>
+                                        ) : (
+                                            <span className="text-amber-600 flex items-center gap-1">
+                                                <span>âš </span> Please complete the range values
+                                            </span>
+                                        )}
+                                    </div>
+                                    {selectedClause.status !== 'rejected' && (
                                         <button
-                                            onClick={() => setIsEditingRange(true)}
-                                            className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                            onClick={() => saveAndConfigureClause(selectedClause.clauseId)}
+                                            disabled={!isRangeComplete || selectedClause.status === 'verified'}
+                                            className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                                         >
-                                            Edit Range
+                                            {selectedClause.status === 'verified' ? (
+                                                <>âœ“ Configured</>
+                                            ) : (
+                                                <>âœ“ Save & Configure</>
+                                            )}
                                         </button>
                                     )}
                                 </div>
+                            </div>
 
-                                {/* Range Type Selector */}
-                                <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-6 border border-slate-200">
-                                    {/* Range Type */}
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                                            Range Type
-                                        </label>
-                                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                                            {(Object.keys(RANGE_TYPE_CONFIG) as RangeType[]).map((type) => (
-                                                <button
-                                                    key={type}
-                                                    onClick={() => updateClauseRange(selectedClause.clauseId, {
-                                                        rangeType: type,
-                                                        unit: RANGE_TYPE_CONFIG[type].units[0].value
-                                                    })}
-                                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${currentRange.rangeType === type
-                                                        ? 'bg-blue-600 text-white shadow-md'
-                                                        : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-300 hover:bg-blue-50'
-                                                        }`}
-                                                >
-                                                    {RANGE_TYPE_CONFIG[type].label}
-                                                </button>
-                                            ))}
+                            {/* Range Summary Card (shows when complete) */}
+                            {isRangeComplete && (
+                                <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                    <h4 className="text-sm font-semibold text-blue-800 mb-3">Range Summary</h4>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        {currentRange.rangeType !== 'boolean' && currentRange.rangeType !== 'text' && (
+                                            <>
+                                                <div>
+                                                    <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Min</span>
+                                                    <p className="font-medium text-blue-900">
+                                                        {formatRangeValue(currentRange.minValue, currentRange.rangeType, currentRange.unit)}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Max</span>
+                                                    <p className="font-medium text-blue-900">
+                                                        {formatRangeValue(currentRange.maxValue, currentRange.rangeType, currentRange.unit)}
+                                                    </p>
+                                                </div>
+                                            </>
+                                        )}
+                                        <div>
+                                            <span className="text-emerald-600 text-xs uppercase tracking-wide">Our Target</span>
+                                            <p className="font-medium text-emerald-700">
+                                                {formatRangeValue(currentRange.targetValue, currentRange.rangeType, currentRange.unit)}
+                                            </p>
                                         </div>
-                                        <p className="text-xs text-slate-500 mt-2">
-                                            {rangeConfig.description}
-                                        </p>
+                                        <div>
+                                            <span className="text-amber-600 text-xs uppercase tracking-wide">Walkaway</span>
+                                            <p className="font-medium text-amber-700">
+                                                {formatRangeValue(currentRange.walkawayValue, currentRange.rangeType, currentRange.unit)}
+                                            </p>
+                                        </div>
                                     </div>
-
-                                    {/* Unit Selector */}
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                                            Unit
-                                        </label>
-                                        <select
-                                            value={currentRange.unit}
-                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { unit: e.target.value })}
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                                        >
-                                            {rangeConfig.units.map((unit) => (
-                                                <option key={unit.value} value={unit.value}>
-                                                    {unit.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Value Inputs - Conditional based on range type */}
-                                    {currentRange.rangeType === 'boolean' ? (
-                                        /* Boolean Range */
-                                        <div className="grid grid-cols-2 gap-4 mb-6">
-                                            <div>
-                                                <label className="block text-sm font-medium text-emerald-700 mb-2">
-                                                    Our Preferred Position
-                                                </label>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'Yes' })}
-                                                        className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'Yes'
-                                                            ? 'bg-emerald-600 text-white'
-                                                            : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
-                                                            }`}
-                                                    >
-                                                        Yes / Allowed
-                                                    </button>
-                                                    <button
-                                                        onClick={() => updateClauseRange(selectedClause.clauseId, { targetValue: 'No' })}
-                                                        className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.targetValue === 'No'
-                                                            ? 'bg-emerald-600 text-white'
-                                                            : 'bg-white border border-slate-200 text-slate-600 hover:border-emerald-300'
-                                                            }`}
-                                                    >
-                                                        No / Prohibited
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-amber-700 mb-2">
-                                                    Would Accept (Walkaway)
-                                                </label>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'Yes' })}
-                                                        className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'Yes'
-                                                            ? 'bg-amber-500 text-white'
-                                                            : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
-                                                            }`}
-                                                    >
-                                                        Yes / Allowed
-                                                    </button>
-                                                    <button
-                                                        onClick={() => updateClauseRange(selectedClause.clauseId, { walkawayValue: 'No' })}
-                                                        className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${currentRange.walkawayValue === 'No'
-                                                            ? 'bg-amber-500 text-white'
-                                                            : 'bg-white border border-slate-200 text-slate-600 hover:border-amber-300'
-                                                            }`}
-                                                    >
-                                                        No / Prohibited
-                                                    </button>
-                                                </div>
-                                            </div>
+                                    {currentRange.rationale && (
+                                        <div className="mt-3 pt-3 border-t border-blue-200">
+                                            <span className="text-blue-600 text-xs uppercase tracking-wide">Rationale</span>
+                                            <p className="text-sm text-blue-800 mt-1">{currentRange.rationale}</p>
                                         </div>
-                                    ) : currentRange.rangeType === 'text' ? (
-                                        /* Text Range */
-                                        <div className="grid grid-cols-2 gap-4 mb-6">
-                                            <div>
-                                                <label className="block text-sm font-medium text-emerald-700 mb-2">
-                                                    Our Preferred Position
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={currentRange.targetValue}
-                                                    onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
-                                                    placeholder="e.g., England & Wales"
-                                                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-amber-700 mb-2">
-                                                    Would Accept (Walkaway)
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={currentRange.walkawayValue}
-                                                    onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
-                                                    placeholder="e.g., Any EU jurisdiction"
-                                                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                                />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        /* Numeric Ranges (Duration, Percentage, Currency, Count) */
-                                        <>
-                                            {/* Industry Range */}
-                                            <div className="mb-6">
-                                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                                    Typical Industry Range
-                                                </label>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="block text-xs text-slate-500 mb-1">Minimum</label>
-                                                        <div className="relative">
-                                                            <input
-                                                                type="text"
-                                                                value={currentRange.minValue}
-                                                                onChange={(e) => updateClauseRange(selectedClause.clauseId, { minValue: e.target.value })}
-                                                                placeholder={rangeConfig.placeholder.min}
-                                                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
-                                                            />
-                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                                                                {currentRange.rangeType === 'percentage' ? '%' :
-                                                                    currentRange.rangeType === 'currency' ? currentRange.unit :
-                                                                        currentRange.unit}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs text-slate-500 mb-1">Maximum</label>
-                                                        <div className="relative">
-                                                            <input
-                                                                type="text"
-                                                                value={currentRange.maxValue}
-                                                                onChange={(e) => updateClauseRange(selectedClause.clauseId, { maxValue: e.target.value })}
-                                                                placeholder={rangeConfig.placeholder.max}
-                                                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-16"
-                                                            />
-                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-                                                                {currentRange.rangeType === 'percentage' ? '%' :
-                                                                    currentRange.rangeType === 'currency' ? currentRange.unit :
-                                                                        currentRange.unit}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Target and Walkaway */}
-                                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                                <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-                                                    <label className="block text-sm font-semibold text-emerald-700 mb-2">
-                                                        Our Target
-                                                    </label>
-                                                    <p className="text-xs text-emerald-600 mb-2">What we're aiming for</p>
-                                                    <div className="relative">
-                                                        <input
-                                                            type="text"
-                                                            value={currentRange.targetValue}
-                                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { targetValue: e.target.value })}
-                                                            placeholder={rangeConfig.placeholder.target}
-                                                            className="w-full px-4 py-2.5 bg-white border border-emerald-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                                                    <label className="block text-sm font-semibold text-amber-700 mb-2">
-                                                        Our Walkaway
-                                                    </label>
-                                                    <p className="text-xs text-amber-600 mb-2">Bottom line we'd accept</p>
-                                                    <div className="relative">
-                                                        <input
-                                                            type="text"
-                                                            value={currentRange.walkawayValue}
-                                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { walkawayValue: e.target.value })}
-                                                            placeholder={rangeConfig.placeholder.walkaway}
-                                                            className="w-full px-4 py-2.5 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </>
                                     )}
-
-                                    {/* Importance Level */}
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                                            Clause Importance
-                                        </label>
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {(['low', 'medium', 'high', 'critical'] as const).map((level) => (
-                                                <button
-                                                    key={level}
-                                                    onClick={() => updateClauseRange(selectedClause.clauseId, { importance: level })}
-                                                    className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${currentRange.importance === level
-                                                        ? level === 'critical'
-                                                            ? 'bg-red-600 text-white shadow-md'
-                                                            : level === 'high'
-                                                                ? 'bg-amber-500 text-white shadow-md'
-                                                                : level === 'medium'
-                                                                    ? 'bg-blue-500 text-white shadow-md'
-                                                                    : 'bg-slate-500 text-white shadow-md'
-                                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                                                        }`}
-                                                >
-                                                    {level.charAt(0).toUpperCase() + level.slice(1)}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Rationale */}
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                                            Rationale / Notes
-                                        </label>
-                                        <textarea
-                                            value={currentRange.rationale}
-                                            onChange={(e) => updateClauseRange(selectedClause.clauseId, { rationale: e.target.value })}
-                                            placeholder="Why is this range important? Any context for the negotiation..."
-                                            rows={3}
-                                            className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none"
-                                        />
-                                    </div>
-
-                                    {/* Save & Configure Button */}
-                                    <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-                                        <div className="text-sm text-slate-500">
-                                            {selectedClause.status === 'verified' ? (
-                                                <span className="text-green-600 flex items-center gap-1">
-                                                    <span></span> Clause configured and ready
-                                                </span>
-                                            ) : selectedClause.status === 'rejected' ? (
-                                                <span className="text-red-500 flex items-center gap-1">
-                                                    <span></span> Clause excluded from negotiation
-                                                </span>
-                                            ) : isRangeComplete ? (
-                                                <span className="text-blue-600 flex items-center gap-1">
-                                                    <span></span> Range complete - ready to configure
-                                                </span>
-                                            ) : (
-                                                <span className="text-amber-600 flex items-center gap-1">
-                                                    <span></span> Please complete the range values
-                                                </span>
-                                            )}
-                                        </div>
-                                        {selectedClause.status !== 'rejected' && (
-                                            <button
-                                                onClick={() => saveAndConfigureClause(selectedClause.clauseId)}
-                                                disabled={!isRangeComplete || selectedClause.status === 'verified'}
-                                                className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                                            >
-                                                {selectedClause.status === 'verified' ? (
-                                                    <> Configured</>
-                                                ) : (
-                                                    <> Save & Configure</>
-                                                )}
-                                            </button>
-                                        )}
-                                    </div>
                                 </div>
+                            )}
 
-                                {/* Range Summary Card (shows when complete) */}
-                                {isRangeComplete && (
-                                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                                        <h4 className="text-sm font-semibold text-blue-800 mb-3">Range Summary</h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                            {currentRange.rangeType !== 'boolean' && currentRange.rangeType !== 'text' && (
-                                                <>
-                                                    <div>
-                                                        <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Min</span>
-                                                        <p className="font-medium text-blue-900">
-                                                            {formatRangeValue(currentRange.minValue, currentRange.rangeType, currentRange.unit)}
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-blue-600 text-xs uppercase tracking-wide">Industry Max</span>
-                                                        <p className="font-medium text-blue-900">
-                                                            {formatRangeValue(currentRange.maxValue, currentRange.rangeType, currentRange.unit)}
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            )}
-                                            <div>
-                                                <span className="text-emerald-600 text-xs uppercase tracking-wide">Our Target</span>
-                                                <p className="font-medium text-emerald-700">
-                                                    {formatRangeValue(currentRange.targetValue, currentRange.rangeType, currentRange.unit)}
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <span className="text-amber-600 text-xs uppercase tracking-wide">Walkaway</span>
-                                                <p className="font-medium text-amber-700">
-                                                    {formatRangeValue(currentRange.walkawayValue, currentRange.rangeType, currentRange.unit)}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        {currentRange.rationale && (
-                                            <div className="mt-3 pt-3 border-t border-blue-200">
-                                                <span className="text-blue-600 text-xs uppercase tracking-wide">Rationale</span>
-                                                <p className="text-sm text-blue-800 mt-1">{currentRange.rationale}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* AI Suggestions */}
-                                {selectedClause.aiSuggestion && (
-                                    <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-                                        <h4 className="text-sm font-medium text-purple-800 mb-2 flex items-center gap-2">
-                                            <span></span> AI Suggestion
-                                        </h4>
-                                        <p className="text-sm text-purple-700">{selectedClause.aiSuggestion}</p>
-                                    </div>
-                                )}
-                            </div>{/* End of opacity wrapper */}
-                        </div>
-                    ) : (
-                        /* Quick Contract Mode - Show Clause Content Only */
-                        <div className="p-6">
-                            {/* Quick Contract Info Banner */}
-                            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200 mb-6">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-bold">
-                                        QC
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold text-emerald-800">Quick Contract Mode</h3>
-                                        <p className="text-sm text-emerald-600">Standard terms - ready for review</p>
-                                    </div>
+                            {/* AI Suggestions */}
+                            {selectedClause.aiSuggestion && (
+                                <div className="mt-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                                    <h4 className="text-sm font-medium text-purple-800 mb-2 flex items-center gap-2">
+                                        <span>ðŸ¤–</span> AI Suggestion
+                                    </h4>
+                                    <p className="text-sm text-purple-700">{selectedClause.aiSuggestion}</p>
                                 </div>
-                                <div className="text-sm text-slate-600 space-y-1">
-                                    <p>&#10003; This clause uses your standard terms</p>
-                                    <p>&#10003; No position or range configuration needed</p>
-                                    <p>&#10003; The other party will review and accept</p>
-                                </div>
-                            </div>
-
-                            {/* Clause Content Display */}
-                            <div className="bg-white rounded-xl border border-slate-200 p-5">
-                                <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">
-                                    Full Clause Text
-                                </h4>
-                                <div className="prose prose-sm max-w-none">
-                                    <div className="text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-100 max-h-96 overflow-auto">
-                                        {selectedClause.content}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Tip about unlocking */}
-                            <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                                <p className="text-xs text-amber-700">
-                                    <strong>Tip:</strong> If negotiation becomes necessary, you can unlock specific clauses in the Contract Studio after inviting the other party.
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                            )}
+                        </div>{/* End of opacity wrapper */}
+                    </div>
                 </div>
 
                 {/* Error Display */}
                 {error && (
                     <div className="p-4 m-4 rounded-lg bg-red-50 border border-red-200 text-red-700 flex items-center justify-between">
                         <span>{error}</span>
-                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700"></button>
+                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">âœ•</button>
                     </div>
                 )}
             </div>
@@ -3701,7 +3562,7 @@ function ContractPrepContent() {
                             : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
-                        Clarence
+                        ðŸ’¬ Clarence
                     </button>
                     <button
                         onClick={() => setShowEntitiesPanel(true)}
@@ -3710,7 +3571,7 @@ function ContractPrepContent() {
                             : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
-                        Entities {detectedEntities.length > 0 && `(${detectedEntities.length})`}
+                        ðŸ”’ Entities {detectedEntities.length > 0 && `(${detectedEntities.length})`}
                     </button>
                 </div>
 
@@ -3719,7 +3580,7 @@ function ContractPrepContent() {
                         {detectedEntities.length === 0 ? (
                             <div className="text-center py-8">
                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <span className="text-2xl"></span>
+                                    <span className="text-2xl">ðŸ”</span>
                                 </div>
                                 <p className="text-slate-500 text-sm">No entities detected</p>
                                 <p className="text-slate-400 text-xs mt-1">
@@ -3746,7 +3607,7 @@ function ContractPrepContent() {
                                                     <p className="font-medium text-slate-800">{entity.value}</p>
                                                 </div>
                                                 {entity.confirmed && (
-                                                    <span className="text-green-600 text-sm"></span>
+                                                    <span className="text-green-600 text-sm">âœ“</span>
                                                 )}
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -3858,7 +3719,7 @@ function ContractPrepContent() {
                             onClick={() => setEditingClause(null)}
                             className="text-slate-400 hover:text-slate-600"
                         >
-
+                            âœ•
                         </button>
                     </div>
 
@@ -3939,7 +3800,7 @@ function ContractPrepContent() {
                 <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
                     <div className="p-6">
                         <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-2xl"></span>
+                            <span className="text-2xl">ðŸ—‘ï¸</span>
                         </div>
                         <h3 className="text-lg font-semibold text-slate-800 text-center mb-2">
                             Delete {isBulk ? `${deleteCount} Clauses` : 'Clause'}?
@@ -4028,7 +3889,7 @@ function ContractPrepContent() {
                                 placeholder="Search clauses by name, category, or description..."
                                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">ðŸ”</span>
                         </div>
                     </div>
 
@@ -4040,7 +3901,7 @@ function ContractPrepContent() {
                             </div>
                         ) : sortedCategories.length === 0 ? (
                             <div className="text-center py-12 text-slate-500">
-                                <p className="text-4xl mb-2"></p>
+                                <p className="text-4xl mb-2">ðŸ“‹</p>
                                 <p>No clauses found matching your search</p>
                             </div>
                         ) : (
@@ -4053,7 +3914,7 @@ function ContractPrepContent() {
                                         >
                                             <div className="flex items-center gap-2">
                                                 <span className={`transform transition-transform ${libraryExpandedCategories.has(category) ? 'rotate-90' : ''}`}>
-
+                                                    â–¶
                                                 </span>
                                                 <span className="font-medium text-slate-700">{category}</span>
                                                 <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
@@ -4092,7 +3953,7 @@ function ContractPrepContent() {
                                                                     }`}
                                                             >
                                                                 {(isSelected || isAlreadyInContract) && (
-                                                                    <span className="text-white text-xs"></span>
+                                                                    <span className="text-white text-xs">âœ“</span>
                                                                 )}
                                                             </button>
 
