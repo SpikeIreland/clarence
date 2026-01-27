@@ -264,19 +264,48 @@ function CreateQuickContractContent() {
     // ==========================================================================
 
     useEffect(() => {
+        let isMounted = true
+
         const init = async () => {
-            setLoading(true)
-            const user = await loadUserInfo()
-            if (user) {
-                await loadTemplates()
-                if (duplicateId) {
-                    await loadDuplicateContract(duplicateId)
+            try {
+                console.log('🔄 Create page: Starting initialization...')
+                setLoading(true)
+
+                const user = await loadUserInfo()
+                console.log('🔄 Create page: User loaded:', user ? 'yes' : 'no')
+
+                if (!isMounted) return
+
+                if (user) {
+                    console.log('🔄 Create page: Loading templates...')
+                    await loadTemplates()
+                    console.log('🔄 Create page: Templates loaded')
+
+                    if (!isMounted) return
+
+                    if (duplicateId) {
+                        console.log('🔄 Create page: Loading duplicate contract...')
+                        await loadDuplicateContract(duplicateId)
+                        console.log('🔄 Create page: Duplicate loaded')
+                    }
+                }
+            } catch (err) {
+                console.error('🔴 Create page: Initialization error:', err)
+            } finally {
+                if (isMounted) {
+                    console.log('✅ Create page: Initialization complete')
+                    setLoading(false)
                 }
             }
-            setLoading(false)
         }
+
         init()
-    }, [loadUserInfo, loadTemplates, loadDuplicateContract, duplicateId])
+
+        return () => {
+            isMounted = false
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [duplicateId])
 
     // ==========================================================================
     // SECTION 11: NAVIGATION HANDLERS
