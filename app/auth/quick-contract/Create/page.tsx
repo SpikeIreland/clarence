@@ -165,9 +165,11 @@ export default function CreateQuickContractPage() {
 // ============================================================================
 
 function CreateQuickContractContent() {
+    console.log('🚀 CreateQuickContractContent MOUNTING')  // Add this FIRST
+
     const router = useRouter()
     const searchParams = useSearchParams()
-    const supabase = React.useMemo(() => createClient(), [])  // Memoize!
+    const supabase = React.useMemo(() => createClient(), [])
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // ==========================================================================
