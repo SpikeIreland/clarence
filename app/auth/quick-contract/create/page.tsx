@@ -1017,53 +1017,68 @@ function CreateQuickContractContent() {
         setError(null)
 
         try {
-            console.log('🚀 Creating session and sending invite...')
+            console.log('🚀 Creating Quick Contract session and sending invite...')
 
-            // Create session via N8N workflow
-            const response = await fetch(`${API_BASE}/0-1-session-create`, {
+            // Create session via QC-Send workflow (Quick Contract specific)
+            const response = await fetch(`${API_BASE}/qc-send`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    user_id: userInfo.userId,
-                    company_id: userInfo.companyId,
-                    user_email: userInfo.email,
-                    user_name: `${userInfo.firstName} ${userInfo.lastName}`,
-                    company_name: userInfo.company,
+                    // Contract details
+                    contract_id: state.uploadedContractId,
                     contract_name: state.contractName,
                     contract_type: state.contractType || 'other',
-                    mediation_type: 'stc',
-                    template_source: 'uploaded',
-                    uploaded_contract_id: state.uploadedContractId,
-                    // Provider details for invitation
-                    provider_email: inviteEmail,
-                    provider_name: inviteName,
-                    provider_company: inviteCompany || 'Not specified'
+
+                    // Initiator (sender) details
+                    initiator_user_id: userInfo.userId,
+                    initiator_company_id: userInfo.companyId,
+                    initiator_email: userInfo.email,
+                    initiator_name: `${userInfo.firstName} ${userInfo.lastName}`,
+                    initiator_company: userInfo.company,
+
+                    // Recipient details
+                    recipient_email: inviteEmail.trim(),
+                    recipient_name: inviteName.trim(),
+                    recipient_company: inviteCompany?.trim() || '',
+
+                    // Personal message (optional)
+                    personal_message: inviteMessage?.trim() || '',
+
+                    // Mode
+                    mediation_type: 'stc'
                 })
             })
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
-                throw new Error(errorData.error || 'Failed to create session')
+                throw new Error(errorData.error || `Failed to send: ${response.status}`)
             }
 
             const result = await response.json()
-            console.log('✅ Session created:', result)
+            console.log('✅ Quick Contract sent:', result)
 
-            if (result.success && result.sessionId) {
-                setState(prev => ({
-                    ...prev,
-                    sessionId: result.sessionId
-                }))
+            if (result.success) {
+                const sessionId = result.sessionId || result.session_id
 
-                // Redirect to the contract studio
-                router.push(`/auth/contract-studio/${result.sessionId}`)
+                if (sessionId) {
+                    setState(prev => ({
+                        ...prev,
+                        sessionId: sessionId
+                    }))
+
+                    // Redirect to the contract studio (STC mode)
+                    router.push(`/auth/contract-studio/${sessionId}`)
+                } else {
+                    // No session returned - show success message and go to dashboard
+                    router.push('/auth/quick-contract?sent=true')
+                }
             } else {
-                throw new Error(result.error || 'Failed to create session')
+                throw new Error(result.error || 'Failed to send contract')
             }
 
         } catch (err) {
-            console.error('❌ Session creation error:', err)
-            setError(err instanceof Error ? err.message : 'Failed to create session')
+            console.error('❌ Quick Contract send error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to send contract')
         } finally {
             setSendingInvite(false)
         }
@@ -1076,9 +1091,6 @@ function CreateQuickContractContent() {
         setError(null)
 
         try {
-            // If we have parsed clauses, save to uploaded_contracts
-            // Otherwise save to quick_contracts for simple drafts
-
             if (state.uploadedContractId) {
                 // Already saved during parsing - just update name/description
                 const { error: updateError } = await supabase
@@ -1885,20 +1897,20 @@ function CreateQuickContractContent() {
                                                         key={`clause-nav-${clause.clauseId || index}`}
                                                         onClick={() => setSelectedReviewClauseIndex(actualIndex)}
                                                         className={`px-4 py-3 border-b border-slate-100 cursor-pointer transition-all ${isSelected
-                                                                ? 'bg-teal-50 border-l-4 border-l-teal-500'
-                                                                : 'hover:bg-slate-50 border-l-4 border-l-transparent'
+                                                            ? 'bg-teal-50 border-l-4 border-l-teal-500'
+                                                            : 'hover:bg-slate-50 border-l-4 border-l-transparent'
                                                             }`}
                                                         style={{ paddingLeft: `${16 + (clause.level - 1) * 12}px` }}
                                                     >
                                                         <div className="flex items-start gap-3">
                                                             {/* Certification Status Icon */}
                                                             <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
-                                                                    ? 'bg-slate-200 text-slate-400'
-                                                                    : hasFlags
-                                                                        ? 'bg-amber-100 text-amber-600'
-                                                                        : clause.clarenceFairness === 'balanced'
-                                                                            ? 'bg-emerald-100 text-emerald-600'
-                                                                            : 'bg-blue-100 text-blue-600'
+                                                                ? 'bg-slate-200 text-slate-400'
+                                                                : hasFlags
+                                                                    ? 'bg-amber-100 text-amber-600'
+                                                                    : clause.clarenceFairness === 'balanced'
+                                                                        ? 'bg-emerald-100 text-emerald-600'
+                                                                        : 'bg-blue-100 text-blue-600'
                                                                 }`}>
                                                                 {!isCertified ? '○' : hasFlags ? '!' : '✓'}
                                                             </div>
@@ -2039,28 +2051,28 @@ function CreateQuickContractContent() {
                                         <>
                                             {/* Certification Status Header */}
                                             <div className={`px-6 py-4 border-b ${selectedReviewClause.clarenceCertified
-                                                    ? selectedReviewClause.clarenceFairness === 'balanced'
-                                                        ? 'bg-emerald-50 border-emerald-200'
-                                                        : selectedReviewClause.clarenceFairness === 'review_recommended'
-                                                            ? 'bg-amber-50 border-amber-200'
-                                                            : 'bg-blue-50 border-blue-200'
-                                                    : 'bg-slate-50 border-slate-200'
+                                                ? selectedReviewClause.clarenceFairness === 'balanced'
+                                                    ? 'bg-emerald-50 border-emerald-200'
+                                                    : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                        ? 'bg-amber-50 border-amber-200'
+                                                        : 'bg-blue-50 border-blue-200'
+                                                : 'bg-slate-50 border-slate-200'
                                                 }`}>
                                                 <div className="flex items-center gap-4">
                                                     <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedReviewClause.clarenceCertified
-                                                            ? selectedReviewClause.clarenceFairness === 'balanced'
-                                                                ? 'bg-emerald-100'
-                                                                : selectedReviewClause.clarenceFairness === 'review_recommended'
-                                                                    ? 'bg-amber-100'
-                                                                    : 'bg-blue-100'
-                                                            : 'bg-slate-200'
+                                                        ? selectedReviewClause.clarenceFairness === 'balanced'
+                                                            ? 'bg-emerald-100'
+                                                            : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                ? 'bg-amber-100'
+                                                                : 'bg-blue-100'
+                                                        : 'bg-slate-200'
                                                         }`}>
                                                         {selectedReviewClause.clarenceCertified ? (
                                                             <svg className={`w-6 h-6 ${selectedReviewClause.clarenceFairness === 'balanced'
-                                                                    ? 'text-emerald-600'
-                                                                    : selectedReviewClause.clarenceFairness === 'review_recommended'
-                                                                        ? 'text-amber-600'
-                                                                        : 'text-blue-600'
+                                                                ? 'text-emerald-600'
+                                                                : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                    ? 'text-amber-600'
+                                                                    : 'text-blue-600'
                                                                 }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                                             </svg>
@@ -2076,10 +2088,10 @@ function CreateQuickContractContent() {
                                                         </h3>
                                                         {selectedReviewClause.clarenceCertified && (
                                                             <p className={`text-sm font-medium ${selectedReviewClause.clarenceFairness === 'balanced'
-                                                                    ? 'text-emerald-600'
-                                                                    : selectedReviewClause.clarenceFairness === 'review_recommended'
-                                                                        ? 'text-amber-600'
-                                                                        : 'text-blue-600'
+                                                                ? 'text-emerald-600'
+                                                                : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                    ? 'text-amber-600'
+                                                                    : 'text-blue-600'
                                                                 }`}>
                                                                 {selectedReviewClause.clarenceFairness?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                                             </p>
@@ -2100,10 +2112,10 @@ function CreateQuickContractContent() {
                                                                     <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
                                                                         <div
                                                                             className={`h-full rounded-full transition-all ${selectedReviewClause.clarencePosition <= 4
-                                                                                    ? 'bg-green-500'
-                                                                                    : selectedReviewClause.clarencePosition <= 6
-                                                                                        ? 'bg-emerald-500'
-                                                                                        : 'bg-blue-500'
+                                                                                ? 'bg-green-500'
+                                                                                : selectedReviewClause.clarencePosition <= 6
+                                                                                    ? 'bg-emerald-500'
+                                                                                    : 'bg-blue-500'
                                                                                 }`}
                                                                             style={{ width: `${(selectedReviewClause.clarencePosition / 10) * 100}%` }}
                                                                         />
