@@ -719,17 +719,17 @@ function CreateQuickContractContent() {
                 console.log('📄 Contract status:', contractData.status)
 
                 if (contractData.status === 'ready') {
-                    // Fetch the parsed clauses with certification fields
+                    // Fetch the parsed clauses with CORRECT column names
                     const { data: clausesData, error: clausesError } = await supabase
                         .from('uploaded_contract_clauses')
                         .select(`
                         clause_id,
                         clause_number,
                         clause_name,
-                        clause_category,
-                        clause_text,
-                        level,
-                        parent_clause_number,
+                        category,
+                        content,
+                        clause_level,
+                        parent_clause_id,
                         display_order,
                         clarence_certified,
                         clarence_position,
@@ -743,6 +743,7 @@ function CreateQuickContractContent() {
                         .order('display_order', { ascending: true })
 
                     if (clausesError) {
+                        console.error('Clauses fetch error:', clausesError)
                         throw new Error('Failed to fetch parsed clauses')
                     }
 
@@ -750,13 +751,12 @@ function CreateQuickContractContent() {
                         clauseId: c.clause_id,
                         clauseNumber: c.clause_number,
                         clauseName: c.clause_name,
-                        category: c.clause_category || 'Other',
-                        clauseText: c.clause_text || '',
-                        level: c.level || 1,
-                        parentClauseNumber: c.parent_clause_number,
+                        category: c.category || 'Other',
+                        clauseText: c.content || '',
+                        level: c.clause_level || 1,
+                        parentClauseNumber: null, // We have parent_clause_id (UUID) not parent_clause_number
                         displayOrder: c.display_order,
                         isExpanded: false,
-                        // Certification fields
                         clarenceCertified: c.clarence_certified || false,
                         clarencePosition: c.clarence_position,
                         clarenceFairness: c.clarence_fairness,
@@ -818,6 +818,70 @@ function CreateQuickContractContent() {
         poll()
     }
 
+    async function reloadClauses(contractId: string) {
+        try {
+            const { data: clausesData, error: clausesError } = await supabase
+                .from('uploaded_contract_clauses')
+                .select(`
+                clause_id,
+                clause_number,
+                clause_name,
+                category,
+                content,
+                clause_level,
+                parent_clause_id,
+                display_order,
+                clarence_certified,
+                clarence_position,
+                clarence_fairness,
+                clarence_summary,
+                clarence_assessment,
+                clarence_flags,
+                clarence_certified_at
+            `)
+                .eq('contract_id', contractId)
+                .order('display_order', { ascending: true })
+
+            if (clausesError) {
+                throw clausesError
+            }
+
+            const parsedClauses: ParsedClause[] = (clausesData || []).map(c => ({
+                clauseId: c.clause_id,
+                clauseNumber: c.clause_number,
+                clauseName: c.clause_name,
+                category: c.category || 'Other',
+                clauseText: c.content || '',
+                level: c.clause_level || 1,
+                parentClauseNumber: null,
+                displayOrder: c.display_order,
+                isExpanded: false,
+                clarenceCertified: c.clarence_certified || false,
+                clarencePosition: c.clarence_position,
+                clarenceFairness: c.clarence_fairness,
+                clarenceSummary: c.clarence_summary,
+                clarenceAssessment: c.clarence_assessment,
+                clarenceFlags: c.clarence_flags || [],
+                clarenceCertifiedAt: c.clarence_certified_at
+            }))
+
+            console.log(`✅ Reloaded ${parsedClauses.length} clauses, ${parsedClauses.filter(c => c.clarenceCertified).length} certified`)
+
+            setState(prev => ({
+                ...prev,
+                parsedClauses,
+                parsingStatus: 'complete'
+            }))
+
+        } catch (err) {
+            console.error('Error reloading clauses:', err)
+            setState(prev => ({
+                ...prev,
+                parsingStatus: 'complete' // Continue anyway
+            }))
+        }
+    }
+
     async function triggerCertification(contractId: string, clauses: ParsedClause[]) {
         console.log(`🔐 Starting CLARENCE certification for ${clauses.length} clauses...`)
 
@@ -876,69 +940,6 @@ function CreateQuickContractContent() {
         }
     }
 
-    async function reloadClauses(contractId: string) {
-        try {
-            const { data: clausesData, error: clausesError } = await supabase
-                .from('uploaded_contract_clauses')
-                .select(`
-                clause_id,
-                clause_number,
-                clause_name,
-                clause_category,
-                clause_text,
-                level,
-                parent_clause_number,
-                display_order,
-                clarence_certified,
-                clarence_position,
-                clarence_fairness,
-                clarence_summary,
-                clarence_assessment,
-                clarence_flags,
-                clarence_certified_at
-            `)
-                .eq('contract_id', contractId)
-                .order('display_order', { ascending: true })
-
-            if (clausesError) {
-                throw clausesError
-            }
-
-            const parsedClauses: ParsedClause[] = (clausesData || []).map(c => ({
-                clauseId: c.clause_id,
-                clauseNumber: c.clause_number,
-                clauseName: c.clause_name,
-                category: c.clause_category || 'Other',
-                clauseText: c.clause_text || '',
-                level: c.level || 1,
-                parentClauseNumber: c.parent_clause_number,
-                displayOrder: c.display_order,
-                isExpanded: false,
-                clarenceCertified: c.clarence_certified || false,
-                clarencePosition: c.clarence_position,
-                clarenceFairness: c.clarence_fairness,
-                clarenceSummary: c.clarence_summary,
-                clarenceAssessment: c.clarence_assessment,
-                clarenceFlags: c.clarence_flags || [],
-                clarenceCertifiedAt: c.clarence_certified_at
-            }))
-
-            console.log(`✅ Reloaded ${parsedClauses.length} clauses, ${parsedClauses.filter(c => c.clarenceCertified).length} certified`)
-
-            setState(prev => ({
-                ...prev,
-                parsedClauses,
-                parsingStatus: 'complete'
-            }))
-
-        } catch (err) {
-            console.error('Error reloading clauses:', err)
-            setState(prev => ({
-                ...prev,
-                parsingStatus: 'complete' // Continue anyway
-            }))
-        }
-    }
 
     function handleClauseNameChange(index: number, newName: string) {
         setState(prev => ({
