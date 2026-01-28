@@ -139,24 +139,24 @@ function QuickContractStudioContent() {
             }
 
             try {
-                // Get current user
-                const { data: { user }, error: authError } = await supabase.auth.getUser()
-                if (authError || !user) {
-                    router.push('/login')
+                // Get user from localStorage (same as main Contract Studio)
+                const authData = localStorage.getItem('clarence_auth')
+                if (!authData) {
+                    router.push('/auth/login')
                     return
                 }
 
-                // Get user profile
-                const { data: profile, error: profileError } = await supabase
-                    .from('user_profiles')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .single()
+                let parsedAuth
+                try {
+                    parsedAuth = JSON.parse(authData)
+                } catch {
+                    router.push('/auth/login')
+                    return
+                }
 
-                if (profileError) {
-                    console.error('Profile error:', profileError)
-                    setError('Failed to load user profile')
-                    setLoading(false)
+                const userFromStorage = parsedAuth.userInfo
+                if (!userFromStorage) {
+                    router.push('/auth/login')
                     return
                 }
 
@@ -186,8 +186,8 @@ function QuickContractStudioContent() {
                 }
 
                 // Check access - user must be uploader or same company
-                const isOwner = contractData.uploaded_by_user_id === user.id
-                const isSameCompany = contractData.company_id === profile.company_id
+                const isOwner = contractData.uploaded_by_user_id === userFromStorage.userId
+                const isSameCompany = contractData.company_id === userFromStorage.companyId
 
                 if (!isOwner && !isSameCompany) {
                     setError('You do not have access to this contract')
@@ -197,15 +197,15 @@ function QuickContractStudioContent() {
 
                 // Set user info
                 setUserInfo({
-                    userId: user.id,
-                    email: user.email || '',
-                    firstName: profile.first_name || '',
-                    lastName: profile.last_name || '',
-                    fullName: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
-                    company: profile.company_name || '',
-                    companyId: profile.company_id || '',
+                    userId: userFromStorage.userId || '',
+                    email: userFromStorage.email || '',
+                    firstName: userFromStorage.firstName || '',
+                    lastName: userFromStorage.lastName || '',
+                    fullName: `${userFromStorage.firstName || ''} ${userFromStorage.lastName || ''}`.trim() || 'User',
+                    company: userFromStorage.company || '',
+                    companyId: userFromStorage.companyId || '',
                     isOwner: isOwner,
-                    isAdmin: profile.is_admin || false
+                    isAdmin: userFromStorage.isAdmin || false
                 })
 
                 // Set contract
@@ -294,8 +294,9 @@ function QuickContractStudioContent() {
     // ========================================================================
 
     const handleSignOut = async () => {
+        localStorage.removeItem('clarence_auth')
         await supabase.auth.signOut()
-        router.push('/login')
+        router.push('/auth/login')
     }
 
     const handleAcceptAll = async () => {
