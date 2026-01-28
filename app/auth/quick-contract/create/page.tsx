@@ -67,6 +67,7 @@ interface ParsedClause {
     level: number
     parentClauseNumber: string | null
     displayOrder: number
+    isExpanded?: boolean
 }
 
 type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content' | 'parsing' | 'invite'
@@ -791,6 +792,15 @@ function CreateQuickContractContent() {
         }))
     }
 
+    function handleToggleClauseExpanded(index: number) {
+        setState(prev => ({
+            ...prev,
+            parsedClauses: prev.parsedClauses.map((clause, i) =>
+                i === index ? { ...clause, isExpanded: !clause.isExpanded } : clause
+            )
+        }))
+    }
+
     // ==========================================================================
     // SECTION 14: SESSION AND INVITE HANDLERS
     // ==========================================================================
@@ -1509,7 +1519,7 @@ function CreateQuickContractContent() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 26: STEP - PARSING */}
+                {/* SECTION 25: STEP - PARSING */}
                 {/* ============================================================== */}
                 {state.step === 'parsing' && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
@@ -1558,89 +1568,207 @@ function CreateQuickContractContent() {
                                     <div>
                                         <h2 className="text-xl font-bold text-slate-800">Review Extracted Clauses</h2>
                                         <p className="text-slate-500 text-sm">
-                                            Found {state.parsedClauses.length} clauses. You can adjust names and categories before proceeding.
+                                            Found {state.parsedClauses.length} clauses. Review content and adjust names/categories as needed.
                                         </p>
                                     </div>
-                                    <button
-                                        onClick={handleRetryParsing}
-                                        className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                        </svg>
-                                        Back to Content
-                                    </button>
-                                </div>
-
-                                {/* Clauses List */}
-                                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 mb-6">
-                                    {state.parsedClauses.map((clause, index) => (
-                                        <div
-                                            key={`clause-${index}`}
-                                            className="border border-slate-200 rounded-lg p-4 hover:border-slate-300 transition-colors"
-                                            style={{ marginLeft: `${(clause.level - 1) * 24}px` }}
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={() => {
+                                                // Expand all
+                                                setState(prev => ({
+                                                    ...prev,
+                                                    parsedClauses: prev.parsedClauses.map(c => ({ ...c, isExpanded: true }))
+                                                }))
+                                            }}
+                                            className="text-xs text-teal-600 hover:text-teal-700 font-medium"
                                         >
-                                            <div className="flex items-start gap-3">
-                                                {/* Clause Number */}
-                                                <div className="w-14 flex-shrink-0">
-                                                    <span className="text-sm font-mono font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                                                        {clause.clauseNumber}
-                                                    </span>
-                                                </div>
-
-                                                {/* Clause Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                        {/* Editable Name */}
-                                                        <input
-                                                            type="text"
-                                                            value={clause.clauseName}
-                                                            onChange={(e) => handleClauseNameChange(index, e.target.value)}
-                                                            className="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                                                        />
-
-                                                        {/* Category Dropdown */}
-                                                        <select
-                                                            value={clause.category}
-                                                            onChange={(e) => handleClauseCategoryChange(index, e.target.value)}
-                                                            className={`px-3 py-1.5 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 border-0 ${getCategoryColor(clause.category)}`}
-                                                        >
-                                                            {CLAUSE_CATEGORIES.map(cat => (
-                                                                <option key={cat} value={cat}>{cat}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-
-                                                    {/* Clause Text Preview */}
-                                                    <p className="text-sm text-slate-600 line-clamp-2">
-                                                        {clause.clauseText}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
+                                            Expand All
+                                        </button>
+                                        <span className="text-slate-300">|</span>
+                                        <button
+                                            onClick={() => {
+                                                // Collapse all
+                                                setState(prev => ({
+                                                    ...prev,
+                                                    parsedClauses: prev.parsedClauses.map(c => ({ ...c, isExpanded: false }))
+                                                }))
+                                            }}
+                                            className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+                                        >
+                                            Collapse All
+                                        </button>
+                                        <span className="text-slate-300">|</span>
+                                        <button
+                                            onClick={handleRetryParsing}
+                                            className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                            </svg>
+                                            Back to Content
+                                        </button>
+                                    </div>
                                 </div>
 
-                                {/* Summary */}
+                                {/* Summary Stats */}
                                 <div className="bg-slate-50 rounded-lg p-4 mb-6">
-                                    <div className="flex flex-wrap gap-4 text-sm">
+                                    <div className="flex flex-wrap gap-6 text-sm">
                                         <div>
                                             <span className="text-slate-500">Total Clauses:</span>
-                                            <span className="ml-2 font-medium text-slate-800">{state.parsedClauses.length}</span>
+                                            <span className="ml-2 font-semibold text-slate-800">{state.parsedClauses.length}</span>
                                         </div>
                                         <div>
                                             <span className="text-slate-500">Top-Level:</span>
-                                            <span className="ml-2 font-medium text-slate-800">
+                                            <span className="ml-2 font-semibold text-slate-800">
                                                 {state.parsedClauses.filter(c => c.level === 1).length}
                                             </span>
                                         </div>
                                         <div>
                                             <span className="text-slate-500">Sub-Clauses:</span>
-                                            <span className="ml-2 font-medium text-slate-800">
+                                            <span className="ml-2 font-semibold text-slate-800">
                                                 {state.parsedClauses.filter(c => c.level > 1).length}
                                             </span>
                                         </div>
+                                        <div>
+                                            <span className="text-slate-500">Categories:</span>
+                                            <span className="ml-2 font-semibold text-slate-800">
+                                                {new Set(state.parsedClauses.map(c => c.category)).size}
+                                            </span>
+                                        </div>
                                     </div>
+                                </div>
+
+                                {/* Clauses List with Expandable Content */}
+                                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 mb-6">
+                                    {state.parsedClauses.map((clause, index) => {
+                                        const isExpanded = clause.isExpanded ?? false
+
+                                        return (
+                                            <div
+                                                key={`clause-${index}`}
+                                                className="border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-colors"
+                                                style={{ marginLeft: `${(clause.level - 1) * 24}px` }}
+                                            >
+                                                {/* Clause Header - Always Visible */}
+                                                <div
+                                                    className="flex items-start gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                                                    onClick={() => handleToggleClauseExpanded(index)}
+                                                >
+                                                    {/* Expand/Collapse Arrow */}
+                                                    <button
+                                                        className="mt-1 flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            handleToggleClauseExpanded(index)
+                                                        }}
+                                                    >
+                                                        <svg
+                                                            className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                                            fill="none"
+                                                            stroke="currentColor"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    </button>
+
+                                                    {/* Clause Number */}
+                                                    <div className="w-14 flex-shrink-0">
+                                                        <span className="text-sm font-mono font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                                                            {clause.clauseNumber}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Clause Info */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            {/* Editable Name */}
+                                                            <input
+                                                                type="text"
+                                                                value={clause.clauseName}
+                                                                onChange={(e) => handleClauseNameChange(index, e.target.value)}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                            />
+
+                                                            {/* Category Dropdown */}
+                                                            <select
+                                                                value={clause.category}
+                                                                onChange={(e) => handleClauseCategoryChange(index, e.target.value)}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 border-0 ${getCategoryColor(clause.category)}`}
+                                                            >
+                                                                {CLAUSE_CATEGORIES.map(cat => (
+                                                                    <option key={cat} value={cat}>{cat}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+
+                                                        {/* Preview text when collapsed */}
+                                                        {!isExpanded && (
+                                                            <p className="text-sm text-slate-500 mt-2 line-clamp-1">
+                                                                {clause.clauseText}
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Character count indicator */}
+                                                    <div className="flex-shrink-0 text-xs text-slate-400">
+                                                        {clause.clauseText.length} chars
+                                                    </div>
+                                                </div>
+
+                                                {/* Expanded Content */}
+                                                {isExpanded && (
+                                                    <div className="border-t border-slate-200 bg-slate-50">
+                                                        {/* Clause Full Text */}
+                                                        <div className="p-4">
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                                                                    Clause Content
+                                                                </span>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        navigator.clipboard.writeText(clause.clauseText)
+                                                                        // Could add a toast notification here
+                                                                    }}
+                                                                    className="text-xs text-teal-600 hover:text-teal-700 flex items-center gap-1"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                    </svg>
+                                                                    Copy
+                                                                </button>
+                                                            </div>
+                                                            <div className="bg-white rounded-lg border border-slate-200 p-4 max-h-64 overflow-y-auto">
+                                                                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                                    {clause.clauseText}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Placeholder for Clarence Certification (Phase 2) */}
+                                                        <div className="px-4 pb-4">
+                                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                                                <div className="flex items-start gap-2">
+                                                                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                                        <span className="text-blue-600 text-xs">C</span>
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <p className="text-xs font-medium text-blue-800">CLARENCE Assessment</p>
+                                                                        <p className="text-xs text-blue-600 mt-0.5">
+                                                                            Certification will appear here in a future update.
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
                                 </div>
 
                                 {/* Actions */}
