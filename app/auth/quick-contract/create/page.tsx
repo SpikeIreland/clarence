@@ -248,6 +248,16 @@ function CreateQuickContractContent() {
     // Duplicate mode
     const duplicateId = searchParams.get('duplicate')
 
+    // Review panel state
+    const [selectedReviewClauseIndex, setSelectedReviewClauseIndex] = useState<number | null>(null)
+    const [clauseSearchTerm, setClauseSearchTerm] = useState('')
+
+    // Derived: Get the currently selected clause
+    const selectedReviewClause = selectedReviewClauseIndex !== null
+        ? state.parsedClauses[selectedReviewClauseIndex]
+        : null
+
+
     // ==========================================================================
     // SECTION 9: DATA LOADING
     // ==========================================================================
@@ -754,7 +764,7 @@ function CreateQuickContractContent() {
                         category: c.category || 'Other',
                         clauseText: c.content || '',
                         level: c.clause_level || 1,
-                        parentClauseNumber: null, // We have parent_clause_id (UUID) not parent_clause_number
+                        parentClauseNumber: null,
                         displayOrder: c.display_order,
                         isExpanded: false,
                         clarenceCertified: c.clarence_certified || false,
@@ -779,6 +789,11 @@ function CreateQuickContractContent() {
                             parsedClauses
                         }))
 
+                        // ✅ AUTO-SELECT FIRST CLAUSE - LOCATION 1
+                        if (parsedClauses.length > 0) {
+                            setSelectedReviewClauseIndex(0)
+                        }
+
                         // Trigger certification
                         await triggerCertification(contractId, uncertifiedClauses)
                     } else {
@@ -789,6 +804,11 @@ function CreateQuickContractContent() {
                             parsedClauses,
                             parsingStatus: 'complete'
                         }))
+
+                        // ✅ AUTO-SELECT FIRST CLAUSE - LOCATION 2
+                        if (parsedClauses.length > 0) {
+                            setSelectedReviewClauseIndex(0)
+                        }
                     }
 
                     return
@@ -1696,10 +1716,10 @@ function CreateQuickContractContent() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 26: STEP - PARSING */}
+                {/* SECTION 26: STEP - PARSING / REVIEW CLAUSES (3-PANEL LAYOUT) */}
                 {/* ============================================================== */}
                 {state.step === 'parsing' && (
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
 
                         {/* Parsing In Progress */}
                         {state.parsingStatus === 'parsing' && (
@@ -1720,7 +1740,6 @@ function CreateQuickContractContent() {
                                 <p className="text-sm text-slate-400">
                                     Certified {state.certificationProgress?.completed || 0} of {state.certificationProgress?.total || 0} clauses
                                 </p>
-                                {/* Progress bar */}
                                 <div className="max-w-xs mx-auto mt-4">
                                     <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                                         <div
@@ -1763,352 +1782,433 @@ function CreateQuickContractContent() {
                             </div>
                         )}
 
-                        {/* Parsing Complete - Show Clauses with Certification */}
+                        {/* Parsing Complete - 3-Panel Layout */}
                         {state.parsingStatus === 'complete' && (
-                            <>
-                                <div className="flex items-center justify-between mb-6">
+                            <div className="flex flex-col h-[calc(100vh-200px)] min-h-[600px]">
+
+                                {/* Header Bar */}
+                                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
                                     <div>
-                                        <h2 className="text-xl font-bold text-slate-800">Review Extracted Clauses</h2>
-                                        <p className="text-slate-500 text-sm">
-                                            CLARENCE has reviewed {state.parsedClauses.filter(c => c.clarenceCertified).length} of {state.parsedClauses.length} clauses.
+                                        <h2 className="text-lg font-bold text-slate-800">Review Extracted Clauses</h2>
+                                        <p className="text-sm text-slate-500">
+                                            {state.parsedClauses.length} clauses extracted •
+                                            {state.parsedClauses.filter(c => c.clarenceCertified).length} certified
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <button
-                                            onClick={() => {
-                                                setState(prev => ({
-                                                    ...prev,
-                                                    parsedClauses: prev.parsedClauses.map(c => ({ ...c, isExpanded: true }))
-                                                }))
-                                            }}
-                                            className="text-xs text-teal-600 hover:text-teal-700 font-medium"
-                                        >
-                                            Expand All
-                                        </button>
-                                        <span className="text-slate-300">|</span>
-                                        <button
-                                            onClick={() => {
-                                                setState(prev => ({
-                                                    ...prev,
-                                                    parsedClauses: prev.parsedClauses.map(c => ({ ...c, isExpanded: false }))
-                                                }))
-                                            }}
-                                            className="text-xs text-teal-600 hover:text-teal-700 font-medium"
-                                        >
-                                            Collapse All
-                                        </button>
-                                        <span className="text-slate-300">|</span>
-                                        <button
                                             onClick={handleRetryParsing}
-                                            className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                                            className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg text-sm transition-colors flex items-center gap-1"
                                         >
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                             </svg>
                                             Back to Content
                                         </button>
+                                        <button
+                                            onClick={handleSaveDraft}
+                                            disabled={saving}
+                                            className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                        >
+                                            {saving ? 'Saving...' : 'Save Draft'}
+                                        </button>
+                                        <button
+                                            onClick={() => setState(prev => ({ ...prev, step: 'invite' }))}
+                                            className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                        >
+                                            Continue to Invite
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </div>
 
-                                {/* Summary Stats with Certification Status */}
-                                <div className="bg-slate-50 rounded-lg p-4 mb-6">
-                                    <div className="flex flex-wrap gap-6 text-sm">
-                                        <div>
-                                            <span className="text-slate-500">Total Clauses:</span>
-                                            <span className="ml-2 font-semibold text-slate-800">{state.parsedClauses.length}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-slate-500">Certified:</span>
-                                            <span className="ml-1 font-semibold text-emerald-600">
-                                                {state.parsedClauses.filter(c => c.clarenceCertified).length}
-                                            </span>
-                                            <span className="w-4 h-4 text-emerald-500">
-                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                {/* 3-Panel Content Area */}
+                                <div className="flex flex-1 overflow-hidden">
+
+                                    {/* LEFT PANEL: Clause List */}
+                                    <div className="w-72 border-r border-slate-200 flex flex-col bg-slate-50">
+                                        {/* Search/Filter */}
+                                        <div className="p-3 border-b border-slate-200">
+                                            <div className="relative">
+                                                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                                 </svg>
-                                            </span>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search clauses..."
+                                                    value={clauseSearchTerm}
+                                                    onChange={(e) => setClauseSearchTerm(e.target.value)}
+                                                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-slate-500">Balanced:</span>
-                                            <span className="ml-1 font-semibold text-slate-800">
-                                                {state.parsedClauses.filter(c => c.clarenceFairness === 'balanced').length}
-                                            </span>
+
+                                        {/* Clause List */}
+                                        <div className="flex-1 overflow-y-auto">
+                                            {state.parsedClauses
+                                                .filter(c => {
+                                                    if (!clauseSearchTerm) return true
+                                                    const search = clauseSearchTerm.toLowerCase()
+                                                    return (
+                                                        c.clauseName.toLowerCase().includes(search) ||
+                                                        c.clauseNumber.toLowerCase().includes(search) ||
+                                                        c.category.toLowerCase().includes(search)
+                                                    )
+                                                })
+                                                .map((clause, index) => {
+                                                    const isSelected = selectedReviewClauseIndex === index
+                                                    const isCertified = clause.clarenceCertified
+                                                    const hasFlags = clause.clarenceFlags && clause.clarenceFlags.length > 0 && !clause.clarenceFlags.includes('none')
+
+                                                    return (
+                                                        <div
+                                                            key={`clause-nav-${index}`}
+                                                            onClick={() => setSelectedReviewClauseIndex(index)}
+                                                            className={`px-3 py-2.5 border-b border-slate-100 cursor-pointer transition-colors ${isSelected
+                                                                ? 'bg-teal-50 border-l-4 border-l-teal-500'
+                                                                : 'hover:bg-slate-100 border-l-4 border-l-transparent'
+                                                                }`}
+                                                            style={{ paddingLeft: `${12 + (clause.level - 1) * 16}px` }}
+                                                        >
+                                                            <div className="flex items-start gap-2">
+                                                                {/* Certification Status Icon */}
+                                                                <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
+                                                                    ? 'bg-slate-200 text-slate-400'
+                                                                    : hasFlags
+                                                                        ? 'bg-amber-100 text-amber-600'
+                                                                        : clause.clarenceFairness === 'balanced'
+                                                                            ? 'bg-emerald-100 text-emerald-600'
+                                                                            : 'bg-blue-100 text-blue-600'
+                                                                    }`}>
+                                                                    {!isCertified ? '○' : hasFlags ? '!' : '✓'}
+                                                                </div>
+
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-xs font-mono text-slate-400">{clause.clauseNumber}</span>
+                                                                    </div>
+                                                                    <p className={`text-sm truncate ${isSelected ? 'text-teal-700 font-medium' : 'text-slate-700'}`}>
+                                                                        {clause.clauseName}
+                                                                    </p>
+                                                                    <span className={`inline-block mt-1 px-1.5 py-0.5 text-xs rounded ${getCategoryColor(clause.category)}`}>
+                                                                        {clause.category}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
                                         </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-slate-500">Flagged:</span>
-                                            <span className="ml-1 font-semibold text-amber-600">
-                                                {state.parsedClauses.filter(c => c.clarenceFlags && c.clarenceFlags.length > 0 && !c.clarenceFlags.includes('none')).length}
-                                            </span>
+
+                                        {/* Clause Stats Footer */}
+                                        <div className="p-3 border-t border-slate-200 bg-white text-xs text-slate-500">
+                                            <div className="flex justify-between">
+                                                <span>Total: {state.parsedClauses.length}</span>
+                                                <span className="text-emerald-600">✓ {state.parsedClauses.filter(c => c.clarenceCertified).length} certified</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Clauses List with Expandable Content and Certification */}
-                                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 mb-6">
-                                    {state.parsedClauses.map((clause, index) => {
-                                        const isExpanded = clause.isExpanded ?? false
-                                        const isCertified = clause.clarenceCertified ?? false
-                                        const hasFlags = clause.clarenceFlags && clause.clarenceFlags.length > 0 && !clause.clarenceFlags.includes('none')
-
-                                        // Determine seal color based on fairness
-                                        const getSealColor = () => {
-                                            if (!isCertified) return 'bg-slate-200 text-slate-400'
-                                            if (clause.clarenceFairness === 'review_recommended' || hasFlags) return 'bg-amber-100 text-amber-600'
-                                            if (clause.clarenceFairness === 'balanced') return 'bg-emerald-100 text-emerald-600'
-                                            return 'bg-blue-100 text-blue-600'
-                                        }
-
-                                        const getSealIcon = () => {
-                                            if (!isCertified) return '○'
-                                            if (clause.clarenceFairness === 'review_recommended' || hasFlags) return '⚠'
-                                            return '✓'
-                                        }
-
-                                        return (
-                                            <div
-                                                key={`clause-${index}`}
-                                                className="border border-slate-200 rounded-lg overflow-hidden hover:border-slate-300 transition-colors"
-                                                style={{ marginLeft: `${(clause.level - 1) * 24}px` }}
-                                            >
-                                                {/* Clause Header - Always Visible */}
-                                                <div
-                                                    className="flex items-start gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors"
-                                                    onClick={() => handleToggleClauseExpanded(index)}
-                                                >
-                                                    {/* Expand/Collapse Arrow */}
-                                                    <button
-                                                        className="mt-1 flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            handleToggleClauseExpanded(index)
-                                                        }}
-                                                    >
-                                                        <svg
-                                                            className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            viewBox="0 0 24 24"
-                                                        >
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                        </svg>
-                                                    </button>
-
-                                                    {/* Clause Number */}
-                                                    <div className="w-14 flex-shrink-0">
-                                                        <span className="text-sm font-mono font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                                                            {clause.clauseNumber}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Clause Info */}
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            {/* Editable Name */}
+                                    {/* MIDDLE PANEL: Clause Detail */}
+                                    <div className="flex-1 flex flex-col overflow-hidden">
+                                        {selectedReviewClause ? (
+                                            <>
+                                                {/* Clause Header */}
+                                                <div className="px-6 py-4 border-b border-slate-200 bg-white">
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <span className="text-sm font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                                                                    {selectedReviewClause.clauseNumber}
+                                                                </span>
+                                                                <select
+                                                                    value={selectedReviewClause.category}
+                                                                    onChange={(e) => handleClauseCategoryChange(selectedReviewClauseIndex!, e.target.value)}
+                                                                    className={`px-2 py-0.5 rounded text-xs font-medium border-0 cursor-pointer ${getCategoryColor(selectedReviewClause.category)}`}
+                                                                >
+                                                                    {CLAUSE_CATEGORIES.map(cat => (
+                                                                        <option key={cat} value={cat}>{cat}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
                                                             <input
                                                                 type="text"
-                                                                value={clause.clauseName}
-                                                                onChange={(e) => handleClauseNameChange(index, e.target.value)}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                                value={selectedReviewClause.clauseName}
+                                                                onChange={(e) => handleClauseNameChange(selectedReviewClauseIndex!, e.target.value)}
+                                                                className="text-xl font-semibold text-slate-800 w-full bg-transparent border-0 border-b-2 border-transparent hover:border-slate-200 focus:border-teal-500 focus:outline-none transition-colors px-0 py-1"
                                                             />
-
-                                                            {/* Category Dropdown */}
-                                                            <select
-                                                                value={clause.category}
-                                                                onChange={(e) => handleClauseCategoryChange(index, e.target.value)}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 border-0 ${getCategoryColor(clause.category)}`}
-                                                            >
-                                                                {CLAUSE_CATEGORIES.map(cat => (
-                                                                    <option key={cat} value={cat}>{cat}</option>
-                                                                ))}
-                                                            </select>
                                                         </div>
-
-                                                        {/* Preview text when collapsed */}
-                                                        {!isExpanded && clause.clauseText && (
-                                                            <p className="text-sm text-slate-500 mt-2 line-clamp-1">
-                                                                {clause.clauseText}
-                                                            </p>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Certification Seal */}
-                                                    <div
-                                                        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${getSealColor()}`}
-                                                        title={isCertified ? `CLARENCE Certified: ${clause.clarenceFairness}` : 'Pending certification'}
-                                                    >
-                                                        {getSealIcon()}
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(selectedReviewClause.clauseText || '')
+                                                                }}
+                                                                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                                                title="Copy clause text"
+                                                            >
+                                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
 
-                                                {/* Expanded Content */}
-                                                {isExpanded && (
-                                                    <div className="border-t border-slate-200 bg-slate-50">
-                                                        {/* Clause Full Text */}
-                                                        <div className="p-4">
-                                                            <div className="flex items-center justify-between mb-2">
-                                                                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-                                                                    Clause Content
-                                                                </span>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        navigator.clipboard.writeText(clause.clauseText)
-                                                                    }}
-                                                                    className="text-xs text-teal-600 hover:text-teal-700 flex items-center gap-1"
-                                                                >
-                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                                    </svg>
-                                                                    Copy
-                                                                </button>
-                                                            </div>
-                                                            <div className="bg-white rounded-lg border border-slate-200 p-4 max-h-48 overflow-y-auto">
-                                                                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                                                                    {clause.clauseText || 'No content available'}
-                                                                </p>
-                                                            </div>
+                                                {/* Clause Content */}
+                                                <div className="flex-1 overflow-y-auto p-6 bg-white">
+                                                    <div className="prose prose-slate max-w-none">
+                                                        <div className="bg-slate-50 rounded-lg p-6 border border-slate-200">
+                                                            <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-base">
+                                                                {selectedReviewClause.clauseText || 'No content available for this clause.'}
+                                                            </p>
                                                         </div>
+                                                    </div>
 
-                                                        {/* CLARENCE Certification Panel */}
-                                                        <div className="px-4 pb-4">
-                                                            {isCertified ? (
-                                                                <div className={`rounded-lg border p-4 ${clause.clarenceFairness === 'balanced'
-                                                                    ? 'bg-emerald-50 border-emerald-200'
-                                                                    : clause.clarenceFairness === 'review_recommended' || hasFlags
-                                                                        ? 'bg-amber-50 border-amber-200'
-                                                                        : 'bg-blue-50 border-blue-200'
-                                                                    }`}>
-                                                                    {/* Header */}
-                                                                    <div className="flex items-start gap-3 mb-3">
-                                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${clause.clarenceFairness === 'balanced'
-                                                                            ? 'bg-emerald-100'
-                                                                            : clause.clarenceFairness === 'review_recommended' || hasFlags
-                                                                                ? 'bg-amber-100'
-                                                                                : 'bg-blue-100'
-                                                                            }`}>
-                                                                            <svg className={`w-5 h-5 ${clause.clarenceFairness === 'balanced'
-                                                                                ? 'text-emerald-600'
-                                                                                : clause.clarenceFairness === 'review_recommended' || hasFlags
-                                                                                    ? 'text-amber-600'
-                                                                                    : 'text-blue-600'
-                                                                                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                                                            </svg>
-                                                                        </div>
-                                                                        <div className="flex-1">
-                                                                            <div className="flex items-center justify-between">
-                                                                                <h4 className="font-semibold text-slate-800">CLARENCE Certified</h4>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${clause.clarenceFairness === 'balanced'
-                                                                                        ? 'bg-emerald-200 text-emerald-800'
-                                                                                        : clause.clarenceFairness === 'customer_favoring'
-                                                                                            ? 'bg-green-200 text-green-800'
-                                                                                            : clause.clarenceFairness === 'provider_favoring'
-                                                                                                ? 'bg-blue-200 text-blue-800'
-                                                                                                : 'bg-amber-200 text-amber-800'
-                                                                                        }`}>
-                                                                                        {clause.clarenceFairness === 'balanced' && 'Balanced'}
-                                                                                        {clause.clarenceFairness === 'customer_favoring' && 'Customer-Favoring'}
-                                                                                        {clause.clarenceFairness === 'provider_favoring' && 'Provider-Favoring'}
-                                                                                        {clause.clarenceFairness === 'review_recommended' && 'Review Recommended'}
-                                                                                    </span>
-                                                                                    {clause.clarencePosition && (
-                                                                                        <span className="text-xs text-slate-500 font-mono">
-                                                                                            Position: {clause.clarencePosition.toFixed(1)}/10
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
+                                                    {/* Character count */}
+                                                    <div className="mt-3 text-xs text-slate-400 text-right">
+                                                        {selectedReviewClause.clauseText?.length || 0} characters
+                                                    </div>
+                                                </div>
 
-                                                                    {/* Summary */}
-                                                                    {clause.clarenceSummary && (
-                                                                        <div className="mb-3">
-                                                                            <p className="text-sm font-medium text-slate-700 mb-1">What this means:</p>
-                                                                            <p className="text-sm text-slate-600">{clause.clarenceSummary}</p>
-                                                                        </div>
-                                                                    )}
+                                                {/* Navigation Footer */}
+                                                <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                                                    <button
+                                                        onClick={() => setSelectedReviewClauseIndex(Math.max(0, (selectedReviewClauseIndex || 0) - 1))}
+                                                        disabled={selectedReviewClauseIndex === 0}
+                                                        className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                                        </svg>
+                                                        Previous
+                                                    </button>
+                                                    <span className="text-sm text-slate-500">
+                                                        {(selectedReviewClauseIndex || 0) + 1} of {state.parsedClauses.length}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => setSelectedReviewClauseIndex(Math.min(state.parsedClauses.length - 1, (selectedReviewClauseIndex || 0) + 1))}
+                                                        disabled={selectedReviewClauseIndex === state.parsedClauses.length - 1}
+                                                        className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                                                    >
+                                                        Next
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            /* No clause selected */
+                                            <div className="flex-1 flex items-center justify-center bg-slate-50">
+                                                <div className="text-center">
+                                                    <svg className="w-16 h-16 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                    <p className="text-slate-500">Select a clause from the list to view details</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
-                                                                    {/* Assessment */}
-                                                                    {clause.clarenceAssessment && (
-                                                                        <div className="mb-3">
-                                                                            <p className="text-sm font-medium text-slate-700 mb-1">Assessment:</p>
-                                                                            <p className="text-sm text-slate-600">{clause.clarenceAssessment}</p>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Flags */}
-                                                                    {hasFlags && (
-                                                                        <div className="pt-3 border-t border-slate-200">
-                                                                            <p className="text-xs font-medium text-slate-500 mb-2">Attention Points:</p>
-                                                                            <div className="flex flex-wrap gap-1.5">
-                                                                                {clause.clarenceFlags?.filter(f => f !== 'none').map((flag, i) => (
-                                                                                    <span
-                                                                                        key={i}
-                                                                                        className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full"
-                                                                                    >
-                                                                                        {flag.replace(/_/g, ' ')}
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-
-                                                                    {/* Certification timestamp */}
-                                                                    {clause.clarenceCertifiedAt && (
-                                                                        <div className="mt-3 pt-2 border-t border-slate-200 text-xs text-slate-400">
-                                                                            Certified: {new Date(clause.clarenceCertifiedAt).toLocaleDateString()}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+                                    {/* RIGHT PANEL: CLARENCE Advisor */}
+                                    <div className="w-80 border-l border-slate-200 flex flex-col bg-white">
+                                        {selectedReviewClause ? (
+                                            <>
+                                                {/* Certification Status Header */}
+                                                <div className={`px-4 py-3 border-b ${selectedReviewClause.clarenceCertified
+                                                    ? selectedReviewClause.clarenceFairness === 'balanced'
+                                                        ? 'bg-emerald-50 border-emerald-200'
+                                                        : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                            ? 'bg-amber-50 border-amber-200'
+                                                            : 'bg-blue-50 border-blue-200'
+                                                    : 'bg-slate-50 border-slate-200'
+                                                    }`}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${selectedReviewClause.clarenceCertified
+                                                            ? selectedReviewClause.clarenceFairness === 'balanced'
+                                                                ? 'bg-emerald-100'
+                                                                : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                    ? 'bg-amber-100'
+                                                                    : 'bg-blue-100'
+                                                            : 'bg-slate-200'
+                                                            }`}>
+                                                            {selectedReviewClause.clarenceCertified ? (
+                                                                <svg className={`w-5 h-5 ${selectedReviewClause.clarenceFairness === 'balanced'
+                                                                    ? 'text-emerald-600'
+                                                                    : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                        ? 'text-amber-600'
+                                                                        : 'text-blue-600'
+                                                                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                                </svg>
                                                             ) : (
-                                                                /* Pending Certification */
-                                                                <div className="bg-slate-100 border border-slate-200 rounded-lg p-4">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
-                                                                            <svg className="w-4 h-4 text-slate-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                            </svg>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-sm font-medium text-slate-600">Certification Pending</p>
-                                                                            <p className="text-xs text-slate-400">CLARENCE is reviewing this clause...</p>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
+                                                                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                            )}
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-semibold text-slate-800">
+                                                                {selectedReviewClause.clarenceCertified ? 'CLARENCE Certified' : 'Pending Certification'}
+                                                            </h3>
+                                                            {selectedReviewClause.clarenceCertified && (
+                                                                <p className={`text-sm ${selectedReviewClause.clarenceFairness === 'balanced'
+                                                                    ? 'text-emerald-600'
+                                                                    : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                        ? 'text-amber-600'
+                                                                        : 'text-blue-600'
+                                                                    }`}>
+                                                                    {selectedReviewClause.clarenceFairness?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                                                </p>
                                                             )}
                                                         </div>
                                                     </div>
-                                                )}
+                                                </div>
+
+                                                {/* Certification Details */}
+                                                <div className="flex-1 overflow-y-auto p-4">
+                                                    {selectedReviewClause.clarenceCertified ? (
+                                                        <div className="space-y-4">
+                                                            {/* Position Score */}
+                                                            {selectedReviewClause.clarencePosition && (
+                                                                <div>
+                                                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Position Score</h4>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                                                                            <div
+                                                                                className={`h-full rounded-full ${selectedReviewClause.clarencePosition <= 4
+                                                                                    ? 'bg-green-500'
+                                                                                    : selectedReviewClause.clarencePosition <= 6
+                                                                                        ? 'bg-emerald-500'
+                                                                                        : 'bg-blue-500'
+                                                                                    }`}
+                                                                                style={{ width: `${(selectedReviewClause.clarencePosition / 10) * 100}%` }}
+                                                                            />
+                                                                        </div>
+                                                                        <span className="text-lg font-bold text-slate-800">
+                                                                            {selectedReviewClause.clarencePosition.toFixed(1)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                                                        <span>Customer-Favoring</span>
+                                                                        <span>Provider-Favoring</span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Summary */}
+                                                            {selectedReviewClause.clarenceSummary && (
+                                                                <div>
+                                                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">What This Means</h4>
+                                                                    <p className="text-sm text-slate-700 leading-relaxed">
+                                                                        {selectedReviewClause.clarenceSummary}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Assessment */}
+                                                            {selectedReviewClause.clarenceAssessment && (
+                                                                <div>
+                                                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Assessment</h4>
+                                                                    <p className="text-sm text-slate-700 leading-relaxed">
+                                                                        {selectedReviewClause.clarenceAssessment}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Flags */}
+                                                            {selectedReviewClause.clarenceFlags && selectedReviewClause.clarenceFlags.length > 0 && !selectedReviewClause.clarenceFlags.includes('none') && (
+                                                                <div>
+                                                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Attention Points</h4>
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {selectedReviewClause.clarenceFlags.filter(f => f !== 'none').map((flag, i) => (
+                                                                            <span
+                                                                                key={i}
+                                                                                className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full"
+                                                                            >
+                                                                                {flag.replace(/_/g, ' ')}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Certification Date */}
+                                                            {selectedReviewClause.clarenceCertifiedAt && (
+                                                                <div className="pt-3 border-t border-slate-200">
+                                                                    <p className="text-xs text-slate-400">
+                                                                        Certified: {new Date(selectedReviewClause.clarenceCertifiedAt).toLocaleDateString()}
+                                                                    </p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center py-8">
+                                                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                            </div>
+                                                            <p className="text-sm text-slate-500 mb-4">
+                                                                This clause hasn't been certified yet.
+                                                            </p>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (state.uploadedContractId) {
+                                                                        triggerCertification(state.uploadedContractId, [selectedReviewClause])
+                                                                    }
+                                                                }}
+                                                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                                            >
+                                                                Certify This Clause
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* CLARENCE Chat Section (Placeholder) */}
+                                                <div className="border-t border-slate-200 p-4 bg-slate-50">
+                                                    <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Ask CLARENCE</h4>
+                                                    <div className="relative">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Ask about this clause..."
+                                                            className="w-full px-4 py-2.5 pr-10 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                                            disabled
+                                                        />
+                                                        <button
+                                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-teal-600 transition-colors"
+                                                            disabled
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-xs text-slate-400 mt-2 text-center">
+                                                        Chat coming soon
+                                                    </p>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="flex-1 flex items-center justify-center">
+                                                <div className="text-center px-6">
+                                                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                        <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                        </svg>
+                                                    </div>
+                                                    <p className="text-slate-500 text-sm">
+                                                        Select a clause to view CLARENCE's certification assessment
+                                                    </p>
+                                                </div>
                                             </div>
-                                        )
-                                    })}
+                                        )}
+                                    </div>
                                 </div>
-
-                                {/* Actions */}
-                                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                                    <button
-                                        onClick={handleSaveDraft}
-                                        disabled={saving}
-                                        className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
-                                    >
-                                        {saving ? 'Saving...' : 'Save as Draft'}
-                                    </button>
-
-                                    <button
-                                        onClick={() => setState(prev => ({ ...prev, step: 'invite' }))}
-                                        className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
-                                    >
-                                        Continue to Invite
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </>
+                            </div>
                         )}
                     </div>
                 )}
