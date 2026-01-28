@@ -60,6 +60,7 @@ interface VariableField {
 }
 
 interface ParsedClause {
+    clauseId?: string  // Add this line
     clauseNumber: string
     clauseName: string
     category: string
@@ -71,7 +72,7 @@ interface ParsedClause {
     // Clarence Certification fields
     clarenceCertified?: boolean
     clarencePosition?: number | null
-    clarenceFairness?: 'balanced' | 'customer_favoring' | 'provider_favoring' | 'review_recommended' | null
+    clarenceFairness?: 'balanced' | 'slightly_customer_favoring' | 'customer_favoring' | 'heavily_customer_favoring' | 'slightly_provider_favoring' | 'provider_favoring' | 'heavily_provider_favoring' | 'review_recommended' | null
     clarenceSummary?: string | null
     clarenceAssessment?: string | null
     clarenceFlags?: string[]
@@ -664,7 +665,7 @@ function CreateQuickContractContent() {
                     file_name: state.uploadedFileName || `${state.contractName}.txt`,
                     file_type: 'text/plain',
                     file_size: state.documentContent.length,
-                    raw_text: state.documentContent.replace(/<[^>]*>/g, '\n'), // Strip HTML tags
+                    raw_text: state.documentContent.replace(/<[^>]*>/g, '\n'),
                     contract_type: state.contractType,
                     mediation_type: 'stc',
                     template_source: state.uploadedFileName ? 'uploaded' : 'manual'
@@ -697,7 +698,7 @@ function CreateQuickContractContent() {
     }
 
     async function pollForParsingComplete(contractId: string) {
-        const maxAttempts = 30 // 30 attempts * 2 seconds = 60 seconds max
+        const maxAttempts = 30
         let attempts = 0
 
         const poll = async () => {
@@ -705,7 +706,6 @@ function CreateQuickContractContent() {
             console.log(`🔄 Polling attempt ${attempts}/${maxAttempts}...`)
 
             try {
-                // Check contract status
                 const { data: contractData, error: contractError } = await supabase
                     .from('uploaded_contracts')
                     .select('status, clause_count')
@@ -719,10 +719,26 @@ function CreateQuickContractContent() {
                 console.log('📄 Contract status:', contractData.status)
 
                 if (contractData.status === 'ready') {
-                    // Fetch the parsed clauses
+                    // Fetch the parsed clauses with certification fields
                     const { data: clausesData, error: clausesError } = await supabase
                         .from('uploaded_contract_clauses')
-                        .select('*')
+                        .select(`
+                        clause_id,
+                        clause_number,
+                        clause_name,
+                        clause_category,
+                        clause_text,
+                        level,
+                        parent_clause_number,
+                        display_order,
+                        clarence_certified,
+                        clarence_position,
+                        clarence_fairness,
+                        clarence_summary,
+                        clarence_assessment,
+                        clarence_flags,
+                        clarence_certified_at
+                    `)
                         .eq('contract_id', contractId)
                         .order('display_order', { ascending: true })
 
@@ -731,24 +747,49 @@ function CreateQuickContractContent() {
                     }
 
                     const parsedClauses: ParsedClause[] = (clausesData || []).map(c => ({
+                        clauseId: c.clause_id,
                         clauseNumber: c.clause_number,
                         clauseName: c.clause_name,
-                        category: c.clause_category || c.category || 'Other',  // Handle both column names
-                        clauseText: c.clause_text || '',  // Add fallback
+                        category: c.clause_category || 'Other',
+                        clauseText: c.clause_text || '',
                         level: c.level || 1,
                         parentClauseNumber: c.parent_clause_number,
                         displayOrder: c.display_order,
-                        isExpanded: false
+                        isExpanded: false,
+                        // Certification fields
+                        clarenceCertified: c.clarence_certified || false,
+                        clarencePosition: c.clarence_position,
+                        clarenceFairness: c.clarence_fairness,
+                        clarenceSummary: c.clarence_summary,
+                        clarenceAssessment: c.clarence_assessment,
+                        clarenceFlags: c.clarence_flags || [],
+                        clarenceCertifiedAt: c.clarence_certified_at
                     }))
 
                     console.log(`✅ Parsing complete! Found ${parsedClauses.length} clauses`)
 
-                    setState(prev => ({
-                        ...prev,
-                        uploadedContractId: contractId,
-                        parsedClauses,
-                        parsingStatus: 'complete'
-                    }))
+                    // Check if any clauses need certification
+                    const uncertifiedClauses = parsedClauses.filter(c => !c.clarenceCertified)
+
+                    if (uncertifiedClauses.length > 0) {
+                        // Update state with clauses first
+                        setState(prev => ({
+                            ...prev,
+                            uploadedContractId: contractId,
+                            parsedClauses
+                        }))
+
+                        // Trigger certification
+                        await triggerCertification(contractId, uncertifiedClauses)
+                    } else {
+                        // All clauses already certified
+                        setState(prev => ({
+                            ...prev,
+                            uploadedContractId: contractId,
+                            parsedClauses,
+                            parsingStatus: 'complete'
+                        }))
+                    }
 
                     return
                 }
@@ -775,6 +816,128 @@ function CreateQuickContractContent() {
         }
 
         poll()
+    }
+
+    async function triggerCertification(contractId: string, clauses: ParsedClause[]) {
+        console.log(`🔐 Starting CLARENCE certification for ${clauses.length} clauses...`)
+
+        setState(prev => ({
+            ...prev,
+            parsingStatus: 'certifying',
+            certificationProgress: {
+                total: clauses.length,
+                completed: 0
+            }
+        }))
+
+        try {
+            // Prepare clauses for certification API
+            const clausesForCertification = clauses.map(c => ({
+                clause_id: c.clauseId,
+                clause_number: c.clauseNumber,
+                clause_name: c.clauseName,
+                clause_category: c.category,
+                clause_text: c.clauseText
+            }))
+
+            const response = await fetch(`${API_BASE}/clarence-certify-clauses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contractId,
+                    contract_type: state.contractType || 'general',
+                    clauses: clausesForCertification
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || `Certification failed with status ${response.status}`)
+            }
+
+            const result = await response.json()
+            console.log('🔐 Certification result:', result)
+
+            if (result.success) {
+                // Reload clauses to get updated certification data
+                await reloadClauses(contractId)
+            } else {
+                throw new Error(result.error || 'Certification failed')
+            }
+
+        } catch (err) {
+            console.error('❌ Certification error:', err)
+            // Don't fail the whole flow - just log and continue without certification
+            console.log('⚠️ Continuing without certification')
+            setState(prev => ({
+                ...prev,
+                parsingStatus: 'complete'
+            }))
+        }
+    }
+
+    async function reloadClauses(contractId: string) {
+        try {
+            const { data: clausesData, error: clausesError } = await supabase
+                .from('uploaded_contract_clauses')
+                .select(`
+                clause_id,
+                clause_number,
+                clause_name,
+                clause_category,
+                clause_text,
+                level,
+                parent_clause_number,
+                display_order,
+                clarence_certified,
+                clarence_position,
+                clarence_fairness,
+                clarence_summary,
+                clarence_assessment,
+                clarence_flags,
+                clarence_certified_at
+            `)
+                .eq('contract_id', contractId)
+                .order('display_order', { ascending: true })
+
+            if (clausesError) {
+                throw clausesError
+            }
+
+            const parsedClauses: ParsedClause[] = (clausesData || []).map(c => ({
+                clauseId: c.clause_id,
+                clauseNumber: c.clause_number,
+                clauseName: c.clause_name,
+                category: c.clause_category || 'Other',
+                clauseText: c.clause_text || '',
+                level: c.level || 1,
+                parentClauseNumber: c.parent_clause_number,
+                displayOrder: c.display_order,
+                isExpanded: false,
+                clarenceCertified: c.clarence_certified || false,
+                clarencePosition: c.clarence_position,
+                clarenceFairness: c.clarence_fairness,
+                clarenceSummary: c.clarence_summary,
+                clarenceAssessment: c.clarence_assessment,
+                clarenceFlags: c.clarence_flags || [],
+                clarenceCertifiedAt: c.clarence_certified_at
+            }))
+
+            console.log(`✅ Reloaded ${parsedClauses.length} clauses, ${parsedClauses.filter(c => c.clarenceCertified).length} certified`)
+
+            setState(prev => ({
+                ...prev,
+                parsedClauses,
+                parsingStatus: 'complete'
+            }))
+
+        } catch (err) {
+            console.error('Error reloading clauses:', err)
+            setState(prev => ({
+                ...prev,
+                parsingStatus: 'complete' // Continue anyway
+            }))
+        }
     }
 
     function handleClauseNameChange(index: number, newName: string) {
