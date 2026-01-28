@@ -244,6 +244,7 @@ function CreateQuickContractContent() {
     const [inviteName, setInviteName] = useState('')
     const [inviteCompany, setInviteCompany] = useState('')
     const [sendingInvite, setSendingInvite] = useState(false)
+    const [inviteMessage, setInviteMessage] = useState('')
 
     // Duplicate mode
     const duplicateId = searchParams.get('duplicate')
