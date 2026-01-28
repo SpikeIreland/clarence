@@ -1,30 +1,23 @@
 'use client'
-import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { PartyChatPanel } from '@/app/auth/contract-studio/components/party-chat-component'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
 // ============================================================================
 
-interface Session {
-    sessionId: string
-    sessionNumber: string
+interface Contract {
+    contractId: string
     contractName: string
     contractType: string
-    customerCompany: string
-    providerCompany: string
-    customerContactName: string | null
-    providerContactName: string | null
-    customerUserId: string | null
-    providerId: string | null
+    description: string | null
+    fileName: string
     status: string
-    phase: number
+    clauseCount: number
+    companyId: string | null
+    uploadedByUserId: string
     createdAt: string
-    // Quick Contract specific
-    mediationType: string | null
-    uploadedContractId: string | null
 }
 
 interface ContractClause {
@@ -47,9 +40,6 @@ interface ContractClause {
 }
 
 interface UserInfo {
-    odooPartyId: string | null
-    odooUserId: string | null
-    odooCompanyId: string | null
     userId: string
     email: string
     firstName: string
@@ -57,7 +47,7 @@ interface UserInfo {
     fullName: string
     company: string
     companyId: string
-    role: 'customer' | 'provider'
+    isOwner: boolean
     isAdmin: boolean
 }
 
@@ -109,7 +99,7 @@ function QuickContractStudioLoading() {
 function QuickContractStudioContent() {
     const router = useRouter()
     const params = useParams()
-    const sessionId = params?.sessionId as string
+    const contractId = params?.contractId as string
 
     // ========================================================================
     // SECTION 4A: STATE
@@ -118,14 +108,13 @@ function QuickContractStudioContent() {
     // Core state
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [session, setSession] = useState<Session | null>(null)
+    const [contract, setContract] = useState<Contract | null>(null)
     const [clauses, setClauses] = useState<ContractClause[]>([])
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
 
     // UI state
     const [selectedClauseIndex, setSelectedClauseIndex] = useState<number | null>(null)
     const [clauseSearchTerm, setClauseSearchTerm] = useState('')
-    const [showPartyChat, setShowPartyChat] = useState(false)
 
     // Action state
     const [accepting, setAccepting] = useState(false)
@@ -138,13 +127,13 @@ function QuickContractStudioContent() {
     const clauseListRef = useRef<HTMLDivElement>(null)
 
     // ========================================================================
-    // SECTION 4B: AUTH & SESSION LOADING
+    // SECTION 4B: AUTH & CONTRACT LOADING
     // ========================================================================
 
     useEffect(() => {
-        async function loadSessionAndClauses() {
-            if (!sessionId) {
-                setError('No session ID provided')
+        async function loadContractAndClauses() {
+            if (!contractId) {
+                setError('No contract ID provided')
                 setLoading(false)
                 return
             }
@@ -171,42 +160,36 @@ function QuickContractStudioContent() {
                     return
                 }
 
-                // Load session
-                const { data: sessionData, error: sessionError } = await supabase
-                    .from('sessions')
+                // Load contract
+                const { data: contractData, error: contractError } = await supabase
+                    .from('uploaded_contracts')
                     .select(`
-                        session_id,
-                        session_number,
+                        contract_id,
                         contract_name,
-                        contract_type,
-                        customer_company,
-                        provider_company,
-                        customer_contact_name,
-                        provider_contact_name,
-                        customer_user_id,
-                        provider_id,
+                        detected_contract_type,
+                        description,
+                        file_name,
                         status,
-                        phase,
-                        created_at,
-                        mediation_type,
-                        uploaded_contract_id
+                        clause_count,
+                        company_id,
+                        uploaded_by_user_id,
+                        created_at
                     `)
-                    .eq('session_id', sessionId)
+                    .eq('contract_id', contractId)
                     .single()
 
-                if (sessionError || !sessionData) {
-                    console.error('Session error:', sessionError)
-                    setError('Session not found')
+                if (contractError || !contractData) {
+                    console.error('Contract error:', contractError)
+                    setError('Contract not found')
                     setLoading(false)
                     return
                 }
 
-                // Determine user role
-                const isCustomer = sessionData.customer_user_id === user.id
-                const isProvider = sessionData.provider_id === user.id ||
-                    profile.company_id === sessionData.provider_id
+                // Check access - user must be uploader or same company
+                const isOwner = contractData.uploaded_by_user_id === user.id
+                const isSameCompany = contractData.company_id === profile.company_id
 
-                if (!isCustomer && !isProvider) {
+                if (!isOwner && !isSameCompany) {
                     setError('You do not have access to this contract')
                     setLoading(false)
                     return
@@ -214,9 +197,6 @@ function QuickContractStudioContent() {
 
                 // Set user info
                 setUserInfo({
-                    odooPartyId: profile.odoo_party_id,
-                    odooUserId: profile.odoo_user_id,
-                    odooCompanyId: profile.odoo_company_id,
                     userId: user.id,
                     email: user.email || '',
                     firstName: profile.first_name || '',
@@ -224,84 +204,77 @@ function QuickContractStudioContent() {
                     fullName: `${profile.first_name || ''} ${profile.last_name || ''}`.trim(),
                     company: profile.company_name || '',
                     companyId: profile.company_id || '',
-                    role: isCustomer ? 'customer' : 'provider',
+                    isOwner: isOwner,
                     isAdmin: profile.is_admin || false
                 })
 
-                // Set session
-                setSession({
-                    sessionId: sessionData.session_id,
-                    sessionNumber: sessionData.session_number,
-                    contractName: sessionData.contract_name,
-                    contractType: sessionData.contract_type,
-                    customerCompany: sessionData.customer_company,
-                    providerCompany: sessionData.provider_company || 'Provider',
-                    customerContactName: sessionData.customer_contact_name,
-                    providerContactName: sessionData.provider_contact_name,
-                    customerUserId: sessionData.customer_user_id,
-                    providerId: sessionData.provider_id,
-                    status: sessionData.status,
-                    phase: sessionData.phase,
-                    createdAt: sessionData.created_at,
-                    mediationType: sessionData.mediation_type,
-                    uploadedContractId: sessionData.uploaded_contract_id
+                // Set contract
+                setContract({
+                    contractId: contractData.contract_id,
+                    contractName: contractData.contract_name,
+                    contractType: contractData.detected_contract_type || 'Contract',
+                    description: contractData.description,
+                    fileName: contractData.file_name,
+                    status: contractData.status,
+                    clauseCount: contractData.clause_count || 0,
+                    companyId: contractData.company_id,
+                    uploadedByUserId: contractData.uploaded_by_user_id,
+                    createdAt: contractData.created_at
                 })
 
-                // Load clauses from uploaded_contract_clauses
-                if (sessionData.uploaded_contract_id) {
-                    const { data: clausesData, error: clausesError } = await supabase
-                        .from('uploaded_contract_clauses')
-                        .select(`
-                            clause_id,
-                            clause_number,
-                            clause_name,
-                            category,
-                            content,
-                            clause_level,
-                            display_order,
-                            parent_clause_id,
-                            clarence_certified,
-                            clarence_position,
-                            clarence_fairness,
-                            clarence_summary,
-                            clarence_assessment,
-                            clarence_flags,
-                            clarence_certified_at
-                        `)
-                        .eq('contract_id', sessionData.uploaded_contract_id)
-                        .order('display_order', { ascending: true })
+                // Load clauses
+                const { data: clausesData, error: clausesError } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select(`
+                        clause_id,
+                        clause_number,
+                        clause_name,
+                        category,
+                        content,
+                        clause_level,
+                        display_order,
+                        parent_clause_id,
+                        clarence_certified,
+                        clarence_position,
+                        clarence_fairness,
+                        clarence_summary,
+                        clarence_assessment,
+                        clarence_flags,
+                        clarence_certified_at
+                    `)
+                    .eq('contract_id', contractId)
+                    .order('display_order', { ascending: true })
 
-                    if (clausesError) {
-                        console.error('Clauses error:', clausesError)
-                        setError('Failed to load contract clauses')
-                        setLoading(false)
-                        return
-                    }
+                if (clausesError) {
+                    console.error('Clauses error:', clausesError)
+                    setError('Failed to load contract clauses')
+                    setLoading(false)
+                    return
+                }
 
-                    const mappedClauses: ContractClause[] = (clausesData || []).map(c => ({
-                        clauseId: c.clause_id,
-                        clauseNumber: c.clause_number,
-                        clauseName: c.clause_name,
-                        category: c.category || 'Other',
-                        clauseText: c.content || '',
-                        clauseLevel: c.clause_level || 1,
-                        displayOrder: c.display_order,
-                        parentClauseId: c.parent_clause_id,
-                        clarenceCertified: c.clarence_certified || false,
-                        clarencePosition: c.clarence_position,
-                        clarenceFairness: c.clarence_fairness,
-                        clarenceSummary: c.clarence_summary,
-                        clarenceAssessment: c.clarence_assessment,
-                        clarenceFlags: c.clarence_flags || [],
-                        clarenceCertifiedAt: c.clarence_certified_at
-                    }))
+                const mappedClauses: ContractClause[] = (clausesData || []).map(c => ({
+                    clauseId: c.clause_id,
+                    clauseNumber: c.clause_number,
+                    clauseName: c.clause_name,
+                    category: c.category || 'Other',
+                    clauseText: c.content || '',
+                    clauseLevel: c.clause_level || 1,
+                    displayOrder: c.display_order,
+                    parentClauseId: c.parent_clause_id,
+                    clarenceCertified: c.clarence_certified || false,
+                    clarencePosition: c.clarence_position,
+                    clarenceFairness: c.clarence_fairness,
+                    clarenceSummary: c.clarence_summary,
+                    clarenceAssessment: c.clarence_assessment,
+                    clarenceFlags: c.clarence_flags || [],
+                    clarenceCertifiedAt: c.clarence_certified_at
+                }))
 
-                    setClauses(mappedClauses)
+                setClauses(mappedClauses)
 
-                    // Auto-select first clause
-                    if (mappedClauses.length > 0) {
-                        setSelectedClauseIndex(0)
-                    }
+                // Auto-select first clause
+                if (mappedClauses.length > 0) {
+                    setSelectedClauseIndex(0)
                 }
 
                 setLoading(false)
@@ -313,8 +286,8 @@ function QuickContractStudioContent() {
             }
         }
 
-        loadSessionAndClauses()
-    }, [sessionId, router])
+        loadContractAndClauses()
+    }, [contractId, router])
 
     // ========================================================================
     // SECTION 4C: EVENT HANDLERS
@@ -326,19 +299,19 @@ function QuickContractStudioContent() {
     }
 
     const handleAcceptAll = async () => {
-        if (!session || !userInfo) return
+        if (!contract || !userInfo) return
 
         setAccepting(true)
 
         try {
-            // Update session status
+            // Update contract status
             const { error: updateError } = await supabase
-                .from('sessions')
+                .from('uploaded_contracts')
                 .update({
-                    status: userInfo.role === 'customer' ? 'customer_accepted' : 'provider_accepted',
+                    status: 'accepted',
                     updated_at: new Date().toISOString()
                 })
-                .eq('session_id', session.sessionId)
+                .eq('contract_id', contract.contractId)
 
             if (updateError) {
                 throw updateError
@@ -346,12 +319,12 @@ function QuickContractStudioContent() {
 
             // Log event
             await supabase.from('system_events').insert({
-                event_type: 'contract_accepted',
+                event_type: 'quick_contract_accepted',
                 source_system: 'quick_contract_studio',
                 context: {
-                    session_id: session.sessionId,
+                    contract_id: contract.contractId,
+                    contract_name: contract.contractName,
                     user_id: userInfo.userId,
-                    role: userInfo.role,
                     clause_count: clauses.length
                 }
             })
@@ -366,9 +339,9 @@ function QuickContractStudioContent() {
         }
     }
 
-    const handleRequestChanges = () => {
-        // Open party chat for discussion
-        setShowPartyChat(true)
+    const handleDownloadPdf = () => {
+        // TODO: Implement PDF download
+        alert('PDF download coming soon!')
     }
 
     // ========================================================================
@@ -409,7 +382,7 @@ function QuickContractStudioContent() {
                     <h2 className="text-xl font-semibold text-slate-800 mb-2">Error</h2>
                     <p className="text-slate-600 mb-6">{error}</p>
                     <button
-                        onClick={() => router.push('//auth/quick-contract/studio/[sessionId]')}
+                        onClick={() => router.push('/auth/quick-contract')}
                         className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
                     >
                         Back to Contracts
@@ -434,19 +407,17 @@ function QuickContractStudioContent() {
                     </div>
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">Contract Accepted!</h2>
                     <p className="text-slate-600 mb-6">
-                        {userInfo?.role === 'customer'
-                            ? 'You have accepted the contract. The other party will be notified.'
-                            : 'You have accepted the contract. The contract is now complete.'}
+                        You have reviewed and accepted the contract. A confirmation has been recorded.
                     </p>
                     <div className="space-y-3">
                         <button
-                            onClick={() => router.push('/auth/quick-contract/studio/[sessionId]')}
+                            onClick={() => router.push('/auth/quick-contract')}
                             className="w-full px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
                         >
                             Back to Contracts
                         </button>
                         <button
-                            onClick={() => window.print()}
+                            onClick={handleDownloadPdf}
                             className="w-full px-6 py-3 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium transition-colors"
                         >
                             Download PDF
@@ -477,40 +448,35 @@ function QuickContractStudioContent() {
                             </div>
                             <div>
                                 <h1 className="font-semibold text-slate-800">Quick Contract</h1>
-                                <p className="text-xs text-slate-500">{session?.sessionNumber}</p>
+                                <p className="text-xs text-slate-500">{contract?.contractType}</p>
                             </div>
                         </div>
                         <div className="h-8 w-px bg-slate-200"></div>
                         <div>
-                            <h2 className="font-medium text-slate-700">{session?.contractName}</h2>
+                            <h2 className="font-medium text-slate-700">{contract?.contractName}</h2>
                             <p className="text-xs text-slate-500">
-                                {session?.customerCompany} ↔ {session?.providerCompany}
+                                {clauses.length} clauses · {clauses.filter(c => c.clarenceCertified).length} certified
                             </p>
                         </div>
                     </div>
 
                     {/* Right: User & Actions */}
                     <div className="flex items-center gap-4">
-                        {/* Party Chat Toggle */}
+                        {/* Download Button */}
                         <button
-                            onClick={() => setShowPartyChat(!showPartyChat)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${showPartyChat
-                                    ? 'bg-teal-100 text-teal-700'
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
+                            onClick={handleDownloadPdf}
+                            className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center gap-2"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            Party Chat
+                            Download PDF
                         </button>
 
                         {/* User Info */}
                         <div className="text-right">
                             <p className="text-sm font-medium text-slate-700">{userInfo?.fullName}</p>
-                            <p className="text-xs text-slate-500">
-                                {userInfo?.role === 'customer' ? 'Customer' : 'Provider'}
-                            </p>
+                            <p className="text-xs text-slate-500">{userInfo?.company}</p>
                         </div>
 
                         {/* Sign Out */}
@@ -882,13 +848,13 @@ function QuickContractStudioContent() {
                                     )}
                                 </button>
                                 <button
-                                    onClick={handleRequestChanges}
+                                    onClick={() => router.push('/auth/quick-contract')}
                                     className="w-full py-3 border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                     </svg>
-                                    Request Changes
+                                    Back to Contracts
                                 </button>
                             </div>
                         </>
@@ -908,23 +874,6 @@ function QuickContractStudioContent() {
                     )}
                 </div>
             </div>
-
-            {/* ============================================================ */}
-            {/* SECTION 8C: PARTY CHAT PANEL (Slide-out) */}
-            {/* ============================================================ */}
-            {session && userInfo && (
-                <PartyChatPanel
-                    sessionId={session.sessionId}
-                    providerId={session.providerId || ''}
-                    providerName={userInfo.role === 'customer' ? session.providerCompany : session.customerCompany}
-                    currentUserType={userInfo.role === 'customer' ? 'customer' : 'provider'}
-                    currentUserName={userInfo.firstName || 'User'}
-                    isProviderOnline={false}
-                    isOpen={showPartyChat}
-                    onClose={() => setShowPartyChat(false)}
-                    onUnreadCountChange={() => { }}
-                />
-            )}
         </div>
     )
 }
