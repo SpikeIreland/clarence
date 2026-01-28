@@ -1070,8 +1070,8 @@ function CreateQuickContractContent() {
                     // Redirect to the contract studio (STC mode)
                     router.push(`/auth/contract-studio/${sessionId}`)
                 } else {
-                    // No session returned - show success message and go to dashboard
-                    router.push('/auth/quick-contract?sent=true')
+                    // New - redirects to studio
+                    router.push(`/auth/quick-contract/studio/${state.uploadedContractId}`)
                 }
             } else {
                 throw new Error(result.error || 'Failed to send contract')
