@@ -409,7 +409,7 @@ function QuickContractStudioContent() {
                     <h2 className="text-xl font-semibold text-slate-800 mb-2">Error</h2>
                     <p className="text-slate-600 mb-6">{error}</p>
                     <button
-                        onClick={() => router.push('/auth/quick-contract')}
+                        onClick={() => router.push('//auth/quick-contract/studio/[sessionId]')}
                         className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
                     >
                         Back to Contracts
@@ -440,7 +440,7 @@ function QuickContractStudioContent() {
                     </p>
                     <div className="space-y-3">
                         <button
-                            onClick={() => router.push('/auth/quick-contract')}
+                            onClick={() => router.push('/auth/quick-contract/studio/[sessionId]')}
                             className="w-full px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
                         >
                             Back to Contracts
