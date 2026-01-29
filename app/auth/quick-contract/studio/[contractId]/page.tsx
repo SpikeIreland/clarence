@@ -189,18 +189,17 @@ function QuickContractStudioContent() {
                 }
 
                 const authData = JSON.parse(storedAuth)
-                const user = authData.userInfo || authData
-                if (!user.userId) {
+                if (!authData.userId) {
                     router.push('/auth/login?redirect=/auth/quick-contract/studio/' + contractId)
                     return
                 }
 
                 setUserInfo({
-                    userId: user.userId,
-                    email: user.email || '',
-                    fullName: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : (user.email || 'User'),
-                    companyId: user.companyId || null,
-                    companyName: user.company || null
+                    userId: authData.userId,
+                    email: authData.email || '',
+                    fullName: authData.fullName || authData.email || 'User',
+                    companyId: authData.companyId || null,
+                    companyName: authData.companyName || null
                 })
 
                 // Load contract
@@ -478,7 +477,7 @@ function QuickContractStudioContent() {
     // ========================================================================
 
     return (
-        <div className="min-h-screen bg-slate-100 flex flex-col">
+        <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
 
             {/* ============================================================ */}
             {/* SECTION 7A: HEADER */}
@@ -486,8 +485,8 @@ function QuickContractStudioContent() {
             <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
                 <div className="flex items-center justify-between px-4 py-3">
                     {/* Left: Logo & Contract Info */}
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                        <div className="flex items-center gap-3 flex-shrink-0">
                             <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md">
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
@@ -496,9 +495,11 @@ function QuickContractStudioContent() {
                                 <p className="text-xs text-slate-500">CLARENCE Certified Review</p>
                             </div>
                         </div>
-                        <div className="h-8 w-px bg-slate-200"></div>
-                        <div>
-                            <h2 className="font-medium text-slate-700">{contract?.contractName}</h2>
+                        <div className="h-8 w-px bg-slate-200 flex-shrink-0"></div>
+                        <div className="min-w-0 flex-1">
+                            <h2 className="font-medium text-slate-700 truncate" title={contract?.contractName}>
+                                {contract?.contractName}
+                            </h2>
                             <p className="text-xs text-slate-500">
                                 {contract?.contractType} · {clauses.length} clauses · {clauses.filter(c => c.clarenceCertified).length} certified
                             </p>
@@ -539,12 +540,12 @@ function QuickContractStudioContent() {
             {/* ============================================================ */}
             {/* SECTION 7B: 3-PANEL LAYOUT */}
             {/* ============================================================ */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden min-h-0">
 
                 {/* ======================================================== */}
                 {/* LEFT PANEL: Clause List */}
                 {/* ======================================================== */}
-                <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0">
+                <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-hidden">
                     {/* Search */}
                     <div className="p-3 border-b border-slate-200">
                         <div className="relative">
@@ -562,7 +563,7 @@ function QuickContractStudioContent() {
                     </div>
 
                     {/* Clause List */}
-                    <div ref={clauseListRef} className="flex-1 overflow-y-auto">
+                    <div ref={clauseListRef} className="flex-1 overflow-y-auto min-h-0">
                         {filteredClauses.map((clause) => {
                             const actualIndex = clauses.findIndex(c => c.clauseId === clause.clauseId)
                             const isSelected = selectedClauseIndex === actualIndex
@@ -574,20 +575,20 @@ function QuickContractStudioContent() {
                                     key={clause.clauseId}
                                     onClick={() => setSelectedClauseIndex(actualIndex)}
                                     className={`px-3 py-2.5 border-b border-slate-100 cursor-pointer transition-all ${isSelected
-                                        ? 'bg-purple-50 border-l-4 border-l-purple-500'
-                                        : 'hover:bg-slate-50 border-l-4 border-l-transparent'
+                                            ? 'bg-purple-50 border-l-4 border-l-purple-500'
+                                            : 'hover:bg-slate-50 border-l-4 border-l-transparent'
                                         }`}
                                     style={{ paddingLeft: `${12 + (clause.clauseLevel - 1) * 12}px` }}
                                 >
                                     <div className="flex items-start gap-2">
                                         {/* Certification Icon */}
                                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
-                                            ? 'bg-slate-200 text-slate-400'
-                                            : hasFlags
-                                                ? 'bg-amber-100 text-amber-600'
-                                                : clause.clarenceFairness === 'balanced'
-                                                    ? 'bg-emerald-100 text-emerald-600'
-                                                    : 'bg-purple-100 text-purple-600'
+                                                ? 'bg-slate-200 text-slate-400'
+                                                : hasFlags
+                                                    ? 'bg-amber-100 text-amber-600'
+                                                    : clause.clarenceFairness === 'balanced'
+                                                        ? 'bg-emerald-100 text-emerald-600'
+                                                        : 'bg-purple-100 text-purple-600'
                                             }`}>
                                             {!isCertified ? '○' : hasFlags ? '!' : '✓'}
                                         </div>
@@ -635,7 +636,7 @@ function QuickContractStudioContent() {
                 {/* ======================================================== */}
                 {/* CENTER PANEL: Main Workspace */}
                 {/* ======================================================== */}
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                     {selectedClause ? (
                         <>
                             {/* Clause Header */}
@@ -668,8 +669,8 @@ function QuickContractStudioContent() {
                                                 key={tab}
                                                 onClick={() => setActiveTab(tab)}
                                                 className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
+                                                        ? 'bg-white text-slate-800 shadow-sm'
+                                                        : 'text-slate-500 hover:text-slate-700'
                                                     }`}
                                             >
                                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -680,7 +681,7 @@ function QuickContractStudioContent() {
                             </div>
 
                             {/* Workspace Content */}
-                            <div className="flex-1 overflow-y-auto p-6">
+                            <div className="flex-1 overflow-y-auto p-6 min-h-0">
 
                                 {/* ==================== OVERVIEW TAB ==================== */}
                                 {activeTab === 'overview' && (
@@ -691,9 +692,9 @@ function QuickContractStudioContent() {
                                             <h3 className="text-sm font-semibold text-slate-700 mb-4">CLARENCE Recommended Position</h3>
 
                                             {/* Position Scale */}
-                                            <div className="relative mb-6">
-                                                {/* Scale Background */}
-                                                <div className="h-4 bg-gradient-to-r from-emerald-200 via-teal-200 via-50% to-blue-200 rounded-full relative">
+                                            <div className="relative mb-6 pt-6 pb-2">
+                                                {/* Scale Background - with extra padding for badge */}
+                                                <div className="relative h-4 bg-gradient-to-r from-emerald-200 via-teal-200 via-50% to-blue-200 rounded-full">
                                                     {/* Scale markers */}
                                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                                         <div
@@ -706,12 +707,43 @@ function QuickContractStudioContent() {
                                                     {/* CLARENCE Badge - Only marker shown */}
                                                     {selectedClause.clarencePosition !== null && (
                                                         <div
-                                                            className="absolute top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all"
+                                                            className="absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all cursor-grab active:cursor-grabbing hover:scale-110"
                                                             style={{
                                                                 left: `${((selectedClause.clarencePosition - 1) / 9) * 100}%`,
+                                                                top: '50%',
                                                                 transform: 'translate(-50%, -50%)'
                                                             }}
-                                                            title={`CLARENCE recommends: ${selectedClause.clarencePosition.toFixed(1)}`}
+                                                            title={`CLARENCE recommends: ${selectedClause.clarencePosition.toFixed(1)} - Drag to adjust`}
+                                                            draggable={false}
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault()
+                                                                const bar = e.currentTarget.parentElement
+                                                                if (!bar) return
+
+                                                                const handleMouseMove = (moveEvent: MouseEvent) => {
+                                                                    const rect = bar.getBoundingClientRect()
+                                                                    const x = moveEvent.clientX - rect.left
+                                                                    const percent = Math.max(0, Math.min(1, x / rect.width))
+                                                                    const newPosition = 1 + (percent * 9)
+                                                                    const roundedPosition = Math.round(newPosition * 2) / 2 // Round to nearest 0.5
+
+                                                                    // Update the clause position
+                                                                    setClauses(prev => prev.map(c =>
+                                                                        c.clauseId === selectedClause.clauseId
+                                                                            ? { ...c, clarencePosition: roundedPosition }
+                                                                            : c
+                                                                    ))
+                                                                }
+
+                                                                const handleMouseUp = () => {
+                                                                    document.removeEventListener('mousemove', handleMouseMove)
+                                                                    document.removeEventListener('mouseup', handleMouseUp)
+                                                                    // TODO: Save to database here
+                                                                }
+
+                                                                document.addEventListener('mousemove', handleMouseMove)
+                                                                document.addEventListener('mouseup', handleMouseUp)
+                                                            }}
                                                         >
                                                             C
                                                         </div>
@@ -719,7 +751,7 @@ function QuickContractStudioContent() {
                                                 </div>
 
                                                 {/* Scale Labels */}
-                                                <div className="flex justify-between mt-2 text-xs text-slate-500">
+                                                <div className="flex justify-between mt-4 text-xs text-slate-500">
                                                     <span>Customer-Favoring</span>
                                                     <span>Balanced</span>
                                                     <span>Provider-Favoring</span>
@@ -746,12 +778,12 @@ function QuickContractStudioContent() {
 
                                                 {selectedClause.clarenceFairness && (
                                                     <div className={`px-4 py-3 rounded-lg ${selectedClause.clarenceFairness === 'balanced'
-                                                        ? 'bg-emerald-50 border border-emerald-200'
-                                                        : 'bg-amber-50 border border-amber-200'
+                                                            ? 'bg-emerald-50 border border-emerald-200'
+                                                            : 'bg-amber-50 border border-amber-200'
                                                         }`}>
                                                         <div className={`text-sm font-medium ${selectedClause.clarenceFairness === 'balanced'
-                                                            ? 'text-emerald-700'
-                                                            : 'text-amber-700'
+                                                                ? 'text-emerald-700'
+                                                                : 'text-amber-700'
                                                             }`}>
                                                             {selectedClause.clarenceFairness === 'balanced' ? '✓ Balanced' : '⚠ Review Recommended'}
                                                         </div>
@@ -927,7 +959,7 @@ function QuickContractStudioContent() {
                 {/* ======================================================== */}
                 {/* RIGHT PANEL: CLARENCE Chat */}
                 {/* ======================================================== */}
-                <div className="w-96 bg-white border-l border-slate-200 flex flex-col flex-shrink-0">
+                <div className="w-96 bg-white border-l border-slate-200 flex flex-col flex-shrink-0 overflow-hidden min-h-0">
                     {/* Chat Header */}
                     <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-white">
                         <div className="flex items-center gap-3">
@@ -942,15 +974,15 @@ function QuickContractStudioContent() {
                     </div>
 
                     {/* Chat Messages */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
                         {chatMessages.map((message) => (
                             <div
                                 key={message.id}
                                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                             >
                                 <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-slate-100 text-slate-700'
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-slate-100 text-slate-700'
                                     }`}>
                                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                                     <p className={`text-xs mt-1.5 ${message.role === 'user' ? 'text-purple-200' : 'text-slate-400'
