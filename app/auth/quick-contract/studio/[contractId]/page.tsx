@@ -189,17 +189,20 @@ function QuickContractStudioContent() {
                 }
 
                 const authData = JSON.parse(storedAuth)
-                if (!authData.userId) {
+                // Handle nested userInfo structure
+                const user = authData.userInfo || authData
+
+                if (!user.userId) {
                     router.push('/auth/login?redirect=/auth/quick-contract/studio/' + contractId)
                     return
                 }
 
                 setUserInfo({
-                    userId: authData.userId,
-                    email: authData.email || '',
-                    fullName: authData.fullName || authData.email || 'User',
-                    companyId: authData.companyId || null,
-                    companyName: authData.companyName || null
+                    userId: user.userId,
+                    email: user.email || '',
+                    fullName: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : (user.email || 'User'),
+                    companyId: user.companyId || null,
+                    companyName: user.company || null
                 })
 
                 // Load contract

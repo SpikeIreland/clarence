@@ -1068,7 +1068,7 @@ function CreateQuickContractContent() {
                     }))
 
                     // Redirect to the contract studio (STC mode)
-                    router.push(`/auth/contract-studio/${sessionId}`)
+                    router.push(`/auth/quick-contract/studio/${sessionId}`)
                 } else {
                     // New - redirects to studio
                     router.push(`/auth/quick-contract/studio/${state.uploadedContractId}`)
@@ -1143,7 +1143,7 @@ function CreateQuickContractContent() {
                     contractName: state.contractName
                 })
 
-                router.push(`/auth/quick-contract/${data.quick_contract_id}`)
+                router.push(`/auth/quick-contract/studio/${data.quick_contract_id}`)
             }
 
         } catch (err) {
