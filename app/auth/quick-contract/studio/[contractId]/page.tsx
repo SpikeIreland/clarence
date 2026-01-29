@@ -189,17 +189,18 @@ function QuickContractStudioContent() {
                 }
 
                 const authData = JSON.parse(storedAuth)
-                if (!authData.userId) {
+                const user = authData.userInfo || authData
+                if (!user.userId) {
                     router.push('/auth/login?redirect=/auth/quick-contract/studio/' + contractId)
                     return
                 }
 
                 setUserInfo({
-                    userId: authData.userId,
-                    email: authData.email || '',
-                    fullName: authData.fullName || authData.email || 'User',
-                    companyId: authData.companyId || null,
-                    companyName: authData.companyName || null
+                    userId: user.userId,
+                    email: user.email || '',
+                    fullName: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : (user.email || 'User'),
+                    companyId: user.companyId || null,
+                    companyName: user.company || null
                 })
 
                 // Load contract
@@ -573,20 +574,20 @@ function QuickContractStudioContent() {
                                     key={clause.clauseId}
                                     onClick={() => setSelectedClauseIndex(actualIndex)}
                                     className={`px-3 py-2.5 border-b border-slate-100 cursor-pointer transition-all ${isSelected
-                                            ? 'bg-purple-50 border-l-4 border-l-purple-500'
-                                            : 'hover:bg-slate-50 border-l-4 border-l-transparent'
+                                        ? 'bg-purple-50 border-l-4 border-l-purple-500'
+                                        : 'hover:bg-slate-50 border-l-4 border-l-transparent'
                                         }`}
                                     style={{ paddingLeft: `${12 + (clause.clauseLevel - 1) * 12}px` }}
                                 >
                                     <div className="flex items-start gap-2">
                                         {/* Certification Icon */}
                                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
-                                                ? 'bg-slate-200 text-slate-400'
-                                                : hasFlags
-                                                    ? 'bg-amber-100 text-amber-600'
-                                                    : clause.clarenceFairness === 'balanced'
-                                                        ? 'bg-emerald-100 text-emerald-600'
-                                                        : 'bg-purple-100 text-purple-600'
+                                            ? 'bg-slate-200 text-slate-400'
+                                            : hasFlags
+                                                ? 'bg-amber-100 text-amber-600'
+                                                : clause.clarenceFairness === 'balanced'
+                                                    ? 'bg-emerald-100 text-emerald-600'
+                                                    : 'bg-purple-100 text-purple-600'
                                             }`}>
                                             {!isCertified ? '○' : hasFlags ? '!' : '✓'}
                                         </div>
@@ -667,8 +668,8 @@ function QuickContractStudioContent() {
                                                 key={tab}
                                                 onClick={() => setActiveTab(tab)}
                                                 className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
-                                                        ? 'bg-white text-slate-800 shadow-sm'
-                                                        : 'text-slate-500 hover:text-slate-700'
+                                                    ? 'bg-white text-slate-800 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-700'
                                                     }`}
                                             >
                                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -745,12 +746,12 @@ function QuickContractStudioContent() {
 
                                                 {selectedClause.clarenceFairness && (
                                                     <div className={`px-4 py-3 rounded-lg ${selectedClause.clarenceFairness === 'balanced'
-                                                            ? 'bg-emerald-50 border border-emerald-200'
-                                                            : 'bg-amber-50 border border-amber-200'
+                                                        ? 'bg-emerald-50 border border-emerald-200'
+                                                        : 'bg-amber-50 border border-amber-200'
                                                         }`}>
                                                         <div className={`text-sm font-medium ${selectedClause.clarenceFairness === 'balanced'
-                                                                ? 'text-emerald-700'
-                                                                : 'text-amber-700'
+                                                            ? 'text-emerald-700'
+                                                            : 'text-amber-700'
                                                             }`}>
                                                             {selectedClause.clarenceFairness === 'balanced' ? '✓ Balanced' : '⚠ Review Recommended'}
                                                         </div>
@@ -948,8 +949,8 @@ function QuickContractStudioContent() {
                                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                             >
                                 <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                        ? 'bg-purple-600 text-white'
-                                        : 'bg-slate-100 text-slate-700'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-slate-100 text-slate-700'
                                     }`}>
                                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                                     <p className={`text-xs mt-1.5 ${message.role === 'user' ? 'text-purple-200' : 'text-slate-400'
