@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
@@ -12,16 +12,17 @@ interface Contract {
     contractName: string
     contractType: string
     description: string | null
-    fileName: string
     status: string
     clauseCount: number
     companyId: string | null
-    uploadedByUserId: string
+    uploadedByUserId: string | null
     createdAt: string
+    extractedText: string | null
 }
 
 interface ContractClause {
     clauseId: string
+    positionId: string
     clauseNumber: string
     clauseName: string
     category: string
@@ -37,18 +38,29 @@ interface ContractClause {
     clarenceAssessment: string | null
     clarenceFlags: string[]
     clarenceCertifiedAt: string | null
+    // Position options (from clause library)
+    positionOptions: PositionOption[]
+}
+
+interface PositionOption {
+    value: number
+    label: string
+    description: string
 }
 
 interface UserInfo {
     userId: string
     email: string
-    firstName: string
-    lastName: string
     fullName: string
-    company: string
-    companyId: string
-    isOwner: boolean
-    isAdmin: boolean
+    companyId: string | null
+    companyName: string | null
+}
+
+interface ChatMessage {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+    timestamp: Date
 }
 
 // ============================================================================
@@ -58,23 +70,41 @@ interface UserInfo {
 const supabase = createClient()
 
 const CATEGORY_COLORS: Record<string, string> = {
-    'Service Delivery': 'bg-blue-100 text-blue-700',
-    'Service Levels': 'bg-cyan-100 text-cyan-700',
-    'Charges & Payment': 'bg-emerald-100 text-emerald-700',
-    'Liability': 'bg-red-100 text-red-700',
-    'Intellectual Property': 'bg-purple-100 text-purple-700',
-    'Term & Termination': 'bg-orange-100 text-orange-700',
-    'Data Protection': 'bg-pink-100 text-pink-700',
-    'Governance': 'bg-indigo-100 text-indigo-700',
-    'Employment': 'bg-amber-100 text-amber-700',
-    'General': 'bg-slate-100 text-slate-700',
-    'Definitions': 'bg-gray-100 text-gray-700',
-    'Other': 'bg-slate-100 text-slate-600'
+    'Service Delivery': 'bg-blue-100 text-blue-700 border-blue-200',
+    'Service Levels': 'bg-cyan-100 text-cyan-700 border-cyan-200',
+    'Charges and Payment': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    'Liability': 'bg-red-100 text-red-700 border-red-200',
+    'Intellectual Property': 'bg-purple-100 text-purple-700 border-purple-200',
+    'Term and Termination': 'bg-orange-100 text-orange-700 border-orange-200',
+    'Data Protection': 'bg-pink-100 text-pink-700 border-pink-200',
+    'Governance': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+    'Employment': 'bg-amber-100 text-amber-700 border-amber-200',
+    'Confidentiality': 'bg-violet-100 text-violet-700 border-violet-200',
+    'Insurance': 'bg-teal-100 text-teal-700 border-teal-200',
+    'Audit': 'bg-sky-100 text-sky-700 border-sky-200',
+    'Dispute Resolution': 'bg-rose-100 text-rose-700 border-rose-200',
+    'General': 'bg-slate-100 text-slate-700 border-slate-200',
+    'Definitions': 'bg-gray-100 text-gray-600 border-gray-200',
+    'Other': 'bg-slate-100 text-slate-600 border-slate-200'
 }
 
 function getCategoryColor(category: string): string {
     return CATEGORY_COLORS[category] || CATEGORY_COLORS['Other']
 }
+
+// Default position options when none specified
+const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
+    { value: 1, label: 'Maximum Protection', description: 'Strongest customer-favoring terms' },
+    { value: 2, label: 'Strong Protection', description: 'Significant customer advantages' },
+    { value: 3, label: 'Moderate Protection', description: 'Customer-leaning but reasonable' },
+    { value: 4, label: 'Slight Customer Favor', description: 'Marginally customer-favoring' },
+    { value: 5, label: 'Balanced', description: 'Neutral, industry standard' },
+    { value: 6, label: 'Slight Provider Favor', description: 'Marginally provider-favoring' },
+    { value: 7, label: 'Moderate Flexibility', description: 'Provider-leaning but reasonable' },
+    { value: 8, label: 'Provider Advantage', description: 'Significant provider advantages' },
+    { value: 9, label: 'Strong Provider Terms', description: 'Provider-favoring terms' },
+    { value: 10, label: 'Maximum Flexibility', description: 'Strongest provider-favoring terms' }
+]
 
 // ============================================================================
 // SECTION 3: LOADING COMPONENT
@@ -84,9 +114,15 @@ function QuickContractStudioLoading() {
     return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center">
             <div className="text-center">
-                <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <h2 className="text-xl font-semibold text-slate-700">Loading Contract...</h2>
-                <p className="text-slate-500 mt-2">Please wait while we prepare your contract</p>
+                <div className="relative w-20 h-20 mx-auto mb-6">
+                    <div className="absolute inset-0 rounded-full border-4 border-purple-200"></div>
+                    <div className="absolute inset-0 rounded-full border-4 border-purple-600 border-t-transparent animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-2xl font-bold text-purple-600">C</span>
+                    </div>
+                </div>
+                <h2 className="text-xl font-semibold text-slate-700">Loading Contract Studio...</h2>
+                <p className="text-slate-500 mt-2">Preparing your Quick Contract review</p>
             </div>
         </div>
     )
@@ -105,33 +141,39 @@ function QuickContractStudioContent() {
     // SECTION 4A: STATE
     // ========================================================================
 
-    // Core state
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [contract, setContract] = useState<Contract | null>(null)
     const [clauses, setClauses] = useState<ContractClause[]>([])
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
 
     // UI state
     const [selectedClauseIndex, setSelectedClauseIndex] = useState<number | null>(null)
     const [clauseSearchTerm, setClauseSearchTerm] = useState('')
+    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'tradeoffs' | 'draft'>('overview')
+    const [showClauseText, setShowClauseText] = useState(false)
+
+    // Chat state
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+    const [chatInput, setChatInput] = useState('')
+    const [chatLoading, setChatLoading] = useState(false)
 
     // Action state
     const [accepting, setAccepting] = useState(false)
-    const [acceptComplete, setAcceptComplete] = useState(false)
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
 
     // Refs
     const clauseListRef = useRef<HTMLDivElement>(null)
+    const chatEndRef = useRef<HTMLDivElement>(null)
 
     // ========================================================================
-    // SECTION 4B: AUTH & CONTRACT LOADING
+    // SECTION 4B: AUTHENTICATION & DATA LOADING
     // ========================================================================
 
     useEffect(() => {
-        async function loadContractAndClauses() {
+        async function loadData() {
             if (!contractId) {
                 setError('No contract ID provided')
                 setLoading(false)
@@ -139,42 +181,31 @@ function QuickContractStudioContent() {
             }
 
             try {
-                // Get user from localStorage (same as main Contract Studio)
-                const authData = localStorage.getItem('clarence_auth')
-                if (!authData) {
-                    router.push('/auth/login')
+                // Get user from localStorage (matching main Contract Studio pattern)
+                const storedAuth = localStorage.getItem('clarence_auth')
+                if (!storedAuth) {
+                    router.push('/auth/login?redirect=/auth/quick-contract/studio/' + contractId)
                     return
                 }
 
-                let parsedAuth
-                try {
-                    parsedAuth = JSON.parse(authData)
-                } catch {
-                    router.push('/auth/login')
+                const authData = JSON.parse(storedAuth)
+                if (!authData.userId) {
+                    router.push('/auth/login?redirect=/auth/quick-contract/studio/' + contractId)
                     return
                 }
 
-                const userFromStorage = parsedAuth.userInfo
-                if (!userFromStorage) {
-                    router.push('/auth/login')
-                    return
-                }
+                setUserInfo({
+                    userId: authData.userId,
+                    email: authData.email || '',
+                    fullName: authData.fullName || authData.email || 'User',
+                    companyId: authData.companyId || null,
+                    companyName: authData.companyName || null
+                })
 
                 // Load contract
                 const { data: contractData, error: contractError } = await supabase
                     .from('uploaded_contracts')
-                    .select(`
-                        contract_id,
-                        contract_name,
-                        detected_contract_type,
-                        description,
-                        file_name,
-                        status,
-                        clause_count,
-                        company_id,
-                        uploaded_by_user_id,
-                        created_at
-                    `)
+                    .select('*')
                     .eq('contract_id', contractId)
                     .single()
 
@@ -185,63 +216,23 @@ function QuickContractStudioContent() {
                     return
                 }
 
-                // Check access - user must be uploader or same company
-                const isOwner = contractData.uploaded_by_user_id === userFromStorage.userId
-                const isSameCompany = contractData.company_id === userFromStorage.companyId
-
-                if (!isOwner && !isSameCompany) {
-                    setError('You do not have access to this contract')
-                    setLoading(false)
-                    return
-                }
-
-                // Set user info
-                setUserInfo({
-                    userId: userFromStorage.userId || '',
-                    email: userFromStorage.email || '',
-                    firstName: userFromStorage.firstName || '',
-                    lastName: userFromStorage.lastName || '',
-                    fullName: `${userFromStorage.firstName || ''} ${userFromStorage.lastName || ''}`.trim() || 'User',
-                    company: userFromStorage.company || '',
-                    companyId: userFromStorage.companyId || '',
-                    isOwner: isOwner,
-                    isAdmin: userFromStorage.isAdmin || false
-                })
-
-                // Set contract
                 setContract({
                     contractId: contractData.contract_id,
                     contractName: contractData.contract_name,
                     contractType: contractData.detected_contract_type || 'Contract',
                     description: contractData.description,
-                    fileName: contractData.file_name,
                     status: contractData.status,
                     clauseCount: contractData.clause_count || 0,
                     companyId: contractData.company_id,
                     uploadedByUserId: contractData.uploaded_by_user_id,
-                    createdAt: contractData.created_at
+                    createdAt: contractData.created_at,
+                    extractedText: contractData.extracted_text
                 })
 
                 // Load clauses
                 const { data: clausesData, error: clausesError } = await supabase
                     .from('uploaded_contract_clauses')
-                    .select(`
-                        clause_id,
-                        clause_number,
-                        clause_name,
-                        category,
-                        content,
-                        clause_level,
-                        display_order,
-                        parent_clause_id,
-                        clarence_certified,
-                        clarence_position,
-                        clarence_fairness,
-                        clarence_summary,
-                        clarence_assessment,
-                        clarence_flags,
-                        clarence_certified_at
-                    `)
+                    .select('*')
                     .eq('contract_id', contractId)
                     .order('display_order', { ascending: true })
 
@@ -254,6 +245,7 @@ function QuickContractStudioContent() {
 
                 const mappedClauses: ContractClause[] = (clausesData || []).map(c => ({
                     clauseId: c.clause_id,
+                    positionId: c.clause_id, // Use clause_id as position_id for Quick Contract
                     clauseNumber: c.clause_number,
                     clauseName: c.clause_name,
                     category: c.category || 'Other',
@@ -267,7 +259,8 @@ function QuickContractStudioContent() {
                     clarenceSummary: c.clarence_summary,
                     clarenceAssessment: c.clarence_assessment,
                     clarenceFlags: c.clarence_flags || [],
-                    clarenceCertifiedAt: c.clarence_certified_at
+                    clarenceCertifiedAt: c.clarence_certified_at,
+                    positionOptions: DEFAULT_POSITION_OPTIONS
                 }))
 
                 setClauses(mappedClauses)
@@ -276,6 +269,14 @@ function QuickContractStudioContent() {
                 if (mappedClauses.length > 0) {
                     setSelectedClauseIndex(0)
                 }
+
+                // Initialize chat with welcome message
+                setChatMessages([{
+                    id: 'welcome',
+                    role: 'assistant',
+                    content: `Welcome to the Quick Contract Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${contractData.contract_name}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
+                    timestamp: new Date()
+                }])
 
                 setLoading(false)
 
@@ -286,26 +287,92 @@ function QuickContractStudioContent() {
             }
         }
 
-        loadContractAndClauses()
+        loadData()
     }, [contractId, router])
 
     // ========================================================================
-    // SECTION 4C: EVENT HANDLERS
+    // SECTION 4C: CHAT FUNCTIONS
     // ========================================================================
 
-    const handleSignOut = async () => {
-        localStorage.removeItem('clarence_auth')
-        await supabase.auth.signOut()
-        router.push('/auth/login')
-    }
+    const sendChatMessage = useCallback(async () => {
+        if (!chatInput.trim() || chatLoading) return
 
-    const handleAcceptAll = async () => {
-        if (!contract || !userInfo) return
+        const userMessage: ChatMessage = {
+            id: `user-${Date.now()}`,
+            role: 'user',
+            content: chatInput.trim(),
+            timestamp: new Date()
+        }
+
+        setChatMessages(prev => [...prev, userMessage])
+        setChatInput('')
+        setChatLoading(true)
+
+        try {
+            // Call CLARENCE AI endpoint
+            const response = await fetch('/api/n8n/clarence-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: userMessage.content,
+                    contractId: contractId,
+                    clauseId: selectedClause?.clauseId,
+                    clauseName: selectedClause?.clauseName,
+                    clauseCategory: selectedClause?.category,
+                    context: 'quick_contract_studio'
+                })
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                const assistantMessage: ChatMessage = {
+                    id: `assistant-${Date.now()}`,
+                    role: 'assistant',
+                    content: data.response || data.message || "I understand. Let me help you with that.",
+                    timestamp: new Date()
+                }
+                setChatMessages(prev => [...prev, assistantMessage])
+            } else {
+                // Fallback response
+                const assistantMessage: ChatMessage = {
+                    id: `assistant-${Date.now()}`,
+                    role: 'assistant',
+                    content: selectedClause
+                        ? `Regarding "${selectedClause.clauseName}": ${selectedClause.clarenceAssessment || selectedClause.clarenceSummary || 'This clause has been reviewed and certified. The recommended position balances both parties\' interests based on industry standards.'}`
+                        : "I'm here to help you understand this contract. Please select a clause or ask me a specific question.",
+                    timestamp: new Date()
+                }
+                setChatMessages(prev => [...prev, assistantMessage])
+            }
+        } catch (err) {
+            console.error('Chat error:', err)
+            const errorMessage: ChatMessage = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: "I apologize, but I'm having trouble connecting right now. Please try again in a moment.",
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
+            setChatLoading(false)
+        }
+    }, [chatInput, chatLoading, contractId, selectedClause])
+
+    // Auto-scroll chat
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [chatMessages])
+
+    // ========================================================================
+    // SECTION 4D: ACTION HANDLERS
+    // ========================================================================
+
+    const handleAcceptContract = async () => {
+        if (!contract) return
 
         setAccepting(true)
 
         try {
-            // Update contract status
             const { error: updateError } = await supabase
                 .from('uploaded_contracts')
                 .update({
@@ -314,9 +381,7 @@ function QuickContractStudioContent() {
                 })
                 .eq('contract_id', contract.contractId)
 
-            if (updateError) {
-                throw updateError
-            }
+            if (updateError) throw updateError
 
             // Log event
             await supabase.from('system_events').insert({
@@ -324,13 +389,14 @@ function QuickContractStudioContent() {
                 source_system: 'quick_contract_studio',
                 context: {
                     contract_id: contract.contractId,
-                    contract_name: contract.contractName,
-                    user_id: userInfo.userId,
-                    clause_count: clauses.length
+                    user_id: userInfo?.userId,
+                    clause_count: clauses.length,
+                    certified_count: clauses.filter(c => c.clarenceCertified).length
                 }
             })
 
-            setAcceptComplete(true)
+            // Redirect to success or dashboard
+            router.push('/auth/quick-contract?accepted=true')
 
         } catch (err) {
             console.error('Accept error:', err)
@@ -340,13 +406,8 @@ function QuickContractStudioContent() {
         }
     }
 
-    const handleDownloadPdf = () => {
-        // TODO: Implement PDF download
-        alert('PDF download coming soon!')
-    }
-
     // ========================================================================
-    // SECTION 4D: FILTERED CLAUSES
+    // SECTION 4E: FILTERED CLAUSES
     // ========================================================================
 
     const filteredClauses = clauses.filter(c => {
@@ -358,6 +419,24 @@ function QuickContractStudioContent() {
             c.category.toLowerCase().includes(search)
         )
     })
+
+    // ========================================================================
+    // SECTION 4F: HELPER FUNCTIONS
+    // ========================================================================
+
+    const getPositionLabel = (position: number | null): string => {
+        if (position === null) return 'Not set'
+        const option = DEFAULT_POSITION_OPTIONS.find(o => o.value === Math.round(position))
+        return option?.label || `Position ${position}`
+    }
+
+    const getPositionColor = (position: number | null): string => {
+        if (position === null) return 'bg-slate-200'
+        if (position <= 3) return 'bg-emerald-500'
+        if (position <= 5) return 'bg-teal-500'
+        if (position <= 7) return 'bg-blue-500'
+        return 'bg-indigo-500'
+    }
 
     // ========================================================================
     // SECTION 5: LOADING STATE
@@ -380,13 +459,13 @@ function QuickContractStudioContent() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                     </div>
-                    <h2 className="text-xl font-semibold text-slate-800 mb-2">Error</h2>
+                    <h2 className="text-xl font-semibold text-slate-800 mb-2">Unable to Load Contract</h2>
                     <p className="text-slate-600 mb-6">{error}</p>
                     <button
                         onClick={() => router.push('/auth/quick-contract')}
-                        className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
+                        className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
                     >
-                        Back to Contracts
+                        Back to Quick Contract
                     </button>
                 </div>
             </div>
@@ -394,117 +473,79 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 7: ACCEPT COMPLETE STATE
-    // ========================================================================
-
-    if (acceptComplete) {
-        return (
-            <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-                <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
-                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Contract Accepted!</h2>
-                    <p className="text-slate-600 mb-6">
-                        You have reviewed and accepted the contract. A confirmation has been recorded.
-                    </p>
-                    <div className="space-y-3">
-                        <button
-                            onClick={() => router.push('/auth/quick-contract')}
-                            className="w-full px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
-                        >
-                            Back to Contracts
-                        </button>
-                        <button
-                            onClick={handleDownloadPdf}
-                            className="w-full px-6 py-3 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium transition-colors"
-                        >
-                            Download PDF
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )
-    }
-
-    // ========================================================================
-    // SECTION 8: MAIN LAYOUT RENDER
+    // SECTION 7: MAIN LAYOUT RENDER
     // ========================================================================
 
     return (
         <div className="min-h-screen bg-slate-100 flex flex-col">
 
             {/* ============================================================ */}
-            {/* SECTION 8A: HEADER */}
+            {/* SECTION 7A: HEADER */}
             {/* ============================================================ */}
-            <header className="bg-white border-b border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between px-6 py-4">
+            <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+                <div className="flex items-center justify-between px-4 py-3">
                     {/* Left: Logo & Contract Info */}
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md">
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
                             <div>
-                                <h1 className="font-semibold text-slate-800">Quick Contract</h1>
-                                <p className="text-xs text-slate-500">{contract?.contractType}</p>
+                                <h1 className="font-semibold text-slate-800">Quick Contract Studio</h1>
+                                <p className="text-xs text-slate-500">CLARENCE Certified Review</p>
                             </div>
                         </div>
                         <div className="h-8 w-px bg-slate-200"></div>
                         <div>
                             <h2 className="font-medium text-slate-700">{contract?.contractName}</h2>
                             <p className="text-xs text-slate-500">
-                                {clauses.length} clauses · {clauses.filter(c => c.clarenceCertified).length} certified
+                                {contract?.contractType} · {clauses.length} clauses · {clauses.filter(c => c.clarenceCertified).length} certified
                             </p>
                         </div>
                     </div>
 
-                    {/* Right: User & Actions */}
-                    <div className="flex items-center gap-4">
-                        {/* Download Button */}
+                    {/* Right: Actions */}
+                    <div className="flex items-center gap-3">
                         <button
-                            onClick={handleDownloadPdf}
-                            className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center gap-2"
+                            onClick={() => router.push('/auth/quick-contract')}
+                            className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
                         >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Download PDF
+                            ← Back
                         </button>
-
-                        {/* User Info */}
-                        <div className="text-right">
-                            <p className="text-sm font-medium text-slate-700">{userInfo?.fullName}</p>
-                            <p className="text-xs text-slate-500">{userInfo?.company}</p>
-                        </div>
-
-                        {/* Sign Out */}
                         <button
-                            onClick={handleSignOut}
-                            className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
-                            title="Sign Out"
+                            onClick={handleAcceptContract}
+                            disabled={accepting}
+                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
+                            {accepting ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Processing...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Accept Contract
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>
             </header>
 
             {/* ============================================================ */}
-            {/* SECTION 8B: 3-PANEL LAYOUT */}
+            {/* SECTION 7B: 3-PANEL LAYOUT */}
             {/* ============================================================ */}
             <div className="flex flex-1 overflow-hidden">
 
                 {/* ======================================================== */}
                 {/* LEFT PANEL: Clause List */}
                 {/* ======================================================== */}
-                <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+                <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0">
                     {/* Search */}
-                    <div className="p-4 border-b border-slate-200">
+                    <div className="p-3 border-b border-slate-200">
                         <div className="relative">
                             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -514,14 +555,14 @@ function QuickContractStudioContent() {
                                 placeholder="Search clauses..."
                                 value={clauseSearchTerm}
                                 onChange={(e) => setClauseSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                             />
                         </div>
                     </div>
 
                     {/* Clause List */}
                     <div ref={clauseListRef} className="flex-1 overflow-y-auto">
-                        {filteredClauses.map((clause, index) => {
+                        {filteredClauses.map((clause) => {
                             const actualIndex = clauses.findIndex(c => c.clauseId === clause.clauseId)
                             const isSelected = selectedClauseIndex === actualIndex
                             const isCertified = clause.clarenceCertified
@@ -531,13 +572,13 @@ function QuickContractStudioContent() {
                                 <div
                                     key={clause.clauseId}
                                     onClick={() => setSelectedClauseIndex(actualIndex)}
-                                    className={`px-4 py-3 border-b border-slate-100 cursor-pointer transition-all ${isSelected
-                                            ? 'bg-teal-50 border-l-4 border-l-teal-500'
+                                    className={`px-3 py-2.5 border-b border-slate-100 cursor-pointer transition-all ${isSelected
+                                            ? 'bg-purple-50 border-l-4 border-l-purple-500'
                                             : 'hover:bg-slate-50 border-l-4 border-l-transparent'
                                         }`}
-                                    style={{ paddingLeft: `${16 + (clause.clauseLevel - 1) * 12}px` }}
+                                    style={{ paddingLeft: `${12 + (clause.clauseLevel - 1) * 12}px` }}
                                 >
-                                    <div className="flex items-start gap-3">
+                                    <div className="flex items-start gap-2">
                                         {/* Certification Icon */}
                                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
                                                 ? 'bg-slate-200 text-slate-400'
@@ -545,7 +586,7 @@ function QuickContractStudioContent() {
                                                     ? 'bg-amber-100 text-amber-600'
                                                     : clause.clarenceFairness === 'balanced'
                                                         ? 'bg-emerald-100 text-emerald-600'
-                                                        : 'bg-blue-100 text-blue-600'
+                                                        : 'bg-purple-100 text-purple-600'
                                             }`}>
                                             {!isCertified ? '○' : hasFlags ? '!' : '✓'}
                                         </div>
@@ -555,11 +596,16 @@ function QuickContractStudioContent() {
                                                 <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                                                     {clause.clauseNumber}
                                                 </span>
+                                                {clause.clarencePosition && (
+                                                    <span className="text-xs font-medium text-purple-600">
+                                                        {clause.clarencePosition.toFixed(1)}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <p className={`text-sm leading-snug ${isSelected ? 'text-teal-700 font-medium' : 'text-slate-700'}`}>
+                                            <p className={`text-sm leading-snug truncate ${isSelected ? 'text-purple-700 font-medium' : 'text-slate-700'}`}>
                                                 {clause.clauseName}
                                             </p>
-                                            <span className={`inline-block mt-1.5 px-2 py-0.5 text-xs rounded-full ${getCategoryColor(clause.category)}`}>
+                                            <span className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full border ${getCategoryColor(clause.category)}`}>
                                                 {clause.category}
                                             </span>
                                         </div>
@@ -570,13 +616,13 @@ function QuickContractStudioContent() {
                     </div>
 
                     {/* Stats Footer */}
-                    <div className="p-4 border-t border-slate-200 bg-slate-50">
-                        <div className="flex justify-between text-sm">
+                    <div className="p-3 border-t border-slate-200 bg-slate-50">
+                        <div className="flex justify-between text-xs">
                             <span className="text-slate-500">
-                                Total: <strong className="text-slate-700">{clauses.length}</strong>
+                                {clauses.length} clauses
                             </span>
-                            <span className="text-emerald-600 flex items-center gap-1">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <span className="text-purple-600 flex items-center gap-1">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                 </svg>
                                 {clauses.filter(c => c.clarenceCertified).length} certified
@@ -586,62 +632,258 @@ function QuickContractStudioContent() {
                 </div>
 
                 {/* ======================================================== */}
-                {/* MIDDLE PANEL: Clause Content */}
+                {/* CENTER PANEL: Main Workspace */}
                 {/* ======================================================== */}
-                <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+                <div className="flex-1 flex flex-col overflow-hidden">
                     {selectedClause ? (
                         <>
                             {/* Clause Header */}
-                            <div className="px-8 py-5 border-b border-slate-200 bg-white">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <span className="text-sm font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded">
+                            <div className="flex-shrink-0 px-6 py-4 border-b border-slate-200 bg-white">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-sm font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
                                                 {selectedClause.clauseNumber}
                                             </span>
-                                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getCategoryColor(selectedClause.category)}`}>
+                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getCategoryColor(selectedClause.category)}`}>
                                                 {selectedClause.category}
                                             </span>
-                                            {/* Read-only indicator */}
-                                            <span className="px-2 py-1 bg-slate-100 text-slate-500 text-xs rounded flex items-center gap-1">
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                                </svg>
-                                                Read-only
-                                            </span>
+                                            {selectedClause.clarenceCertified && (
+                                                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium flex items-center gap-1">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                    </svg>
+                                                    Certified
+                                                </span>
+                                            )}
                                         </div>
-                                        <h2 className="text-2xl font-bold text-slate-800">
-                                            {selectedClause.clauseName}
-                                        </h2>
+                                        <h2 className="text-xl font-semibold text-slate-800">{selectedClause.clauseName}</h2>
                                     </div>
-                                    <button
-                                        onClick={() => navigator.clipboard.writeText(selectedClause.clauseText || '')}
-                                        className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                                        title="Copy clause text"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
-                                    </button>
+
+                                    {/* Tabs */}
+                                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                                        {(['overview', 'history', 'tradeoffs', 'draft'] as const).map(tab => (
+                                            <button
+                                                key={tab}
+                                                onClick={() => setActiveTab(tab)}
+                                                className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
+                                                        ? 'bg-white text-slate-800 shadow-sm'
+                                                        : 'text-slate-500 hover:text-slate-700'
+                                                    }`}
+                                            >
+                                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Clause Content */}
-                            <div className="flex-1 overflow-y-auto p-8">
-                                <div className="max-w-4xl mx-auto">
-                                    <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
-                                        <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-base">
-                                            {selectedClause.clauseText || 'No content available for this clause.'}
+                            {/* Workspace Content */}
+                            <div className="flex-1 overflow-y-auto p-6">
+
+                                {/* ==================== OVERVIEW TAB ==================== */}
+                                {activeTab === 'overview' && (
+                                    <div className="space-y-6">
+
+                                        {/* CLARENCE Position Bar - THE STAR OF THE SHOW */}
+                                        <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                            <h3 className="text-sm font-semibold text-slate-700 mb-4">CLARENCE Recommended Position</h3>
+
+                                            {/* Position Scale */}
+                                            <div className="relative mb-6">
+                                                {/* Scale Background */}
+                                                <div className="h-4 bg-gradient-to-r from-emerald-200 via-teal-200 via-50% to-blue-200 rounded-full relative">
+                                                    {/* Scale markers */}
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                                        <div
+                                                            key={n}
+                                                            className="absolute top-0 bottom-0 w-px bg-white/50"
+                                                            style={{ left: `${((n - 1) / 9) * 100}%` }}
+                                                        />
+                                                    ))}
+
+                                                    {/* CLARENCE Badge - Only marker shown */}
+                                                    {selectedClause.clarencePosition !== null && (
+                                                        <div
+                                                            className="absolute top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all"
+                                                            style={{
+                                                                left: `${((selectedClause.clarencePosition - 1) / 9) * 100}%`,
+                                                                transform: 'translate(-50%, -50%)'
+                                                            }}
+                                                            title={`CLARENCE recommends: ${selectedClause.clarencePosition.toFixed(1)}`}
+                                                        >
+                                                            C
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Scale Labels */}
+                                                <div className="flex justify-between mt-2 text-xs text-slate-500">
+                                                    <span>Customer-Favoring</span>
+                                                    <span>Balanced</span>
+                                                    <span>Provider-Favoring</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Position Details */}
+                                            <div className="flex items-center gap-6">
+                                                <div className="flex-1 p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-lg">
+                                                            <span className="text-white text-xl font-bold">C</span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-3xl font-bold text-purple-700">
+                                                                {selectedClause.clarencePosition?.toFixed(1) ?? '—'}
+                                                            </div>
+                                                            <div className="text-sm text-purple-600">
+                                                                {getPositionLabel(selectedClause.clarencePosition)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {selectedClause.clarenceFairness && (
+                                                    <div className={`px-4 py-3 rounded-lg ${selectedClause.clarenceFairness === 'balanced'
+                                                            ? 'bg-emerald-50 border border-emerald-200'
+                                                            : 'bg-amber-50 border border-amber-200'
+                                                        }`}>
+                                                        <div className={`text-sm font-medium ${selectedClause.clarenceFairness === 'balanced'
+                                                                ? 'text-emerald-700'
+                                                                : 'text-amber-700'
+                                                            }`}>
+                                                            {selectedClause.clarenceFairness === 'balanced' ? '✓ Balanced' : '⚠ Review Recommended'}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* CLARENCE Analysis */}
+                                        {(selectedClause.clarenceSummary || selectedClause.clarenceAssessment) && (
+                                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                                <h3 className="text-sm font-semibold text-slate-700 mb-3">CLARENCE Analysis</h3>
+
+                                                {selectedClause.clarenceSummary && (
+                                                    <div className="mb-4">
+                                                        <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Summary</h4>
+                                                        <p className="text-slate-700 leading-relaxed">{selectedClause.clarenceSummary}</p>
+                                                    </div>
+                                                )}
+
+                                                {selectedClause.clarenceAssessment && (
+                                                    <div>
+                                                        <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Assessment</h4>
+                                                        <p className="text-slate-700 leading-relaxed">{selectedClause.clarenceAssessment}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Attention Points */}
+                                        {selectedClause.clarenceFlags && selectedClause.clarenceFlags.length > 0 && !selectedClause.clarenceFlags.includes('none') && (
+                                            <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
+                                                <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                    </svg>
+                                                    Attention Points
+                                                </h3>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedClause.clarenceFlags.filter(f => f !== 'none').map((flag, i) => (
+                                                        <span
+                                                            key={i}
+                                                            className="px-3 py-1.5 bg-amber-100 text-amber-800 text-sm font-medium rounded-full"
+                                                        >
+                                                            {flag.replace(/_/g, ' ')}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* View Clause Text Toggle */}
+                                        <div className="bg-white rounded-xl border border-slate-200">
+                                            <button
+                                                onClick={() => setShowClauseText(!showClauseText)}
+                                                className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors rounded-xl"
+                                            >
+                                                <span className="text-sm font-medium text-slate-700">View Full Clause Text</span>
+                                                <svg
+                                                    className={`w-5 h-5 text-slate-400 transition-transform ${showClauseText ? 'rotate-180' : ''}`}
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                            {showClauseText && (
+                                                <div className="px-5 pb-5 border-t border-slate-100">
+                                                    <div className="mt-4 p-4 bg-slate-50 rounded-lg">
+                                                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                                                            {selectedClause.clauseText || 'Clause text not available.'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ==================== HISTORY TAB ==================== */}
+                                {activeTab === 'history' && (
+                                    <div className="bg-white rounded-xl border border-slate-200 p-6">
+                                        <div className="text-center py-12">
+                                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-medium text-slate-700 mb-2">No History Yet</h3>
+                                            <p className="text-slate-500 text-sm">
+                                                This is a Quick Contract review. Position history is available in full negotiation mode.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ==================== TRADEOFFS TAB ==================== */}
+                                {activeTab === 'tradeoffs' && (
+                                    <div className="bg-white rounded-xl border border-slate-200 p-6">
+                                        <div className="text-center py-12">
+                                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-medium text-slate-700 mb-2">Trade-Offs</h3>
+                                            <p className="text-slate-500 text-sm">
+                                                Trade-off analysis is available in full negotiation mode where both parties can adjust positions.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ==================== DRAFT TAB ==================== */}
+                                {activeTab === 'draft' && (
+                                    <div className="bg-white rounded-xl border border-slate-200 p-6">
+                                        <h3 className="text-sm font-semibold text-slate-700 mb-4">Draft Clause Language</h3>
+                                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
+                                                {selectedClause.clauseText || 'Clause text not available for drafting.'}
+                                            </p>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-3 italic">
+                                            This shows the current clause text. In full negotiation mode, CLARENCE can generate draft language based on agreed positions.
                                         </p>
                                     </div>
-                                    <div className="mt-3 text-sm text-slate-400 text-right">
-                                        {selectedClause.clauseText?.length || 0} characters
-                                    </div>
-                                </div>
+                                )}
                             </div>
 
                             {/* Navigation Footer */}
-                            <div className="px-8 py-4 border-t border-slate-200 bg-white flex items-center justify-between">
+                            <div className="flex-shrink-0 px-6 py-3 border-t border-slate-200 bg-white flex items-center justify-between">
                                 <button
                                     onClick={() => setSelectedClauseIndex(Math.max(0, (selectedClauseIndex || 0) - 1))}
                                     disabled={selectedClauseIndex === 0}
@@ -652,7 +894,7 @@ function QuickContractStudioContent() {
                                     </svg>
                                     Previous
                                 </button>
-                                <span className="text-sm text-slate-500 font-medium">
+                                <span className="text-sm text-slate-500">
                                     Clause {(selectedClauseIndex || 0) + 1} of {clauses.length}
                                 </span>
                                 <button
@@ -670,9 +912,11 @@ function QuickContractStudioContent() {
                     ) : (
                         <div className="flex-1 flex items-center justify-center">
                             <div className="text-center">
-                                <svg className="w-20 h-20 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
+                                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
                                 <p className="text-slate-500 text-lg">Select a clause to view details</p>
                             </div>
                         </div>
@@ -680,199 +924,80 @@ function QuickContractStudioContent() {
                 </div>
 
                 {/* ======================================================== */}
-                {/* RIGHT PANEL: CLARENCE Certification + Actions */}
+                {/* RIGHT PANEL: CLARENCE Chat */}
                 {/* ======================================================== */}
-                <div className="w-96 bg-white border-l border-slate-200 flex flex-col">
-                    {selectedClause ? (
-                        <>
-                            {/* Certification Header */}
-                            <div className={`px-6 py-4 border-b ${selectedClause.clarenceCertified
-                                    ? selectedClause.clarenceFairness === 'balanced'
-                                        ? 'bg-emerald-50 border-emerald-200'
-                                        : selectedClause.clarenceFairness === 'review_recommended'
-                                            ? 'bg-amber-50 border-amber-200'
-                                            : 'bg-blue-50 border-blue-200'
-                                    : 'bg-slate-50 border-slate-200'
-                                }`}>
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedClause.clarenceCertified
-                                            ? selectedClause.clarenceFairness === 'balanced'
-                                                ? 'bg-emerald-100'
-                                                : selectedClause.clarenceFairness === 'review_recommended'
-                                                    ? 'bg-amber-100'
-                                                    : 'bg-blue-100'
-                                            : 'bg-slate-200'
-                                        }`}>
-                                        {selectedClause.clarenceCertified ? (
-                                            <svg className={`w-6 h-6 ${selectedClause.clarenceFairness === 'balanced'
-                                                    ? 'text-emerald-600'
-                                                    : selectedClause.clarenceFairness === 'review_recommended'
-                                                        ? 'text-amber-600'
-                                                        : 'text-blue-600'
-                                                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                            </svg>
-                                        ) : (
-                                            <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-slate-800 text-lg">
-                                            {selectedClause.clarenceCertified ? 'CLARENCE Certified' : 'Pending Review'}
-                                        </h3>
-                                        {selectedClause.clarenceCertified && selectedClause.clarenceFairness && (
-                                            <p className={`text-sm font-medium ${selectedClause.clarenceFairness === 'balanced'
-                                                    ? 'text-emerald-600'
-                                                    : selectedClause.clarenceFairness === 'review_recommended'
-                                                        ? 'text-amber-600'
-                                                        : 'text-blue-600'
-                                                }`}>
-                                                {selectedClause.clarenceFairness.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
+                <div className="w-96 bg-white border-l border-slate-200 flex flex-col flex-shrink-0">
+                    {/* Chat Header */}
+                    <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-purple-50 to-white">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-md">
+                                <span className="text-white font-bold">C</span>
                             </div>
-
-                            {/* Certification Details */}
-                            <div className="flex-1 overflow-y-auto p-6">
-                                {selectedClause.clarenceCertified ? (
-                                    <div className="space-y-6">
-                                        {/* Position Score */}
-                                        {selectedClause.clarencePosition && (
-                                            <div>
-                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Position Score</h4>
-                                                <div className="flex items-center gap-4">
-                                                    <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
-                                                        <div
-                                                            className={`h-full rounded-full transition-all ${selectedClause.clarencePosition <= 4
-                                                                    ? 'bg-green-500'
-                                                                    : selectedClause.clarencePosition <= 6
-                                                                        ? 'bg-emerald-500'
-                                                                        : 'bg-blue-500'
-                                                                }`}
-                                                            style={{ width: `${(selectedClause.clarencePosition / 10) * 100}%` }}
-                                                        />
-                                                    </div>
-                                                    <span className="text-2xl font-bold text-slate-800 w-12 text-right">
-                                                        {selectedClause.clarencePosition.toFixed(1)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between text-xs text-slate-400 mt-2">
-                                                    <span>Customer-Favoring</span>
-                                                    <span>Provider-Favoring</span>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Summary */}
-                                        {selectedClause.clarenceSummary && (
-                                            <div>
-                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">What This Means</h4>
-                                                <p className="text-sm text-slate-700 leading-relaxed">
-                                                    {selectedClause.clarenceSummary}
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Assessment */}
-                                        {selectedClause.clarenceAssessment && (
-                                            <div>
-                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Assessment</h4>
-                                                <p className="text-sm text-slate-700 leading-relaxed">
-                                                    {selectedClause.clarenceAssessment}
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Flags */}
-                                        {selectedClause.clarenceFlags && selectedClause.clarenceFlags.length > 0 && !selectedClause.clarenceFlags.includes('none') && (
-                                            <div>
-                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Attention Points</h4>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {selectedClause.clarenceFlags.filter(f => f !== 'none').map((flag, i) => (
-                                                        <span
-                                                            key={i}
-                                                            className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full"
-                                                        >
-                                                            {flag.replace(/_/g, ' ')}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Certification Date */}
-                                        {selectedClause.clarenceCertifiedAt && (
-                                            <div className="pt-4 border-t border-slate-200">
-                                                <p className="text-xs text-slate-400">
-                                                    Certified: {new Date(selectedClause.clarenceCertifiedAt).toLocaleDateString()}
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12">
-                                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </div>
-                                        <p className="text-sm text-slate-500">
-                                            This clause is awaiting CLARENCE certification.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-3">
-                                <button
-                                    onClick={handleAcceptAll}
-                                    disabled={accepting}
-                                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-                                >
-                                    {accepting ? (
-                                        <>
-                                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            Accept Contract
-                                        </>
-                                    )}
-                                </button>
-                                <button
-                                    onClick={() => router.push('/auth/quick-contract')}
-                                    className="w-full py-3 border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                    </svg>
-                                    Back to Contracts
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center">
-                            <div className="text-center px-8">
-                                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                    </svg>
-                                </div>
-                                <p className="text-slate-500">
-                                    Select a clause to view CLARENCE certification
-                                </p>
+                            <div>
+                                <h3 className="font-semibold text-slate-800">CLARENCE</h3>
+                                <p className="text-xs text-slate-500">Contract Analysis Assistant</p>
                             </div>
                         </div>
-                    )}
+                    </div>
+
+                    {/* Chat Messages */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {chatMessages.map((message) => (
+                            <div
+                                key={message.id}
+                                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                            >
+                                <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-slate-100 text-slate-700'
+                                    }`}>
+                                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                    <p className={`text-xs mt-1.5 ${message.role === 'user' ? 'text-purple-200' : 'text-slate-400'
+                                        }`}>
+                                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                        {chatLoading && (
+                            <div className="flex justify-start">
+                                <div className="bg-slate-100 rounded-2xl px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    {/* Chat Input */}
+                    <div className="p-4 border-t border-slate-200">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendChatMessage()}
+                                placeholder="Ask CLARENCE about this contract..."
+                                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            />
+                            <button
+                                onClick={sendChatMessage}
+                                disabled={!chatInput.trim() || chatLoading}
+                                className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg transition-colors"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2 text-center">
+                            Press Enter to send
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -880,7 +1005,7 @@ function QuickContractStudioContent() {
 }
 
 // ============================================================================
-// SECTION 9: DEFAULT EXPORT WITH SUSPENSE
+// SECTION 8: DEFAULT EXPORT WITH SUSPENSE
 // ============================================================================
 
 export default function QuickContractStudioPage() {
