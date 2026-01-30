@@ -305,10 +305,15 @@ function QuickContractReviewContent() {
                     .update(updates)
                     .eq('recipient_id', recipientData.recipient_id)
 
+                // Truncate very long contract names for display
+                const displayName = qc.contract_name.length > 50
+                    ? qc.contract_name.substring(0, 47) + '...'
+                    : qc.contract_name
+
                 setChatMessages([{
                     id: 'welcome',
                     role: 'assistant',
-                    content: `Welcome${recipientData.recipient_name ? `, ${recipientData.recipient_name.split(' ')[0]}` : ''}! I'm CLARENCE, your contract review assistant.\n\n${senderName ? `${senderName}${senderCompany ? ` from ${senderCompany}` : ''} has sent you ` : 'You have received '}"${qc.contract_name}" for your review.\n\nI've analyzed ${mappedClauses.length} clauses and can help you understand any terms.`,
+                    content: `Welcome${recipientData.recipient_name ? `, ${recipientData.recipient_name.split(' ')[0]}` : ''}! I'm CLARENCE, your contract review assistant.\n\n${senderName ? `${senderName}${senderCompany ? ` from ${senderCompany}` : ''} has sent you ` : 'You have received '}"${displayName}" for your review.\n\nI've analyzed ${mappedClauses.length} clauses and can help you understand any terms.`,
                     timestamp: new Date()
                 }])
 
@@ -815,7 +820,7 @@ function QuickContractReviewContent() {
                             <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user' ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-700'
                                     }`}>
-                                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                    <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">{message.content}</p>
                                 </div>
                             </div>
                         ))}

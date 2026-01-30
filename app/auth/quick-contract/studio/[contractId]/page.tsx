@@ -38,6 +38,14 @@ interface ContractClause {
     clarenceAssessment: string | null
     clarenceFlags: string[]
     clarenceCertifiedAt: string | null
+    // Value extraction fields (from document)
+    extractedValue: string | null
+    extractedUnit: string | null
+    valueType: string | null
+    documentPosition: number | null
+    // Draft editing fields
+    draftText: string | null
+    draftModified: boolean
     // Position options (from clause library)
     positionOptions: PositionOption[]
 }
@@ -153,6 +161,11 @@ function QuickContractStudioContent() {
     const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'tradeoffs' | 'draft'>('overview')
     const [showClauseText, setShowClauseText] = useState(false)
 
+    // Draft editing state
+    const [isDraftEditing, setIsDraftEditing] = useState(false)
+    const [editingDraftText, setEditingDraftText] = useState('')
+    const [savingDraft, setSavingDraft] = useState(false)
+
     // Chat state
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
@@ -263,6 +276,14 @@ function QuickContractStudioContent() {
                     clarenceAssessment: c.clarence_assessment,
                     clarenceFlags: c.clarence_flags || [],
                     clarenceCertifiedAt: c.clarence_certified_at,
+                    // Value extraction fields
+                    extractedValue: c.extracted_value,
+                    extractedUnit: c.extracted_unit,
+                    valueType: c.value_type,
+                    documentPosition: c.document_position,
+                    // Draft fields
+                    draftText: c.draft_text || null,
+                    draftModified: !!c.draft_text,
                     positionOptions: DEFAULT_POSITION_OPTIONS
                 }))
 
@@ -274,10 +295,15 @@ function QuickContractStudioContent() {
                 }
 
                 // Initialize chat with welcome message
+                // Truncate very long contract names for display
+                const displayName = contractData.contract_name.length > 50
+                    ? contractData.contract_name.substring(0, 47) + '...'
+                    : contractData.contract_name
+
                 setChatMessages([{
                     id: 'welcome',
                     role: 'assistant',
-                    content: `Welcome to the Quick Contract Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${contractData.contract_name}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
+                    content: `Welcome to the Quick Contract Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
                     timestamp: new Date()
                 }])
 
@@ -367,6 +393,174 @@ function QuickContractStudioContent() {
     }, [chatMessages])
 
     // ========================================================================
+    // SECTION 4C-2: HELPER FOR POSITION LABELS
+    // ========================================================================
+
+    const getPositionLabel = (position: number | null): string => {
+        if (position === null) return 'Not set'
+        const option = DEFAULT_POSITION_OPTIONS.find(o => o.value === Math.round(position))
+        return option?.label || `Position ${position}`
+    }
+
+    // Helper to get typical industry range based on category and value type
+    const getTypicalRange = (category: string, valueType: string | null, unit: string | null): string => {
+        // Category-specific typical ranges
+        const categoryRanges: Record<string, Record<string, string>> = {
+            'Charges and Payment': {
+                'duration': '14-30 days',
+                'percentage': '2-4%',
+                'currency': 'Net amount',
+                'default': '30 days'
+            },
+            'Term and Termination': {
+                'duration': '30-90 days notice',
+                'default': '60-90 days'
+            },
+            'Liability': {
+                'currency': '100-150% annual fees',
+                'percentage': '100-200%',
+                'default': 'Capped at contract value'
+            },
+            'Confidentiality': {
+                'duration': '2-5 years',
+                'default': '3-5 years'
+            },
+            'Service Levels': {
+                'percentage': '99.5-99.9%',
+                'duration': '4-24 hours',
+                'default': '99.9% uptime'
+            },
+            'Data Protection': {
+                'duration': '72 hours breach notification',
+                'default': 'GDPR compliant'
+            },
+            'Intellectual Property': {
+                'default': 'Retained by originator'
+            },
+            'Insurance': {
+                'currency': '£1M-£5M',
+                'default': 'Industry standard coverage'
+            },
+            'Audit': {
+                'duration': '30 days notice',
+                'count': '1-2 per year',
+                'default': 'Annual audit rights'
+            },
+            'Dispute Resolution': {
+                'duration': '30-60 days escalation',
+                'default': 'Mediation then arbitration'
+            }
+        }
+
+        const categoryConfig = categoryRanges[category]
+        if (categoryConfig) {
+            if (valueType && categoryConfig[valueType]) {
+                return categoryConfig[valueType]
+            }
+            return categoryConfig['default'] || 'Industry standard'
+        }
+
+        // Generic fallback based on value type
+        if (valueType === 'duration') {
+            if (unit === 'days') return '30-60 days'
+            if (unit === 'months') return '3-6 months'
+            if (unit === 'years') return '2-5 years'
+            if (unit === 'hours') return '24-48 hours'
+            return '30-90 days'
+        }
+        if (valueType === 'percentage') return '5-15%'
+        if (valueType === 'currency') return 'Market rate'
+
+        return 'Industry standard'
+    }
+
+    // ========================================================================
+    // SECTION 4C-3: CLAUSE CLICK → RATIONALE
+    // Auto-generate explanation when clause is selected
+    // ========================================================================
+
+    const [lastExplainedClauseId, setLastExplainedClauseId] = useState<string | null>(null)
+
+    useEffect(() => {
+        // Only trigger if we have a selected clause and it's different from last explained
+        if (!selectedClause || selectedClause.clauseId === lastExplainedClauseId) return
+
+        // Don't trigger on initial load (when welcome message is the only message)
+        if (chatMessages.length <= 1) {
+            setLastExplainedClauseId(selectedClause.clauseId)
+            return
+        }
+
+        // Generate rationale message
+        const generateRationale = () => {
+            const clause = selectedClause
+            const posLabel = getPositionLabel(clause.clarencePosition)
+
+            // Build the rationale message
+            let rationaleContent = `📋 **${clause.clauseName}** (${clause.clauseNumber})\n\n`
+
+            // Show document position vs CLARENCE position if we have both
+            if (clause.documentPosition !== null && clause.clarencePosition !== null) {
+                const docPosLabel = getPositionLabel(clause.documentPosition)
+                const difference = Math.abs(clause.documentPosition - clause.clarencePosition)
+
+                rationaleContent += `**Your Document:** Position ${clause.documentPosition.toFixed(1)} - ${docPosLabel}`
+                if (clause.extractedValue && clause.extractedUnit) {
+                    rationaleContent += ` (${clause.extractedValue} ${clause.extractedUnit})`
+                }
+                rationaleContent += `\n**CLARENCE Recommends:** Position ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
+
+                // Add comparison insight
+                if (difference < 0.5) {
+                    rationaleContent += `✅ **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
+                } else if (clause.documentPosition > clause.clarencePosition) {
+                    rationaleContent += `⚠️ **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
+                } else {
+                    rationaleContent += `💡 **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
+                }
+            } else if (clause.clarencePosition !== null) {
+                rationaleContent += `**CLARENCE Position:** ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
+            }
+
+            // Add the summary/assessment
+            if (clause.clarenceSummary) {
+                rationaleContent += `**Summary:**\n${clause.clarenceSummary}\n\n`
+            }
+
+            if (clause.clarenceAssessment) {
+                rationaleContent += `**Rationale:**\n${clause.clarenceAssessment}\n\n`
+            }
+
+            // Add flags if any
+            if (clause.clarenceFlags && clause.clarenceFlags.length > 0) {
+                rationaleContent += `**Attention Points:**\n`
+                clause.clarenceFlags.forEach(flag => {
+                    rationaleContent += `• ${flag}\n`
+                })
+                rationaleContent += '\n'
+            }
+
+            // Closing prompt
+            rationaleContent += `Would you like me to explain any aspect in more detail, or discuss alternatives?`
+
+            const rationaleMessage: ChatMessage = {
+                id: `rationale-${clause.clauseId}-${Date.now()}`,
+                role: 'assistant',
+                content: rationaleContent,
+                timestamp: new Date()
+            }
+
+            setChatMessages(prev => [...prev, rationaleMessage])
+            setLastExplainedClauseId(clause.clauseId)
+        }
+
+        // Small delay to make it feel more natural
+        const timer = setTimeout(generateRationale, 300)
+        return () => clearTimeout(timer)
+
+    }, [selectedClause, lastExplainedClauseId, chatMessages.length])
+
+    // ========================================================================
     // SECTION 4D: ACTION HANDLERS
     // ========================================================================
 
@@ -410,6 +604,125 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
+    // SECTION 4D-2: DRAFT EDITING HANDLERS
+    // ========================================================================
+
+    // Start editing draft
+    const handleStartEditing = () => {
+        if (!selectedClause) return
+        // Use existing draft text, or fall back to original clause text
+        setEditingDraftText(selectedClause.draftText || selectedClause.clauseText || '')
+        setIsDraftEditing(true)
+    }
+
+    // Cancel editing
+    const handleCancelEditing = () => {
+        setIsDraftEditing(false)
+        setEditingDraftText('')
+    }
+
+    // Save draft to database
+    const handleSaveDraft = async () => {
+        if (!selectedClause || !userInfo) return
+
+        setSavingDraft(true)
+        try {
+            const { error: updateError } = await supabase
+                .from('uploaded_contract_clauses')
+                .update({
+                    draft_text: editingDraftText,
+                    draft_modified_at: new Date().toISOString(),
+                    draft_modified_by: userInfo.userId
+                })
+                .eq('clause_id', selectedClause.clauseId)
+
+            if (updateError) throw updateError
+
+            // Update local state
+            setClauses(prev => prev.map(c =>
+                c.clauseId === selectedClause.clauseId
+                    ? { ...c, draftText: editingDraftText, draftModified: true }
+                    : c
+            ))
+
+            setIsDraftEditing(false)
+            setEditingDraftText('')
+
+            // Add confirmation message to chat
+            const confirmMessage: ChatMessage = {
+                id: `draft-saved-${Date.now()}`,
+                role: 'assistant',
+                content: `✅ Draft saved for "${selectedClause.clauseName}". This modified text will be used when generating the final contract document.`,
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, confirmMessage])
+
+        } catch (err) {
+            console.error('Save draft error:', err)
+            const errorMessage: ChatMessage = {
+                id: `draft-error-${Date.now()}`,
+                role: 'assistant',
+                content: `❌ Failed to save draft. Please try again.`,
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
+            setSavingDraft(false)
+        }
+    }
+
+    // Reset draft to original
+    const handleResetDraft = async () => {
+        if (!selectedClause) return
+
+        setSavingDraft(true)
+        try {
+            const { error: updateError } = await supabase
+                .from('uploaded_contract_clauses')
+                .update({
+                    draft_text: null,
+                    draft_modified_at: null,
+                    draft_modified_by: null
+                })
+                .eq('clause_id', selectedClause.clauseId)
+
+            if (updateError) throw updateError
+
+            // Update local state
+            setClauses(prev => prev.map(c =>
+                c.clauseId === selectedClause.clauseId
+                    ? { ...c, draftText: null, draftModified: false }
+                    : c
+            ))
+
+            // Add confirmation message
+            const confirmMessage: ChatMessage = {
+                id: `draft-reset-${Date.now()}`,
+                role: 'assistant',
+                content: `↩️ Draft reset to original document text for "${selectedClause.clauseName}".`,
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, confirmMessage])
+
+        } catch (err) {
+            console.error('Reset draft error:', err)
+        } finally {
+            setSavingDraft(false)
+        }
+    }
+
+    // Discuss with CLARENCE - sends clause text to chat for modification suggestions
+    const handleDiscussClause = () => {
+        if (!selectedClause) return
+
+        const currentText = selectedClause.draftText || selectedClause.clauseText || ''
+        const discussPrompt = `I'd like to discuss modifying this clause:\n\n**${selectedClause.clauseName}** (${selectedClause.clauseNumber})\n\n"${currentText.substring(0, 500)}${currentText.length > 500 ? '...' : ''}"\n\nCan you suggest improvements or alternative wording?`
+
+        setChatInput(discussPrompt)
+        // Switch focus to chat - user can then send the message
+    }
+
+    // ========================================================================
     // SECTION 4E: FILTERED CLAUSES
     // ========================================================================
 
@@ -426,12 +739,6 @@ function QuickContractStudioContent() {
     // ========================================================================
     // SECTION 4F: HELPER FUNCTIONS
     // ========================================================================
-
-    const getPositionLabel = (position: number | null): string => {
-        if (position === null) return 'Not set'
-        const option = DEFAULT_POSITION_OPTIONS.find(o => o.value === Math.round(position))
-        return option?.label || `Position ${position}`
-    }
 
     const getPositionColor = (position: number | null): string => {
         if (position === null) return 'bg-slate-200'
@@ -796,6 +1103,108 @@ function QuickContractStudioContent() {
                                             </div>
                                         </div>
 
+                                        {/* Document Value & Range Comparison */}
+                                        {(selectedClause.extractedValue || selectedClause.documentPosition) && (
+                                            <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                                <h3 className="text-sm font-semibold text-slate-700 mb-4">Document Analysis</h3>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    {/* What the Document Says */}
+                                                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Your Document Says</div>
+                                                        {selectedClause.extractedValue ? (
+                                                            <div className="flex items-baseline gap-1">
+                                                                <span className="text-2xl font-bold text-slate-800">
+                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '£' && '£'}
+                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '$' && '$'}
+                                                                    {selectedClause.extractedValue}
+                                                                </span>
+                                                                <span className="text-sm text-slate-600">
+                                                                    {selectedClause.extractedUnit && !['£', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
+                                                                    {selectedClause.valueType === 'percentage' && '%'}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-lg font-medium text-slate-600">
+                                                                Position {selectedClause.documentPosition?.toFixed(1)}
+                                                            </div>
+                                                        )}
+                                                        {selectedClause.documentPosition && (
+                                                            <div className="mt-2 flex items-center gap-2">
+                                                                <div className={`w-3 h-3 rounded-full ${selectedClause.documentPosition <= 3 ? 'bg-emerald-500' :
+                                                                        selectedClause.documentPosition <= 5 ? 'bg-teal-500' :
+                                                                            selectedClause.documentPosition <= 7 ? 'bg-blue-500' :
+                                                                                'bg-indigo-500'
+                                                                    }`}></div>
+                                                                <span className="text-xs text-slate-500">
+                                                                    {getPositionLabel(selectedClause.documentPosition)}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Typical Industry Range */}
+                                                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                                                        <div className="text-xs font-medium text-purple-600 uppercase tracking-wide mb-2">Industry Standard</div>
+                                                        <div className="text-lg font-semibold text-purple-800">
+                                                            {getTypicalRange(selectedClause.category, selectedClause.valueType, selectedClause.extractedUnit)}
+                                                        </div>
+                                                        <div className="mt-2 text-xs text-purple-600">
+                                                            Based on {selectedClause.category} best practices
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Comparison Indicator */}
+                                                {selectedClause.documentPosition !== null && selectedClause.clarencePosition !== null && (
+                                                    <div className={`mt-4 p-3 rounded-lg flex items-center gap-3 ${Math.abs(selectedClause.documentPosition - selectedClause.clarencePosition) < 0.5
+                                                            ? 'bg-emerald-50 border border-emerald-200'
+                                                            : selectedClause.documentPosition > selectedClause.clarencePosition
+                                                                ? 'bg-amber-50 border border-amber-200'
+                                                                : 'bg-blue-50 border border-blue-200'
+                                                        }`}>
+                                                        {Math.abs(selectedClause.documentPosition - selectedClause.clarencePosition) < 0.5 ? (
+                                                            <>
+                                                                <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                                                                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-emerald-800">Well Aligned</div>
+                                                                    <div className="text-xs text-emerald-600">Document terms match industry standards</div>
+                                                                </div>
+                                                            </>
+                                                        ) : selectedClause.documentPosition > selectedClause.clarencePosition ? (
+                                                            <>
+                                                                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                                                                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-amber-800">Provider-Favoring</div>
+                                                                    <div className="text-xs text-amber-600">Terms are more favorable to the provider than typical</div>
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                                                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-blue-800">Customer-Protective</div>
+                                                                    <div className="text-xs text-blue-600">Terms are more favorable to you than typical</div>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
                                         {/* CLARENCE Analysis */}
                                         {(selectedClause.clarenceSummary || selectedClause.clarenceAssessment) && (
                                             <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -904,16 +1313,161 @@ function QuickContractStudioContent() {
 
                                 {/* ==================== DRAFT TAB ==================== */}
                                 {activeTab === 'draft' && (
-                                    <div className="bg-white rounded-xl border border-slate-200 p-6">
-                                        <h3 className="text-sm font-semibold text-slate-700 mb-4">Draft Clause Language</h3>
-                                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
-                                                {selectedClause.clauseText || 'Clause text not available for drafting.'}
-                                            </p>
+                                    <div className="space-y-4">
+                                        {/* Header with Status and Actions */}
+                                        <div className="bg-white rounded-xl border border-slate-200 p-5">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div>
+                                                    <h3 className="text-sm font-semibold text-slate-700">Draft Clause Language</h3>
+                                                    <p className="text-xs text-slate-500 mt-1">
+                                                        {selectedClause.draftModified
+                                                            ? '✏️ Modified - Your edited version will be used in the final document'
+                                                            : '📄 Original document text'
+                                                        }
+                                                    </p>
+                                                </div>
+
+                                                {/* Status Badge */}
+                                                <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${selectedClause.draftModified
+                                                        ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                                        : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                                    }`}>
+                                                    {selectedClause.draftModified ? 'Modified' : 'Original'}
+                                                </div>
+                                            </div>
+
+                                            {/* Clause Text Display / Editor */}
+                                            {isDraftEditing ? (
+                                                // Editing Mode
+                                                <div className="space-y-3">
+                                                    <textarea
+                                                        value={editingDraftText}
+                                                        onChange={(e) => setEditingDraftText(e.target.value)}
+                                                        className="w-full h-64 p-4 bg-white rounded-lg border-2 border-purple-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 text-sm text-slate-700 font-mono leading-relaxed resize-none transition-colors"
+                                                        placeholder="Enter your modified clause text..."
+                                                    />
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-xs text-slate-500">
+                                                            {editingDraftText.length} characters
+                                                        </p>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={handleCancelEditing}
+                                                                disabled={savingDraft}
+                                                                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                onClick={handleSaveDraft}
+                                                                disabled={savingDraft || !editingDraftText.trim()}
+                                                                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                                            >
+                                                                {savingDraft ? (
+                                                                    <>
+                                                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                        </svg>
+                                                                        Saving...
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                        </svg>
+                                                                        Save Draft
+                                                                    </>
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                // Read-Only Mode
+                                                <div className="space-y-3">
+                                                    <div className={`p-4 rounded-lg border ${selectedClause.draftModified
+                                                            ? 'bg-purple-50 border-purple-200'
+                                                            : 'bg-slate-50 border-slate-200'
+                                                        }`}>
+                                                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
+                                                            {selectedClause.draftText || selectedClause.clauseText || 'Clause text not available.'}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Action Buttons */}
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            {/* Unlock to Edit Button */}
+                                                            <button
+                                                                onClick={handleStartEditing}
+                                                                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors flex items-center gap-2"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                                                </svg>
+                                                                Unlock to Edit
+                                                            </button>
+
+                                                            {/* Discuss with CLARENCE Button */}
+                                                            <button
+                                                                onClick={handleDiscussClause}
+                                                                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors flex items-center gap-2"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                                </svg>
+                                                                Discuss with CLARENCE
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Reset Button (only show if modified) */}
+                                                        {selectedClause.draftModified && (
+                                                            <button
+                                                                onClick={handleResetDraft}
+                                                                disabled={savingDraft}
+                                                                className="px-4 py-2 text-sm text-amber-700 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors flex items-center gap-2"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                </svg>
+                                                                Reset to Original
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <p className="text-xs text-slate-500 mt-3 italic">
-                                            This shows the current clause text. In full negotiation mode, CLARENCE can generate draft language based on agreed positions.
-                                        </p>
+
+                                        {/* Original Text Reference (shown if modified) */}
+                                        {selectedClause.draftModified && !isDraftEditing && (
+                                            <div className="bg-slate-50 rounded-xl border border-slate-200 p-5">
+                                                <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Original Document Text</h4>
+                                                <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed font-mono">
+                                                    {selectedClause.clauseText || 'Original text not available.'}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Help Text */}
+                                        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-medium text-blue-800 mb-1">Editing Tips</h4>
+                                                    <ul className="text-xs text-blue-700 space-y-1">
+                                                        <li>• Click "Unlock to Edit" to modify the clause language</li>
+                                                        <li>• Use "Discuss with CLARENCE" to get AI suggestions for improvements</li>
+                                                        <li>• Your modified text will be used when generating the final contract</li>
+                                                        <li>• You can always reset to the original document text</li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -987,7 +1541,7 @@ function QuickContractStudioContent() {
                                         ? 'bg-purple-600 text-white'
                                         : 'bg-slate-100 text-slate-700'
                                     }`}>
-                                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                    <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">{message.content}</p>
                                     <p className={`text-xs mt-1.5 ${message.role === 'user' ? 'text-purple-200' : 'text-slate-400'
                                         }`}>
                                         {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
