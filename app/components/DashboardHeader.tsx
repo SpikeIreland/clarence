@@ -64,8 +64,15 @@ export default function DashboardHeader({
     // SECTION 4: HELPER FUNCTIONS
     // ========================================================================
 
-    const isActive = (path: string) => pathname?.startsWith(path)
-
+    const isActive = (path: string) => {
+        // Exact match for Contracts Library to avoid matching contracts-dashboard
+        if (path === '/auth/contracts') {
+            return pathname === '/auth/contracts'
+        }
+        // For other paths, use startsWith for nested routes
+        return pathname?.startsWith(path)
+    }
+    
     // ========================================================================
     // SECTION 5: RENDER
     // ========================================================================
@@ -99,8 +106,8 @@ export default function DashboardHeader({
                             <Link
                                 href="/auth/contracts-dashboard"
                                 className={`font-medium text-sm transition-colors ${isActive('/auth/contracts-dashboard')
-                                        ? 'text-white border-b-2 border-emerald-500 pb-1'
-                                        : 'text-slate-400 hover:text-white'
+                                    ? 'text-white border-b-2 border-emerald-500 pb-1'
+                                    : 'text-slate-400 hover:text-white'
                                     }`}
                             >
                                 Negotiations
@@ -110,8 +117,8 @@ export default function DashboardHeader({
                             <Link
                                 href="/auth/quick-contract"
                                 className={`font-medium text-sm transition-colors ${isActive('/auth/quick-contract')
-                                        ? 'text-white border-b-2 border-emerald-500 pb-1'
-                                        : 'text-slate-400 hover:text-white'
+                                    ? 'text-white border-b-2 border-emerald-500 pb-1'
+                                    : 'text-slate-400 hover:text-white'
                                     }`}
                             >
                                 Quick Contracts
@@ -121,8 +128,8 @@ export default function DashboardHeader({
                             <Link
                                 href="/auth/contracts"
                                 className={`font-medium text-sm transition-colors ${isActive('/auth/contracts')
-                                        ? 'text-white border-b-2 border-emerald-500 pb-1'
-                                        : 'text-slate-400 hover:text-white'
+                                    ? 'text-white border-b-2 border-emerald-500 pb-1'
+                                    : 'text-slate-400 hover:text-white'
                                     }`}
                             >
                                 Contracts Library
