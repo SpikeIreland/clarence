@@ -4276,9 +4276,9 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
 
                 // Add AI opponent's response to chat (field is 'providerResponse', not 'chatMessage')
                 if (result.providerResponse) {
-                    const decisionEmoji = result.decision === 'accept' ? 'âœ…'
-                        : result.decision === 'counter' ? 'â†”ï¸'
-                            : 'âœ‹'
+                    const decisionEmoji = result.decision === 'accept' ? '✅'
+                        : result.decision === 'counter' ? '↔️'
+                            : '✋'
 
                     const decisionText = result.decision === 'accept'
                         ? `accepted your position`
@@ -4308,7 +4308,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                             positionId: positionId,
                             sender: 'clarence',
                             senderUserId: null,
-                            message: `ðŸ’¡ **CLARENCE's Tip:** ${result.teachingMoment}`,
+                            message: `💡 **CLARENCE's Tip:** ${result.teachingMoment}`,
                             messageType: 'notification',
                             relatedPositionChange: false,
                             triggeredBy: 'training_ai_move',
@@ -4555,7 +4555,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     console.error('CLARENCE AI response error:', error)
                     // Fallback to simple message on error
                     const fallbackMessage = isNowAligned
-                        ? `ðŸŽ‰ Agreement reached on **${selectedClause.clauseName}**! Both parties are now aligned.`
+                        ? '🎉 Agreement reached on **${selectedClause.clauseName}**! Both parties are now aligned.'
                         : alignedWithClarence
                             ? `Position updated to match CLARENCE recommendation on **${selectedClause.clauseName}**.`
                             : `Position updated on **${selectedClause.clauseName}**. Current gap: ${newGap.toFixed(1)} points.`
