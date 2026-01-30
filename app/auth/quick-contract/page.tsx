@@ -18,6 +18,7 @@ import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import DashboardHeader from '@/app/components/DashboardHeader'
 
 // ============================================================================
 // SECTION 2: TYPE DEFINITIONS
@@ -147,7 +148,6 @@ export default function QuickContractDashboard() {
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [contracts, setContracts] = useState<QuickContract[]>([])
     const [loading, setLoading] = useState(true)
-    const [showUserMenu, setShowUserMenu] = useState(false)
 
     // Filter and search state
     const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
@@ -245,18 +245,6 @@ export default function QuickContractDashboard() {
         init()
     }, [loadUserInfo, loadContracts])
 
-    // Close user menu when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            const target = event.target as HTMLElement
-            if (!target.closest('.user-menu-container')) {
-                setShowUserMenu(false)
-            }
-        }
-
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
 
     // ==========================================================================
     // SECTION 8: FILTERING AND SORTING
@@ -506,96 +494,10 @@ export default function QuickContractDashboard() {
             {/* ================================================================== */}
             {/* SECTION 14: NAVIGATION HEADER */}
             {/* ================================================================== */}
-            <header className="bg-slate-800 text-white">
-                <div className="container mx-auto px-6">
-                    <nav className="flex justify-between items-center h-16">
-
-                        {/* Logo & Brand */}
-                        <Link href="/" className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                                <span className="text-white font-bold text-lg">C</span>
-                            </div>
-                            <div>
-                                <div className="font-semibold text-white tracking-wide">CLARENCE</div>
-                                <div className="text-xs text-slate-400">Quick Contract</div>
-                            </div>
-                        </Link>
-
-                        {/* Center: Navigation Links */}
-                        <div className="hidden md:flex items-center gap-8">
-                            <div className="h-4 w-px bg-slate-600"></div>
-                            <div className="flex items-center gap-6">
-                                <Link
-                                    href="/auth/contracts-dashboard"
-                                    className="text-slate-400 hover:text-white font-medium text-sm transition-colors"
-                                >
-                                    Pro Contracts
-                                </Link>
-                                <Link
-                                    href="/auth/quick-contract"
-                                    className="text-white font-medium text-sm border-b-2 border-teal-500 pb-1"
-                                >
-                                    Quick Contract
-                                </Link>
-                            </div>
-                        </div>
-
-                        {/* Right: User Menu */}
-                        <div className="flex items-center gap-4">
-                            <FeedbackButton position="header" />
-
-                            {/* User Dropdown */}
-                            <div className="relative user-menu-container">
-                                <button
-                                    onClick={() => setShowUserMenu(!showUserMenu)}
-                                    className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-                                >
-                                    <div className="w-8 h-8 bg-teal-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
-                                        {userInfo?.firstName?.[0]}{userInfo?.lastName?.[0]}
-                                    </div>
-                                    <span className="hidden sm:block text-sm">{userInfo?.firstName}</span>
-                                    <svg className={`w-4 h-4 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                {/* Dropdown Menu */}
-                                {showUserMenu && (
-                                    <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50">
-                                        <div className="px-4 py-3 border-b border-slate-100">
-                                            <div className="font-medium text-slate-800">{userInfo?.firstName} {userInfo?.lastName}</div>
-                                            <div className="text-sm text-slate-500">{userInfo?.email}</div>
-                                            <div className="text-xs text-slate-400 mt-1">{userInfo?.company}</div>
-                                        </div>
-                                        <div className="py-2">
-                                            <Link
-                                                href="/how-it-works"
-                                                className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                                            >
-                                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                How It Works
-                                            </Link>
-                                        </div>
-                                        <div className="border-t border-slate-100 pt-2">
-                                            <button
-                                                onClick={handleSignOut}
-                                                className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                                </svg>
-                                                Sign Out
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </nav>
-                </div>
-            </header>
+            <DashboardHeader
+                userInfo={userInfo}
+                onSignOut={handleSignOut}
+            />
 
             {/* ================================================================== */}
             {/* SECTION 15: MAIN CONTENT */}
@@ -733,8 +635,8 @@ export default function QuickContractDashboard() {
                                         key={filter.value}
                                         onClick={() => setFilterStatus(filter.value as FilterStatus)}
                                         className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${filterStatus === filter.value
-                                                ? 'bg-teal-100 text-teal-700'
-                                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                            ? 'bg-teal-100 text-teal-700'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                             }`}
                                     >
                                         {filter.label}
@@ -823,15 +725,15 @@ export default function QuickContractDashboard() {
 
                                                 {/* Contract Icon */}
                                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${contract.status === 'accepted' ? 'bg-emerald-100' :
-                                                        contract.status === 'declined' ? 'bg-red-100' :
-                                                            contract.status === 'sent' || contract.status === 'viewed' ? 'bg-purple-100' :
-                                                                'bg-slate-100'
+                                                    contract.status === 'declined' ? 'bg-red-100' :
+                                                        contract.status === 'sent' || contract.status === 'viewed' ? 'bg-purple-100' :
+                                                            'bg-slate-100'
                                                     }`}>
                                                     <svg
                                                         className={`w-5 h-5 ${contract.status === 'accepted' ? 'text-emerald-600' :
-                                                                contract.status === 'declined' ? 'text-red-600' :
-                                                                    contract.status === 'sent' || contract.status === 'viewed' ? 'text-purple-600' :
-                                                                        'text-slate-600'
+                                                            contract.status === 'declined' ? 'text-red-600' :
+                                                                contract.status === 'sent' || contract.status === 'viewed' ? 'text-purple-600' :
+                                                                    'text-slate-600'
                                                             }`}
                                                         fill="none"
                                                         stroke="currentColor"
