@@ -27,6 +27,7 @@ interface ContractClause {
     clauseName: string
     category: string
     clauseText: string
+    originalText: string | null  // Full original text from document
     clauseLevel: number
     displayOrder: number
     parentClauseId: string | null
@@ -266,6 +267,7 @@ function QuickContractStudioContent() {
                     clauseName: c.clause_name,
                     category: c.category || 'Other',
                     clauseText: c.content || '',
+                    originalText: c.original_text || c.content || null,  // Prefer original_text, fall back to content
                     clauseLevel: c.clause_level || 1,
                     displayOrder: c.display_order,
                     parentClauseId: c.parent_clause_id,
@@ -323,18 +325,19 @@ function QuickContractStudioContent() {
     // SECTION 4C: CHAT FUNCTIONS
     // ========================================================================
 
-    const sendChatMessage = useCallback(async () => {
-        if (!chatInput.trim() || chatLoading) return
+    const sendChatMessage = useCallback(async (directMessage?: string) => {
+        const messageToSend = directMessage || chatInput.trim()
+        if (!messageToSend || chatLoading) return
 
         const userMessage: ChatMessage = {
             id: `user-${Date.now()}`,
             role: 'user',
-            content: chatInput.trim(),
+            content: messageToSend,
             timestamp: new Date()
         }
 
         setChatMessages(prev => [...prev, userMessage])
-        setChatInput('')
+        if (!directMessage) setChatInput('') // Only clear input if using input field
         setChatLoading(true)
 
         try {
@@ -480,16 +483,29 @@ function QuickContractStudioContent() {
     // ========================================================================
 
     const [lastExplainedClauseId, setLastExplainedClauseId] = useState<string | null>(null)
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false)
+
+    // Reset draft editing state when clause selection changes
+    useEffect(() => {
+        setIsDraftEditing(false)
+        setEditingDraftText('')
+    }, [selectedClauseIndex])
+
+    // Mark initial load complete after first render with clauses
+    useEffect(() => {
+        if (clauses.length > 0 && selectedClause && !initialLoadComplete) {
+            // Set the first clause as "explained" to prevent auto-triggering on load
+            setLastExplainedClauseId(selectedClause.clauseId)
+            setInitialLoadComplete(true)
+        }
+    }, [clauses.length, selectedClause, initialLoadComplete])
 
     useEffect(() => {
+        // Don't trigger until initial load is complete
+        if (!initialLoadComplete) return
+
         // Only trigger if we have a selected clause and it's different from last explained
         if (!selectedClause || selectedClause.clauseId === lastExplainedClauseId) return
-
-        // Don't trigger on initial load (when welcome message is the only message)
-        if (chatMessages.length <= 1) {
-            setLastExplainedClauseId(selectedClause.clauseId)
-            return
-        }
 
         // Generate rationale message
         const generateRationale = () => {
@@ -558,7 +574,7 @@ function QuickContractStudioContent() {
         const timer = setTimeout(generateRationale, 300)
         return () => clearTimeout(timer)
 
-    }, [selectedClause, lastExplainedClauseId, chatMessages.length])
+    }, [selectedClause?.clauseId, lastExplainedClauseId, initialLoadComplete])
 
     // ========================================================================
     // SECTION 4D: ACTION HANDLERS
@@ -713,13 +729,20 @@ function QuickContractStudioContent() {
 
     // Discuss with CLARENCE - sends clause text to chat for modification suggestions
     const handleDiscussClause = () => {
-        if (!selectedClause) return
+        if (!selectedClause || chatLoading) return
 
-        const currentText = selectedClause.draftText || selectedClause.clauseText || ''
-        const discussPrompt = `I'd like to discuss modifying this clause:\n\n**${selectedClause.clauseName}** (${selectedClause.clauseNumber})\n\n"${currentText.substring(0, 500)}${currentText.length > 500 ? '...' : ''}"\n\nCan you suggest improvements or alternative wording?`
+        // Use the best available text: draft > original > content
+        const currentText = selectedClause.draftText || selectedClause.originalText || selectedClause.clauseText || ''
 
-        setChatInput(discussPrompt)
-        // Switch focus to chat - user can then send the message
+        // Build the discussion prompt with full text (up to 2000 chars for very long clauses)
+        const textForDiscussion = currentText.length > 2000
+            ? currentText.substring(0, 2000) + '...'
+            : currentText
+
+        const discussPrompt = `I'd like to discuss modifying this clause:\n\n**${selectedClause.clauseName}** (${selectedClause.clauseNumber})\n\n"${textForDiscussion}"\n\nCan you suggest improvements or alternative wording?`
+
+        // Auto-send the message directly
+        sendChatMessage(discussPrompt)
     }
 
     // ========================================================================
@@ -913,6 +936,11 @@ function QuickContractStudioContent() {
                                                         {clause.clarencePosition.toFixed(1)}
                                                     </span>
                                                 )}
+                                                {clause.draftModified && (
+                                                    <span className="text-xs font-medium text-amber-600" title="Draft modified">
+                                                        ✏️
+                                                    </span>
+                                                )}
                                             </div>
                                             <p className={`text-sm leading-snug truncate ${isSelected ? 'text-purple-700 font-medium' : 'text-slate-700'}`}>
                                                 {clause.clauseName}
@@ -933,12 +961,19 @@ function QuickContractStudioContent() {
                             <span className="text-slate-500">
                                 {clauses.length} clauses
                             </span>
-                            <span className="text-purple-600 flex items-center gap-1">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
-                                {clauses.filter(c => c.clarenceCertified).length} certified
-                            </span>
+                            <div className="flex items-center gap-3">
+                                {clauses.filter(c => c.draftModified).length > 0 && (
+                                    <span className="text-amber-600 flex items-center gap-1">
+                                        ✏️ {clauses.filter(c => c.draftModified).length} edited
+                                    </span>
+                                )}
+                                <span className="text-purple-600 flex items-center gap-1">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                    </svg>
+                                    {clauses.filter(c => c.clarenceCertified).length} certified
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1575,7 +1610,7 @@ function QuickContractStudioContent() {
                                 className="flex-1 px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                             />
                             <button
-                                onClick={sendChatMessage}
+                                onClick={() => sendChatMessage()}
                                 disabled={!chatInput.trim() || chatLoading}
                                 className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg transition-colors"
                             >
