@@ -1005,8 +1005,8 @@ async function withdrawClauseConfirmation(
 // ============================================================================
 
 function formatCurrency(value: string | number | null, currency: string): string {
-    if (!value) return '£0'
-    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : 'â‚¬'
+    if (!value) return 'Â£0'
+    const symbol = currency === 'GBP' ? 'Â£' : currency === 'USD' ? '$' : 'â‚¬'
 
     // Handle category-based deal values from Create Contract page
     const categoryLabels: Record<string, string> = {
@@ -1027,7 +1027,7 @@ function formatCurrency(value: string | number | null, currency: string): string
     }
 
     // Parse as number
-    const num = typeof value === 'string' ? parseFloat(value.replace(/[£$â‚¬,]/g, '')) : value
+    const num = typeof value === 'string' ? parseFloat(value.replace(/[Â£$â‚¬,]/g, '')) : value
 
     // Handle NaN
     if (isNaN(num)) return 'Not specified'
@@ -1140,11 +1140,11 @@ async function checkPartyStatus(sessionId: string, partyRole: 'customer' | 'prov
 // ============================================================================
 
 const DEAL_VALUE_OPTIONS = [
-    { value: 'under_50k', label: 'Under £50k' },
-    { value: '50k_250k', label: '£50k - £250k' },
-    { value: '250k_1m', label: '£250k - £1M' },
-    { value: '1m_5m', label: '£1M - £5M' },
-    { value: 'over_5m', label: 'Over £5M' }
+    { value: 'under_50k', label: 'Under Â£50k' },
+    { value: '50k_250k', label: 'Â£50k - Â£250k' },
+    { value: '250k_1m', label: 'Â£250k - Â£1M' },
+    { value: '1m_5m', label: 'Â£1M - Â£5M' },
+    { value: 'over_5m', label: 'Over Â£5M' }
 ]
 
 const SERVICE_CRITICALITY_OPTIONS = [
@@ -1383,10 +1383,10 @@ function getHistoryEventIcon(eventType: string): string {
     switch (eventType) {
         case 'position_change': return 'â†”'
         case 'agreement': return 'âœ“'
-        case 'comment': return '💬'
-        case 'tradeoff_accepted': return '⇄'
-        case 'session_started': return '🚀'
-        default: return '•'
+        case 'comment': return 'ðŸ’¬'
+        case 'tradeoff_accepted': return 'â‡„'
+        case 'session_started': return 'ðŸš€'
+        default: return 'â€¢'
     }
 }
 
@@ -1735,7 +1735,7 @@ const CombinedPositionMarker = ({
 
                 {/* Labels below */}
                 <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-slate-600 font-medium">
-                    C+P{hasClarence ? '+★' : ''}
+                    C+P{hasClarence ? '+â˜…' : ''}
                 </div>
             </div>
         )
@@ -2027,7 +2027,7 @@ function TrainingModeBanner({ scenarioName, aiPersonality, onExitTraining }: Tra
                         </div>
                         <p className="text-xs text-amber-100">
                             {scenarioName ? `Scenario: ${scenarioName}` : 'Practicing with CLARENCE AI'}
-                            {aiPersonality && ` • AI: ${aiPersonality}`}
+                            {aiPersonality && ` â€¢ AI: ${aiPersonality}`}
                         </p>
                     </div>
                 </div>
@@ -2844,7 +2844,7 @@ function ContractStudioContent() {
 
                 {/* Info */}
                 <p className="text-xs text-slate-500 mt-3">
-                    💡 You can start reviewing configured clauses in the list while others are still processing.
+                    ðŸ’¡ You can start reviewing configured clauses in the list while others are still processing.
                 </p>
             </div>
         )
@@ -3149,7 +3149,7 @@ function ContractStudioContent() {
                             customerContactName: null,
                             providerContactName: null,
                             serviceType: 'Service Agreement',
-                            dealValue: '£0',
+                            dealValue: 'Â£0',
                             phase: 1,
                             status: 'pending_provider'
                         })
@@ -3165,7 +3165,7 @@ function ContractStudioContent() {
                         customerContactName: null,
                         providerContactName: null,
                         serviceType: 'Service Agreement',
-                        dealValue: '£0',
+                        dealValue: 'Â£0',
                         phase: 1,
                         status: 'pending_provider'
                     })
@@ -4835,7 +4835,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     sessionNumber: session.sessionNumber,
                     customerCompany: session.customerCompany,
                     serviceRequired: session.serviceType,
-                    dealValue: session.dealValue.replace(/[£$â‚¬,]/g, ''),
+                    dealValue: session.dealValue.replace(/[Â£$â‚¬,]/g, ''),
                     provider: {
                         companyName: '',
                         contactName: '',
@@ -5540,7 +5540,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 {isCustomer ? 'P' : 'C'}
                                                 {isOtherAtClarence && (
                                                     <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
-                                                        <span className="text-[10px] text-white">★</span>
+                                                        <span className="text-[10px] text-white">â˜…</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -5556,7 +5556,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 }}
                                                 title={`CLARENCE suggests: ${clarenceDbPosition?.toFixed(1)}`}
                                             >
-                                                ★
+                                                â˜…
                                             </div>
                                         )}
 
@@ -5591,7 +5591,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 {isCustomer ? 'C' : 'P'}
                                                 {isMeAtClarence && (
                                                     <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full flex items-center justify-center">
-                                                        <span className="text-[10px] text-white">★</span>
+                                                        <span className="text-[10px] text-white">â˜…</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -6009,7 +6009,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     ? `${selectedClause.gapSize.toFixed(1)} points apart âœ“ Nearly Aligned`
                                     : selectedClause.gapSize <= 3
                                         ? `${selectedClause.gapSize.toFixed(1)} points apart`
-                                        : `${selectedClause.gapSize.toFixed(1)} points apart ⚠ Significant Gap`
+                                        : `${selectedClause.gapSize.toFixed(1)} points apart âš  Significant Gap`
                             }
                         </span>
                     </div>
@@ -6086,11 +6086,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         <div className="flex items-center gap-3 mb-2">
                             <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                                <span className="text-xs text-slate-500">◆ Baseline:</span>
+                                <span className="text-xs text-slate-500">â—† Baseline:</span>
                                 <span className="text-sm font-bold text-slate-400">--:--</span>
                             </div>
                             <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                                <span className="text-xs text-slate-500">⬡ Tracker:</span>
+                                <span className="text-xs text-slate-500">â¬¡ Tracker:</span>
                                 <span className="text-sm font-bold text-slate-400">--:--</span>
                             </div>
                         </div>
@@ -6186,7 +6186,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <div className="flex items-center gap-3 mb-2">
                     {/* Baseline */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                        <span className="text-xs text-slate-500">◆ Baseline:</span>
+                        <span className="text-xs text-slate-500">â—† Baseline:</span>
                         <span className="text-sm font-bold">
                             <span className="text-emerald-600">{customerBaseline}</span>
                             <span className="text-slate-400">:</span>
@@ -6196,7 +6196,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                     {/* Tracker */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                        <span className="text-xs text-slate-500">⬡ Tracker:</span>
+                        <span className="text-xs text-slate-500">â¬¡ Tracker:</span>
                         <span className="text-sm font-bold">
                             <span className="text-emerald-600">{customerTracker}</span>
                             <span className="text-slate-400">:</span>
@@ -7041,7 +7041,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 {/* Info Box */}
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                     <p className="text-sm text-blue-800">
-                                        <strong>💡 Why this matters:</strong> Deal value and service criticality help
+                                        <strong>ðŸ’¡ Why this matters:</strong> Deal value and service criticality help
                                         CLARENCE calibrate its range suggestions and negotiation guidance.
                                     </p>
                                 </div>
@@ -8056,7 +8056,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     {tradeOffOpportunities.length === 0 ? (
                                         <div className="text-center py-6">
                                             <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                                <span className="text-xl">⇄</span>
+                                                <span className="text-xl">â‡„</span>
                                             </div>
                                             <p className="text-slate-600 text-sm mb-1">No trade-off opportunities detected</p>
                                             <p className="text-xs text-slate-400">
@@ -8100,7 +8100,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                 <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
                                                                     {tradeOff.clauseA.clauseNumber}
                                                                 </span>
-                                                                <span className="text-slate-400">⇄</span>
+                                                                <span className="text-slate-400">â‡„</span>
                                                                 <span className="text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
                                                                     {tradeOff.clauseB.clauseNumber}
                                                                 </span>
@@ -8224,7 +8224,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                     entry.eventType === 'agreement' ? 'âœ“' :
                                                                         entry.eventType === 'clause_locked' ? 'ðŸ”’' :
                                                                             entry.eventType === 'clause_unlocked' ? 'ðŸ”“' :
-                                                                                entry.eventType === 'session_started' ? '🚀' : '•'}
+                                                                                entry.eventType === 'session_started' ? 'ðŸš€' : 'â€¢'}
                                                             </div>
 
                                                             {/* Entry content */}
@@ -8430,7 +8430,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 {selectedClause.gapSize > 3 && (
                                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
                                         <div className="flex items-start gap-2">
-                                            <span className="text-amber-500">⚠ï¸</span>
+                                            <span className="text-amber-500">âš ï¸</span>
                                             <div>
                                                 <p className="text-sm font-medium text-amber-800">Positions Not Yet Aligned</p>
                                                 <p className="text-xs text-amber-600 mt-1">
