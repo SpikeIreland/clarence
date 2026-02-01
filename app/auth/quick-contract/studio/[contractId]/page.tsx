@@ -1012,20 +1012,20 @@ function QuickContractStudioContent() {
                                     key={clause.clauseId}
                                     onClick={() => setSelectedClauseIndex(actualIndex)}
                                     className={`px-3 py-2.5 border-b border-slate-100 cursor-pointer transition-all ${isSelected
-                                            ? 'bg-purple-50 border-l-4 border-l-purple-500'
-                                            : 'hover:bg-slate-50 border-l-4 border-l-transparent'
+                                        ? 'bg-purple-50 border-l-4 border-l-purple-500'
+                                        : 'hover:bg-slate-50 border-l-4 border-l-transparent'
                                         }`}
                                     style={{ paddingLeft: `${12 + (clause.clauseLevel - 1) * 12}px` }}
                                 >
                                     <div className="flex items-start gap-2">
                                         {/* Certification Icon */}
                                         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
-                                                ? 'bg-slate-200 text-slate-400'
-                                                : hasFlags
-                                                    ? 'bg-amber-100 text-amber-600'
-                                                    : clause.clarenceFairness === 'balanced'
-                                                        ? 'bg-emerald-100 text-emerald-600'
-                                                        : 'bg-purple-100 text-purple-600'
+                                            ? 'bg-slate-200 text-slate-400'
+                                            : hasFlags
+                                                ? 'bg-amber-100 text-amber-600'
+                                                : clause.clarenceFairness === 'balanced'
+                                                    ? 'bg-emerald-100 text-emerald-600'
+                                                    : 'bg-purple-100 text-purple-600'
                                             }`}>
                                             {!isCertified ? '○' : hasFlags ? '!' : '✓'}
                                         </div>
@@ -1118,8 +1118,8 @@ function QuickContractStudioContent() {
                                                 key={tab}
                                                 onClick={() => setActiveTab(tab)}
                                                 className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
-                                                        ? 'bg-white text-slate-800 shadow-sm'
-                                                        : 'text-slate-500 hover:text-slate-700'
+                                                    ? 'bg-white text-slate-800 shadow-sm'
+                                                    : 'text-slate-500 hover:text-slate-700'
                                                     }`}
                                             >
                                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -1227,12 +1227,12 @@ function QuickContractStudioContent() {
 
                                                 {selectedClause.clarenceFairness && (
                                                     <div className={`px-4 py-3 rounded-lg ${selectedClause.clarenceFairness === 'balanced'
-                                                            ? 'bg-emerald-50 border border-emerald-200'
-                                                            : 'bg-amber-50 border border-amber-200'
+                                                        ? 'bg-emerald-50 border border-emerald-200'
+                                                        : 'bg-amber-50 border border-amber-200'
                                                         }`}>
                                                         <div className={`text-sm font-medium ${selectedClause.clarenceFairness === 'balanced'
-                                                                ? 'text-emerald-700'
-                                                                : 'text-amber-700'
+                                                            ? 'text-emerald-700'
+                                                            : 'text-amber-700'
                                                             }`}>
                                                             {selectedClause.clarenceFairness === 'balanced' ? '✓ Balanced' : '⚠ Review Recommended'}
                                                         </div>
@@ -1271,9 +1271,9 @@ function QuickContractStudioContent() {
                                                         {selectedClause.documentPosition && (
                                                             <div className="mt-2 flex items-center gap-2">
                                                                 <div className={`w-3 h-3 rounded-full ${selectedClause.documentPosition <= 3 ? 'bg-emerald-500' :
-                                                                        selectedClause.documentPosition <= 5 ? 'bg-teal-500' :
-                                                                            selectedClause.documentPosition <= 7 ? 'bg-blue-500' :
-                                                                                'bg-indigo-500'
+                                                                    selectedClause.documentPosition <= 5 ? 'bg-teal-500' :
+                                                                        selectedClause.documentPosition <= 7 ? 'bg-blue-500' :
+                                                                            'bg-indigo-500'
                                                                     }`}></div>
                                                                 <span className="text-xs text-slate-500">
                                                                     {getPositionLabel(selectedClause.documentPosition)}
@@ -1297,10 +1297,10 @@ function QuickContractStudioContent() {
                                                 {/* Comparison Indicator */}
                                                 {selectedClause.documentPosition !== null && selectedClause.clarencePosition !== null && (
                                                     <div className={`mt-4 p-3 rounded-lg flex items-center gap-3 ${Math.abs(selectedClause.documentPosition - selectedClause.clarencePosition) < 0.5
-                                                            ? 'bg-emerald-50 border border-emerald-200'
-                                                            : selectedClause.documentPosition > selectedClause.clarencePosition
-                                                                ? 'bg-amber-50 border border-amber-200'
-                                                                : 'bg-blue-50 border border-blue-200'
+                                                        ? 'bg-emerald-50 border border-emerald-200'
+                                                        : selectedClause.documentPosition > selectedClause.clarencePosition
+                                                            ? 'bg-amber-50 border border-amber-200'
+                                                            : 'bg-blue-50 border border-blue-200'
                                                         }`}>
                                                         {Math.abs(selectedClause.documentPosition - selectedClause.clarencePosition) < 0.5 ? (
                                                             <>
@@ -1468,8 +1468,8 @@ function QuickContractStudioContent() {
 
                                                 {/* Status Badge */}
                                                 <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${selectedClause.draftModified
-                                                        ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                                                        : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                                    ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
                                                     }`}>
                                                     {selectedClause.draftModified ? 'Modified' : 'Original'}
                                                 </div>
@@ -1526,7 +1526,7 @@ function QuickContractStudioContent() {
                                                 // Read-Only Mode
                                                 <div className="space-y-3">
                                                     {/* Truncation Warning & Extract Button */}
-                                                    {isClauseTextTruncated(selectedClause) && !fullTextExtracted && (
+                                                    {isClauseTextTruncated(selectedClause) && (
                                                         <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
                                                             <div className="flex items-start justify-between gap-4">
                                                                 <div className="flex items-start gap-3">
@@ -1568,8 +1568,8 @@ function QuickContractStudioContent() {
 
                                                     {/* Clause Text Display */}
                                                     <div className={`p-4 rounded-lg border ${selectedClause.draftModified
-                                                            ? 'bg-purple-50 border-purple-200'
-                                                            : 'bg-slate-50 border-slate-200'
+                                                        ? 'bg-purple-50 border-purple-200'
+                                                        : 'bg-slate-50 border-slate-200'
                                                         }`}>
                                                         <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
                                                             {selectedClause.draftText || selectedClause.originalText || selectedClause.clauseText || 'Clause text not available.'}
@@ -1734,8 +1734,8 @@ function QuickContractStudioContent() {
                                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                             >
                                 <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                        ? 'bg-purple-600 text-white'
-                                        : 'bg-slate-100 text-slate-700'
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-slate-100 text-slate-700'
                                     }`}>
                                     <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">{message.content}</p>
                                     <p className={`text-xs mt-1.5 ${message.role === 'user' ? 'text-purple-200' : 'text-slate-400'
