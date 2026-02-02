@@ -49,6 +49,9 @@ interface ContractClause {
     draftModified: boolean
     // Position options (from clause library)
     positionOptions: PositionOption[]
+    // In the interface definition, add:
+    isHeader: boolean
+    processingStatus: 'pending' | 'processing' | 'certified' | 'failed'
 }
 
 interface PositionOption {
@@ -250,6 +253,15 @@ function QuickContractStudioContent() {
                     extractedText: contractData.extracted_text
                 })
 
+                // In the data loading section, after fetching the contract:
+                if (contractData.status === 'processing') {
+                    // Still scanning structure - show a brief loading message
+                    // (This should only take 10-15 seconds)
+                } else if (contractData.status === 'certifying' || contractData.status === 'ready') {
+                    // Clauses are available - load them and show progressive UI
+                    // Polling will handle the rest
+                }
+
                 // Load clauses
                 const { data: clausesData, error: clausesError } = await supabase
                     .from('uploaded_contract_clauses')
@@ -290,6 +302,8 @@ function QuickContractStudioContent() {
                     // Draft fields
                     draftText: c.draft_text || null,
                     draftModified: !!c.draft_text,
+                    isHeader: c.is_header || false,
+                    processingStatus: c.status || 'pending',
                     positionOptions: DEFAULT_POSITION_OPTIONS
                 }))
 
@@ -503,6 +517,22 @@ function QuickContractStudioContent() {
             setInitialLoadComplete(true)
         }
     }, [clauses.length, selectedClause, initialLoadComplete])
+
+
+    // Auto-expand all sections when clauses first load
+    useEffect(() => {
+        if (clauses.length > 0 && expandedSections.size === 0) {
+            const parentIds = new Set<string>()
+            clauses.forEach(c => {
+                if (c.parentClauseId) parentIds.add(c.parentClauseId)
+            })
+            // Only expand parents that have children
+            const headerIds = clauses
+                .filter(c => parentIds.has(c.clauseId))
+                .map(c => c.clauseId)
+            setExpandedSections(new Set(headerIds))
+        }
+    }, [clauses.length])
 
     useEffect(() => {
         // Don't trigger until initial load is complete
@@ -795,6 +825,8 @@ function QuickContractStudioContent() {
                         originalText: c.original_text || c.content || null,
                         clauseLevel: c.clause_level || 1,
                         displayOrder: c.display_order,
+                        isHeader: c.is_header || false,
+                        processingStatus: c.status || 'pending',
                         parentClauseId: c.parent_clause_id,
                         clarenceCertified: c.clarence_certified || false,
                         clarencePosition: c.clarence_position,
@@ -882,6 +914,87 @@ function QuickContractStudioContent() {
     if (loading) {
         return <QuickContractStudioLoading />
     }
+
+    // Progressive loading state
+    const [isPolling, setIsPolling] = useState(false)
+    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
+
+    // ========================================================================
+    // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
+    // ========================================================================
+
+    useEffect(() => {
+        if (!contractId || !clauses.length) return
+
+        // Check if there are any uncertified non-header clauses
+        const uncertified = clauses.filter(c =>
+            !c.isHeader && c.processingStatus !== 'certified' && c.processingStatus !== 'failed'
+        )
+
+        if (uncertified.length === 0) {
+            setIsPolling(false)
+            return
+        }
+
+        setIsPolling(true)
+
+        const pollInterval = setInterval(async () => {
+            try {
+                const { data: updatedClauses, error } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
+                    .eq('contract_id', contractId)
+                    .order('display_order', { ascending: true })
+
+                if (error || !updatedClauses) return
+
+                // Update clause statuses without replacing entire array (preserves selection)
+                setClauses(prev => prev.map(clause => {
+                    const updated = updatedClauses.find(u => u.clause_id === clause.clauseId)
+                    if (!updated) return clause
+
+                    return {
+                        ...clause,
+                        processingStatus: updated.status || clause.processingStatus,
+                        isHeader: updated.is_header || false,
+                        clarenceCertified: updated.clarence_certified || false,
+                        clarencePosition: updated.clarence_position,
+                        clarenceFairness: updated.clarence_fairness,
+                        clarenceSummary: updated.clarence_summary,
+                        clarenceAssessment: updated.clarence_assessment,
+                        clarenceFlags: updated.clarence_flags || [],
+                        clauseText: updated.content || clause.clauseText,
+                        originalText: updated.original_text || clause.originalText,
+                        extractedValue: updated.extracted_value,
+                        extractedUnit: updated.extracted_unit,
+                        valueType: updated.value_type,
+                    }
+                }))
+
+                // Update progress
+                const certified = updatedClauses.filter(c => c.status === 'certified' && !c.is_header).length
+                const total = updatedClauses.filter(c => !c.is_header).length
+                const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
+                setCertificationProgress({ certified, total, failed })
+
+                // Stop polling when done
+                const stillProcessing = updatedClauses.some(c =>
+                    !c.is_header && (c.status === 'pending' || c.status === 'processing')
+                )
+                if (!stillProcessing) {
+                    setIsPolling(false)
+                    clearInterval(pollInterval)
+                }
+
+            } catch (err) {
+                console.error('Polling error:', err)
+            }
+        }, 4000) // Poll every 4 seconds
+
+        return () => clearInterval(pollInterval)
+    }, [contractId, clauses.length, isPolling])
 
     // ========================================================================
     // SECTION 6: ERROR STATE
@@ -979,108 +1092,194 @@ function QuickContractStudioContent() {
             {/* ============================================================ */}
             <div className="flex flex-1 overflow-hidden min-h-0">
 
-                {/* ======================================================== */}
-                {/* LEFT PANEL: Clause List */}
-                {/* ======================================================== */}
-                <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-hidden">
-                    {/* Search */}
-                    <div className="p-3 border-b border-slate-200">
-                        <div className="relative">
-                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                            <input
-                                type="text"
-                                placeholder="Search clauses..."
-                                value={clauseSearchTerm}
-                                onChange={(e) => setClauseSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                {/* ==================== CERTIFICATION PROGRESS ==================== */}
+                {isPolling && (
+                    <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-emerald-50">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-teal-700">
+                                Certifying clauses...
+                            </span>
+                            <span className="text-xs text-teal-600">
+                                {certificationProgress.certified}/{certificationProgress.total}
+                            </span>
+                        </div>
+                        <div className="w-full h-2 bg-teal-100 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-teal-500 rounded-full transition-all duration-500"
+                                style={{
+                                    width: `${certificationProgress.total > 0
+                                        ? (certificationProgress.certified / certificationProgress.total) * 100
+                                        : 0}%`
+                                }}
                             />
                         </div>
+                        {certificationProgress.failed > 0 && (
+                            <p className="text-xs text-amber-600 mt-1">
+                                {certificationProgress.failed} clause(s) failed certification
+                            </p>
+                        )}
                     </div>
+                )}
 
-                    {/* Clause List */}
-                    <div ref={clauseListRef} className="flex-1 overflow-y-auto min-h-0">
-                        {filteredClauses.map((clause) => {
-                            const actualIndex = clauses.findIndex(c => c.clauseId === clause.clauseId)
-                            const isSelected = selectedClauseIndex === actualIndex
-                            const isCertified = clause.clarenceCertified
-                            const hasFlags = clause.clarenceFlags && clause.clarenceFlags.length > 0 && !clause.clarenceFlags.includes('none')
+                {/* ==================== CLAUSE TREE ==================== */}
+                {(() => {
+                    // Build parent-child tree
+                    const parentMap = new Map<string, ContractClause[]>()
+                    const topLevel: ContractClause[] = []
+
+                    filteredClauses.forEach(clause => {
+                        if (clause.parentClauseId) {
+                            const siblings = parentMap.get(clause.parentClauseId) || []
+                            siblings.push(clause)
+                            parentMap.set(clause.parentClauseId, siblings)
+                        } else {
+                            topLevel.push(clause)
+                        }
+                    })
+
+                    // Status icon helper
+                    const StatusIcon = ({ status }: { status: string }) => {
+                        switch (status) {
+                            case 'certified':
+                                return <span className="text-emerald-500 text-xs">✅</span>
+                            case 'processing':
+                                return (
+                                    <span className="inline-block w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                                )
+                            case 'failed':
+                                return <span className="text-red-500 text-xs">⚠️</span>
+                            default: // pending
+                                return <span className="text-slate-300 text-xs">🔒</span>
+                        }
+                    }
+
+                    return topLevel.map(parent => {
+                        const children = parentMap.get(parent.clauseId) || []
+                        const isSection = children.length > 0  // Has children = section header
+                        const isExpanded = expandedSections.has(parent.clauseId)
+
+                        if (isSection) {
+                            // ---- SECTION HEADER (collapsible) ----
+                            const certifiedChildren = children.filter(c => c.processingStatus === 'certified').length
+                            const processingChild = children.find(c => c.processingStatus === 'processing')
 
                             return (
-                                <div
-                                    key={clause.clauseId}
-                                    onClick={() => setSelectedClauseIndex(actualIndex)}
-                                    className={`px-3 py-2.5 border-b border-slate-100 cursor-pointer transition-all ${isSelected
-                                        ? 'bg-purple-50 border-l-4 border-l-purple-500'
-                                        : 'hover:bg-slate-50 border-l-4 border-l-transparent'
-                                        }`}
-                                    style={{ paddingLeft: `${12 + (clause.clauseLevel - 1) * 12}px` }}
-                                >
-                                    <div className="flex items-start gap-2">
-                                        {/* Certification Icon */}
-                                        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
-                                            ? 'bg-slate-200 text-slate-400'
-                                            : hasFlags
-                                                ? 'bg-amber-100 text-amber-600'
-                                                : clause.clarenceFairness === 'balanced'
-                                                    ? 'bg-emerald-100 text-emerald-600'
-                                                    : 'bg-purple-100 text-purple-600'
-                                            }`}>
-                                            {!isCertified ? '○' : hasFlags ? '!' : '✓'}
-                                        </div>
+                                <div key={parent.clauseId}>
+                                    {/* Section Header */}
+                                    <button
+                                        onClick={() => {
+                                            setExpandedSections(prev => {
+                                                const next = new Set(prev)
+                                                if (next.has(parent.clauseId)) {
+                                                    next.delete(parent.clauseId)
+                                                } else {
+                                                    next.add(parent.clauseId)
+                                                }
+                                                return next
+                                            })
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                                    >
+                                        <svg
+                                            className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                            fill="currentColor" viewBox="0 0 20 20"
+                                        >
+                                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex-1 truncate">
+                                            {parent.clauseNumber}. {parent.clauseName}
+                                        </span>
+                                        <span className="text-xs text-slate-400">
+                                            {certifiedChildren}/{children.length}
+                                        </span>
+                                        {processingChild && (
+                                            <span className="w-2 h-2 bg-teal-500 rounded-full animate-pulse" />
+                                        )}
+                                    </button>
 
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-0.5">
-                                                <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                    {clause.clauseNumber}
-                                                </span>
-                                                {clause.clarencePosition && (
-                                                    <span className="text-xs font-medium text-purple-600">
-                                                        {clause.clarencePosition.toFixed(1)}
+                                    {/* Children */}
+                                    {isExpanded && children.map(child => {
+                                        const isClickable = child.processingStatus === 'certified' || child.processingStatus === 'failed'
+                                        const isSelected = selectedClause?.clauseId === child.clauseId
+
+                                        return (
+                                            <button
+                                                key={child.clauseId}
+                                                onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
+                                                disabled={!isClickable}
+                                                className={`w-full flex items-center gap-2 pl-8 pr-3 py-2 text-left transition-colors ${isSelected
+                                                    ? 'bg-teal-50 border-l-2 border-teal-500'
+                                                    : isClickable
+                                                        ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                                        : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
+                                                    }`}
+                                            >
+                                                <StatusIcon status={child.processingStatus} />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'
+                                                            }`}>
+                                                            {child.clauseNumber}
+                                                        </span>
+                                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'
+                                                            }`}>
+                                                            {child.clauseName}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {child.clarenceCertified && child.clarencePosition && (
+                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
+                                                        child.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
+                                                            'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        {child.clarencePosition.toFixed(1)}
                                                     </span>
                                                 )}
-                                                {clause.draftModified && (
-                                                    <span className="text-xs font-medium text-amber-600" title="Draft modified">
-                                                        ✏️
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className={`text-sm leading-snug truncate ${isSelected ? 'text-purple-700 font-medium' : 'text-slate-700'}`}>
-                                                {clause.clauseName}
-                                            </p>
-                                            <span className={`inline-block mt-1 px-2 py-0.5 text-xs rounded-full border ${getCategoryColor(clause.category)}`}>
-                                                {clause.category}
-                                            </span>
-                                        </div>
-                                    </div>
+                                            </button>
+                                        )
+                                    })}
                                 </div>
                             )
-                        })}
-                    </div>
+                        } else {
+                            // ---- STANDALONE CLAUSE (no children) ----
+                            const isClickable = parent.processingStatus === 'certified' || parent.processingStatus === 'failed'
+                            const isSelected = selectedClause?.clauseId === parent.clauseId
 
-                    {/* Stats Footer */}
-                    <div className="p-3 border-t border-slate-200 bg-slate-50">
-                        <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">
-                                {clauses.length} clauses
-                            </span>
-                            <div className="flex items-center gap-3">
-                                {clauses.filter(c => c.draftModified).length > 0 && (
-                                    <span className="text-amber-600 flex items-center gap-1">
-                                        ✏️ {clauses.filter(c => c.draftModified).length} edited
-                                    </span>
-                                )}
-                                <span className="text-purple-600 flex items-center gap-1">
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                    </svg>
-                                    {clauses.filter(c => c.clarenceCertified).length} certified
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                            return (
+                                <button
+                                    key={parent.clauseId}
+                                    onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
+                                    disabled={!isClickable}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${isSelected
+                                        ? 'bg-teal-50 border-l-2 border-teal-500'
+                                        : isClickable
+                                            ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                            : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
+                                        }`}
+                                >
+                                    <StatusIcon status={parent.processingStatus} />
+                                    <div className="flex-1 min-w-0">
+                                        <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
+                                            {parent.clauseNumber}.
+                                        </span>
+                                        {' '}
+                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
+                                            {parent.clauseName}
+                                        </span>
+                                    </div>
+                                    {parent.clarenceCertified && parent.clarencePosition && (
+                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
+                                            parent.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
+                                                'bg-red-100 text-red-700'
+                                            }`}>
+                                            {parent.clarencePosition.toFixed(1)}
+                                        </span>
+                                    )}
+                                </button>
+                            )
+                        }
+                    })
+                })()}
 
                 {/* ======================================================== */}
                 {/* CENTER PANEL: Main Workspace */}

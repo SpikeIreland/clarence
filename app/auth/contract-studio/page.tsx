@@ -7682,6 +7682,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     avatarName={trainingAvatarInfo?.characterName}
                     avatarInitials={trainingAvatarInfo?.avatarInitials}
                     avatarCompany={trainingAvatarInfo?.companyName}
+                    // NEW: Inject messages from AI counter-moves into Party Chat
+                    externalMessages={pendingPartyChatMessages}
+                    onExternalMessagesConsumed={() => setPendingPartyChatMessages([])}
                 />
             )}
 
