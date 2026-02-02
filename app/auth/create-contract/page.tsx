@@ -1081,7 +1081,19 @@ function ContractCreationContent() {
         return (
             <div className={`h-full ${isTrainingMode ? 'bg-amber-50/30' : 'bg-emerald-50/30'} border-r border-slate-200 flex flex-col`}>
                 <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-2 mb-3">&larr; {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
+                    <div className="flex items-center gap-2 mb-3">
+                        <Link
+                            href="/auth/contracts-dashboard"
+                            className="p-1 rounded hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
+                            title="Back to Negotiations"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                        </Link>
+                        <span className="text-slate-300">|</span>
+                        <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">← {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
+                    </div>
                     <h2 className={`font-semibold ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-lg`}>{isTrainingMode ? 'Training Setup' : 'Create Contract'}</h2>
                 </div>
                 <nav className="flex-1 p-4">
