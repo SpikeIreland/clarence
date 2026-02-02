@@ -843,8 +843,110 @@ export default function ContractsDashboard() {
             </div>
           </div>
 
+          {/* ================================================================ */}
+          {/* SECTION 23: COLLAPSIBLE METRICS */}
+          {/* ================================================================ */}
+          {filteredSessions.length > 0 && (
+            <div className="mb-8">
+              <button
+                onClick={() => setShowMetrics(!showMetrics)}
+                className="w-full bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all"
+              >
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeTab === 'training' ? 'bg-amber-100' : 'bg-slate-100'}`}>
+                      <svg className={`w-4 h-4 ${activeTab === 'training' ? 'text-amber-600' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800">
+                      {activeTab === 'training' ? 'Training Analytics' : 'Session Analytics'}
+                    </h3>
+                  </div>
+                  <svg
+                    className={`w-5 h-5 text-slate-500 transition-transform ${showMetrics ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {showMetrics && (
+                <div className="mt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                      <h3 className="text-base font-semibold mb-4 text-slate-800">Active vs Completed</h3>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={metrics.statusData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            {metrics.statusData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                      <h3 className="text-base font-semibold mb-4 text-slate-800">By Type</h3>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={metrics.contractTypeData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="type" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={60} />
+                          <YAxis tick={{ fontSize: 11 }} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill={activeTab === 'training' ? '#f59e0b' : '#3b82f6'} radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                      <h3 className="text-base font-semibold mb-4 text-slate-800">Deal Size Distribution</h3>
+                      {metrics.dealSizeData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie
+                              data={metrics.dealSizeData}
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={80}
+                              dataKey="value"
+                            >
+                              {metrics.dealSizeData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">
+                          No data available
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ============================================================== */}
-          {/* SECTION 23: SESSIONS LIST */}
+          {/* SECTION 24: SESSIONS LIST */}
           {/* ============================================================== */}
           <div className="p-6">
             {loading ? (
@@ -1190,108 +1292,6 @@ export default function ContractsDashboard() {
             )}
           </div>
         </div>
-
-        {/* ================================================================ */}
-        {/* SECTION 24: COLLAPSIBLE METRICS */}
-        {/* ================================================================ */}
-        {filteredSessions.length > 0 && (
-          <div className="mb-8">
-            <button
-              onClick={() => setShowMetrics(!showMetrics)}
-              className="w-full bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all"
-            >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeTab === 'training' ? 'bg-amber-100' : 'bg-slate-100'}`}>
-                    <svg className={`w-4 h-4 ${activeTab === 'training' ? 'text-amber-600' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-800">
-                    {activeTab === 'training' ? 'Training Analytics' : 'Session Analytics'}
-                  </h3>
-                </div>
-                <svg
-                  className={`w-5 h-5 text-slate-500 transition-transform ${showMetrics ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {showMetrics && (
-              <div className="mt-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-base font-semibold mb-4 text-slate-800">Active vs Completed</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <PieChart>
-                        <Pie
-                          data={metrics.statusData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={40}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {metrics.statusData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-base font-semibold mb-4 text-slate-800">By Type</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={metrics.contractTypeData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="type" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={60} />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" fill={activeTab === 'training' ? '#f59e0b' : '#3b82f6'} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-base font-semibold mb-4 text-slate-800">Deal Size Distribution</h3>
-                    {metrics.dealSizeData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie
-                            data={metrics.dealSizeData}
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={80}
-                            dataKey="value"
-                          >
-                            {metrics.dealSizeData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-[200px] flex items-center justify-center text-slate-500 text-sm">
-                        No data available
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )
