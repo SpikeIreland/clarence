@@ -1,25 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const dmMono = DM_Mono({
+  variable: "--font-dm-mono",
   subsets: ["latin"],
+  weight: ["300", "400", "500"],
 });
-
-// ============================================================================
-// SECTION 1: DEFAULT METADATA (Fallback for all pages)
-// ============================================================================
 
 export const metadata: Metadata = {
   title: {
     default: "CLARENCE | The Honest Broker",
-    template: "%s | CLARENCE"  // Pages can set just "Login" and it becomes "Login | CLARENCE"
+    template: "%s | CLARENCE"
   },
   description: "Create, Negotiate, Agree. AI-powered contract mediation that removes emotion and brings transparency to negotiations.",
   keywords: ["contract negotiation", "AI mediation", "contract management", "legal tech"],
@@ -32,10 +30,6 @@ export const metadata: Metadata = {
   },
 };
 
-// ============================================================================
-// SECTION 2: ROOT LAYOUT COMPONENT
-// ============================================================================
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -44,7 +38,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${dmSans.variable} ${dmMono.variable} antialiased`}
+        style={{ fontFamily: 'var(--font-dm-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}
       >
         {children}
       </body>
