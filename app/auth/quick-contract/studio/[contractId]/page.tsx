@@ -947,15 +947,7 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 5: LOADING STATE
-    // ========================================================================
-
-    if (loading) {
-        return <QuickContractStudioLoading />
-    }
-
-    // ========================================================================
-    // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
+    // SECTION 5: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
     // ========================================================================
 
     useEffect(() => {
@@ -1028,6 +1020,15 @@ function QuickContractStudioContent() {
 
         return () => clearInterval(pollInterval)
     }, [contractId, clauses.length, isPolling])
+
+
+    // ========================================================================
+    // SECTION 5B: LOADING STATE (must be after all hooks)
+    // ========================================================================
+
+    if (loading) {
+        return <QuickContractStudioLoading />
+    }
 
     // ========================================================================
     // SECTION 6: ERROR STATE
