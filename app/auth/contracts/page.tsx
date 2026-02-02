@@ -1,16 +1,25 @@
 'use client'
 
 // ============================================================================
-// CLARENCE CONTRACT LIBRARY PAGE - WP6 v2
+// CLARENCE CONTRACT LIBRARY PAGE - WP6 + TEMPLATE UPLOAD
 // ============================================================================
 // File: /app/auth/contracts/page.tsx
 // Purpose: Template library for reusable contract configurations
 // 
-// WP6 v2 CHANGES:
-// 1. Removed "New Contract" button (page is for templates only)
-// 2. Added "Upload Contract" card in My Templates section
-// 3. Added drag & drop upload modal
-// 4. Processes uploaded contracts into user templates
+// WP6 CHANGES:
+// 1. Renamed from "Contract Studio" to "Contract Library"
+// 2. Three sections: System Templates, Company Templates, My Templates
+// 3. Data source changed from uploaded_contracts to contract_templates
+// 4. "Use Template" now pre-fills Create Contract flow
+// 5. Proper empty states for each section
+// 6. Upload moved to "My Templates" section
+//
+// TEMPLATE UPLOAD ADDITIONS (Feb 2026):
+// 7. "Add Template" button in My Templates section header
+// 8. Upload modal with file picker (PDF, DOCX, TXT)
+// 9. Client-side text extraction (PDF.js, Mammoth, FileReader)
+// 10. Sends extracted text to N8N Parse Workflow (1.5) with create_as_template
+// 11. Progress feedback and auto-refresh on success
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
@@ -18,7 +27,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
-import DashboardHeader from '@/app/components/DashboardHeader'
+import AuthenticatedHeader from '@/components/AuthenticatedHeader'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -65,28 +74,18 @@ interface TemplateSection {
     isCollapsed: boolean
     canEdit: boolean
     canDelete: boolean
-    canUpload: boolean
     emptyMessage: string
     emptySubMessage: string
 }
+
+// Upload progress stages
+type UploadStage = 'idle' | 'selecting' | 'extracting' | 'parsing' | 'complete' | 'error'
 
 // ============================================================================
 // SECTION 2: CONSTANTS
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
-
-const ALLOWED_FILE_TYPES = [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain'
-]
-
-const FILE_TYPE_LABELS: Record<string, string> = {
-    'application/pdf': 'PDF',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-    'text/plain': 'TXT'
-}
 
 const CONTRACT_TYPE_ICONS: Record<string, string> = {
     'bpo': '🏢',
@@ -111,15 +110,18 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 }
 
 const CONTRACT_TYPE_OPTIONS = [
-    { value: 'bpo', label: 'BPO / Outsourcing Agreement' },
+    { value: 'bpo', label: 'BPO / Outsourcing' },
     { value: 'saas', label: 'SaaS Agreement' },
     { value: 'nda', label: 'Non-Disclosure Agreement' },
     { value: 'msa', label: 'Master Service Agreement' },
     { value: 'employment', label: 'Employment Contract' },
-    { value: 'it_services', label: 'IT Services Agreement' },
+    { value: 'it_services', label: 'IT Services' },
     { value: 'consulting', label: 'Consulting Agreement' },
-    { value: 'custom', label: 'Custom / Other' },
+    { value: 'custom', label: 'Other / Custom' },
 ]
+
+const ACCEPTED_FILE_TYPES = '.pdf,.docx,.doc,.txt'
+const MAX_FILE_SIZE_MB = 25
 
 // ============================================================================
 // SECTION 3: MAIN COMPONENT
@@ -149,7 +151,6 @@ export default function ContractLibraryPage() {
             isCollapsed: false,
             canEdit: false,
             canDelete: false,
-            canUpload: false,
             emptyMessage: 'No system templates available',
             emptySubMessage: 'System templates will appear here when added by CLARENCE'
         },
@@ -162,7 +163,6 @@ export default function ContractLibraryPage() {
             isCollapsed: false,
             canEdit: false,
             canDelete: false,
-            canUpload: false,
             emptyMessage: 'No company templates yet',
             emptySubMessage: 'Your administrator can add company-wide templates from the Admin Panel'
         },
@@ -170,14 +170,13 @@ export default function ContractLibraryPage() {
             id: 'user',
             title: 'My Templates',
             icon: '👤',
-            description: 'Your personal templates from uploads and completed negotiations',
+            description: 'Created from your negotiations or uploaded documents',
             templates: [],
             isCollapsed: false,
             canEdit: true,
             canDelete: true,
-            canUpload: true,
             emptyMessage: 'No templates yet',
-            emptySubMessage: 'Upload a contract or save from a completed negotiation'
+            emptySubMessage: 'Upload a contract document or save a completed negotiation as a template'
         }
     ])
 
@@ -187,20 +186,17 @@ export default function ContractLibraryPage() {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [searchQuery, setSearchQuery] = useState('')
 
-    // Upload state
+    // ==========================================================================
+    // SECTION 4B: UPLOAD STATE
+    // ==========================================================================
+
     const [showUploadModal, setShowUploadModal] = useState(false)
-    const [isUploading, setIsUploading] = useState(false)
-    const [isProcessing, setIsProcessing] = useState(false)  // NEW: Background processing state
-    const [processingTemplateId, setProcessingTemplateId] = useState<string | null>(null)  // NEW
-    const [uploadProgress, setUploadProgress] = useState<string>('')
-    const [uploadError, setUploadError] = useState<string | null>(null)
-    const [dragActive, setDragActive] = useState(false)
+    const [uploadFile, setUploadFile] = useState<File | null>(null)
     const [uploadTemplateName, setUploadTemplateName] = useState('')
     const [uploadContractType, setUploadContractType] = useState('custom')
-
-    // Polling ref
-    const pollingRef = useRef<NodeJS.Timeout | null>(null)
-    const pollingCountRef = useRef<number>(0)
+    const [uploadStage, setUploadStage] = useState<UploadStage>('idle')
+    const [uploadError, setUploadError] = useState<string | null>(null)
+    const [uploadResult, setUploadResult] = useState<{ clauseCount?: number; templateName?: string } | null>(null)
 
     // ==========================================================================
     // SECTION 5: AUTHENTICATION & DATA LOADING
@@ -372,264 +368,261 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 8: FILE UPLOAD HANDLERS
+    // SECTION 7B: UPLOAD FUNCTIONS
     // ==========================================================================
 
-    const handleDrag = (e: React.DragEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        if (e.type === 'dragenter' || e.type === 'dragover') {
-            setDragActive(true)
-        } else if (e.type === 'dragleave') {
-            setDragActive(false)
-        }
-    }
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        setDragActive(false)
-
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            handleFileSelect(e.dataTransfer.files[0])
-        }
-    }
-
-    const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            handleFileSelect(e.target.files[0])
-        }
-    }
-
-    const handleFileSelect = async (file: File) => {
-        // Validate file type
-        if (!ALLOWED_FILE_TYPES.includes(file.type)) {
-            setUploadError('Please upload a PDF, DOCX, or TXT file')
-            return
-        }
-
-        // Validate file size (max 10MB)
-        if (file.size > 10 * 1024 * 1024) {
-            setUploadError('File size must be less than 10MB')
-            return
-        }
-
-        // Set default template name from filename
-        const defaultName = file.name.replace(/\.[^/.]+$/, '')
-        setUploadTemplateName(defaultName)
-
+    /** Reset upload state to initial values */
+    const resetUpload = () => {
+        setUploadFile(null)
+        setUploadTemplateName('')
+        setUploadContractType('custom')
+        setUploadStage('idle')
         setUploadError(null)
-        setIsUploading(true)
-        setUploadProgress('Extracting text from document...')
+        setUploadResult(null)
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
+    }
 
-        eventLogger.started('contract_library', 'file_upload_started', {
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size
-        })
+    /** Open the upload modal */
+    const openUploadModal = () => {
+        resetUpload()
+        setShowUploadModal(true)
+        setUploadStage('selecting')
+    }
 
-        try {
-            // Step 1: Extract text client-side
-            const extractedText = await extractTextFromFile(file)
-            setUploadProgress('Processing contract...')
+    /** Close the upload modal */
+    const closeUploadModal = () => {
+        setShowUploadModal(false)
+        resetUpload()
+    }
 
-            if (!extractedText || extractedText.length < 100) {
-                throw new Error('Could not extract sufficient text from the document')
+    /** Handle file selection from the file picker */
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        // Validate file size
+        const fileSizeMB = file.size / (1024 * 1024)
+        if (fileSizeMB > MAX_FILE_SIZE_MB) {
+            setUploadError(`File is too large (${fileSizeMB.toFixed(1)}MB). Maximum size is ${MAX_FILE_SIZE_MB}MB.`)
+            return
+        }
+
+        // Validate file type
+        const ext = file.name.split('.').pop()?.toLowerCase()
+        if (!['pdf', 'docx', 'doc', 'txt'].includes(ext || '')) {
+            setUploadError('Unsupported file type. Please upload a PDF, DOCX, or TXT file.')
+            return
+        }
+
+        setUploadFile(file)
+        setUploadError(null)
+
+        // Auto-fill template name from filename (strip extension)
+        if (!uploadTemplateName) {
+            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+            setUploadTemplateName(nameWithoutExt)
+        }
+    }
+
+    /** Handle file drop on the drop zone */
+    const handleFileDrop = (e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+
+        const file = e.dataTransfer.files?.[0]
+        if (!file) return
+
+        // Create a synthetic event to reuse validation logic
+        const ext = file.name.split('.').pop()?.toLowerCase()
+        if (!['pdf', 'docx', 'doc', 'txt'].includes(ext || '')) {
+            setUploadError('Unsupported file type. Please upload a PDF, DOCX, or TXT file.')
+            return
+        }
+
+        const fileSizeMB = file.size / (1024 * 1024)
+        if (fileSizeMB > MAX_FILE_SIZE_MB) {
+            setUploadError(`File is too large (${fileSizeMB.toFixed(1)}MB). Maximum size is ${MAX_FILE_SIZE_MB}MB.`)
+            return
+        }
+
+        setUploadFile(file)
+        setUploadError(null)
+
+        if (!uploadTemplateName) {
+            const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+            setUploadTemplateName(nameWithoutExt)
+        }
+    }
+
+    /** Extract text content from the selected file */
+    const extractTextFromFile = async (file: File): Promise<string> => {
+        const ext = file.name.split('.').pop()?.toLowerCase()
+
+        // ----- TXT files -----
+        if (ext === 'txt') {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(reader.result as string)
+                reader.onerror = () => reject(new Error('Failed to read text file'))
+                reader.readAsText(file)
+            })
+        }
+
+        // ----- PDF files -----
+        if (ext === 'pdf') {
+            const pdfjsLib = await import('pdfjs-dist')
+
+            // Set up worker - use CDN for compatibility
+            if (typeof window !== 'undefined') {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
             }
 
-            // Step 2: Upload to API for processing
+            const arrayBuffer = await file.arrayBuffer()
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+            let fullText = ''
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i)
+                const textContent = await page.getTextContent()
+                const pageText = textContent.items
+                    .map((item: any) => item.str)
+                    .join(' ')
+                fullText += pageText + '\n'
+            }
+
+            return fullText.trim()
+        }
+
+        // ----- DOCX files -----
+        if (ext === 'docx' || ext === 'doc') {
+            const mammoth = await import('mammoth')
+            const arrayBuffer = await file.arrayBuffer()
+            const result = await mammoth.extractRawText({ arrayBuffer })
+            return result.value.trim()
+        }
+
+        throw new Error(`Unsupported file type: .${ext}`)
+    }
+
+    /** Submit the upload: extract text, then send to N8N parse workflow */
+    const handleUploadSubmit = async () => {
+        if (!uploadFile || !uploadTemplateName.trim()) {
+            setUploadError('Please select a file and enter a template name.')
+            return
+        }
+
+        if (!userInfo?.userId) {
+            setUploadError('Not authenticated. Please sign in again.')
+            return
+        }
+
+        try {
+            // Stage 1: Extract text
+            setUploadStage('extracting')
+            setUploadError(null)
+
+            console.log('Extracting text from:', uploadFile.name)
+            const extractedText = await extractTextFromFile(uploadFile)
+
+            if (!extractedText || extractedText.length < 100) {
+                setUploadError('Could not extract sufficient text from the document. Please ensure the file contains readable text (not just scanned images).')
+                setUploadStage('error')
+                return
+            }
+
+            console.log(`Extracted ${extractedText.length} characters from document`)
+
+            // Stage 2: Send to N8N Parse Workflow
+            setUploadStage('parsing')
+
+            const payload = {
+                // Document data
+                document_text: extractedText,
+                file_name: uploadFile.name,
+                file_type: uploadFile.name.split('.').pop()?.toLowerCase() || 'pdf',
+                file_size: uploadFile.size,
+
+                // Template configuration
+                create_as_template: true,
+                template_name: uploadTemplateName.trim(),
+                contract_type: uploadContractType,
+                is_company_template: false,
+
+                // User context
+                user_id: userInfo.userId,
+                company_id: userInfo.companyId || null,
+
+                // No session context (this is a standalone template upload)
+                session_id: null,
+                contract_id: null,
+            }
+
+            console.log('Sending to parse workflow:', {
+                fileName: payload.file_name,
+                textLength: payload.document_text.length,
+                templateName: payload.template_name,
+                contractType: payload.contract_type,
+            })
+
+            eventLogger.started('contract_library', 'upload_template', {
+                fileName: uploadFile.name,
+                templateName: uploadTemplateName.trim(),
+                contractType: uploadContractType,
+                fileSize: uploadFile.size
+            })
+
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user_id: userInfo?.userId,
-                    company_id: userInfo?.companyId,
-                    file_name: file.name,
-                    file_type: file.type || 'application/octet-stream',
-                    file_size: file.size,
-                    document_text: extractedText,
-                    contract_type: uploadContractType,
-                    template_name: uploadTemplateName || defaultName,
-                    create_as_template: true  // Flag to create as user template
-                })
+                body: JSON.stringify(payload)
             })
-
-            if (!response.ok) {
-                throw new Error('Failed to process contract')
-            }
 
             const result = await response.json()
 
-            if (result.success && result.contractId) {
-                setIsUploading(false)
+            if (!response.ok || result.success === false) {
+                throw new Error(result.error || result.message || 'Failed to parse contract document')
+            }
 
-                eventLogger.completed('contract_library', 'file_upload_started', {
-                    contractId: result.contractId
-                })
+            console.log('Parse result:', result)
 
-                // Start polling for the template to be created
-                // The N8N workflow creates it after parsing completes
-                startPollingForTemplate(result.contractId)
+            // Stage 3: Complete
+            setUploadStage('complete')
+            setUploadResult({
+                clauseCount: result.clauseCount || result.clause_count || 0,
+                templateName: uploadTemplateName.trim()
+            })
 
-            } else {
-                throw new Error(result.error || 'Upload failed')
+            eventLogger.completed('contract_library', 'upload_template', {
+                templateName: uploadTemplateName.trim(),
+                clauseCount: result.clauseCount || result.clause_count || 0,
+                contractType: uploadContractType
+            })
+
+            // Refresh templates list
+            if (userInfo) {
+                await loadTemplates(userInfo)
             }
 
         } catch (error) {
             console.error('Upload error:', error)
-            setUploadError(error instanceof Error ? error.message : 'Upload failed')
-            eventLogger.failed('contract_library', 'file_upload_failed',
-                error instanceof Error ? error.message : 'Unknown error'
+            setUploadStage('error')
+            setUploadError(
+                error instanceof Error
+                    ? error.message
+                    : 'An unexpected error occurred. Please try again.'
             )
-        } finally {
-            setIsUploading(false)
+
+            eventLogger.failed('contract_library', 'upload_template',
+                error instanceof Error ? error.message : 'Unknown error',
+                'UPLOAD_FAILED'
+            )
         }
     }
 
-    const extractTextFromFile = async (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = async (event) => {
-                try {
-                    if (file.type === 'text/plain') {
-                        resolve(event.target?.result as string)
-                    } else if (file.type === 'application/pdf') {
-                        const pdfjsLib = await import('pdfjs-dist')
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
-                        const arrayBuffer = event.target?.result as ArrayBuffer
-                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-                        let fullText = ''
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i)
-                            const textContent = await page.getTextContent()
-                            const pageText = textContent.items.map((item: any) => item.str).join(' ')
-                            fullText += pageText + '\n'
-                        }
-                        resolve(fullText)
-                    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                        const mammoth = await import('mammoth')
-                        const arrayBuffer = event.target?.result as ArrayBuffer
-                        const result = await mammoth.extractRawText({ arrayBuffer })
-                        resolve(result.value)
-                    } else {
-                        reject(new Error('Unsupported file type'))
-                    }
-                } catch (error) {
-                    reject(error)
-                }
-            }
-            reader.onerror = () => reject(new Error('Failed to read file'))
-            if (file.type === 'text/plain') {
-                reader.readAsText(file)
-            } else {
-                reader.readAsArrayBuffer(file)
-            }
-        })
-    }
-
     // ==========================================================================
-    // SECTION 8B: POLL FOR UPLOAD COMPLETION
-    // ==========================================================================
-
-    const startPollingForTemplate = (contractId: string) => {
-        console.log('Starting to poll for contract completion:', contractId)
-        pollingCountRef.current = 0
-        setIsProcessing(true)
-        setProcessingTemplateId(contractId)
-        setUploadProgress('Processing contract clauses... This may take up to a minute.')
-
-        pollingRef.current = setInterval(async () => {
-            pollingCountRef.current++
-            console.log(`Polling attempt ${pollingCountRef.current} for contract ${contractId}`)
-
-            // Timeout after 2 minutes (40 attempts at 3 second intervals)
-            if (pollingCountRef.current > 40) {
-                clearInterval(pollingRef.current!)
-                pollingRef.current = null
-                setIsProcessing(false)
-                setUploadError('Processing is taking longer than expected. Please refresh the page in a moment.')
-                return
-            }
-
-            try {
-                // Poll the uploaded_contracts table for status
-                const { data: uploadData, error: uploadError } = await supabase
-                    .from('uploaded_contracts')
-                    .select('contract_id, status, contract_name')
-                    .eq('contract_id', contractId)
-                    .single()
-
-                if (uploadError) {
-                    console.log('Upload record not found:', uploadError.message)
-                    return
-                }
-
-                console.log('Upload status:', uploadData?.status)
-
-                if (uploadData?.status === 'completed' || uploadData?.status === 'ready') {
-                    // Parsing complete! Now check for the template
-                    console.log('Upload processing complete, checking for template...')
-
-                    // Give the workflow a moment to create the template record
-                    await new Promise(resolve => setTimeout(resolve, 1000))
-
-                    // Refresh templates list
-                    if (userInfo) {
-                        await loadTemplates(userInfo)
-                    }
-
-                    clearInterval(pollingRef.current!)
-                    pollingRef.current = null
-                    setIsProcessing(false)
-                    setUploadProgress('✅ Template created successfully!')
-
-                    // Close modal after brief success message
-                    setTimeout(() => {
-                        setShowUploadModal(false)
-                        // Reset state inline
-                        setUploadTemplateName('')
-                        setUploadContractType('custom')
-                        setUploadProgress('')
-                        setUploadError(null)
-                        setIsUploading(false)
-                        setIsProcessing(false)
-                        setProcessingTemplateId(null)
-                        setDragActive(false)
-                        if (fileInputRef.current) {
-                            fileInputRef.current.value = ''
-                        }
-                        pollingCountRef.current = 0
-                    }, 1500)
-
-                } else if (uploadData?.status === 'failed' || uploadData?.status === 'error') {
-                    // Processing failed
-                    clearInterval(pollingRef.current!)
-                    pollingRef.current = null
-                    setIsProcessing(false)
-                    setUploadError('Failed to process contract. Please try again.')
-
-                } else {
-                    // Still processing - update progress message
-                    const elapsed = pollingCountRef.current * 3
-                    if (elapsed < 15) {
-                        setUploadProgress('Extracting text from document...')
-                    } else if (elapsed < 30) {
-                        setUploadProgress('Analyzing contract structure...')
-                    } else if (elapsed < 45) {
-                        setUploadProgress('Extracting and categorizing clauses...')
-                    } else {
-                        setUploadProgress(`Almost done... (${elapsed}s)`)
-                    }
-                }
-
-            } catch (err) {
-                console.error('Polling error:', err)
-            }
-        }, 3000) // Poll every 3 seconds
-    }
-
-    // ==========================================================================
-    // SECTION 9: HELPER FUNCTIONS
+    // SECTION 8: HELPER FUNCTIONS
     // ==========================================================================
 
     const formatDate = (dateString: string | null) => {
@@ -660,31 +653,14 @@ export default function ContractLibraryPage() {
         )
     }
 
-    // ==========================================================================
-    // SECTION 10: RENDER - UPLOAD CARD
-    // ==========================================================================
-
-    const renderUploadCard = () => (
-        <div
-            onClick={() => setShowUploadModal(true)}
-            className="bg-white rounded-xl border-2 border-dashed border-emerald-300 hover:border-emerald-400 hover:shadow-md transition-all overflow-hidden cursor-pointer group"
-        >
-            <div className="p-8 text-center">
-                <div className="w-14 h-14 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-4 group-hover:bg-emerald-200 transition-colors">
-                    <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                </div>
-                <h3 className="font-semibold text-emerald-700 mb-1">Upload Contract</h3>
-                <p className="text-sm text-slate-500">
-                    PDF, DOCX, or TXT
-                </p>
-            </div>
-        </div>
-    )
+    const formatFileSize = (bytes: number): string => {
+        if (bytes < 1024) return `${bytes} B`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    }
 
     // ==========================================================================
-    // SECTION 11: RENDER - TEMPLATE CARD
+    // SECTION 9: RENDER - TEMPLATE CARD
     // ==========================================================================
 
     const renderTemplateCard = (template: ContractTemplate, section: TemplateSection) => (
@@ -776,153 +752,166 @@ export default function ContractLibraryPage() {
     )
 
     // ==========================================================================
-    // SECTION 12: RENDER - SECTION COMPONENT
+    // SECTION 10: RENDER - SECTION COMPONENT
     // ==========================================================================
 
     const renderSection = (section: TemplateSection) => {
         const filteredTemplates = filterTemplates(section.templates)
-        const isEmpty = filteredTemplates.length === 0 && !section.canUpload
+        const isEmpty = filteredTemplates.length === 0
 
         return (
             <div key={section.id} className="mb-8">
                 {/* Section Header */}
-                <button
-                    onClick={() => toggleSectionCollapse(section.id)}
-                    className="w-full flex items-center justify-between p-4 bg-white rounded-t-xl border border-slate-200 hover:bg-slate-50 transition-colors"
-                >
-                    <div className="flex items-center gap-3">
-                        <span className="text-2xl">{section.icon}</span>
-                        <div className="text-left">
-                            <h2 className="font-semibold text-slate-800">{section.title}</h2>
-                            <p className="text-sm text-slate-500">{section.description}</p>
-                        </div>
-                        <span className="ml-3 px-2.5 py-0.5 bg-slate-100 text-slate-600 text-sm font-medium rounded-full">
-                            {section.templates.length}
-                        </span>
-                    </div>
-                    <svg
-                        className={`w-5 h-5 text-slate-400 transition-transform ${section.isCollapsed ? '' : 'rotate-180'}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <div className="flex items-center gap-2">
+                    {/* Collapsible header button - takes most of the width */}
+                    <button
+                        onClick={() => toggleSectionCollapse(section.id)}
+                        className="flex-1 flex items-center justify-between p-4 bg-white rounded-t-xl border border-slate-200 hover:bg-slate-50 transition-colors"
                     >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">{section.icon}</span>
+                            <div className="text-left">
+                                <h2 className="font-semibold text-slate-800">{section.title}</h2>
+                                <p className="text-sm text-slate-500">{section.description}</p>
+                            </div>
+                            <span className="ml-3 px-2.5 py-0.5 bg-slate-100 text-slate-600 text-sm font-medium rounded-full">
+                                {section.templates.length}
+                            </span>
+                        </div>
+                        <svg
+                            className={`w-5 h-5 text-slate-400 transition-transform ${section.isCollapsed ? '' : 'rotate-180'}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+
+                    {/* ADD TEMPLATE button - only for My Templates section */}
+                    {section.id === 'user' && (
+                        <button
+                            onClick={openUploadModal}
+                            className="flex items-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors shadow-sm whitespace-nowrap self-stretch"
+                            title="Upload a contract to create a template"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Template
+                        </button>
+                    )}
+                </div>
 
                 {/* Section Content */}
                 {!section.isCollapsed && (
-                    <div className="border border-t-0 border-slate-200 rounded-b-xl bg-slate-50/50 p-6">
-                        {isEmpty && !section.canUpload ? (
-                            /* Empty State (non-uploadable sections) */
+                    <div className={`border border-t-0 border-slate-200 rounded-b-xl bg-slate-50/50 p-6 ${section.id === 'user' ? '' : ''}`}>
+                        {isEmpty ? (
+                            /* Empty State */
                             <div className="text-center py-8">
                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                                     <span className="text-xl opacity-50">{section.icon}</span>
                                 </div>
                                 <p className="text-slate-600 font-medium mb-1">{section.emptyMessage}</p>
                                 <p className="text-sm text-slate-400 mb-4">{section.emptySubMessage}</p>
+                                {section.id === 'user' && (
+                                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                        <button
+                                            onClick={openUploadModal}
+                                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                            </svg>
+                                            Upload Contract
+                                        </button>
+                                        <Link
+                                            href="/auth/contracts-dashboard"
+                                            className="inline-flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors"
+                                        >
+                                            Or start from a System Template →
+                                        </Link>
+                                    </div>
+                                )}
                             </div>
                         ) : viewMode === 'grid' ? (
                             /* Grid View */
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {/* Upload Card for User section */}
-                                {section.canUpload && renderUploadCard()}
-                                {/* Template Cards */}
                                 {filteredTemplates.map(template => renderTemplateCard(template, section))}
                             </div>
                         ) : (
                             /* List View */
-                            <>
-                                {section.canUpload && (
-                                    <button
-                                        onClick={() => setShowUploadModal(true)}
-                                        className="mb-4 w-full py-3 px-4 border-2 border-dashed border-emerald-300 hover:border-emerald-400 rounded-lg text-emerald-600 hover:text-emerald-700 font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                        </svg>
-                                        Upload Contract
-                                    </button>
-                                )}
-                                {filteredTemplates.length > 0 && (
-                                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                                        <table className="w-full">
-                                            <thead className="bg-slate-50 border-b border-slate-200">
-                                                <tr>
-                                                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Template</th>
-                                                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
-                                                    <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Clauses</th>
-                                                    <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Uses</th>
-                                                    <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100">
-                                                {filteredTemplates.map(template => (
-                                                    <tr key={template.templateId} className="hover:bg-slate-50">
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-xl">{getContractTypeIcon(template.contractType)}</span>
-                                                                <div>
-                                                                    <div className="font-medium text-slate-800 text-sm">{template.templateName}</div>
-                                                                    {template.description && (
-                                                                        <div className="text-xs text-slate-400 truncate max-w-xs">{template.description}</div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                                            {getContractTypeLabel(template.contractType)}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-center text-sm text-slate-600">{template.clauseCount || '—'}</td>
-                                                        <td className="px-6 py-4 text-center text-sm text-slate-600">{template.timesUsed}</td>
-                                                        <td className="px-6 py-4">
-                                                            <div className="flex items-center justify-end gap-3">
-                                                                <button
-                                                                    onClick={() => handleViewTemplate(template)}
-                                                                    className="text-slate-500 hover:text-slate-700 text-sm font-medium"
-                                                                >
-                                                                    Preview
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleUseTemplate(template)}
-                                                                    className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
-                                                                >
-                                                                    Use
-                                                                </button>
-                                                                {section.canEdit && (
-                                                                    <button
-                                                                        onClick={() => handleEditTemplate(template)}
-                                                                        className="text-slate-400 hover:text-emerald-600"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                                        </svg>
-                                                                    </button>
-                                                                )}
-                                                                {section.canDelete && (
-                                                                    <button
-                                                                        onClick={() => handleDeleteTemplate(template.templateId)}
-                                                                        className="text-slate-400 hover:text-red-600"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                        </svg>
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                                {filteredTemplates.length === 0 && section.canUpload && (
-                                    <p className="text-center text-slate-400 text-sm py-4">
-                                        No templates yet. Upload your first contract above.
-                                    </p>
-                                )}
-                            </>
+                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                <table className="w-full">
+                                    <thead className="bg-slate-50 border-b border-slate-200">
+                                        <tr>
+                                            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Template</th>
+                                            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                                            <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Clauses</th>
+                                            <th className="text-center px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Uses</th>
+                                            <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filteredTemplates.map(template => (
+                                            <tr key={template.templateId} className="hover:bg-slate-50">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-xl">{getContractTypeIcon(template.contractType)}</span>
+                                                        <div>
+                                                            <div className="font-medium text-slate-800 text-sm">{template.templateName}</div>
+                                                            {template.description && (
+                                                                <div className="text-xs text-slate-400 truncate max-w-xs">{template.description}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-slate-600">
+                                                    {getContractTypeLabel(template.contractType)}
+                                                </td>
+                                                <td className="px-6 py-4 text-center text-sm text-slate-600">{template.clauseCount || '—'}</td>
+                                                <td className="px-6 py-4 text-center text-sm text-slate-600">{template.timesUsed}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center justify-end gap-3">
+                                                        <button
+                                                            onClick={() => handleViewTemplate(template)}
+                                                            className="text-slate-500 hover:text-slate-700 text-sm font-medium"
+                                                        >
+                                                            Preview
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleUseTemplate(template)}
+                                                            className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+                                                        >
+                                                            Use
+                                                        </button>
+                                                        {section.canEdit && (
+                                                            <button
+                                                                onClick={() => handleEditTemplate(template)}
+                                                                className="text-slate-400 hover:text-emerald-600"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
+                                                        {section.canDelete && (
+                                                            <button
+                                                                onClick={() => handleDeleteTemplate(template.templateId)}
+                                                                className="text-slate-400 hover:text-red-600"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
                 )}
@@ -931,7 +920,7 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 13: RENDER - TEMPLATE PREVIEW MODAL
+    // SECTION 11: RENDER - TEMPLATE PREVIEW MODAL
     // ==========================================================================
 
     const renderTemplateModal = () => {
@@ -1039,164 +1028,300 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 14: RENDER - UPLOAD MODAL
+    // SECTION 11B: RENDER - UPLOAD MODAL
     // ==========================================================================
 
     const renderUploadModal = () => {
         if (!showUploadModal) return null
 
+        const isProcessing = uploadStage === 'extracting' || uploadStage === 'parsing'
+        const isComplete = uploadStage === 'complete'
+        const isError = uploadStage === 'error'
+
         return (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col">
+
                     {/* Modal Header */}
                     <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-slate-800">Upload Contract</h2>
-                        <button
-                            onClick={() => {
-                                if (!isProcessing) {
-                                    setShowUploadModal(false)
-                                    setUploadTemplateName('')
-                                    setUploadContractType('custom')
-                                    setUploadProgress('')
-                                    setUploadError(null)
-                                    setIsUploading(false)
-                                    setIsProcessing(false)
-                                    setProcessingTemplateId(null)
-                                    setDragActive(false)
-                                    pollingCountRef.current = 0
-                                }
-                            }}
-                            disabled={isProcessing}
-                            className={`text-slate-400 hover:text-slate-600 ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-semibold text-slate-800">Add Template</h2>
+                                <p className="text-sm text-slate-500">Upload a contract document to create a reusable template</p>
+                            </div>
+                        </div>
+                        {!isProcessing && (
+                            <button
+                                onClick={closeUploadModal}
+                                className="text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
                     </div>
 
                     {/* Modal Body */}
                     <div className="p-6">
-                        {/* Template Name Input */}
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Template Name
-                            </label>
-                            <input
-                                type="text"
-                                value={uploadTemplateName}
-                                onChange={(e) => setUploadTemplateName(e.target.value)}
-                                placeholder="e.g., Standard NDA Template"
-                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            />
-                        </div>
 
-                        {/* Contract Type Select */}
-                        <div className="mb-6">
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
-                                Contract Type
-                            </label>
-                            <select
-                                value={uploadContractType}
-                                onChange={(e) => setUploadContractType(e.target.value)}
-                                className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            >
-                                {CONTRACT_TYPE_OPTIONS.map(opt => (
-                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {/* ---- SUCCESS STATE ---- */}
+                        {isComplete && uploadResult && (
+                            <div className="text-center py-6">
+                                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Template Created!</h3>
+                                <p className="text-slate-600 mb-1">
+                                    <strong>{uploadResult.templateName}</strong>
+                                </p>
+                                <p className="text-sm text-slate-500 mb-6">
+                                    {uploadResult.clauseCount} clause{uploadResult.clauseCount !== 1 ? 's' : ''} extracted and saved
+                                </p>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={closeUploadModal}
+                                        className="flex-1 py-2.5 px-4 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                                    >
+                                        Done
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            closeUploadModal()
+                                            openUploadModal()
+                                        }}
+                                        className="flex-1 py-2.5 px-4 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+                                    >
+                                        Upload Another
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
-                        {/* Drag & Drop Zone */}
-                        <div
-                            onDragEnter={handleDrag}
-                            onDragLeave={handleDrag}
-                            onDragOver={handleDrag}
-                            onDrop={handleDrop}
-                            onClick={() => !isUploading && !isProcessing && fileInputRef.current?.click()}
-                            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
-                                ${dragActive
-                                    ? 'border-emerald-500 bg-emerald-50'
-                                    : 'border-slate-300 hover:border-emerald-400 hover:bg-slate-50'
-                                }
-                                ${(isUploading || isProcessing) ? 'cursor-not-allowed' : ''}
-                            `}
-                        >
-                            {isUploading ? (
-                                <>
-                                    <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                                    <p className="text-emerald-600 font-medium">{uploadProgress}</p>
-                                </>
-                            ) : isProcessing ? (
-                                <>
-                                    <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+                        {/* ---- PROCESSING STATE ---- */}
+                        {isProcessing && (
+                            <div className="text-center py-8">
+                                <div className="w-16 h-16 mx-auto mb-4 relative">
+                                    <div className="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                                    {uploadStage === 'extracting' ? 'Extracting Text...' : 'Parsing Contract...'}
+                                </h3>
+                                <p className="text-sm text-slate-500">
+                                    {uploadStage === 'extracting'
+                                        ? 'Reading the document and extracting text content'
+                                        : 'CLARENCE is analysing the contract and identifying clauses'
+                                    }
+                                </p>
+
+                                {/* Progress Steps */}
+                                <div className="mt-6 flex justify-center gap-2">
+                                    <div className={`flex items-center gap-1.5 text-xs font-medium ${uploadStage === 'extracting' ? 'text-emerald-600' : 'text-emerald-600'}`}>
+                                        <div className={`w-2 h-2 rounded-full ${uploadStage === 'extracting' ? 'bg-emerald-600 animate-pulse' : 'bg-emerald-600'}`}></div>
+                                        Extract
                                     </div>
-                                    <p className="text-emerald-700 font-semibold mb-2">Processing Your Contract</p>
-                                    <p className="text-emerald-600 text-sm">{uploadProgress}</p>
-                                    <p className="text-slate-400 text-xs mt-3">Extracting and categorizing clauses...</p>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                        </svg>
+                                    <div className="w-6 h-px bg-slate-300 self-center"></div>
+                                    <div className={`flex items-center gap-1.5 text-xs font-medium ${uploadStage === 'parsing' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                        <div className={`w-2 h-2 rounded-full ${uploadStage === 'parsing' ? 'bg-emerald-600 animate-pulse' : 'bg-slate-300'}`}></div>
+                                        Parse
                                     </div>
-                                    <p className="text-slate-600 font-medium mb-1">
-                                        {dragActive ? 'Drop your file here' : 'Click to upload or drag and drop'}
+                                    <div className="w-6 h-px bg-slate-300 self-center"></div>
+                                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                                        <div className="w-2 h-2 rounded-full bg-slate-300"></div>
+                                        Save
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ---- INPUT STATE (selecting file & details) ---- */}
+                        {(uploadStage === 'selecting' || uploadStage === 'idle') && (
+                            <>
+                                {/* File Drop Zone */}
+                                <div
+                                    className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${uploadFile
+                                        ? 'border-emerald-300 bg-emerald-50'
+                                        : 'border-slate-300 hover:border-emerald-400 hover:bg-slate-50'
+                                        }`}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
+                                    onDrop={handleFileDrop}
+                                >
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept={ACCEPTED_FILE_TYPES}
+                                        onChange={handleFileSelect}
+                                        className="hidden"
+                                    />
+
+                                    {uploadFile ? (
+                                        /* File Selected */
+                                        <div className="flex items-center justify-center gap-3">
+                                            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                                <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="font-medium text-slate-800 text-sm">{uploadFile.name}</p>
+                                                <p className="text-xs text-slate-500">{formatFileSize(uploadFile.size)}</p>
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setUploadFile(null)
+                                                    if (fileInputRef.current) fileInputRef.current.value = ''
+                                                }}
+                                                className="ml-2 p-1 text-slate-400 hover:text-red-500 transition-colors"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* No File Yet */
+                                        <>
+                                            <svg className="w-10 h-10 text-slate-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                            </svg>
+                                            <p className="text-sm font-medium text-slate-700 mb-1">
+                                                Click to upload or drag and drop
+                                            </p>
+                                            <p className="text-xs text-slate-400">
+                                                PDF, DOCX, or TXT (max {MAX_FILE_SIZE_MB}MB)
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Template Name */}
+                                <div className="mt-4">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Template Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={uploadTemplateName}
+                                        onChange={(e) => setUploadTemplateName(e.target.value)}
+                                        placeholder="e.g. Master Services Agreement - Acme Corp"
+                                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                {/* Contract Type */}
+                                <div className="mt-4">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Contract Type
+                                    </label>
+                                    <select
+                                        value={uploadContractType}
+                                        onChange={(e) => setUploadContractType(e.target.value)}
+                                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                                    >
+                                        {CONTRACT_TYPE_OPTIONS.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        CLARENCE will also attempt to detect the contract type automatically
                                     </p>
-                                    <p className="text-sm text-slate-400">PDF, DOCX, or TXT (max 10MB)</p>
-                                </>
-                            )}
-                        </div>
+                                </div>
 
-                        {/* Error Message */}
-                        {uploadError && (
-                            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                                {uploadError}
+                                {/* Error Message */}
+                                {(uploadError || isError) && (
+                                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                                        <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <p className="text-sm text-red-700">{uploadError}</p>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* ---- ERROR STATE (after failed processing) ---- */}
+                        {isError && uploadStage === 'error' && !uploadError && (
+                            <div className="text-center py-6">
+                                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Upload Failed</h3>
+                                <p className="text-sm text-slate-500 mb-6">Something went wrong. Please try again.</p>
                             </div>
                         )}
                     </div>
 
-                    {/* Hidden File Input */}
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileInputChange}
-                        className="hidden"
-                        accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                    />
+                    {/* Modal Footer - only show for input/error states */}
+                    {(uploadStage === 'selecting' || uploadStage === 'idle' || uploadStage === 'error') && !isComplete && (
+                        <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
+                            <button
+                                onClick={closeUploadModal}
+                                className="flex-1 py-2.5 px-4 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUploadSubmit}
+                                disabled={!uploadFile || !uploadTemplateName.trim()}
+                                className="flex-1 py-2.5 px-4 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {uploadStage === 'error' ? 'Try Again' : 'Upload & Parse'}
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         )
     }
 
     // ==========================================================================
-    // SECTION 15: MAIN RENDER
+    // SECTION 12: MAIN RENDER
     // ==========================================================================
 
     return (
         <div className="min-h-screen bg-slate-50">
             {/* ================================================================== */}
-            {/* SECTION 16: HEADER */}
+            {/* SECTION 13: HEADER */}
             {/* ================================================================== */}
-            <DashboardHeader
+            <AuthenticatedHeader
+                activePage="contracts"
                 userInfo={userInfo}
                 onSignOut={handleSignOut}
             />
 
             {/* ================================================================== */}
-            {/* SECTION 17: MAIN CONTENT */}
+            {/* SECTION 14: MAIN CONTENT */}
             {/* ================================================================== */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-                {/* Page Header - NO New Contract button */}
-                <div className="mb-8">
-                    <h1 className="text-2xl font-bold text-slate-800 mb-1">📚 Contract Library</h1>
-                    <p className="text-slate-500 text-sm">
-                        Browse templates or upload your own contracts
-                    </p>
+                {/* Page Header */}
+                <div className="flex justify-between items-start mb-8">
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800 mb-1">📚 Contract Library</h1>
+                        <p className="text-slate-500 text-sm">
+                            Browse and use templates to start new negotiations
+                        </p>
+                    </div>
+                    <Link
+                        href="/auth/create-contract"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        New Contract
+                    </Link>
                 </div>
 
                 {/* Search & View Toggle */}
@@ -1252,12 +1377,23 @@ export default function ContractLibraryPage() {
                 )}
             </div>
 
+            {/* ================================================================== */}
+            {/* SECTION 15: MODALS */}
+            {/* ================================================================== */}
+
             {/* Template Preview Modal */}
             {renderTemplateModal()}
 
-            {/* Upload Modal */}
+            {/* Upload Template Modal */}
             {renderUploadModal()}
 
+            {/* Click outside to close user menu */}
+            {showUserMenu && (
+                <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setShowUserMenu(false)}
+                />
+            )}
         </div>
     )
 }
