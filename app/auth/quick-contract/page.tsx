@@ -18,7 +18,7 @@ import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
 import FeedbackButton from '@/app/components/FeedbackButton'
-import DashboardHeader from '@/app/components/DashboardHeader'
+import AuthenticatedHeader from '@/components/AuthenticatedHeader'
 
 // ============================================================================
 // SECTION 2: TYPE DEFINITIONS
@@ -494,7 +494,8 @@ export default function QuickContractDashboard() {
             {/* ================================================================== */}
             {/* SECTION 14: NAVIGATION HEADER */}
             {/* ================================================================== */}
-            <DashboardHeader
+            <AuthenticatedHeader
+                activePage="quick-contracts"
                 userInfo={userInfo}
                 onSignOut={handleSignOut}
             />
