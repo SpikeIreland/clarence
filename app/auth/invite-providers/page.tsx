@@ -790,29 +790,48 @@ function InviteProvidersContent() {
     return (
         <div className="min-h-screen bg-slate-50">
             {/* Navigation */}
-            <nav className="bg-white shadow-sm border-b border-slate-200">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-16">
-                        <div className="flex items-center">
-                            <Link href="/auth/contracts-dashboard" className="flex items-center">
-                                <div>
-                                    <div className="text-2xl font-medium text-slate-700">CLARENCE</div>
-                                    <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
-                                </div>
-                            </Link>
-                            <span className="ml-4 text-slate-400">|</span>
-                            <span className="ml-4 text-slate-600 text-sm font-medium">Invite Providers</span>
+            <header className="h-14 bg-slate-800 flex items-center justify-between px-6 relative sticky top-0 z-40">
+                {/* Left: Home + CLARENCE Create branding */}
+                <div className="flex items-center gap-3">
+                    <Link
+                        href="/auth/contracts-dashboard"
+                        className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                        title="Back to Negotiations"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                    </Link>
+                    <div className="h-6 w-px bg-slate-600"></div>
+                    <Link href="/auth/contracts-dashboard" className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold">C</span>
                         </div>
-                        <div className="flex items-center gap-4">
-                            {session?.sessionNumber && (
-                                <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-mono">
-                                    {session.sessionNumber}
-                                </span>
-                            )}
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-white font-semibold">CLARENCE</span>
+                                <span className="text-emerald-400 font-semibold">Create</span>
+                            </div>
+                            <span className="text-slate-500 text-xs">The Honest Broker</span>
                         </div>
-                    </div>
+                    </Link>
                 </div>
-            </nav>
+
+                {/* Centre: Page Title */}
+                <div className="absolute left-1/2 transform -translate-x-1/2">
+                    <h1 className="text-white font-medium">Invite Respondents</h1>
+                </div>
+
+                {/* Right: Feedback & Session Number */}
+                <div className="flex items-center gap-4">
+                    <FeedbackButton position="header" />
+                    {session?.sessionNumber && (
+                        <span className="text-sm text-slate-400 bg-slate-700 px-3 py-1 rounded-full font-mono">
+                            {session.sessionNumber}
+                        </span>
+                    )}
+                </div>
+            </header>
 
             {/* Session Banner */}
             <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white py-3">
