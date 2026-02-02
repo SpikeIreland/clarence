@@ -550,17 +550,21 @@ function QuickContractStudioContent() {
 
 
     // Auto-expand all sections when clauses first load
+    const sectionsInitialized = useRef(false)
+
     useEffect(() => {
-        if (clauses.length > 0 && expandedSections.size === 0) {
+        if (clauses.length > 0 && !sectionsInitialized.current) {
+            sectionsInitialized.current = true
             const parentIds = new Set<string>()
             clauses.forEach(c => {
                 if (c.parentClauseId) parentIds.add(c.parentClauseId)
             })
-            // Only expand parents that have children
             const headerIds = clauses
                 .filter(c => parentIds.has(c.clauseId))
                 .map(c => c.clauseId)
-            setExpandedSections(new Set(headerIds))
+            if (headerIds.length > 0) {
+                setExpandedSections(new Set(headerIds))
+            }
         }
     }, [clauses.length])
 
