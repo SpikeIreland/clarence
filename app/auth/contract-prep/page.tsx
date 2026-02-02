@@ -4109,19 +4109,31 @@ function ContractPrepContent() {
             )}
 
             {/* Header */}
-            <header className="h-14 bg-slate-800 flex items-center justify-between px-6 flex-shrink-0">
-                {/* Left: CLARENCE Create branding */}
+            <header className="h-14 bg-slate-800 flex items-center justify-between px-6 flex-shrink-0 relative">
+                {/* Left: Home + CLARENCE Create branding */}
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                        <span className="text-white font-bold">C</span>
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-white font-semibold">CLARENCE</span>
-                            <span className="text-emerald-400 font-semibold">Create</span>
+                    <Link
+                        href="/auth/contracts-dashboard"
+                        className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                        title="Back to Negotiations"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                    </Link>
+                    <div className="h-6 w-px bg-slate-600"></div>
+                    <Link href="/auth/contracts-dashboard" className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold">C</span>
                         </div>
-                        <span className="text-slate-500 text-xs">The Honest Broker</span>
-                    </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-white font-semibold">CLARENCE</span>
+                                <span className="text-emerald-400 font-semibold">Create</span>
+                            </div>
+                            <span className="text-slate-500 text-xs">The Honest Broker</span>
+                        </div>
+                    </Link>
                 </div>
 
                 {/* Centre: Page Title */}
