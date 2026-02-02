@@ -606,7 +606,7 @@ function ContractCreationContent() {
                 const data = await response.json()
                 const allTemplates: Template[] = data.templates || []
                 const matchingTypes = getMatchingContractTypes(assessment.contractType)
-                let filteredTemplates = matchingTypes.length === 0 ? allTemplates : allTemplates.filter(t => matchingTypes.some(type => t.contractType.toLowerCase().includes(type.toLowerCase()) || t.industry.toLowerCase().includes(type.toLowerCase())))
+                let filteredTemplates = matchingTypes.length === 0 ? allTemplates : allTemplates.filter(t => matchingTypes.some(type => (t.contractType || '').toLowerCase().includes(type.toLowerCase()) || (t.industry || '').toLowerCase().includes(type.toLowerCase())))
                 setTemplates(filteredTemplates)
                 if (filteredTemplates.length === 0) {
                     addClarenceMessage(`I don't have any **${getContractTypeLabel(assessment.contractType)}** templates available yet.\n\nYou have a few options to proceed:`)
