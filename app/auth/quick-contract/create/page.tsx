@@ -730,7 +730,7 @@ function CreateQuickContractContent() {
                 console.log('📄 Contract status:', contractData.status)
 
                 if (contractData.status === 'ready') {
-                    // Fetch the parsed clauses with CORRECT column names
+                    // Fetch the parsed clauses
                     const { data: clausesData, error: clausesError } = await supabase
                         .from('uploaded_contract_clauses')
                         .select(`
@@ -779,37 +779,17 @@ function CreateQuickContractContent() {
 
                     console.log(`✅ Parsing complete! Found ${parsedClauses.length} clauses`)
 
-                    // Check if any clauses need certification
-                    const uncertifiedClauses = parsedClauses.filter(c => !c.clarenceCertified)
+                    // Clauses loaded - certification happens later in Studio page
+                    setState(prev => ({
+                        ...prev,
+                        uploadedContractId: contractId,
+                        parsedClauses,
+                        parsingStatus: 'complete'
+                    }))
 
-                    if (uncertifiedClauses.length > 0) {
-                        // Update state with clauses first
-                        setState(prev => ({
-                            ...prev,
-                            uploadedContractId: contractId,
-                            parsedClauses
-                        }))
-
-                        // ✅ AUTO-SELECT FIRST CLAUSE - LOCATION 1
-                        if (parsedClauses.length > 0) {
-                            setSelectedReviewClauseIndex(0)
-                        }
-
-                        // Trigger certification
-                        await triggerCertification(contractId, uncertifiedClauses)
-                    } else {
-                        // All clauses already certified
-                        setState(prev => ({
-                            ...prev,
-                            uploadedContractId: contractId,
-                            parsedClauses,
-                            parsingStatus: 'complete'
-                        }))
-
-                        // ✅ AUTO-SELECT FIRST CLAUSE - LOCATION 2
-                        if (parsedClauses.length > 0) {
-                            setSelectedReviewClauseIndex(0)
-                        }
+                    // Auto-select first clause for review
+                    if (parsedClauses.length > 0) {
+                        setSelectedReviewClauseIndex(0)
                     }
 
                     return
@@ -899,64 +879,6 @@ function CreateQuickContractContent() {
             setState(prev => ({
                 ...prev,
                 parsingStatus: 'complete' // Continue anyway
-            }))
-        }
-    }
-
-    async function triggerCertification(contractId: string, clauses: ParsedClause[]) {
-        console.log(`🔐 Starting CLARENCE certification for ${clauses.length} clauses...`)
-
-        setState(prev => ({
-            ...prev,
-            parsingStatus: 'certifying',
-            certificationProgress: {
-                total: clauses.length,
-                completed: 0
-            }
-        }))
-
-        try {
-            // Prepare clauses for certification API
-            const clausesForCertification = clauses.map(c => ({
-                clause_id: c.clauseId,
-                clause_number: c.clauseNumber,
-                clause_name: c.clauseName,
-                clause_category: c.category,
-                clause_text: c.clauseText
-            }))
-
-            const response = await fetch(`${API_BASE}/clarence-certify-clauses`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contract_id: contractId,
-                    contract_type: state.contractType || 'general',
-                    clauses: clausesForCertification
-                })
-            })
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
-                throw new Error(errorData.error || `Certification failed with status ${response.status}`)
-            }
-
-            const result = await response.json()
-            console.log('🔐 Certification result:', result)
-
-            if (result.success) {
-                // Reload clauses to get updated certification data
-                await reloadClauses(contractId)
-            } else {
-                throw new Error(result.error || 'Certification failed')
-            }
-
-        } catch (err) {
-            console.error('❌ Certification error:', err)
-            // Don't fail the whole flow - just log and continue without certification
-            console.log('⚠️ Continuing without certification')
-            setState(prev => ({
-                ...prev,
-                parsingStatus: 'complete'
             }))
         }
     }
@@ -1745,31 +1667,6 @@ function CreateQuickContractContent() {
                             </div>
                         )}
 
-                        {/* Certifying In Progress - Keep in container */}
-                        {state.parsingStatus === 'certifying' && (
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                                <div className="text-center py-16">
-                                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-                                    <h2 className="text-xl font-bold text-slate-800 mb-2">CLARENCE Review in Progress</h2>
-                                    <p className="text-slate-500 mb-2">Analyzing each clause for fairness and market standards...</p>
-                                    <p className="text-sm text-slate-400">
-                                        Certified {state.certificationProgress?.completed || 0} of {state.certificationProgress?.total || 0} clauses
-                                    </p>
-                                    <div className="max-w-xs mx-auto mt-4">
-                                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-blue-600 transition-all duration-300"
-                                                style={{
-                                                    width: `${state.certificationProgress?.total
-                                                        ? (state.certificationProgress.completed / state.certificationProgress.total) * 100
-                                                        : 0}%`
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
 
                         {/* Parsing Error - Keep in container */}
                         {state.parsingStatus === 'error' && (
@@ -2188,16 +2085,7 @@ function CreateQuickContractContent() {
                                                         <p className="text-sm text-slate-500 mb-6">
                                                             This clause hasn't been certified yet.
                                                         </p>
-                                                        <button
-                                                            onClick={() => {
-                                                                if (state.uploadedContractId) {
-                                                                    triggerCertification(state.uploadedContractId, [selectedReviewClause])
-                                                                }
-                                                            }}
-                                                            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                                                        >
-                                                            Certify This Clause
-                                                        </button>
+                                                        <p className="text-xs text-slate-500 italic">Certification will happen automatically in the Studio.</p>
                                                     </div>
                                                 )}
                                             </div>

@@ -340,6 +340,36 @@ function QuickContractStudioContent() {
     }, [contractId, router])
 
     // ========================================================================
+    // SECTION: TRIGGER CERTIFICATION ON STUDIO LOAD
+    // When user arrives at studio, kick off sequential certification
+    // for any clauses that haven't been certified yet
+    // ========================================================================
+
+    const [certificationTriggered, setCertificationTriggered] = useState(false)
+
+    useEffect(() => {
+        if (certificationTriggered || !contractId || !clauses.length) return
+
+        // Check if there are uncertified non-header clauses
+        const pendingClauses = clauses.filter(c =>
+            !c.isHeader && (c.processingStatus === 'pending' || c.processingStatus === 'processing')
+        )
+
+        if (pendingClauses.length === 0) return // All already certified
+
+        console.log(`🔐 Triggering certification for ${pendingClauses.length} pending clauses...`)
+        setCertificationTriggered(true)
+
+        // Fire and forget - the polling useEffect handles the rest
+        fetch('https://spikeislandstudios.app.n8n.cloud/webhook/certify-next-clause', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contract_id: contractId })
+        }).catch(err => console.error('Failed to trigger certification:', err))
+
+    }, [contractId, clauses.length, certificationTriggered])
+
+    // ========================================================================
     // SECTION 4C: CHAT FUNCTIONS
     // ========================================================================
 
