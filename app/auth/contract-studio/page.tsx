@@ -2142,8 +2142,17 @@ function ContractStudioContent() {
     const [showResetConfirm, setShowResetConfirm] = useState(false)
 
     // Party Chat state
-    const [isChatOpen, setIsChatOpen] = useState(false)
     const [chatUnreadCount, setChatUnreadCount] = useState(0)
+    const [isChatOpen, setIsChatOpen] = useState(false)
+
+    // NEW: Messages to inject into Party Chat from outside (e.g., AI counter-move responses)
+    const [pendingPartyChatMessages, setPendingPartyChatMessages] = useState<Array<{
+        messageId: string
+        senderType: 'customer' | 'provider'
+        senderName: string
+        messageText: string
+        createdAt: string
+    }>>([])
 
     // CLARENCE AI state
     const [clarenceWelcomeLoaded, setClarenceWelcomeLoaded] = useState(false)
@@ -4274,7 +4283,11 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     } : null)
                 }
 
-                // Add AI opponent's response to chat (field is 'providerResponse', not 'chatMessage')
+                // ==========================================================
+                // Route AI response to PARTY CHAT (not CLARENCE Chat)
+                // The opponent's words belong in the Party Chat panel.
+                // Teaching moments stay in CLARENCE Chat (coach guidance).
+                // ==========================================================
                 if (result.providerResponse) {
                     const decisionEmoji = result.decision === 'accept' ? '✅'
                         : result.decision === 'counter' ? '↔️'
@@ -4286,21 +4299,21 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                             ? `countered with position ${result.newProviderPosition?.toFixed(1)}`
                             : `is holding firm`
 
-                    const aiChatMessage: ClauseChatMessage = {
+                    // ADD to Party Chat (opponent's response)
+                    setPendingPartyChatMessages(prev => [...prev, {
                         messageId: `training-ai-${Date.now()}`,
-                        sessionId: session.sessionId,
-                        positionId: positionId,
-                        sender: 'clarence',
-                        senderUserId: null,
-                        message: `${decisionEmoji} **${avatarName}** ${decisionText}:\n\n"${result.providerResponse}"`,
-                        messageType: 'auto_response',
-                        relatedPositionChange: true,
-                        triggeredBy: 'training_ai_move',
+                        senderType: 'provider' as const,
+                        senderName: avatarName,
+                        messageText: `${decisionEmoji} ${decisionText}\n\n"${result.providerResponse}"`,
                         createdAt: new Date().toISOString()
-                    }
-                    setChatMessages(prev => [...prev, aiChatMessage])
+                    }])
 
-                    // Add teaching moment as separate message (it's a string, not an object)
+                    // Bump unread count if Party Chat panel is closed
+                    if (!isChatOpen) {
+                        setChatUnreadCount(prev => prev + 1)
+                    }
+
+                    // Teaching moment stays in CLARENCE Chat (it's coach guidance, not opponent dialogue)
                     if (result.teachingMoment) {
                         const teachingMessage: ClauseChatMessage = {
                             messageId: `teaching-${Date.now()}`,
@@ -4582,10 +4595,21 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 await fetchNegotiationHistory()
 
                 // ============================================================
+                // Clear the overlay BEFORE AI counter-move
+                // The AI thinking has its own indicator (aiThinking state)
+                // so the user can see the workspace while the AI responds
+                // ============================================================
+                stopWorking()
+
                 // TRAINING MODE: Trigger AI opponent counter-move
+                // Now runs WITHOUT the overlay - user can see the workspace
+                // The aiThinking/aiThinkingClause states show a subtle
+                // indicator on the clause while the AI is thinking
                 // ============================================================
                 if (isTrainingMode && resolvedParty === 'customer') {
-                    await handleTrainingAIMove(
+                    // Don't await - let it run in the background
+                    // so the user can see their position change first
+                    handleTrainingAIMove(
                         selectedClause.clauseId,
                         selectedClause.positionId,
                         proposedPosition,
@@ -4595,8 +4619,6 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                         selectedClause.clauseName
                     )
                 }
-
-                stopWorking()  // â† This MUST come AFTER handleTrainingAIMove
             } else {
                 setWorkingError('Failed to save your position. Please try again.')
             }

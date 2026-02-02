@@ -37,6 +37,15 @@ interface PartyChatPanelProps {
     avatarName?: string
     avatarInitials?: string
     avatarCompany?: string
+    // NEW: External message injection (from AI counter-moves)
+    externalMessages?: Array<{
+        messageId: string
+        senderType: 'customer' | 'provider'
+        senderName: string
+        messageText: string
+        createdAt: string
+    }>
+    onExternalMessagesConsumed?: () => void
 }
 
 interface ToastNotification {
@@ -297,19 +306,11 @@ export function PartyChatPanel({
     aiPersonality = 'balanced',
     avatarName,
     avatarInitials,
-    avatarCompany
+    avatarCompany,
+    // NEW: External message injection (from AI counter-moves)
+    externalMessages = [],
+    onExternalMessagesConsumed
 }: PartyChatPanelProps) {
-    // Debug: Log props on render
-    console.log('[PartyChat] Component props:', {
-        sessionId,
-        providerId,
-        providerName,
-        currentUserType,
-        currentUserName,
-        isOpen,
-        isAIOpponent,
-        aiPersonality
-    })
 
     // State
     const [messages, setMessages] = useState<PartyMessage[]>([])
@@ -797,6 +798,82 @@ export function PartyChatPanel({
     }, [isOpen])
 
     // ============================================================================
+    // CONSUME EXTERNAL MESSAGES (from AI counter-moves in training mode)
+    // These are injected by the parent component when the AI opponent responds
+    // to a position change. We add them to our local messages state.
+    // ============================================================================
+    useEffect(() => {
+        if (externalMessages && externalMessages.length > 0) {
+            // Convert external messages to PartyMessage format
+            const newMessages: PartyMessage[] = externalMessages.map(msg => ({
+                messageId: msg.messageId,
+                sessionId: sessionId,
+                providerId: providerId,
+                senderType: msg.senderType,
+                senderName: msg.senderName,
+                messageText: msg.messageText,
+                isRead: isOpen ? true : false,  // Mark as read if panel is open
+                createdAt: msg.createdAt
+            }))
+
+            setMessages(prev => [...prev, ...newMessages])
+
+            // Update unread count if panel is closed
+            if (!isOpen) {
+                const newUnread = unreadCount + newMessages.length
+                setUnreadCount(newUnread)
+                onUnreadCountChange?.(newUnread)
+            }
+
+            // Tell parent we've consumed the messages
+            onExternalMessagesConsumed?.()
+        }
+    }, [externalMessages])
+
+    // ============================================================================
+    // AI OPPONENT: Show greeting message on first load
+    // This fires once when the component mounts in AI mode.
+    // The panel starts closed, so this also triggers the badge.
+    // ============================================================================
+    const greetingShownRef = useRef(false)
+
+    useEffect(() => {
+        if (isAIOpponent && !greetingShownRef.current && avatarName) {
+            greetingShownRef.current = true
+
+            // Character greetings (matching training_characters.greeting_message)
+            // These could also come from a prop if you prefer
+            const greetings: Record<string, string> = {
+                'Robert Jones': 'Hello! I\'m Robert Jones from Montgomery Bank procurement. This is one of my first major contract negotiations, so I appreciate your patience. I want to make sure we reach a fair agreement that works for both of us. Where would you like to start?',
+                'Jennifer Stephen': 'Good morning. I\'m Jennifer Stephen, Senior Legal Counsel at Brent Industrial. I\'ve reviewed the contract and I\'m ready to work through the clauses efficiently. I appreciate directness, so please do tell me what you need and why. Shall we begin?',
+                'Beth Parks': 'Good morning. I\'m Beth Parks. My client has clear expectations on these terms and I intend to ensure they are met. I suggest we work through each clause methodically. I should tell you upfront that there are several positions my client considers non-negotiable.'
+            }
+
+            const greetingText = greetings[avatarName] || `Hello, I'm ${avatarName}. I'm ready to discuss the contract terms. What would you like to start with?`
+
+            const greetingMessage: PartyMessage = {
+                messageId: `greeting-${Date.now()}`,
+                sessionId: sessionId,
+                providerId: providerId,
+                senderType: 'provider',
+                senderName: avatarName,
+                messageText: greetingText,
+                isRead: false,
+                createdAt: new Date().toISOString()
+            }
+
+            // Small delay so it feels like the AI is "arriving"
+            setTimeout(() => {
+                setMessages(prev => [...prev, greetingMessage])
+
+                // Trigger badge notification (panel starts closed)
+                setUnreadCount(1)
+                onUnreadCountChange?.(1)
+            }, 1500)
+        }
+    }, [isAIOpponent, avatarName])
+
+    // ============================================================================
     // SECTION 8E: RENDER
     // ============================================================================
 
@@ -909,8 +986,8 @@ export function PartyChatPanel({
 
                             {/* Avatar - different styling for AI mode */}
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isAIOpponent
-                                    ? 'bg-gradient-to-br from-amber-500 to-orange-600'
-                                    : 'bg-gradient-to-br from-blue-500 to-indigo-600'
+                                ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                                : 'bg-gradient-to-br from-blue-500 to-indigo-600'
                                 }`}>
                                 <span className="text-white font-semibold">
                                     {displayInitials}
