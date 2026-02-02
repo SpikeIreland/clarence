@@ -185,6 +185,11 @@ function QuickContractStudioContent() {
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
 
+    // Progressive loading state
+    const [isPolling, setIsPolling] = useState(false)
+    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
     // Refs
     const clauseListRef = useRef<HTMLDivElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
@@ -948,12 +953,6 @@ function QuickContractStudioContent() {
     if (loading) {
         return <QuickContractStudioLoading />
     }
-
-    // Progressive loading state
-    const [isPolling, setIsPolling] = useState(false)
-    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-
 
     // ========================================================================
     // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
