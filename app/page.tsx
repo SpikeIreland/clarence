@@ -52,13 +52,13 @@ export default function Home() {
 
             {/* ============================================================ */}
             {/* PRIMARY BRAND MESSAGE: Create, Negotiate, Agree */}
-            {/* "Negotiate" is emphasized - larger and heavier */}
+            {/* All three words equal size — unified brand statement */}
             {/* ============================================================ */}
             <h1 className="text-5xl md:text-6xl font-bold mb-8 tracking-tight flex items-baseline justify-center flex-wrap gap-x-3">
               <span className="text-emerald-600">Create</span>
-              <span className="text-slate-400">·</span>
-              <span className="text-slate-800 text-6xl md:text-7xl font-black">Negotiate</span>
-              <span className="text-slate-400">·</span>
+              <span className="text-slate-300 font-light">·</span>
+              <span className="text-slate-800">Negotiate</span>
+              <span className="text-slate-300 font-light">·</span>
               <span className="text-violet-600">Agree</span>
             </h1>
 
@@ -304,9 +304,9 @@ export default function Home() {
           {/* Create, Negotiate, Agree echo */}
           <div className="text-2xl font-bold mb-6 flex items-baseline justify-center gap-2">
             <span className="text-emerald-400">Create</span>
-            <span className="text-slate-500">·</span>
-            <span className="text-slate-300 text-3xl font-black">Negotiate</span>
-            <span className="text-slate-500">·</span>
+            <span className="text-slate-600 font-light">·</span>
+            <span className="text-slate-300">Negotiate</span>
+            <span className="text-slate-600 font-light">·</span>
             <span className="text-violet-400">Agree</span>
           </div>
 
