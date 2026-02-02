@@ -631,7 +631,7 @@ function QuickContractStudioContent() {
     const handleStartEditing = () => {
         if (!selectedClause) return
         // Use existing draft text, or fall back to original clause text
-        setEditingDraftText(selectedClause.draftText || selectedClause.clauseText || '')
+        setEditingDraftText(selectedClause.draftText || selectedClause.originalText || selectedClause.clauseText || '')
         setIsDraftEditing(true)
     }
 
