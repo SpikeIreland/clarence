@@ -474,9 +474,10 @@ export default function ContractLibraryPage() {
         if (ext === 'pdf') {
             const pdfjsLib = await import('pdfjs-dist')
 
-            // Set up worker - use CDN for compatibility
+            // Set up worker - use CDN matching installed version
             if (typeof window !== 'undefined') {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+                pdfjsLib.GlobalWorkerOptions.workerSrc =
+                    `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
             }
 
             const arrayBuffer = await file.arrayBuffer()
