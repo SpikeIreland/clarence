@@ -797,7 +797,67 @@ export default function TrainingStudioPage() {
                 </div>
 
                 {/* ============================================================ */}
-                {/* SECTION 16B: TAB NAVIGATION */}
+                {/* SECTION 16B: TRAINING MODE CARDS */}
+                {/* ============================================================ */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    {/* Solo vs AI - Default active mode */}
+                    <div className="bg-white rounded-xl border-2 border-amber-400 shadow-md p-6 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 bg-amber-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">ACTIVE</div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center text-2xl">🤖</div>
+                            <div>
+                                <h3 className="font-bold text-slate-800">Solo vs AI</h3>
+                                <p className="text-xs text-amber-600 font-medium">Practice anytime</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-4">Jump into a pre-built scenario or choose a template. Negotiate against AI counterparts with CLARENCE as your mediator.</p>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <span className="bg-amber-50 px-2 py-1 rounded">⚡ Instant start</span>
+                            <span className="bg-amber-50 px-2 py-1 rounded">🎭 3 AI counterparts</span>
+                        </div>
+                    </div>
+
+                    {/* Upload Your Own Contract */}
+                    <button
+                        onClick={() => router.push('/auth/create-contract?mode=training')}
+                        className="bg-white rounded-xl border-2 border-slate-200 hover:border-violet-400 hover:shadow-md p-6 text-left transition-all group"
+                    >
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">📤</div>
+                            <div>
+                                <h3 className="font-bold text-slate-800">Upload Your Own</h3>
+                                <p className="text-xs text-violet-600 font-medium">Bring your contract</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-4">Upload a contract document, go through the intake process, then negotiate it against an AI counterpart.</p>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <span className="bg-violet-50 px-2 py-1 rounded">📄 PDF / DOCX</span>
+                            <span className="bg-violet-50 px-2 py-1 rounded">🤖 AI generates positions</span>
+                        </div>
+                    </button>
+
+                    {/* Practice with a Partner */}
+                    <button
+                        onClick={() => router.push('/auth/create-contract?mode=training&partner=true')}
+                        className="bg-white rounded-xl border-2 border-slate-200 hover:border-blue-400 hover:shadow-md p-6 text-left transition-all group"
+                    >
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">👥</div>
+                            <div>
+                                <h3 className="font-bold text-slate-800">Practice with a Partner</h3>
+                                <p className="text-xs text-blue-600 font-medium">Invite a colleague</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-4">Set up a practice contract and invite a colleague to negotiate with. Both sides get the full CLARENCE experience.</p>
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <span className="bg-blue-50 px-2 py-1 rounded">👤 Real counterpart</span>
+                            <span className="bg-blue-50 px-2 py-1 rounded">🔄 Swap roles</span>
+                        </div>
+                    </button>
+                </div>
+
+                {/* ============================================================ */}
+                {/* SECTION 16C: TAB NAVIGATION */}
                 {/* ============================================================ */}
                 <div className="flex gap-2 mb-6 flex-wrap">
                     <button onClick={() => setActiveTab('quick-start')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'quick-start' ? 'bg-amber-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}>🎯 Quick Start</button>
