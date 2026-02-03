@@ -1398,9 +1398,6 @@ Your data is saved and ready. Click below to continue.`)
         </div>
       </div>
 
-      {/* Beta Feedback Button */}
-      <FeedbackButton position="bottom-left" />
-
       {/* Transition Modal */}
       <TransitionModal
         isOpen={transitionState.isOpen}
