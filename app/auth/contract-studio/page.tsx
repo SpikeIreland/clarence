@@ -1006,7 +1006,7 @@ async function withdrawClauseConfirmation(
 
 function formatCurrency(value: string | number | null, currency: string): string {
     if (!value) return '£0'
-    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : 'â‚¬'
+    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : '€'
 
     // Handle category-based deal values from Create Contract page
     const categoryLabels: Record<string, string> = {
@@ -1027,7 +1027,7 @@ function formatCurrency(value: string | number | null, currency: string): string
     }
 
     // Parse as number
-    const num = typeof value === 'string' ? parseFloat(value.replace(/[£$â‚¬,]/g, '')) : value
+    const num = typeof value === 'string' ? parseFloat(value.replace(/[£$€,]/g, '')) : value
 
     // Handle NaN
     if (isNaN(num)) return 'Not specified'
@@ -6636,34 +6636,36 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 {/* ============================================================ */}
                 <div className={`px-6 py-2 border-b ${borderColor}`}>
                     <div className="flex items-center justify-between">
-                        {/* Left: Dashboard/Training Lobby Button (Customers only) */}
-                        {userInfo?.role !== 'provider' ? (
-                            <button
-                                onClick={() => router.push(isTrainingMode ? '/auth/training' : '/auth/contracts-dashboard')}
-                                className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                </svg>
-                                <span className="text-sm">{isTrainingMode ? 'Training Lobby' : 'Dashboard'}</span>
-                            </button>
-                        ) : (
-                            <div className="w-20"></div>
-                        )}
-
-                        {/* Center: Title */}
+                        {/* Left: Home + CLARENCE Branding */}
                         <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 ${logoBg} rounded-lg flex items-center justify-center`}>
-                                <span className="text-white font-bold text-sm">C</span>
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-white tracking-wide">CLARENCE</span>
-                                    <span className={`font-semibold ${isTrainingMode ? 'text-amber-400' : 'text-slate-300'}`}>
-                                        {isTrainingMode ? 'Training' : 'Negotiate'}
-                                    </span>
+                            {/* Home Icon */}
+                            {userInfo?.role !== 'provider' && (
+                                <>
+                                    <button
+                                        onClick={() => router.push('/auth/contracts-dashboard')}
+                                        className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                        </svg>
+                                    </button>
+                                    <div className="h-5 w-px bg-slate-600"></div>
+                                </>
+                            )}
+                            {/* CLARENCE Branding */}
+                            <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 ${logoBg} rounded-lg flex items-center justify-center`}>
+                                    <span className="text-white font-bold text-sm">C</span>
                                 </div>
-                                <span className="text-slate-500 text-xs">The Honest Broker</span>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold text-white tracking-wide">CLARENCE</span>
+                                        <span className={`font-semibold ${isTrainingMode ? 'text-amber-400' : 'text-slate-300'}`}>
+                                            {isTrainingMode ? 'Training' : 'Negotiate'}
+                                        </span>
+                                    </div>
+                                    <span className="text-slate-500 text-xs">The Honest Broker</span>
+                                </div>
                             </div>
                         </div>
 
@@ -6680,7 +6682,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
                                     : previewButtonBg + ' text-white'
                                     }`}
-                                title="Generate a preview of the full contract"
                             >
                                 {isGeneratingPreview ? (
                                     <>
@@ -6706,7 +6707,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
-                                Documents
+                                Agree
                             </button>
                         </div>
                     </div>
