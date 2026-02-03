@@ -1662,7 +1662,7 @@ function CreateQuickContractContent() {
                                     <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
                                     <h2 className="text-xl font-bold text-slate-800 mb-2">Analyzing Your Contract</h2>
                                     <p className="text-slate-500 mb-2">CLARENCE is identifying and extracting clauses...</p>
-                                    <p className="text-sm text-slate-400">This typically takes 15-30 seconds</p>
+                                    <p className="text-sm text-slate-400">This typically takes about a minute or so</p>
                                 </div>
                             </div>
                         )}
