@@ -1739,8 +1739,6 @@ function DocumentCentreContent() {
             {/* Save as Template Modal */}
             <SaveAsTemplateModal />
 
-            {/* Beta Feedback Button */}
-            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
