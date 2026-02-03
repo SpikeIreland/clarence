@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
 // ============================================================================
@@ -189,6 +189,14 @@ function QuickContractStudioContent() {
     const [isPolling, setIsPolling] = useState(false)
     const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
+    // ==================== TEMPLATE MODE ====================
+    const searchParams = useSearchParams()
+    const isTemplateMode = searchParams.get('mode') === 'template'
+    const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
+    const [templateName, setTemplateName] = useState('')
+    const [savingTemplate, setSavingTemplate] = useState(false)
+    const [templateSaved, setTemplateSaved] = useState(false)
 
     // Refs
     const clauseListRef = useRef<HTMLDivElement>(null)
@@ -692,6 +700,86 @@ function QuickContractStudioContent() {
         }
     }
 
+    // ============================================================================
+    // SAVE AS TEMPLATE HANDLER
+    // ============================================================================
+    const handleSaveAsTemplate = async () => {
+        if (!templateName.trim() || !contractId || !userInfo) return
+
+        setSavingTemplate(true)
+        try {
+            const supabase = createClient()
+
+            // Count certified non-header clauses
+            const certifiedClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+
+            // Generate template code
+            const templateCode = `USER-${contractId.substring(0, 8).toUpperCase()}`
+
+            // Insert template record
+            const { data: template, error: templateError } = await supabase
+                .from('contract_templates')
+                .insert({
+                    template_code: templateCode,
+                    template_name: templateName.trim(),
+                    description: `Certified from uploaded contract: ${contract?.contractName || 'Unknown'}`,
+                    contract_type: contract?.contractType || 'custom',
+                    is_system: false,
+                    is_public: false,
+                    is_active: true,
+                    company_id: userInfo.companyId,
+                    created_by_user_id: userInfo.userId,
+                    clause_count: certifiedClauses.length,
+                    version: 1,
+                    times_used: 0,
+                })
+                .select('template_id')
+                .single()
+
+            if (templateError) throw templateError
+
+            // Insert template clauses from certified contract clauses
+            const templateClauses = certifiedClauses.map((clause, idx) => ({
+                template_id: template.template_id,
+                clause_number: clause.clauseNumber,
+                clause_name: clause.clauseName,
+                category: clause.category,
+                default_text: clause.clauseText || clause.originalText || '',
+                clause_level: clause.clauseLevel,
+                display_order: clause.displayOrder,
+                parent_clause_id: clause.parentClauseId,
+                clarence_position: clause.clarencePosition,
+                clarence_fairness: clause.clarenceFairness,
+                clarence_summary: clause.clarenceSummary,
+            }))
+
+            if (templateClauses.length > 0) {
+                const { error: clauseError } = await supabase
+                    .from('template_clauses')
+                    .insert(templateClauses)
+
+                if (clauseError) {
+                    console.warn('Template clauses insert warning:', clauseError)
+                    // Don't fail the whole operation - template record is saved
+                }
+            }
+
+            console.log('✅ Template saved:', template.template_id)
+            setTemplateSaved(true)
+
+            // Redirect back to contracts page after brief delay
+            setTimeout(() => {
+                router.push('/auth/contracts')
+            }, 1500)
+
+        } catch (error) {
+            console.error('Failed to save template:', error)
+            alert('Failed to save template. Please try again.')
+        } finally {
+            setSavingTemplate(false)
+        }
+    }
+
     // ========================================================================
     // SECTION 4D-2: DRAFT EDITING HANDLERS
     // ========================================================================
@@ -1076,7 +1164,7 @@ function QuickContractStudioContent() {
                             </div>
                             <div>
                                 <h1 className="font-semibold text-slate-800">Quick Contract Studio</h1>
-                                <p className="text-xs text-slate-500">CLARENCE Certified Review</p>
+                                <p className="text-xs text-slate-500">{isTemplateMode ? 'Template Certification' : 'CLARENCE Certified Review'}</p>
                             </div>
                         </div>
                         <div className="h-8 w-px bg-slate-200 flex-shrink-0"></div>
@@ -1093,30 +1181,49 @@ function QuickContractStudioContent() {
                     {/* Right: Actions */}
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={() => router.push('/auth/quick-contract')}
+                            onClick={() => router.push(isTemplateMode ? '/auth/contracts' : '/auth/quick-contract')}
                             className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
                         >
                             ← Back
                         </button>
-                        <button
-                            onClick={handleAcceptContract}
-                            disabled={accepting}
-                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                        >
-                            {accepting ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Processing...
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    Accept Contract
-                                </>
-                            )}
-                        </button>
+
+                        {isTemplateMode ? (
+                            /* ---- TEMPLATE MODE: Save as Template ---- */
+                            <button
+                                onClick={() => {
+                                    setTemplateName(contract?.contractName || '')
+                                    setShowSaveTemplateModal(true)
+                                }}
+                                disabled={clauses.filter(c => c.clarenceCertified).length === 0}
+                                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                </svg>
+                                Save as Template
+                            </button>
+                        ) : (
+                            /* ---- NORMAL MODE: Accept Contract ---- */
+                            <button
+                                onClick={handleAcceptContract}
+                                disabled={accepting}
+                                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                            >
+                                {accepting ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Accept Contract
+                                    </>
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
             </header>
@@ -2039,6 +2146,70 @@ function QuickContractStudioContent() {
                     </div>
                 </div>
             </div>
+            {/* ============================================================ */}
+            {/* SAVE AS TEMPLATE MODAL */}
+            {/* ============================================================ */}
+            {showSaveTemplateModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                        {templateSaved ? (
+                            /* ---- Success State ---- */
+                            <div className="p-8 text-center">
+                                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Template Saved!</h3>
+                                <p className="text-sm text-slate-500">Redirecting to your template library...</p>
+                            </div>
+                        ) : (
+                            /* ---- Input State ---- */
+                            <>
+                                <div className="p-6 border-b border-slate-200">
+                                    <h3 className="text-lg font-semibold text-slate-800">Save as Template</h3>
+                                    <p className="text-sm text-slate-500 mt-1">
+                                        This will save {clauses.filter(c => c.clarenceCertified).length} certified clauses as a reusable template.
+                                    </p>
+                                </div>
+                                <div className="p-6">
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Template Name</label>
+                                    <input
+                                        type="text"
+                                        value={templateName}
+                                        onChange={(e) => setTemplateName(e.target.value)}
+                                        placeholder="e.g., Standard BPO Agreement"
+                                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="flex items-center justify-end gap-3 p-6 pt-0">
+                                    <button
+                                        onClick={() => setShowSaveTemplateModal(false)}
+                                        className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSaveAsTemplate}
+                                        disabled={!templateName.trim() || savingTemplate}
+                                        className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm"
+                                    >
+                                        {savingTemplate ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                Saving...
+                                            </>
+                                        ) : (
+                                            'Save Template'
+                                        )}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

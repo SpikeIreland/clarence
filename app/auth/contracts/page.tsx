@@ -587,7 +587,16 @@ export default function ContractLibraryPage() {
 
             console.log('Parse result:', result)
 
-            // Stage 3: Complete
+            // Stage 3: Redirect to Studio for certification
+            const returnedContractId = result.contractId || result.contract_id
+
+            if (returnedContractId) {
+                // Redirect to Studio in template mode for progressive certification
+                router.push(`/auth/quick-contract/studio/${returnedContractId}?mode=template`)
+                return
+            }
+
+            // Fallback: if no contractId returned, show old complete state
             setUploadStage('complete')
             setUploadResult({
                 clauseCount: result.clauseCount || result.clause_count || 0,
