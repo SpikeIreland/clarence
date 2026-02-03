@@ -1292,9 +1292,21 @@ function DocumentCentreContent() {
             }
 
             // Step 4: Map session_clause_positions to template_clauses
+            // UPDATED: Use ORIGINAL positions as template defaults (starting positions)
+            // and store final positions separately for training comparison
             const templateClauses = positionsData.map((pos: Record<string, unknown>, index: number) => {
-                const customerPos = pos.customer_position ? parseFloat(String(pos.customer_position)) : 5
-                const providerPos = pos.provider_position ? parseFloat(String(pos.provider_position)) : 5
+                // Starting positions — used when creating new sessions from this template
+                const customerPos = pos.original_customer_position
+                    ? parseFloat(String(pos.original_customer_position))
+                    : (pos.customer_position ? parseFloat(String(pos.customer_position)) : 5)
+                const providerPos = pos.original_provider_position
+                    ? parseFloat(String(pos.original_provider_position))
+                    : (pos.provider_position ? parseFloat(String(pos.provider_position)) : 5)
+
+                // Final/outcome positions — for training comparison ("you achieved X, actual was Y")
+                const outcomeCustomerPos = pos.customer_position ? parseFloat(String(pos.customer_position)) : null
+                const outcomeProviderPos = pos.provider_position ? parseFloat(String(pos.provider_position)) : null
+
                 const customerWeight = pos.customer_weight ? parseFloat(String(pos.customer_weight)) : 3
                 const providerWeight = pos.provider_weight ? parseFloat(String(pos.provider_weight)) : 3
                 const avgWeight = Math.round((customerWeight + providerWeight) / 2)
@@ -1314,6 +1326,8 @@ function DocumentCentreContent() {
                     clause_content: pos.clause_content || null,
                     default_customer_position_override: customerPos,
                     default_provider_position_override: providerPos,
+                    outcome_customer_position: outcomeCustomerPos,
+                    outcome_provider_position: outcomeProviderPos,
                     default_weight_override: avgWeight,
                     is_required: true,
                     is_active: true,
