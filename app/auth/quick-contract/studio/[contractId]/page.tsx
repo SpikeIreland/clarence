@@ -266,16 +266,49 @@ function QuickContractStudioContent() {
                     extractedText: contractData.extracted_text
                 })
 
-                // In the data loading section, after fetching the contract:
+                // If still parsing, poll until ready
                 if (contractData.status === 'processing') {
-                    // Still scanning structure - show a brief loading message
-                    // (This should only take 10-15 seconds)
-                } else if (contractData.status === 'certifying' || contractData.status === 'ready') {
-                    // Clauses are available - load them and show progressive UI
-                    // Polling will handle the rest
+                    console.log('⏳ Contract still processing, polling for completion...')
+                    setLoading(true)
+
+                    const pollForReady = async () => {
+                        let attempts = 0
+                        const maxAttempts = 30 // 30 x 3s = 90 seconds max
+
+                        while (attempts < maxAttempts) {
+                            await new Promise(resolve => setTimeout(resolve, 3000))
+                            attempts++
+
+                            const { data: updated } = await supabase
+                                .from('uploaded_contracts')
+                                .select('status, clause_count')
+                                .eq('contract_id', contractId)
+                                .single()
+
+                            console.log(`📊 Poll ${attempts}: status=${updated?.status}, clauses=${updated?.clause_count}`)
+
+                            if (updated && (updated.status === 'ready' || updated.status === 'certifying')) {
+                                // Contract is parsed — reload the full page data
+                                window.location.reload()
+                                return
+                            }
+
+                            if (updated?.status === 'failed') {
+                                setError('Contract parsing failed. Please try again.')
+                                setLoading(false)
+                                return
+                            }
+                        }
+
+                        setError('Contract parsing timed out. Please refresh the page.')
+                        setLoading(false)
+                    }
+
+                    pollForReady()
+                    return // Don't proceed to load clauses yet
                 }
 
-                // Load clauses
+                // Load clauses (only reached when status is ready/certifying)
                 const { data: clausesData, error: clausesError } = await supabase
                     .from('uploaded_contract_clauses')
                     .select('*')
