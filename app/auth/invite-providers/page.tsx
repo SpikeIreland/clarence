@@ -8,6 +8,7 @@ import FeedbackButton from '@/app/components/FeedbackButton'
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
 import type { TransitionConfig } from '@/lib/pathway-utils'
 import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressHeader';
+import { createClient } from '@/lib/supabase'
 
 // ============================================================================
 // SECTION 1: INTERFACES
@@ -30,6 +31,7 @@ interface SessionData {
     contractType: string
     templateSource: string
     status: string
+    isTraining?: boolean
 }
 
 interface ContractData {
@@ -55,6 +57,20 @@ interface UserInfo {
     company: string
     userId: string
     companyId: string | null
+}
+
+// Training character interface
+interface TrainingCharacter {
+    characterId: string
+    characterName: string
+    characterTitle: string
+    companyName: string
+    avatarInitials: string
+    avatarUrl: string | null
+    themeColor: string
+    difficultyLevel: string
+    negotiationStyle: string
+    signatureQuote: string
 }
 
 // NEW: Transition state for modal
@@ -89,6 +105,20 @@ const DEAL_VALUE_LABELS: Record<string, string> = {
     '50k_250k': '£50,000 - £250,000',
     '250k_1m': '£250,000 - £1 million',
     'over_1m': 'Over £1 million'
+}
+
+const DIFFICULTY_CONFIG: Record<string, { label: string; icon: string; description: string; gradient: string }> = {
+    beginner: { label: 'Cooperative', icon: '🟢', description: 'Willing to find common ground quickly', gradient: 'from-emerald-500 to-green-600' },
+    intermediate: { label: 'Balanced', icon: '🟡', description: 'Fair but firm on key positions', gradient: 'from-amber-500 to-orange-600' },
+    advanced: { label: 'Aggressive', icon: '🔴', description: 'Hard negotiator, pushes for maximum advantage', gradient: 'from-red-500 to-rose-600' }
+}
+
+const THEME_COLORS: Record<string, { bg: string; bgLight: string; border: string; text: string }> = {
+    emerald: { bg: 'bg-emerald-600', bgLight: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700' },
+    amber: { bg: 'bg-amber-600', bgLight: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700' },
+    rose: { bg: 'bg-rose-600', bgLight: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700' },
+    blue: { bg: 'bg-blue-600', bgLight: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700' },
+    violet: { bg: 'bg-violet-600', bgLight: 'bg-violet-50', border: 'border-violet-200', text: 'text-violet-700' }
 }
 
 // ============================================================================
@@ -149,6 +179,14 @@ function InviteProvidersContent() {
         transition: null
     })
 
+    // Training mode state
+    const isTrainingMode = searchParams.get('mode') === 'training'
+    const [trainingCharacters, setTrainingCharacters] = useState<TrainingCharacter[]>([])
+    const [selectedCharacter, setSelectedCharacter] = useState<TrainingCharacter | null>(null)
+    const [isCreatingAIBid, setIsCreatingAIBid] = useState(false)
+    const [aiCreationStep, setAiCreationStep] = useState<string>('')
+    const [showAISuccessState, setShowAISuccessState] = useState(false)
+
     // ========================================================================
     // SECTION 6: INITIALIZATION
     // ========================================================================
@@ -189,11 +227,16 @@ function InviteProvidersContent() {
             // Load existing provider bids for this session
             await loadExistingBids(sessionId)
 
+            // Load training characters if in training mode
+            if (isTrainingMode) {
+                await loadTrainingCharacters()
+            }
+
             setLoading(false)
         }
 
         initializePage()
-    }, [searchParams, router])
+    }, [searchParams, router, isTrainingMode])
 
     const loadSessionData = async (sessionId: string) => {
         try {
@@ -207,7 +250,8 @@ function InviteProvidersContent() {
                     mediationType: data.mediation_type || data.mediationType || 'full_mediation',
                     contractType: data.contract_type || data.contractType || '',
                     templateSource: data.template_source || data.templateSource || '',
-                    status: data.status || 'initiated'
+                    status: data.status || 'initiated',
+                    isTraining: data.is_training || data.isTraining || false
                 })
 
                 // Extract deal context if available
@@ -269,6 +313,134 @@ function InviteProvidersContent() {
             }
         } catch (err) {
             console.error('Error loading existing bids:', err)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 6C: LOAD TRAINING CHARACTERS
+    // ========================================================================
+
+    const loadTrainingCharacters = async () => {
+        try {
+            const supabase = createClient()
+            const { data, error } = await supabase
+                .from('training_characters')
+                .select('*')
+                .eq('is_active', true)
+                .order('display_order', { ascending: true })
+
+            if (data && !error) {
+                setTrainingCharacters(data.map((c: any) => ({
+                    characterId: c.character_id,
+                    characterName: c.character_name,
+                    characterTitle: c.character_title,
+                    companyName: c.company_name,
+                    avatarInitials: c.avatar_initials,
+                    avatarUrl: c.avatar_url,
+                    themeColor: c.theme_color || 'amber',
+                    difficultyLevel: c.difficulty_level,
+                    negotiationStyle: c.negotiation_style,
+                    signatureQuote: c.signature_quote || ''
+                })))
+            }
+        } catch (err) {
+            console.error('Error loading training characters:', err)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 6D: AI COUNTERPART INVITE (Training Mode)
+    // ========================================================================
+
+    const handleSelectAICounterpart = (character: TrainingCharacter) => {
+        setSelectedCharacter(prev => prev?.characterId === character.characterId ? null : character)
+    }
+
+    const handleInviteAICounterpart = async () => {
+        if (!selectedCharacter || !session?.sessionId || !userInfo) return
+
+        setIsCreatingAIBid(true)
+        setAiCreationStep('Creating AI provider bid...')
+        setError(null)
+
+        try {
+            // Step 1: Create a bid record for the AI counterpart
+            setAiCreationStep('Setting up AI counterpart profile...')
+            const supabase = createClient()
+
+            const { data: bidData, error: bidError } = await supabase
+                .from('provider_bids')
+                .insert({
+                    session_id: session.sessionId,
+                    provider_company: selectedCharacter.companyName,
+                    provider_contact_name: selectedCharacter.characterName,
+                    provider_contact_email: `${selectedCharacter.characterName.toLowerCase().replace(/\s+/g, '.')}@training.clarence.ai`,
+                    status: 'submitted',
+                    intake_complete: true,
+                    is_ai_counterpart: true,
+                    ai_character_id: selectedCharacter.characterId,
+                    ai_difficulty_level: selectedCharacter.difficultyLevel,
+                    invited_by_user_id: userInfo.userId
+                })
+                .select()
+                .single()
+
+            if (bidError) {
+                throw new Error(`Failed to create bid: ${bidError.message}`)
+            }
+
+            const bidId = bidData.bid_id
+
+            // Step 2: Generate AI provider positions for each clause
+            setAiCreationStep('CLARENCE is generating AI positions...')
+
+            const response = await fetch(`${API_BASE}/training-generate-positions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    session_id: session.sessionId,
+                    bid_id: bidId,
+                    contract_id: contract?.contractId || null,
+                    contract_type: session.contractType,
+                    character_name: selectedCharacter.characterName,
+                    character_company: selectedCharacter.companyName,
+                    character_title: selectedCharacter.characterTitle,
+                    difficulty_level: selectedCharacter.difficultyLevel,
+                    negotiation_style: selectedCharacter.negotiationStyle,
+                    deal_value: dealContext?.dealValue || null,
+                    service_criticality: dealContext?.serviceCriticality || null
+                })
+            })
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}))
+                throw new Error(errData.error || errData.message || 'Failed to generate AI positions')
+            }
+
+            // Step 3: Update session notes with training info
+            setAiCreationStep('Finalising training session...')
+
+            const sessionNotes = `Training Session | Character: ${selectedCharacter.characterName} | Company: ${selectedCharacter.companyName} | Difficulty: ${selectedCharacter.difficultyLevel} | Personality: ${selectedCharacter.negotiationStyle}`
+
+            await supabase
+                .from('mediation_sessions')
+                .update({
+                    session_notes: sessionNotes,
+                    is_training: true,
+                    status: 'active'
+                })
+                .eq('session_id', session.sessionId)
+
+            // Step 4: Show success
+            setAiCreationStep('')
+            setIsCreatingAIBid(false)
+            setShowAISuccessState(true)
+
+        } catch (err: any) {
+            console.error('Error creating AI counterpart:', err)
+            setError(err.message || 'Failed to set up AI counterpart. Please try again.')
+            setIsCreatingAIBid(false)
+            setAiCreationStep('')
         }
     }
 
@@ -460,7 +632,14 @@ function InviteProvidersContent() {
         if (pathwayId) {
             url += `&pathway_id=${pathwayId}`
         }
+        if (isTrainingMode) {
+            url += '&mode=training'
+        }
         router.push(url)
+    }
+
+    const navigateToTrainingStudio = () => {
+        router.push(`/auth/training/${session?.sessionId}`)
     }
 
     // Keep old function for backward compatibility
@@ -494,6 +673,148 @@ function InviteProvidersContent() {
                     <div className="w-8 h-8 border-4 border-slate-300 border-t-slate-600 rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-slate-600">Loading session details...</p>
                 </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 10B: AI COUNTERPART SUCCESS STATE (Training Mode)
+    // ========================================================================
+
+    if (showAISuccessState && selectedCharacter) {
+        const difficulty = DIFFICULTY_CONFIG[selectedCharacter.difficultyLevel] || DIFFICULTY_CONFIG.intermediate
+        const theme = THEME_COLORS[selectedCharacter.themeColor as keyof typeof THEME_COLORS] || THEME_COLORS.amber
+
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-amber-50 to-slate-50">
+                {/* Header */}
+                <header className="h-14 bg-slate-800 flex items-center justify-between px-6 relative">
+                    <div className="flex items-center gap-3">
+                        <Link href="/auth/training" className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white" title="Back to Training">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                        </Link>
+                        <div className="h-6 w-px bg-slate-600"></div>
+                        <Link href="/auth/training" className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold">C</span>
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-white font-semibold">CLARENCE</span>
+                                    <span className="text-amber-400 font-semibold">Training</span>
+                                </div>
+                                <span className="text-slate-500 text-xs">The Honest Broker</span>
+                            </div>
+                        </Link>
+                    </div>
+                    <div className="absolute left-1/2 transform -translate-x-1/2">
+                        <h1 className="text-white font-medium">AI Counterpart Ready</h1>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <FeedbackButton position="header" />
+                        {session?.sessionNumber && (
+                            <span className="text-sm text-slate-400 bg-slate-700 px-3 py-1 rounded-full font-mono">{session.sessionNumber}</span>
+                        )}
+                    </div>
+                </header>
+
+                {/* Success Content */}
+                <div className="max-w-3xl mx-auto px-4 py-12">
+                    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden mb-8">
+                        {/* Header with celebration */}
+                        <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-8 py-10 text-center text-white">
+                            <div className="text-5xl mb-4">🎓</div>
+                            <h1 className="text-2xl font-bold mb-2">Training Session Ready!</h1>
+                            <p className="text-amber-100 text-lg">Your AI counterpart is prepared and waiting</p>
+                        </div>
+
+                        {/* AI Counterpart Card */}
+                        <div className="px-8 py-6 border-b border-slate-200">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="text-xl">🎭</span> Your Counterpart
+                            </h2>
+                            <div className={`flex items-center gap-4 p-4 rounded-xl ${theme.bgLight} border ${theme.border}`}>
+                                <div className={`w-16 h-16 ${theme.bg} rounded-full flex items-center justify-center text-white text-xl font-bold flex-shrink-0`}>
+                                    {selectedCharacter.avatarUrl
+                                        ? <img src={selectedCharacter.avatarUrl} alt={selectedCharacter.characterName} className="w-full h-full rounded-full object-cover" />
+                                        : selectedCharacter.avatarInitials
+                                    }
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-slate-800 text-lg">{selectedCharacter.characterName}</h3>
+                                    <p className="text-sm text-slate-600">{selectedCharacter.characterTitle} &bull; {selectedCharacter.companyName}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-sm">{difficulty.icon}</span>
+                                        <span className={`text-xs font-medium ${theme.text}`}>{difficulty.label} Negotiator</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {selectedCharacter.signatureQuote && (
+                                <p className="text-sm text-slate-500 italic mt-3 px-1">&ldquo;{selectedCharacter.signatureQuote}&rdquo;</p>
+                            )}
+                        </div>
+
+                        {/* Contract Summary */}
+                        <div className="px-8 py-6 border-b border-slate-200">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="text-xl">📋</span> Contract Details
+                            </h2>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-50 rounded-lg p-3">
+                                    <span className="text-xs text-slate-500">Contract</span>
+                                    <div className="text-sm font-medium text-slate-800">{contract?.contractName || CONTRACT_TYPE_LABELS[session?.contractType || ''] || '—'}</div>
+                                </div>
+                                <div className="bg-slate-50 rounded-lg p-3">
+                                    <span className="text-xs text-slate-500">Clauses</span>
+                                    <div className="text-sm font-medium text-slate-800">{contract?.clauseCount || '—'} clauses</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* What Happens Next */}
+                        <div className="px-8 py-6 border-b border-slate-200">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                <span className="text-xl">⚡</span> What Happens Next
+                            </h2>
+                            <div className="space-y-3">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">1</div>
+                                    <div>
+                                        <p className="text-slate-700 font-medium">You&apos;ll enter the negotiation environment</p>
+                                        <p className="text-sm text-slate-500">Review clauses and set your positions as the customer</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">2</div>
+                                    <div>
+                                        <p className="text-slate-700 font-medium">{selectedCharacter.characterName} responds to your moves</p>
+                                        <p className="text-sm text-slate-500">The AI counterpart will adjust positions based on their personality</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">3</div>
+                                    <div>
+                                        <p className="text-slate-700 font-medium">CLARENCE mediates and provides guidance</p>
+                                        <p className="text-sm text-slate-500">Get real-time feedback on your negotiation strategy</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="px-8 py-6 flex items-center justify-between">
+                            <button onClick={() => router.push('/auth/training')} className="px-6 py-3 text-slate-600 hover:text-slate-800 font-medium transition-colors">
+                                ← Back to Training
+                            </button>
+                            <button onClick={navigateToTrainingStudio} className="px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-orange-700 transition-all shadow-lg shadow-amber-200 flex items-center gap-2">
+                                Start Negotiation
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <FeedbackButton position="bottom-left" />
             </div>
         )
     }
@@ -560,7 +881,7 @@ function InviteProvidersContent() {
                     <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden mb-8">
                         {/* Header with celebration */}
                         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-10 text-center text-white">
-                            <div className="text-5xl mb-4">🎉</div>
+                            <div className="text-5xl mb-4">ðŸŽ‰</div>
                             <h1 className="text-2xl font-bold mb-2">
                                 Invitations Sent Successfully!
                             </h1>
@@ -575,7 +896,7 @@ function InviteProvidersContent() {
                         {/* What Happens Next */}
                         <div className="px-8 py-6 border-b border-slate-200">
                             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                                <span className="text-xl">📧</span> What Happens Next
+                                <span className="text-xl">ðŸ“§</span> What Happens Next
                             </h2>
                             <div className="space-y-3">
                                 <div className="flex items-start gap-3">
@@ -608,7 +929,7 @@ function InviteProvidersContent() {
                                 </div>
                             </div>
                             <div className="mt-4 flex items-center gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg px-4 py-3">
-                                <span className="text-lg">⏳</span>
+                                <span className="text-lg">â³</span>
                                 <span>Average provider response time: <strong>2-5 business days</strong></span>
                             </div>
                         </div>
@@ -616,7 +937,7 @@ function InviteProvidersContent() {
                         {/* Invitation Summary */}
                         <div className="px-8 py-6 border-b border-slate-200">
                             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                                <span className="text-xl">📋</span> Invitation Summary
+                                <span className="text-xl">ðŸ“‹</span> Invitation Summary
                             </h2>
                             <div className="bg-slate-50 rounded-xl overflow-hidden">
                                 <table className="w-full">
@@ -646,11 +967,11 @@ function InviteProvidersContent() {
                                                 <td className="px-4 py-3 text-right">
                                                     {bid.status === 'submitted' || bid.intake_complete ? (
                                                         <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
-                                                            <span>✓</span> Submitted
+                                                            <span>âœ“</span> Submitted
                                                         </span>
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
-                                                            <span>📨</span> Sent
+                                                            <span>ðŸ“¨</span> Sent
                                                         </span>
                                                     )}
                                                 </td>
@@ -672,7 +993,7 @@ function InviteProvidersContent() {
                         {/* Important Notice */}
                         <div className="px-8 py-6 bg-amber-50 border-b border-amber-200">
                             <div className="flex items-start gap-3">
-                                <span className="text-2xl">⚠️</span>
+                                <span className="text-2xl">âš ï¸</span>
                                 <div>
                                     <h3 className="font-semibold text-amber-800 mb-1">Important</h3>
                                     <p className="text-sm text-amber-700">
@@ -691,7 +1012,7 @@ function InviteProvidersContent() {
                                     onClick={navigateToDashboard}
                                     className="flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-slate-700 to-slate-800 text-white rounded-xl hover:from-slate-800 hover:to-slate-900 transition-all shadow-md"
                                 >
-                                    <span className="text-2xl">📊</span>
+                                    <span className="text-2xl">ðŸ“Š</span>
                                     <div className="text-left">
                                         <div className="font-semibold">View Dashboard</div>
                                         <div className="text-xs text-slate-300">See all your sessions</div>
@@ -702,7 +1023,7 @@ function InviteProvidersContent() {
                                     onClick={navigateToStudio}
                                     className="flex items-center justify-center gap-3 px-6 py-4 bg-white border-2 border-slate-200 text-slate-700 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-all"
                                 >
-                                    <span className="text-2xl">🏛️</span>
+                                    <span className="text-2xl">ðŸ›ï¸</span>
                                     <div className="text-left">
                                         <div className="font-semibold">Preview Studio</div>
                                         <div className="text-xs text-slate-500">Waiting for responses</div>
@@ -714,7 +1035,7 @@ function InviteProvidersContent() {
                                 onClick={navigateToAssessment}
                                 className="w-full text-center text-sm text-slate-500 hover:text-slate-700 py-2 transition-colors"
                             >
-                                ← Back to Strategic Assessment (modify your positions)
+                                â† Back to Strategic Assessment (modify your positions)
                             </button>
                         </div>
                     </div>
@@ -723,7 +1044,7 @@ function InviteProvidersContent() {
                     {providers.some(p => p.status === 'error') && (
                         <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
                             <h3 className="text-lg font-medium text-red-800 mb-4 flex items-center gap-2">
-                                <span>⚠️</span> Failed Invitations
+                                <span>âš ï¸</span> Failed Invitations
                             </h3>
                             <p className="text-sm text-slate-600 mb-4">
                                 The following invitations failed to send. You can retry or remove them.
@@ -788,29 +1109,29 @@ function InviteProvidersContent() {
     // ========================================================================
 
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className={`min-h-screen ${isTrainingMode ? 'bg-gradient-to-b from-amber-50 to-slate-50' : 'bg-slate-50'}`}>
             {/* Navigation */}
             <header className="h-14 bg-slate-800 flex items-center justify-between px-6 relative sticky top-0 z-40">
-                {/* Left: Home + CLARENCE Create branding */}
+                {/* Left: Home + CLARENCE branding */}
                 <div className="flex items-center gap-3">
                     <Link
-                        href="/auth/contracts-dashboard"
+                        href={isTrainingMode ? '/auth/training' : '/auth/contracts-dashboard'}
                         className="p-1.5 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white"
-                        title="Back to Negotiations"
+                        title={isTrainingMode ? 'Back to Training' : 'Back to Negotiations'}
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                         </svg>
                     </Link>
                     <div className="h-6 w-px bg-slate-600"></div>
-                    <Link href="/auth/contracts-dashboard" className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                    <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts-dashboard'} className="flex items-center gap-3">
+                        <div className={`w-8 h-8 bg-gradient-to-br ${isTrainingMode ? 'from-amber-500 to-orange-600' : 'from-emerald-500 to-teal-600'} rounded-lg flex items-center justify-center`}>
                             <span className="text-white font-bold">C</span>
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
                                 <span className="text-white font-semibold">CLARENCE</span>
-                                <span className="text-emerald-400 font-semibold">Create</span>
+                                <span className={`${isTrainingMode ? 'text-amber-400' : 'text-emerald-400'} font-semibold`}>{isTrainingMode ? 'Training' : 'Create'}</span>
                             </div>
                             <span className="text-slate-500 text-xs">The Honest Broker</span>
                         </div>
@@ -819,7 +1140,7 @@ function InviteProvidersContent() {
 
                 {/* Centre: Page Title */}
                 <div className="absolute left-1/2 transform -translate-x-1/2">
-                    <h1 className="text-white font-medium">Invite Respondents</h1>
+                    <h1 className="text-white font-medium">{isTrainingMode ? 'Choose Your Counterpart' : 'Invite Respondents'}</h1>
                 </div>
 
                 {/* Right: Feedback & Session Number */}
@@ -832,6 +1153,19 @@ function InviteProvidersContent() {
                     )}
                 </div>
             </header>
+
+            {/* Training Mode Banner */}
+            {isTrainingMode && (
+                <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white py-3">
+                    <div className="max-w-5xl mx-auto px-4 flex items-center gap-3">
+                        <span className="text-xl">🎓</span>
+                        <div>
+                            <p className="font-medium">Training Mode</p>
+                            <p className="text-amber-100 text-sm">Choose an AI counterpart to practice against, or invite a colleague for partner training.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Session Banner */}
             <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white py-3">
@@ -846,7 +1180,7 @@ function InviteProvidersContent() {
                         <div>
                             <span className="text-slate-400 text-xs">Contract Type</span>
                             <div className="text-sm">
-                                {CONTRACT_TYPE_LABELS[session?.contractType || ''] || session?.contractType || '—'}
+                                {CONTRACT_TYPE_LABELS[session?.contractType || ''] || session?.contractType || 'â€”'}
                             </div>
                         </div>
                         {contract && (
@@ -858,8 +1192,8 @@ function InviteProvidersContent() {
                         <div>
                             <span className="text-slate-400 text-xs">Status</span>
                             <div className="text-sm">
-                                <span className="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-xs">
-                                    Ready to Invite
+                                <span className={`${isTrainingMode ? 'bg-amber-500/20 text-amber-300' : 'bg-purple-500/20 text-purple-300'} px-2 py-0.5 rounded text-xs`}>
+                                    {isTrainingMode ? 'Training Setup' : 'Ready to Invite'}
                                 </span>
                             </div>
                         </div>
@@ -873,7 +1207,7 @@ function InviteProvidersContent() {
                 {error && (
                     <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center justify-between">
                         <span>{error}</span>
-                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
+                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">âœ•</button>
                     </div>
                 )}
 
@@ -884,25 +1218,25 @@ function InviteProvidersContent() {
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Customer</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {session?.customerCompany || userInfo?.company || '—'}
+                                {session?.customerCompany || userInfo?.company || 'â€”'}
                             </div>
                         </div>
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Contract</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {contract?.contractName || CONTRACT_TYPE_LABELS[session?.contractType || ''] || '—'}
+                                {contract?.contractName || CONTRACT_TYPE_LABELS[session?.contractType || ''] || 'â€”'}
                             </div>
                         </div>
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Clauses Prepared</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {contract?.clauseCount || '—'}
+                                {contract?.clauseCount || 'â€”'}
                             </div>
                         </div>
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Deal Value</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {dealContext?.dealValue ? DEAL_VALUE_LABELS[dealContext.dealValue] : '—'}
+                                {dealContext?.dealValue ? DEAL_VALUE_LABELS[dealContext.dealValue] : 'â€”'}
                             </div>
                         </div>
                     </div>
@@ -920,6 +1254,126 @@ function InviteProvidersContent() {
                         </div>
                     )}
                 </div>
+
+                {/* ============================================================ */}
+                {/* AI COUNTERPART SELECTION (Training Mode Only) */}
+                {/* ============================================================ */}
+                {isTrainingMode && (
+                    <div className="bg-white rounded-xl shadow-sm border-2 border-amber-200 p-6 mb-6">
+                        <div className="flex items-center gap-3 mb-2">
+                            <span className="text-2xl">🤖</span>
+                            <h2 className="text-lg font-semibold text-slate-800">Invite AI Counterpart</h2>
+                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">Recommended</span>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-6">
+                            Select an AI counterpart to practice negotiating against. CLARENCE will generate their
+                            positions based on the contract type and their personality profile.
+                        </p>
+
+                        {/* Character Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            {trainingCharacters.map(character => {
+                                const difficulty = DIFFICULTY_CONFIG[character.difficultyLevel] || DIFFICULTY_CONFIG.intermediate
+                                const theme = THEME_COLORS[character.themeColor as keyof typeof THEME_COLORS] || THEME_COLORS.amber
+                                const isSelected = selectedCharacter?.characterId === character.characterId
+
+                                return (
+                                    <button
+                                        key={character.characterId}
+                                        onClick={() => handleSelectAICounterpart(character)}
+                                        className={`text-left rounded-xl border-2 transition-all overflow-hidden ${isSelected
+                                            ? `${theme.border} shadow-lg ring-2 ring-offset-1 ring-amber-300`
+                                            : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                                            }`}
+                                    >
+                                        <div className={`px-4 py-4 ${isSelected ? theme.bgLight : 'bg-white'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-12 h-12 ${theme.bg} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}>
+                                                    {character.avatarUrl
+                                                        ? <img src={character.avatarUrl} alt={character.characterName} className="w-full h-full rounded-full object-cover" />
+                                                        : character.avatarInitials
+                                                    }
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h4 className="font-bold text-slate-800 truncate">{character.characterName}</h4>
+                                                    <p className="text-xs text-slate-500 truncate">{character.characterTitle}</p>
+                                                    <p className="text-xs text-slate-400 truncate">{character.companyName}</p>
+                                                </div>
+                                                {isSelected && (
+                                                    <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                                        <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="px-4 py-3 border-t border-slate-100 bg-slate-50">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-sm">{difficulty.icon}</span>
+                                                <span className="text-xs font-semibold text-slate-700">{difficulty.label}</span>
+                                            </div>
+                                            <p className="text-xs text-slate-500 line-clamp-2">{difficulty.description}</p>
+                                        </div>
+                                    </button>
+                                )
+                            })}
+                        </div>
+
+                        {/* Loading characters fallback */}
+                        {trainingCharacters.length === 0 && (
+                            <div className="text-center py-8">
+                                <div className="w-8 h-8 border-4 border-amber-300 border-t-amber-600 rounded-full animate-spin mx-auto mb-3"></div>
+                                <p className="text-slate-500 text-sm">Loading AI counterparts...</p>
+                            </div>
+                        )}
+
+                        {/* Selected Character Info + Start Button */}
+                        {selectedCharacter && (
+                            <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">🎯</span>
+                                        <div>
+                                            <p className="font-medium text-slate-800">
+                                                Negotiate with {selectedCharacter.characterName}
+                                            </p>
+                                            <p className="text-sm text-slate-600">
+                                                {selectedCharacter.companyName} &bull; {DIFFICULTY_CONFIG[selectedCharacter.difficultyLevel]?.label || 'Balanced'} difficulty
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleInviteAICounterpart}
+                                        disabled={isCreatingAIBid}
+                                        className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg font-semibold hover:from-amber-600 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-md"
+                                    >
+                                        {isCreatingAIBid ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                {aiCreationStep || 'Setting up...'}
+                                            </>
+                                        ) : (
+                                            <>
+                                                Start Training
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Divider for training mode */}
+                {isTrainingMode && (
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="flex-1 border-t border-slate-200"></div>
+                        <span className="text-sm text-slate-400 font-medium">or invite a real person</span>
+                        <div className="flex-1 border-t border-slate-200"></div>
+                    </div>
+                )}
 
                 {/* Existing Invited Providers */}
                 {existingBids.length > 0 && (
@@ -956,11 +1410,16 @@ function InviteProvidersContent() {
                 {/* Add Provider Form */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
                     <h2 className="text-lg font-medium text-slate-800 mb-4">
-                        {existingBids.length > 0 ? 'Invite More Providers' : 'Add Providers to Invite'}
+                        {isTrainingMode
+                            ? (existingBids.length > 0 ? 'Invite Another Colleague' : 'Invite a Training Partner')
+                            : (existingBids.length > 0 ? 'Invite More Providers' : 'Add Providers to Invite')
+                        }
                     </h2>
                     <p className="text-sm text-slate-600 mb-4">
-                        Enter the details of providers you want to invite. They will receive an email
-                        with instructions to review the contract and submit their positions.
+                        {isTrainingMode
+                            ? 'Enter the details of a colleague to invite for partner training.'
+                            : 'Enter the details of providers you want to invite. They will receive an email with instructions to review the contract and submit their positions.'
+                        }
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -1043,7 +1502,7 @@ function InviteProvidersContent() {
                                                     ? 'bg-blue-500'
                                                     : 'bg-slate-400'
                                             }`}>
-                                            {provider.status === 'sent' ? '✓' :
+                                            {provider.status === 'sent' ? 'âœ“' :
                                                 provider.status === 'error' ? '!' :
                                                     provider.status === 'sending' ? '...' :
                                                         provider.companyName.charAt(0).toUpperCase()}
@@ -1051,7 +1510,7 @@ function InviteProvidersContent() {
                                         <div>
                                             <div className="font-medium text-slate-800">{provider.companyName}</div>
                                             <div className="text-sm text-slate-500">
-                                                {provider.contactName} • {provider.contactEmail}
+                                                {provider.contactName} â€¢ {provider.contactEmail}
                                             </div>
                                             {provider.errorMessage && (
                                                 <div className="text-xs text-red-600 mt-1">{provider.errorMessage}</div>
@@ -1125,7 +1584,7 @@ function InviteProvidersContent() {
                 {/* Empty State */}
                 {providers.length === 0 && existingBids.length === 0 && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mb-6 text-center">
-                        <div className="text-4xl mb-3">📧</div>
+                        <div className="text-4xl mb-3">ðŸ“§</div>
                         <h3 className="text-lg font-medium text-slate-800 mb-2">No providers added yet</h3>
                         <p className="text-sm text-slate-500">
                             Add providers using the form above to send them invitations
@@ -1139,7 +1598,7 @@ function InviteProvidersContent() {
                         onClick={navigateToContractPrep}
                         className="px-6 py-3 text-slate-600 hover:text-slate-800 transition-all flex items-center gap-2"
                     >
-                        ← Back to Contract Prep
+                        â† Back to Contract Prep
                     </button>
 
                     <div className="flex items-center gap-3">
@@ -1179,10 +1638,10 @@ function InviteProvidersContent() {
                 <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <h3 className="text-sm font-medium text-blue-800 mb-2">What happens next?</h3>
                     <ul className="text-sm text-blue-700 space-y-1">
-                        <li>• Each provider will receive an email invitation with a unique link</li>
-                        <li>• They&apos;ll review the contract clauses and set their positions</li>
-                        <li>• CLARENCE will analyze both parties and identify gaps</li>
-                        <li>• Once a provider submits, you&apos;ll be notified and can begin negotiation</li>
+                        <li>â€¢ Each provider will receive an email invitation with a unique link</li>
+                        <li>â€¢ They&apos;ll review the contract clauses and set their positions</li>
+                        <li>â€¢ CLARENCE will analyze both parties and identify gaps</li>
+                        <li>â€¢ Once a provider submits, you&apos;ll be notified and can begin negotiation</li>
                     </ul>
                 </div>
             </div>

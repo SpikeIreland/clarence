@@ -326,9 +326,9 @@ Setting up your contract workspace. This will just take a moment.`,
 
 Setting up your practice contract. This will just take a moment.`,
 
-    training_complete: `**Your training session is ready!** 
+    training_complete: `**Your training contract is ready!** 🎓
 
-Your practice contract has been created. You can now start negotiating against the AI opponent or continue with your training partner.`,
+Taking you to choose your AI counterpart now. You'll select who to negotiate against and CLARENCE will generate their positions.`,
 
     // WP6: Pre-fill message from Contract Library
     prefill_detected: ` **Template pre-selected from your library!**
@@ -999,11 +999,21 @@ function ContractCreationContent() {
                 throw new Error(result.error || 'No session ID returned')
             }
 
-            // Handle Training Mode (separate flow - no transition modal)
+            // Handle Training Mode - redirect to invite-providers to pick AI counterpart
             if (isTrainingMode) {
-                setTrainingSessionCreated(result.sessionId)
+                const contractId = result.contractId || result.contract_id || assessment.uploadedContractId
+                const inviteParams = new URLSearchParams()
+                inviteParams.set('session_id', result.sessionId)
+                inviteParams.set('mode', 'training')
+                if (contractId) inviteParams.set('contract_id', contractId)
+
                 addClarenceMessage(CLARENCE_MESSAGES.training_complete)
                 setIsCreating(false)
+
+                // Short delay so user sees the success message, then redirect
+                setTimeout(() => {
+                    router.push(`/auth/invite-providers?${inviteParams.toString()}`)
+                }, 1500)
                 return
             }
 
@@ -1092,7 +1102,7 @@ function ContractCreationContent() {
                             </svg>
                         </Link>
                         <span className="text-slate-300">|</span>
-                        <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">← {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
+                        <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">â† {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
                     </div>
                     <h2 className={`font-semibold ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-lg`}>{isTrainingMode ? 'Training Setup' : 'Create Contract'}</h2>
                 </div>
