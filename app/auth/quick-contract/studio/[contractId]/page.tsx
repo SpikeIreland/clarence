@@ -463,7 +463,7 @@ function QuickContractStudioContent() {
 
         if (pendingClauses.length === 0) return // All already certified
 
-        console.log(`ðŸš€ Triggering certification for ${pendingClauses.length} pending clauses...`)
+        console.log(`Triggering certification for ${pendingClauses.length} pending clauses...`)
         setCertificationTriggered(true)
 
         // Fire and forget - the polling useEffect handles the rest
@@ -595,7 +595,7 @@ function QuickContractStudioContent() {
                 'default': 'Retained by originator'
             },
             'Insurance': {
-                'currency': 'Â£1M-Â£5M',
+                'currency': '\u00A31M-\u00A35M',
                 'default': 'Industry standard coverage'
             },
             'Audit': {
@@ -632,7 +632,7 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 4C-3: CLAUSE CLICK â†’ RATIONALE
+    // SECTION 4C-3: CLAUSE CLICK -> RATIONALE
     // Auto-generate explanation when clause is selected
     // ========================================================================
 
@@ -687,7 +687,7 @@ function QuickContractStudioContent() {
             const posLabel = getPositionLabel(clause.clarencePosition)
 
             // Build the rationale message
-            let rationaleContent = `ðŸ“‹ **${clause.clauseName}** (${clause.clauseNumber})\n\n`
+            let rationaleContent = `**${clause.clauseName}** (${clause.clauseNumber})\n\n`
 
             // Show document position vs CLARENCE position if we have both
             if (clause.documentPosition !== null && clause.clarencePosition !== null) {
@@ -702,11 +702,11 @@ function QuickContractStudioContent() {
 
                 // Add comparison insight
                 if (difference < 0.5) {
-                    rationaleContent += `âœ… **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
+                    rationaleContent += `\u2705 **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
                 } else if (clause.documentPosition > clause.clarencePosition) {
-                    rationaleContent += `âš ï¸ **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
+                    rationaleContent += `\u26A0\uFE0F **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
                 } else {
-                    rationaleContent += `ðŸ’¡ **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
+                    rationaleContent += `\u{1F4A1} **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
                 }
             } else if (clause.clarencePosition !== null) {
                 rationaleContent += `**CLARENCE Position:** ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
@@ -725,7 +725,7 @@ function QuickContractStudioContent() {
             if (clause.clarenceFlags && clause.clarenceFlags.length > 0) {
                 rationaleContent += `**Attention Points:**\n`
                 clause.clarenceFlags.forEach(flag => {
-                    rationaleContent += `â€¢ ${flag}\n`
+                    rationaleContent += `\u2022 ${flag}\n`
                 })
                 rationaleContent += '\n'
             }
@@ -751,7 +751,7 @@ function QuickContractStudioContent() {
     }, [selectedClause?.clauseId, lastExplainedClauseId, initialLoadComplete])
 
     // ========================================================================
-    // SECTION 4D: ACTION HANDLERS â€” AGREE, QUERY, COMMIT
+    // SECTION 4D: ACTION HANDLERS - AGREE, QUERY, COMMIT
     // ========================================================================
 
     // Determine party role for current user
@@ -825,7 +825,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `Ã¢Å“â€¦ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
+                content: `\u2705 You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -868,7 +868,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `query-${Date.now()}`,
                 role: 'assistant',
-                content: `â“ Query raised on \"${clause?.clauseName}\" (${clause?.clauseNumber}):\n\n\"${queryMessage}\"\n\nThis has been recorded and the other party will be notified.`,
+                content: `\u2753 Query raised on "${clause?.clauseName}" (${clause?.clauseNumber}):\n\n"${queryMessage}"\n\nThis has been recorded and the other party will be notified.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -1322,7 +1322,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: `âœ… Draft saved for \"${selectedClause.clauseName}\". This modified text will be used when generating the final contract document.`,
+                content: `\u2705 Draft saved for "${selectedClause.clauseName}". This modified text will be used when generating the final contract document.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1332,7 +1332,7 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `draft-error-${Date.now()}`,
                 role: 'assistant',
-                content: `âŒ Failed to save draft. Please try again.`,
+                content: `\u274C Failed to save draft. Please try again.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
@@ -1369,7 +1369,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-reset-${Date.now()}`,
                 role: 'assistant',
-                content: `â†©ï¸ Draft reset to original document text for \"${selectedClause.clauseName}\".`,
+                content: `\u21A9\uFE0F Draft reset to original document text for "${selectedClause.clauseName}".`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1873,15 +1873,15 @@ INSTRUCTIONS:
                             const StatusIcon = ({ status }: { status: string }) => {
                                 switch (status) {
                                     case 'certified':
-                                        return <span className="text-emerald-500 text-xs">âœ…</span>
+                                        return <span className="text-emerald-500 text-xs">{'\u2705'}</span>
                                     case 'processing':
                                         return (
                                             <span className="inline-block w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
                                         )
                                     case 'failed':
-                                        return <span className="text-red-500 text-xs">âš ï¸</span>
+                                        return <span className="text-red-500 text-xs">{'\u26A0\uFE0F'}</span>
                                     default: // pending
-                                        return <span className="text-slate-300 text-xs">ðŸ•’</span>
+                                        return <span className="text-slate-300 text-xs">{'\u{1F552}'}</span>
                                 }
                             }
 
@@ -2248,7 +2248,7 @@ INSTRUCTIONS:
                                                         </div>
                                                         <div>
                                                             <div className="text-3xl font-bold text-purple-700">
-                                                                {selectedClause.clarencePosition?.toFixed(1) ?? 'â€“'}
+                                                                {selectedClause.clarencePosition?.toFixed(1) ?? '\u2014'}
                                                             </div>
                                                             <div className="text-sm text-purple-600">
                                                                 {getPositionLabel(selectedClause.clarencePosition)}
@@ -2266,7 +2266,7 @@ INSTRUCTIONS:
                                                             ? 'text-emerald-700'
                                                             : 'text-amber-700'
                                                             }`}>
-                                                            {selectedClause.clarenceFairness === 'balanced' ? 'âœ“ Balanced' : 'âš  Review Recommended'}
+                                                            {selectedClause.clarenceFairness === 'balanced' ? '\u2714 Balanced' : '\u26A0 Review Recommended'}
                                                         </div>
                                                         <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
                                                     </div>
@@ -2286,12 +2286,12 @@ INSTRUCTIONS:
                                                         {selectedClause.extractedValue ? (
                                                             <div className="flex items-baseline gap-1">
                                                                 <span className="text-2xl font-bold text-slate-800">
-                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === 'Â£' && 'Â£'}
+                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '\u00A3' && '\u00A3'}
                                                                     {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '$' && '$'}
                                                                     {selectedClause.extractedValue}
                                                                 </span>
                                                                 <span className="text-sm text-slate-600">
-                                                                    {selectedClause.extractedUnit && !['Â£', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
+                                                                    {selectedClause.extractedUnit && !['\u00A3', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
                                                                     {selectedClause.valueType === 'percentage' && '%'}
                                                                 </span>
                                                             </div>
@@ -2480,16 +2480,16 @@ INSTRUCTIONS:
                                                     <div className="space-y-3">
                                                         {clauseSpecificEvents.map((event) => {
                                                             const eventConfig: Record<string, { icon: string; color: string; label: string }> = {
-                                                                'agreed': { icon: 'Ã¢Å“â€œ', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
-                                                                'agreement_withdrawn': { icon: 'Ã¢â€ Â©', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
+                                                                'agreed': { icon: '\u2714', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
+                                                                'agreement_withdrawn': { icon: '\u21A9', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
                                                                 'queried': { icon: '?', color: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Query Raised' },
-                                                                'query_resolved': { icon: 'Ã¢Å“â€œ', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
-                                                                'position_changed': { icon: 'Ã¢â€ â€¢', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
-                                                                'redrafted': { icon: 'Ã¢Å“Å½', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
-                                                                'committed': { icon: 'Ã°Å¸â€â€™', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
+                                                                'query_resolved': { icon: '\u2714', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
+                                                                'position_changed': { icon: '\u2195', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
+                                                                'redrafted': { icon: '\u270E', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
+                                                                'committed': { icon: '\u{1F91D}', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
                                                             }
 
-                                                            const config = eventConfig[event.eventType] || { icon: 'â€¢', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
+                                                            const config = eventConfig[event.eventType] || { icon: '\u2022', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
                                                             const eventDate = new Date(event.createdAt)
 
                                                             return (
@@ -2571,8 +2571,8 @@ INSTRUCTIONS:
                                                     <h3 className="text-sm font-semibold text-slate-700">Draft Clause Language</h3>
                                                     <p className="text-xs text-slate-500 mt-1">
                                                         {selectedClause.draftModified
-                                                            ? 'âœï¸ Modified - Your edited version will be used in the final document'
-                                                            : 'ðŸ“„ Original document text'
+                                                            ? '\u270F\uFE0F Modified - Your edited version will be used in the final document'
+                                                            : '\u{1F4C4} Original document text'
                                                         }
                                                     </p>
                                                 </div>
