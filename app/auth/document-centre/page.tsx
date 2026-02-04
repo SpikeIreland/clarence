@@ -9,6 +9,8 @@ import FeedbackButton from '@/app/components/FeedbackButton'
 // SECTION 1: INTERFACES & TYPES
 // ============================================================================
 
+type DocumentCentreMode = 'mediation' | 'quick_contract'
+
 type DocumentStatus = 'locked' | 'generating' | 'in_progress' | 'ready' | 'final'
 
 type DocumentId =
@@ -54,6 +56,22 @@ interface Session {
     contractType?: string
 }
 
+interface QuickContractData {
+    contractId: string
+    contractName: string
+    contractType: string
+    status: string
+    clauseCount: number
+    totalClauses: number
+    certifiedClauses: number
+    agreedClauses: number
+    modifiedClauses: number
+    committedAt: string | null
+    uploadedByUserId: string | null
+    companyId: string | null
+    createdAt: string
+}
+
 interface ClarenceChatMessage {
     messageId: string
     sessionId: string
@@ -91,13 +109,33 @@ const DOCUMENT_ENDPOINTS: Record<string, string> = {
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook';
 
+// Documents available per mode
+const QC_AVAILABLE_DOCUMENTS: DocumentId[] = [
+    'executive-summary',
+    'position-history',
+    'chat-transcript',
+    'timeline-audit',
+    'contract-draft'
+]
+
+const MEDIATION_AVAILABLE_DOCUMENTS: DocumentId[] = [
+    'executive-summary',
+    'leverage-report',
+    'position-history',
+    'chat-transcript',
+    'trade-off-register',
+    'timeline-audit',
+    'contract-draft',
+    'contract-roadmap'
+]
+
 const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downloadUrl' | 'progress' | 'documentDbId'>[] = [
     {
         id: 'executive-summary',
         name: 'Executive Summary',
-        description: 'One-page overview of the negotiation outcome for leadership sign-off',
+        description: 'One-page overview of the contract outcome for leadership sign-off',
         category: 'assessment',
-        icon: '📋',
+        icon: '\u{1F4CB}',
         prerequisites: []
     },
     {
@@ -105,15 +143,15 @@ const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downl
         name: 'Leverage Assessment Report',
         description: 'Detailed breakdown of how leverage was calculated and applied',
         category: 'assessment',
-        icon: '⚖️',
+        icon: '\u2696\uFE0F',
         prerequisites: []
     },
     {
         id: 'position-history',
         name: 'Position Movement History',
-        description: 'Complete record of how each clause evolved during negotiation',
+        description: 'Complete record of how each clause evolved during review',
         category: 'negotiation',
-        icon: '📊',
+        icon: '\u{1F4CA}',
         prerequisites: []
     },
     {
@@ -121,7 +159,7 @@ const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downl
         name: 'Chat Transcript',
         description: 'All party communications and CLARENCE conversations',
         category: 'negotiation',
-        icon: '💬',
+        icon: '\u{1F4AC}',
         prerequisites: []
     },
     {
@@ -129,15 +167,15 @@ const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downl
         name: 'Trade-Off Register',
         description: 'Formal record of all linked concessions and exchanges',
         category: 'negotiation',
-        icon: '🔄',
+        icon: '\u{1F504}',
         prerequisites: []
     },
     {
         id: 'timeline-audit',
         name: 'Timeline & Audit Log',
-        description: 'Chronological record of every event in the negotiation',
+        description: 'Chronological record of every event in the contract lifecycle',
         category: 'negotiation',
-        icon: '📅',
+        icon: '\u{1F4C5}',
         prerequisites: []
     },
     {
@@ -145,7 +183,7 @@ const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downl
         name: 'Contract Draft',
         description: 'Complete clause-by-clause agreement ready for signature',
         category: 'agreement',
-        icon: '📄',
+        icon: '\u{1F4C4}',
         prerequisites: ['executive-summary']
     },
     {
@@ -153,7 +191,7 @@ const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downl
         name: 'Contract Roadmap',
         description: 'Governance guide for managing the contract relationship',
         category: 'governance',
-        icon: '🗺️',
+        icon: '\u{1F5FA}\uFE0F',
         prerequisites: ['contract-draft']
     }
 ]
@@ -170,6 +208,8 @@ const CONTRACT_TYPE_OPTIONS = [
     { value: 'partnership', label: 'Partnership Agreement' },
     { value: 'custom', label: 'Custom / Other' }
 ]
+
+
 
 // ============================================================================
 // SECTION 3: HELPER FUNCTIONS
@@ -188,12 +228,12 @@ function getStatusColor(status: DocumentStatus): string {
 
 function getStatusIcon(status: DocumentStatus): string {
     switch (status) {
-        case 'locked': return '🔒'
-        case 'generating': return '⏳'
-        case 'in_progress': return '📝'
-        case 'ready': return '✅'
-        case 'final': return '🎯'
-        default: return '○'
+        case 'locked': return '\u{1F512}'
+        case 'generating': return '\u23F3'
+        case 'in_progress': return '\u{1F4DD}'
+        case 'ready': return '\u2705'
+        case 'final': return '\u{1F3AF}'
+        default: return '\u25CB'
     }
 }
 
@@ -209,15 +249,20 @@ function getStatusLabel(status: DocumentStatus): string {
 }
 
 function formatCurrency(value: string | number | null, currency: string = 'GBP'): string {
-    if (!value) return '£0'
+    if (!value) return '\u00A30'
     const num = typeof value === 'string' ? parseFloat(value) : value
-    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : '€'
+    const symbol = currency === 'GBP' ? '\u00A3' : currency === 'USD' ? '$' : '\u20AC'
     if (num >= 1000000) {
         return `${symbol}${(num / 1000000).toFixed(1)}M`
     } else if (num >= 1000) {
         return `${symbol}${(num / 1000).toFixed(0)}K`
     }
     return `${symbol}${num.toFixed(0)}`
+}
+
+function getDocumentsForMode(mode: DocumentCentreMode): typeof DOCUMENT_DEFINITIONS {
+    const available = mode === 'quick_contract' ? QC_AVAILABLE_DOCUMENTS : MEDIATION_AVAILABLE_DOCUMENTS
+    return DOCUMENT_DEFINITIONS.filter(d => available.includes(d.id))
 }
 
 // ============================================================================
@@ -309,7 +354,7 @@ function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePa
             <div className="flex items-center gap-3 mb-3">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isUnlocked ? 'bg-emerald-100' : 'bg-slate-200'
                     }`}>
-                    📦
+                    {'\u{1F4E6}'}
                 </div>
                 <div className="flex-1">
                     <h3 className={`font-semibold ${isUnlocked ? 'text-emerald-800' : 'text-slate-600'}`}>
@@ -349,12 +394,12 @@ function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePa
                     </>
                 ) : isUnlocked ? (
                     <>
-                        <span>⬇️</span>
+                        <span>{'\u2B07\uFE0F'}</span>
                         Download ZIP Package
                     </>
                 ) : (
                     <>
-                        <span>🔒</span>
+                        <span>{'\u{1F512}'}</span>
                         Complete All Documents First
                     </>
                 )}
@@ -381,7 +426,7 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
             <div className="flex-1 flex items-center justify-center bg-slate-50 p-8">
                 <div className="text-center">
                     <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <span className="text-4xl">📋</span>
+                        <span className="text-4xl">{'\u{1F4CB}'}</span>
                     </div>
                     <h3 className="text-lg font-semibold text-slate-700 mb-2">Select a Document</h3>
                     <p className="text-slate-500 max-w-sm">
@@ -420,7 +465,7 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
                                 disabled={isGenerating}
                                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50"
                             >
-                                {isGenerating ? 'Generating...' : '⚡ Generate'}
+                                {isGenerating ? 'Generating...' : '\u26A1 Generate'}
                             </button>
                         )}
 
@@ -431,13 +476,13 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
                                     disabled={isGenerating}
                                     className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-sm transition"
                                 >
-                                    🔄 Regenerate
+                                    {'\u{1F504}'} Regenerate
                                 </button>
                                 <button
                                     onClick={() => onDownload(document.id, 'pdf')}
                                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition"
                                 >
-                                    ⬇️ Download PDF
+                                    {'\u2B07\uFE0F'} Download PDF
                                 </button>
                             </div>
                         )}
@@ -486,7 +531,7 @@ function DocumentContentPreview({ document, session }: { document: DocumentItem;
             return (
                 <div className="prose prose-sm max-w-none">
                     <div className="text-center mb-6">
-                        <h1 className="text-2xl font-bold text-slate-800 mb-2">📋 EXECUTIVE SUMMARY</h1>
+                        <h1 className="text-2xl font-bold text-slate-800 mb-2">{'\u{1F4CB}'} EXECUTIVE SUMMARY</h1>
                         <p className="text-slate-500">Negotiation Outcome for {session?.customerCompany} & {session?.providerCompany}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mb-6">
@@ -513,7 +558,7 @@ function DocumentContentPreview({ document, session }: { document: DocumentItem;
             return (
                 <div className="prose prose-sm max-w-none">
                     <div className="text-center mb-6">
-                        <h1 className="text-2xl font-bold text-slate-800 mb-2">📄 CONTRACT DRAFT</h1>
+                        <h1 className="text-2xl font-bold text-slate-800 mb-2">{'\u{1F4C4}'} CONTRACT DRAFT</h1>
                         <p className="text-slate-500">Agreement between {session?.customerCompany} & {session?.providerCompany}</p>
                     </div>
                     <div className="space-y-4">
@@ -544,7 +589,7 @@ function DocumentContentPreview({ document, session }: { document: DocumentItem;
             return (
                 <div className="prose prose-sm max-w-none">
                     <div className="text-center mb-6">
-                        <h1 className="text-2xl font-bold text-slate-800 mb-2">🗺️ CONTRACT ROADMAP</h1>
+                        <h1 className="text-2xl font-bold text-slate-800 mb-2">{'\u{1F5FA}\uFE0F'} CONTRACT ROADMAP</h1>
                         <p className="text-slate-500">Governance Guide for {session?.customerCompany} & {session?.providerCompany}</p>
                     </div>
                     <div className="space-y-4">
@@ -710,11 +755,19 @@ function ClarenceChatPanel({ sessionId, selectedDocument, messages, onSendMessag
 interface DocumentCentreHeaderProps {
     session: Session | null
     userInfo: UserInfo | null
+    mode: DocumentCentreMode
+    quickContract: QuickContractData | null
     onBackToStudio: () => void
 }
 
-function DocumentCentreHeader({ session, userInfo, onBackToStudio }: DocumentCentreHeaderProps) {
+function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackToStudio }: DocumentCentreHeaderProps) {
     const isCustomer = userInfo?.role === 'customer'
+
+    // Determine display values based on mode
+    const backLabel = mode === 'quick_contract' ? 'QC Studio' : 'Contract Studio'
+    const contractName = mode === 'quick_contract'
+        ? (quickContract?.contractName || 'Quick Contract')
+        : `${session?.customerCompany || ''} & ${session?.providerCompany || ''}`
 
     return (
         <div className="bg-slate-800 text-white">
@@ -729,7 +782,7 @@ function DocumentCentreHeader({ session, userInfo, onBackToStudio }: DocumentCen
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
-                        <span className="text-sm">Contract Studio</span>
+                        <span className="text-sm">{backLabel}</span>
                     </button>
 
                     {/* Center: Title */}
@@ -740,7 +793,9 @@ function DocumentCentreHeader({ session, userInfo, onBackToStudio }: DocumentCen
                         <div>
                             <div className="flex items-center gap-2">
                                 <span className="font-semibold text-white tracking-wide">CLARENCE</span>
-                                <span className="font-semibold text-violet-400">Agree</span>
+                                <span className="font-semibold text-violet-400">
+                                    {mode === 'quick_contract' ? 'Quick Contract' : 'Agree'}
+                                </span>
                             </div>
                             <span className="text-slate-500 text-xs">The Honest Broker</span>
                         </div>
@@ -752,54 +807,99 @@ function DocumentCentreHeader({ session, userInfo, onBackToStudio }: DocumentCen
                             {userInfo?.firstName} {userInfo?.lastName}
                         </div>
                         <div className="text-xs text-slate-500">
-                            {isCustomer ? 'Customer' : 'Provider'}
+                            {mode === 'quick_contract' ? 'Document Centre' : (isCustomer ? 'Customer' : 'Provider')}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Session Context Row */}
+            {/* Context Row */}
             <div className="px-6 py-3">
-                <div className="flex items-center justify-between">
-                    {/* Customer */}
-                    <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full bg-emerald-400" />
-                        <div>
-                            <div className="text-xs text-slate-400">Customer</div>
-                            <div className="text-sm font-medium text-emerald-400">{session?.customerCompany || '—'}</div>
-                        </div>
-                    </div>
-
-                    {/* Center: Session Details */}
-                    <div className="flex items-center gap-8">
-                        <div className="text-center">
-                            <div className="text-xs text-slate-400">Session</div>
-                            <div className="text-sm font-mono text-white">{session?.sessionNumber || '—'}</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-xs text-slate-400">Deal Value</div>
-                            <div className="text-sm font-semibold text-emerald-400">{session?.dealValue || '—'}</div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-xs text-slate-400">Alignment</div>
-                            <div className={`text-sm font-semibold ${(session?.alignmentPercentage || 0) >= 80 ? 'text-emerald-400' :
-                                (session?.alignmentPercentage || 0) >= 50 ? 'text-amber-400' :
-                                    'text-red-400'
-                                }`}>
-                                {session?.alignmentPercentage || 0}%
+                {mode === 'quick_contract' ? (
+                    /* Quick Contract Context */
+                    <div className="flex items-center justify-between">
+                        {/* Left: Contract Name */}
+                        <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-teal-400" />
+                            <div>
+                                <div className="text-xs text-slate-400">Contract</div>
+                                <div className="text-sm font-medium text-teal-400">{quickContract?.contractName || '\u2014'}</div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Provider */}
-                    <div className="flex items-center gap-3">
-                        <div>
-                            <div className="text-xs text-slate-400">Provider</div>
-                            <div className="text-sm font-medium text-blue-400">{session?.providerCompany || '—'}</div>
+                        {/* Center: Contract Stats */}
+                        <div className="flex items-center gap-8">
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Type</div>
+                                <div className="text-sm font-mono text-white">{quickContract?.contractType || '\u2014'}</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Clauses</div>
+                                <div className="text-sm font-semibold text-white">{quickContract?.totalClauses || 0}</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Status</div>
+                                <div className={`text-sm font-semibold ${quickContract?.status === 'committed' ? 'text-emerald-400' : 'text-amber-400'
+                                    }`}>
+                                    {quickContract?.status === 'committed' ? 'Committed' : 'In Progress'}
+                                </div>
+                            </div>
                         </div>
-                        <div className="w-3 h-3 rounded-full bg-blue-400" />
+
+                        {/* Right: Certification Stats */}
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <div className="text-xs text-slate-400">Agreed</div>
+                                <div className="text-sm font-medium text-emerald-400">
+                                    {quickContract?.agreedClauses || 0}/{quickContract?.totalClauses || 0}
+                                </div>
+                            </div>
+                            <div className="w-3 h-3 rounded-full bg-emerald-400" />
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    /* Mediation Context (original) */
+                    <div className="flex items-center justify-between">
+                        {/* Customer */}
+                        <div className="flex items-center gap-3">
+                            <div className="w-3 h-3 rounded-full bg-emerald-400" />
+                            <div>
+                                <div className="text-xs text-slate-400">Customer</div>
+                                <div className="text-sm font-medium text-emerald-400">{session?.customerCompany || '\u2014'}</div>
+                            </div>
+                        </div>
+
+                        {/* Center: Session Details */}
+                        <div className="flex items-center gap-8">
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Session</div>
+                                <div className="text-sm font-mono text-white">{session?.sessionNumber || '\u2014'}</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Deal Value</div>
+                                <div className="text-sm font-semibold text-emerald-400">{session?.dealValue || '\u2014'}</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-400">Alignment</div>
+                                <div className={`text-sm font-semibold ${(session?.alignmentPercentage || 0) >= 80 ? 'text-emerald-400' :
+                                    (session?.alignmentPercentage || 0) >= 50 ? 'text-amber-400' :
+                                        'text-red-400'
+                                    }`}>
+                                    {session?.alignmentPercentage || 0}%
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Provider */}
+                        <div className="flex items-center gap-3">
+                            <div>
+                                <div className="text-xs text-slate-400">Provider</div>
+                                <div className="text-sm font-medium text-blue-400">{session?.providerCompany || '\u2014'}</div>
+                            </div>
+                            <div className="w-3 h-3 rounded-full bg-blue-400" />
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )
@@ -816,8 +916,10 @@ function DocumentCentreContent() {
 
     // State
     const [loading, setLoading] = useState(true)
+    const [mode, setMode] = useState<DocumentCentreMode>('mediation')
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [session, setSession] = useState<Session | null>(null)
+    const [quickContract, setQuickContract] = useState<QuickContractData | null>(null)
     const [documents, setDocuments] = useState<DocumentItem[]>([])
     const [selectedDocument, setSelectedDocument] = useState<DocumentItem | null>(null)
     const [chatMessages, setChatMessages] = useState<ClarenceChatMessage[]>([])
@@ -868,6 +970,7 @@ function DocumentCentreContent() {
         }
     }, [router])
 
+    // SECTION 11B-1: MEDIATION SESSION LOADER (existing)
     const loadSessionData = useCallback(async (sessionId: string): Promise<Session | null> => {
         try {
             const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
@@ -899,30 +1002,122 @@ function DocumentCentreContent() {
         }
     }, [])
 
-    const initializeDocuments = useCallback((session: Session): DocumentItem[] => {
-        return DOCUMENT_DEFINITIONS.map(def => {
+    // SECTION 11B-2: QUICK CONTRACT LOADER (new)
+    const loadQuickContractData = useCallback(async (contractId: string): Promise<QuickContractData | null> => {
+        try {
+            // Load contract metadata
+            const { data: contractData, error: contractError } = await supabase
+                .from('uploaded_contracts')
+                .select('*')
+                .eq('contract_id', contractId)
+                .single()
+
+            if (contractError || !contractData) {
+                console.error('QC Contract load error:', contractError)
+                return null
+            }
+
+            // Load clause stats
+            const { data: clausesData } = await supabase
+                .from('uploaded_contract_clauses')
+                .select('clause_id, is_header, clarence_certified, draft_text')
+                .eq('contract_id', contractId)
+
+            const leafClauses = (clausesData || []).filter((c: Record<string, unknown>) => !c.is_header)
+            const certifiedCount = leafClauses.filter((c: Record<string, unknown>) => c.clarence_certified).length
+            const modifiedCount = leafClauses.filter((c: Record<string, unknown>) => !!c.draft_text).length
+
+            // Load agreement events
+            const { data: eventsData } = await supabase
+                .from('clause_events')
+                .select('event_type, clause_id')
+                .eq('contract_id', contractId)
+
+            // Count agreed clauses (latest state per clause)
+            const agreedSet = new Set<string>()
+            const withdrawnSet = new Set<string>()
+            let committedAt: string | null = null
+
+            if (eventsData) {
+                for (const evt of eventsData) {
+                    if (evt.event_type === 'agreed' && evt.clause_id) {
+                        agreedSet.add(evt.clause_id)
+                        withdrawnSet.delete(evt.clause_id)
+                    }
+                    if (evt.event_type === 'agreement_withdrawn' && evt.clause_id) {
+                        withdrawnSet.add(evt.clause_id)
+                        agreedSet.delete(evt.clause_id)
+                    }
+                    if (evt.event_type === 'committed') {
+                        committedAt = new Date().toISOString()
+                    }
+                }
+            }
+
+            return {
+                contractId: contractData.contract_id,
+                contractName: contractData.contract_name || 'Untitled Contract',
+                contractType: contractData.detected_contract_type || contractData.contract_type || 'Contract',
+                status: contractData.status || 'unknown',
+                clauseCount: contractData.clause_count || leafClauses.length,
+                totalClauses: leafClauses.length,
+                certifiedClauses: certifiedCount,
+                agreedClauses: agreedSet.size,
+                modifiedClauses: modifiedCount,
+                committedAt,
+                uploadedByUserId: contractData.uploaded_by_user_id,
+                companyId: contractData.company_id,
+                createdAt: contractData.created_at
+            }
+        } catch (error) {
+            console.error('Error loading quick contract:', error)
+            return null
+        }
+    }, [supabase])
+
+    // SECTION 11B-3: INITIALIZE DOCUMENTS (mode-aware)
+    const initializeDocuments = useCallback((
+        currentMode: DocumentCentreMode,
+        sessionData?: Session | null,
+        qcData?: QuickContractData | null
+    ): DocumentItem[] => {
+        const availableDefs = getDocumentsForMode(currentMode)
+
+        return availableDefs.map(def => {
             let status: DocumentStatus = 'locked'
             let progress = 0
 
-            const prerequisitesMet = def.prerequisites.every(prereqId => {
-                return false
-            })
-
-            if (def.prerequisites.length === 0) {
-                status = 'in_progress'
-                progress = 0
-            } else if (prerequisitesMet) {
-                status = 'in_progress'
-                progress = 0
+            // For QC mode: all docs start as in_progress (no prerequisites blocking)
+            if (currentMode === 'quick_contract') {
+                if (def.prerequisites.length === 0) {
+                    status = 'in_progress'
+                } else {
+                    // For contract-draft, require executive-summary
+                    // But for initial load, unlock everything
+                    status = 'in_progress'
+                }
             } else {
-                status = 'locked'
-            }
+                // Mediation mode: existing logic
+                const prerequisitesMet = def.prerequisites.every(prereqId => {
+                    return false
+                })
 
-            // If alignment is high, some docs might be ready
-            if (session.alignmentPercentage >= 50) {
-                if (def.id === 'executive-summary' || def.id === 'leverage-report') {
-                    status = 'ready'
-                    progress = 100
+                if (def.prerequisites.length === 0) {
+                    status = 'in_progress'
+                    progress = 0
+                } else if (prerequisitesMet) {
+                    status = 'in_progress'
+                    progress = 0
+                } else {
+                    status = 'locked'
+                }
+
+                // If alignment is high, some docs might be ready
+                if (sessionData && sessionData.alignmentPercentage >= 50) {
+                    if (def.id === 'executive-summary' || def.id === 'leverage-report') {
+                        status = 'ready'
+                        progress = 100
+                    }
                 }
             }
 
@@ -936,7 +1131,10 @@ function DocumentCentreContent() {
         })
     }, [])
 
-    // Initial Load
+    // ============================================================================
+    // SECTION 11B-4: INITIAL LOAD (dual-mode detection)
+    // ============================================================================
+
     useEffect(() => {
         const init = async () => {
             const user = loadUserInfo()
@@ -944,47 +1142,102 @@ function DocumentCentreContent() {
 
             setUserInfo(user)
 
+            // DUAL-MODE DETECTION: Check for contract_id (QC) or session_id (mediation)
+            const contractId = searchParams.get('contract_id')
             const sessionId = searchParams.get('session_id') || searchParams.get('session')
-            if (!sessionId) {
-                router.push('/auth/contracts-dashboard')
-                return
-            }
+            const isCommitted = searchParams.get('committed') === 'true'
 
-            const sessionData = await loadSessionData(sessionId)
-            if (sessionData) {
-                setSession(sessionData)
-                const docs = initializeDocuments(sessionData)
-                setDocuments(docs)
+            if (contractId) {
+                // ---- QUICK CONTRACT MODE ----
+                setMode('quick_contract')
 
-                // Auto-select first available document
-                const firstAvailable = docs.find(d => d.status !== 'locked')
-                if (firstAvailable) {
-                    setSelectedDocument(firstAvailable)
+                const qcData = await loadQuickContractData(contractId)
+                if (qcData) {
+                    setQuickContract(qcData)
+                    const docs = initializeDocuments('quick_contract', null, qcData)
+                    setDocuments(docs)
+
+                    // Auto-select first available document
+                    const firstAvailable = docs.find(d => d.status !== 'locked')
+                    if (firstAvailable) {
+                        setSelectedDocument(firstAvailable)
+                    }
+
+                    // Welcome message
+                    const statusNote = isCommitted
+                        ? 'Your contract has been committed and is ready for documentation.'
+                        : 'Your contract is in progress.'
+
+                    setChatMessages([{
+                        messageId: 'welcome-1',
+                        sessionId: contractId,
+                        sender: 'clarence',
+                        message: `Welcome to the Document Centre for "${qcData.contractName}".\n\n${statusNote}\n\nI can generate the following documents for you:\n\u2022 Executive Summary - overview for leadership sign-off\n\u2022 Position History - how each clause was assessed\n\u2022 Chat Transcript - all communications\n\u2022 Timeline & Audit Log - chronological event record\n\u2022 Contract Draft - final clause-by-clause agreement\n\nSelect a document from the list and click Generate to begin.`,
+                        createdAt: new Date().toISOString()
+                    }])
+
+                    // Log page view
+                    eventLogger.setSession(contractId)
+                    eventLogger.setUser(user.userId || '')
+                    eventLogger.completed('documentation', 'document_centre_loaded', {
+                        contractId,
+                        mode: 'quick_contract',
+                        isCommitted,
+                        clauseCount: qcData.totalClauses,
+                        agreedClauses: qcData.agreedClauses
+                    })
+                } else {
+                    // Failed to load QC data - redirect to dashboard
+                    router.push('/auth/contracts-dashboard')
+                    return
                 }
 
-                // Add welcome message
-                setChatMessages([{
-                    messageId: 'welcome-1',
-                    sessionId: sessionId,
-                    sender: 'clarence',
-                    message: `Welcome to the Document Centre. I'm here to help you prepare all documentation for the ${sessionData.customerCompany} and ${sessionData.providerCompany} negotiation.\n\nYou can generate individual documents or ask me questions about any of them. When all documents are ready, you'll be able to download the complete Evidence Package.`,
-                    createdAt: new Date().toISOString()
-                }])
+            } else if (sessionId) {
+                // ---- MEDIATION MODE ----
+                setMode('mediation')
 
-                // Log page view
-                eventLogger.setSession(sessionId)
-                eventLogger.setUser(user.userId || '')
-                eventLogger.completed('documentation', 'document_centre_loaded', {
-                    sessionId,
-                    alignmentPercentage: sessionData.alignmentPercentage
-                })
+                const sessionData = await loadSessionData(sessionId)
+                if (sessionData) {
+                    setSession(sessionData)
+                    const docs = initializeDocuments('mediation', sessionData, null)
+                    setDocuments(docs)
+
+                    // Auto-select first available document
+                    const firstAvailable = docs.find(d => d.status !== 'locked')
+                    if (firstAvailable) {
+                        setSelectedDocument(firstAvailable)
+                    }
+
+                    // Add welcome message
+                    setChatMessages([{
+                        messageId: 'welcome-1',
+                        sessionId: sessionId,
+                        sender: 'clarence',
+                        message: `Welcome to the Document Centre. I'm here to help you prepare all documentation for the ${sessionData.customerCompany} and ${sessionData.providerCompany} negotiation.\n\nYou can generate individual documents or ask me questions about any of them. When all documents are ready, you'll be able to download the complete Evidence Package.`,
+                        createdAt: new Date().toISOString()
+                    }])
+
+                    // Log page view
+                    eventLogger.setSession(sessionId)
+                    eventLogger.setUser(user.userId || '')
+                    eventLogger.completed('documentation', 'document_centre_loaded', {
+                        sessionId,
+                        mode: 'mediation',
+                        alignmentPercentage: sessionData.alignmentPercentage
+                    })
+                }
+
+            } else {
+                // No identifier found - redirect to dashboard
+                router.push('/auth/contracts-dashboard')
+                return
             }
 
             setLoading(false)
         }
 
         init()
-    }, [loadUserInfo, loadSessionData, initializeDocuments, searchParams, router])
+    }, [loadUserInfo, loadSessionData, loadQuickContractData, initializeDocuments, searchParams, router])
 
     // ============================================================================
     // SECTION 11C: EVENT HANDLERS
@@ -1001,8 +1254,17 @@ function DocumentCentreContent() {
     // ============================================================================
 
     const handleGenerateDocument = async (documentId: string) => {
-        if (!session || !userInfo) {
-            console.error('Missing session or user info');
+        if (!userInfo) {
+            console.error('Missing user info');
+            return;
+        }
+
+        // Need either session (mediation) or quickContract (QC)
+        const contextId = mode === 'quick_contract'
+            ? quickContract?.contractId
+            : session?.sessionId
+        if (!contextId) {
+            console.error('Missing context ID for document generation');
             return;
         }
 
@@ -1023,7 +1285,7 @@ function DocumentCentreContent() {
         // Add CLARENCE message
         const generatingMessage: ClarenceChatMessage = {
             messageId: `msg-${Date.now()}`,
-            sessionId: session.sessionId,
+            sessionId: contextId,
             sender: 'clarence',
             message: `I'm generating the ${documentId.replace(/-/g, ' ')} now. This typically takes 15-30 seconds...`,
             createdAt: new Date().toISOString()
@@ -1040,18 +1302,30 @@ function DocumentCentreContent() {
         }, 2000);
 
         try {
+            // Build request body based on mode
+            const requestBody = mode === 'quick_contract'
+                ? {
+                    contract_id: quickContract?.contractId,
+                    user_id: userInfo.userId,
+                    mode: 'quick_contract',
+                    format: 'pdf',
+                    regenerate: false
+                }
+                : {
+                    session_id: session?.sessionId,
+                    user_id: userInfo.userId,
+                    provider_id: session?.providerId,
+                    mode: 'mediation',
+                    format: 'pdf',
+                    regenerate: false
+                }
+
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    session_id: session.sessionId,
-                    user_id: userInfo.userId,
-                    provider_id: session.providerId,
-                    format: 'pdf',
-                    regenerate: false
-                })
+                body: JSON.stringify(requestBody)
             });
 
             clearInterval(progressInterval);
@@ -1080,9 +1354,9 @@ function DocumentCentreContent() {
                 // Success message from CLARENCE
                 const successMessage: ClarenceChatMessage = {
                     messageId: `msg-${Date.now()}`,
-                    sessionId: session.sessionId,
+                    sessionId: contextId,
                     sender: 'clarence',
-                    message: `✅ Your ${documentId.replace(/-/g, ' ')} is ready! Click the download button to get your PDF.`,
+                    message: `\u2705 Your ${documentId.replace(/-/g, ' ')} is ready! Click the download button to get your PDF.`,
                     createdAt: new Date().toISOString()
                 };
                 setChatMessages(prev => [...prev, successMessage]);
@@ -1114,9 +1388,9 @@ function DocumentCentreContent() {
             // Error message from CLARENCE
             const errorMessage: ClarenceChatMessage = {
                 messageId: `msg-${Date.now()}`,
-                sessionId: session.sessionId,
+                sessionId: contextId,
                 sender: 'clarence',
-                message: `❌ Sorry, I encountered an error generating the document: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+                message: `\u274C Sorry, I encountered an error generating the document: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
                 createdAt: new Date().toISOString()
             };
             setChatMessages(prev => [...prev, errorMessage]);
@@ -1128,37 +1402,37 @@ function DocumentCentreContent() {
 
     const handleDownloadDocument = async (docId: string, format: 'pdf' | 'docx') => {
         const doc = documents.find(d => d.id === docId)
+        const contextId = mode === 'quick_contract' ? quickContract?.contractId : session?.sessionId
 
         if (!doc?.downloadUrl) {
             console.error('No download URL available for document:', docId)
 
-            const errorMessage: ClarenceChatMessage = {
+            setChatMessages(prev => [...prev, {
                 messageId: `msg-${Date.now()}`,
-                sessionId: session?.sessionId || '',
+                sessionId: contextId || '',
                 sender: 'clarence',
-                message: `❌ Sorry, the download URL for this document isn't available. Try regenerating the document.`,
+                message: `\u274C Sorry, the download URL for this document isn't available. Try regenerating the document.`,
                 createdAt: new Date().toISOString()
-            }
-            setChatMessages(prev => [...prev, errorMessage])
+            }])
             return
         }
 
         if (format === 'pdf') {
             window.open(doc.downloadUrl, '_blank')
-        } else if (format === 'docx') {
-            const infoMessage: ClarenceChatMessage = {
+        } else {
+            setChatMessages(prev => [...prev, {
                 messageId: `msg-${Date.now()}`,
-                sessionId: session?.sessionId || '',
+                sessionId: contextId || '',
                 sender: 'clarence',
-                message: `📘 DOCX format is coming soon. For now, please download the PDF version.`,
+                message: `\u{1F4D8} DOCX format is coming soon. For now, please download the PDF version.`,
                 createdAt: new Date().toISOString()
-            }
-            setChatMessages(prev => [...prev, infoMessage])
+            }])
         }
     }
 
     const handleDownloadPackage = async () => {
-        if (!session) return
+        const contextId = mode === 'quick_contract' ? quickContract?.contractId : session?.sessionId
+        if (!contextId) return
 
         setIsGeneratingPackage(true)
 
@@ -1174,11 +1448,12 @@ function DocumentCentreContent() {
     }
 
     const handleSendChatMessage = async (message: string) => {
-        if (!session) return
+        const contextId = mode === 'quick_contract' ? quickContract?.contractId : session?.sessionId
+        if (!contextId) return
 
         const userMessage: ClarenceChatMessage = {
             messageId: `user-${Date.now()}`,
-            sessionId: session.sessionId,
+            sessionId: contextId,
             sender: 'user',
             message,
             createdAt: new Date().toISOString()
@@ -1193,9 +1468,9 @@ function DocumentCentreContent() {
 
             const response: ClarenceChatMessage = {
                 messageId: `clarence-${Date.now()}`,
-                sessionId: session.sessionId,
+                sessionId: contextId,
                 sender: 'clarence',
-                message: `I understand you're asking about "${message}". I can help you with document generation, explain what each document contains, or answer questions about the negotiation outcome. What would you like to know?`,
+                message: `I understand you're asking about "${message}". I can help you with document generation, explain what each document contains, or answer questions about the ${mode === 'quick_contract' ? 'contract' : 'negotiation'} outcome. What would you like to know?`,
                 createdAt: new Date().toISOString()
             }
             setChatMessages(prev => [...prev, response])
@@ -1208,8 +1483,12 @@ function DocumentCentreContent() {
     }
 
     const handleBackToStudio = () => {
-        const sessionId = searchParams.get('session_id') || searchParams.get('session')
-        router.push(`/auth/contract-studio?session_id=${sessionId}`)
+        if (mode === 'quick_contract' && quickContract) {
+            router.push(`/auth/quick-contract/studio/${quickContract.contractId}`)
+        } else {
+            const sessionId = searchParams.get('session_id') || searchParams.get('session')
+            router.push(`/auth/contract-studio?session_id=${sessionId}`)
+        }
     }
 
     // ============================================================================
@@ -1295,7 +1574,7 @@ function DocumentCentreContent() {
             // UPDATED: Use ORIGINAL positions as template defaults (starting positions)
             // and store final positions separately for training comparison
             const templateClauses = positionsData.map((pos: Record<string, unknown>, index: number) => {
-                // Starting positions — used when creating new sessions from this template
+                // Starting positions -- used when creating new sessions from this template
                 const customerPos = pos.original_customer_position
                     ? parseFloat(String(pos.original_customer_position))
                     : (pos.customer_position ? parseFloat(String(pos.customer_position)) : 5)
@@ -1303,7 +1582,7 @@ function DocumentCentreContent() {
                     ? parseFloat(String(pos.original_provider_position))
                     : (pos.provider_position ? parseFloat(String(pos.provider_position)) : 5)
 
-                // Final/outcome positions — for training comparison ("you achieved X, actual was Y")
+                // Final/outcome positions -- for training comparison ("you achieved X, actual was Y")
                 const outcomeCustomerPos = pos.customer_position ? parseFloat(String(pos.customer_position)) : null
                 const outcomeProviderPos = pos.provider_position ? parseFloat(String(pos.provider_position)) : null
 
@@ -1371,7 +1650,7 @@ function DocumentCentreContent() {
                 messageId: `msg-template-${Date.now()}`,
                 sessionId: session.sessionId,
                 sender: 'clarence',
-                message: `✅ I've saved the negotiation outcome as a template: "${saveTemplateName.trim()}" with ${templateClauses.length} clauses. You can find it in your Contract Library under "My Templates" and use it to start new negotiations with the same clause structure and positions.`,
+                message: `\u2705 I've saved the negotiation outcome as a template: "${saveTemplateName.trim()}" with ${templateClauses.length} clauses. You can find it in your Contract Library under "My Templates" and use it to start new negotiations with the same clause structure and positions.`,
                 createdAt: new Date().toISOString()
             }
             setChatMessages(prev => [...prev, templateMessage])
@@ -1414,7 +1693,7 @@ function DocumentCentreContent() {
                     <div className={`px-6 py-4 border-b border-slate-200 bg-gradient-to-r ${isTraining ? 'from-amber-50 to-orange-50' : 'from-emerald-50 to-teal-50'}`}>
                         <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isTraining ? 'bg-amber-100' : 'bg-emerald-100'}`}>
-                                <span className="text-xl">{isTraining ? '🎓' : '💾'}</span>
+                                <span className="text-xl">{isTraining ? '\u{1F393}' : '\u{1F4BE}'}</span>
                             </div>
                             <div>
                                 <h3 className="text-lg font-semibold text-slate-800">
@@ -1433,7 +1712,7 @@ function DocumentCentreContent() {
                         {saveTemplateResult?.success ? (
                             <div className="text-center py-4">
                                 <div className={`w-16 h-16 ${isTraining ? 'bg-amber-100' : 'bg-emerald-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
-                                    <span className="text-3xl">✅</span>
+                                    <span className="text-3xl">{'\u2705'}</span>
                                 </div>
                                 <h4 className="text-lg font-semibold text-slate-800 mb-2">Template Saved!</h4>
                                 <p className="text-sm text-slate-600 mb-1">
@@ -1462,7 +1741,7 @@ function DocumentCentreContent() {
                             /* Error State */
                             <div className="text-center py-4">
                                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <span className="text-3xl">❌</span>
+                                    <span className="text-3xl">{'\u274C'}</span>
                                 </div>
                                 <h4 className="text-lg font-semibold text-red-800 mb-2">Save Failed</h4>
                                 <p className="text-sm text-red-600 mb-6">{saveTemplateResult.error}</p>
@@ -1591,7 +1870,7 @@ function DocumentCentreContent() {
                                         Saving...
                                     </>
                                 ) : (
-                                    '💾 Save Template'
+                                    '\u{1F4BE} Save Template'
                                 )}
                             </button>
                         </div>
@@ -1609,16 +1888,20 @@ function DocumentCentreContent() {
         return <DocumentCentreLoading />
     }
 
-    if (!session || !userInfo) {
+    // For mediation mode, need session. For QC mode, need quickContract.
+    const hasContext = mode === 'quick_contract' ? !!quickContract : !!session
+    if (!hasContext || !userInfo) {
         return (
             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="text-center">
-                    <p className="text-red-600 mb-4">Failed to load session data</p>
+                    <p className="text-red-600 mb-4">
+                        {mode === 'quick_contract' ? 'Failed to load contract data' : 'Failed to load session data'}
+                    </p>
                     <button
                         onClick={() => router.push('/auth/contracts-dashboard')}
                         className="px-6 py-2 text-slate-600 hover:text-slate-800 transition"
                     >
-                        ← Return to Dashboard
+                        \u2190 Return to Dashboard
                     </button>
                 </div>
             </div>
@@ -1628,6 +1911,7 @@ function DocumentCentreContent() {
     const readyCount = documents.filter(d => d.status === 'ready' || d.status === 'final').length
     const totalCount = documents.length
     const isCustomer = userInfo?.role === 'customer'
+    const contextId = mode === 'quick_contract' ? (quickContract?.contractId || '') : (session?.sessionId || '')
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -1635,6 +1919,8 @@ function DocumentCentreContent() {
             <DocumentCentreHeader
                 session={session}
                 userInfo={userInfo}
+                mode={mode}
+                quickContract={quickContract}
                 onBackToStudio={handleBackToStudio}
             />
 
@@ -1655,7 +1941,7 @@ function DocumentCentreContent() {
                         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div
                                 className="h-full bg-emerald-500 transition-all duration-500"
-                                style={{ width: `${(readyCount / totalCount) * 100}%` }}
+                                style={{ width: `${totalCount > 0 ? (readyCount / totalCount) * 100 : 0}%` }}
                             />
                         </div>
                     </div>
@@ -1679,8 +1965,8 @@ function DocumentCentreContent() {
                         isGenerating={isGeneratingPackage}
                     />
 
-                    {/* Save as Template Card - Customers Only */}
-                    {isCustomer && (
+                    {/* Save as Template Card - Customers Only, Mediation mode only */}
+                    {isCustomer && mode === 'mediation' && session && (
                         <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${session.isTraining
                             ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
                             : 'bg-gradient-to-br from-violet-50 to-purple-50 border-violet-200'
@@ -1688,7 +1974,7 @@ function DocumentCentreContent() {
                             <div className="flex items-center gap-3 mb-3">
                                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${session.isTraining ? 'bg-amber-100' : 'bg-violet-100'
                                     }`}>
-                                    {session.isTraining ? '🎓' : '💾'}
+                                    {session.isTraining ? '\u{1F393}' : '\u{1F4BE}'}
                                 </div>
                                 <div className="flex-1">
                                     <h3 className={`font-semibold text-sm ${session.isTraining ? 'text-amber-800' : 'text-violet-800'}`}>
@@ -1707,7 +1993,7 @@ function DocumentCentreContent() {
                                     : 'bg-violet-600 hover:bg-violet-700 text-white'
                                     }`}
                             >
-                                💾 Save Outcome as Template
+                                {'\u{1F4BE}'} Save Outcome as Template
                             </button>
                         </div>
                     )}
@@ -1727,7 +2013,7 @@ function DocumentCentreContent() {
                 {/* RIGHT PANEL: CLARENCE Chat */}
                 <div className="w-96 border-l border-slate-200">
                     <ClarenceChatPanel
-                        sessionId={session.sessionId}
+                        sessionId={contextId}
                         selectedDocument={selectedDocument}
                         messages={chatMessages}
                         onSendMessage={handleSendChatMessage}
