@@ -978,12 +978,14 @@ function CreateQuickContractContent() {
     }
 
     async function pollForParsingComplete(contractId: string) {
-        const maxAttempts = 30
+        const maxAttempts = 60
         let attempts = 0
+        const startTime = Date.now()
 
         const poll = async () => {
             attempts++
-            console.log(`Polling attempt ${attempts}/${maxAttempts}...`)
+            const elapsed = Math.round((Date.now() - startTime) / 1000)
+            console.log(`Polling attempt ${attempts}/${maxAttempts}... (${elapsed}s elapsed)`)
 
             try {
                 const { data: contractData, error: contractError } = await supabase
@@ -1070,9 +1072,12 @@ function CreateQuickContractContent() {
 
                 // Still processing, continue polling
                 if (attempts < maxAttempts) {
-                    setTimeout(poll, 2000)
+                    setTimeout(poll, 3000)
                 } else {
-                    throw new Error('Parsing timed out. Please try again.')
+                    throw new Error(
+                        'Parsing is taking longer than expected. The document may still be processing in the background. ' +
+                        'Try clicking "Try Again" in a moment, or go back and re-upload.'
+                    )
                 }
 
             } catch (err) {
@@ -2038,7 +2043,11 @@ function CreateQuickContractContent() {
                                     <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
                                     <h2 className="text-xl font-bold text-slate-800 mb-2">Analyzing Your Contract</h2>
                                     <p className="text-slate-500 mb-2">CLARENCE is identifying and extracting clauses...</p>
-                                    <p className="text-sm text-slate-400">This typically takes about a minute or so</p>
+                                    <p className="text-sm text-slate-400 mb-4">Larger documents may take 2-3 minutes</p>
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
+                                        <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
+                                        <span className="text-xs text-slate-500">Processing in progress</span>
+                                    </div>
                                 </div>
                             </div>
                         )}
