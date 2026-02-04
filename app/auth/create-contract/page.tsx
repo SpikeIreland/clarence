@@ -465,6 +465,7 @@ function ContractCreationContent() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [templates, setTemplates] = useState<Template[]>([])
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
+    const [templateFilter, setTemplateFilter] = useState<'all' | 'system' | 'company' | 'my'>('all')
     const [isCreating, setIsCreating] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState<string>('')
@@ -1657,22 +1658,90 @@ function ContractCreationContent() {
         if (isLoadingTemplates) return <div className="flex items-center justify-center h-64"><div className={`w-12 h-12 border-4 ${isTrainingMode ? 'border-amber-600' : 'border-emerald-600'} border-t-transparent rounded-full animate-spin`}></div></div>
         if (templates.length === 0) return <div className="max-w-2xl mx-auto text-center py-8"><h3 className="text-lg font-medium text-slate-800 mb-2">No templates available</h3><p className="text-sm text-slate-500">Try building from scratch or uploading a contract.</p></div>
 
+        // Categorise templates
+        const systemTemplates = templates.filter(t => t.isSystem)
+        const companyTemplates = templates.filter(t => !t.isSystem && t.isPublic && t.companyId === userInfo?.companyId)
+        const myTemplates = templates.filter(t => !t.isSystem && !t.isPublic && t.createdByUserId === userInfo?.userId)
+
+        // Apply active filter
+        const filteredTemplates = templateFilter === 'all' ? templates
+            : templateFilter === 'system' ? systemTemplates
+                : templateFilter === 'company' ? companyTemplates
+                    : myTemplates
+
+        // Helper to get category label for a template
+        const getCategoryLabel = (template: Template) => {
+            if (template.isSystem) return { text: 'System', color: 'bg-blue-100 text-blue-700' }
+            if (template.isPublic && template.companyId === userInfo?.companyId) return { text: 'Company', color: 'bg-purple-100 text-purple-700' }
+            return { text: 'My Template', color: isTrainingMode ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700' }
+        }
+
+        // Filter tab config
+        const filterTabs = [
+            { key: 'all' as const, label: 'All Templates', count: templates.length },
+            { key: 'system' as const, label: 'System', count: systemTemplates.length },
+            { key: 'company' as const, label: 'Company', count: companyTemplates.length },
+            { key: 'my' as const, label: 'My Templates', count: myTemplates.length },
+        ]
+
         return (
             <div className="max-w-3xl mx-auto">
-                <h3 className="text-lg font-medium text-slate-800 mb-6">{assessment.templateSource === 'modified_template' ? 'Select a Template to Customize' : 'Select a Template'}</h3>
-                <div className="grid gap-4">
-                    {templates.map((template) => (
-                        <button key={template.templateId} onClick={() => handleTemplateSelect(template)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
-                            <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl"></span></div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{template.templateName}</h4>
-                                <p className="text-sm text-slate-500 mb-2">{template.description || `Standard ${template.contractType} template`}</p>
-                                <div className="flex items-center gap-4 text-xs text-slate-400"><span> {template.clauseCount} clauses</span><span> {template.industry}</span></div>
-                            </div>
-                            <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center text-xl`}>&rarr;</div>
+                <h3 className="text-lg font-medium text-slate-800 mb-4">{assessment.templateSource === 'modified_template' ? 'Select a Template to Customize' : 'Select a Template'}</h3>
+
+                {/* Filter Tabs */}
+                <div className="flex gap-2 mb-6 flex-wrap">
+                    {filterTabs.map((tab) => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setTemplateFilter(tab.key)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${templateFilter === tab.key
+                                    ? `${colors.btnPrimary} text-white`
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                        >
+                            {tab.label}
+                            {tab.count > 0 && (
+                                <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${templateFilter === tab.key
+                                        ? 'bg-white/20 text-white'
+                                        : 'bg-slate-200 text-slate-500'
+                                    }`}>
+                                    {tab.count}
+                                </span>
+                            )}
                         </button>
                     ))}
                 </div>
+
+                {/* Template List */}
+                {filteredTemplates.length === 0 ? (
+                    <div className="text-center py-8">
+                        <p className="text-sm text-slate-500">No {templateFilter === 'company' ? 'company' : templateFilter === 'my' ? 'personal' : ''} templates found.</p>
+                    </div>
+                ) : (
+                    <div className="grid gap-4">
+                        {filteredTemplates.map((template) => {
+                            const category = getCategoryLabel(template)
+                            return (
+                                <button key={template.templateId} onClick={() => handleTemplateSelect(template)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
+                                    <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">📋</span></div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{template.templateName}</h4>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${category.color}`}>{category.text}</span>
+                                        </div>
+                                        <p className="text-sm text-slate-500 mb-2">{template.description || `Standard ${template.contractType} template`}</p>
+                                        <div className="flex items-center gap-4 text-xs text-slate-400">
+                                            <span>📑 {template.clauseCount} clauses</span>
+                                            {template.industry && <span>🏢 {template.industry}</span>}
+                                            <span>📂 {template.contractType}</span>
+                                        </div>
+                                    </div>
+                                    <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center text-xl`}>&rarr;</div>
+                                </button>
+                            )
+                        })}
+                    </div>
+                )}
             </div>
         )
     }
