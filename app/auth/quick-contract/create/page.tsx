@@ -45,6 +45,16 @@ interface QCTemplate {
     templateName: string
     templateCategory: string
     description: string
+    contractType: string
+    clauseCount: number
+    timesUsed: number
+    // Scope
+    isSystem: boolean
+    isPublic: boolean
+    companyId: string | null
+    createdByUserId: string | null
+    sourceContractId: string | null
+    // Legacy fields for qc_templates compatibility
     documentContent: string
     documentFormat: string
     variableSchema: VariableField[]
@@ -277,12 +287,15 @@ function CreateQuickContractContent() {
         return authData.userInfo
     }, [router])
 
-    const loadTemplates = useCallback(async () => {
+    const loadTemplates = useCallback(async (user?: UserInfo | null) => {
         try {
+            // Load from contract_templates (same source as Contracts page)
+            // Exclude system templates - only show Company and User templates
             const { data, error } = await supabase
-                .from('qc_templates')
+                .from('contract_templates')
                 .select('*')
                 .eq('is_active', true)
+                .eq('is_system', false)
                 .order('template_name')
 
             if (error) {
@@ -290,22 +303,42 @@ function CreateQuickContractContent() {
                 return
             }
 
+            const currentUser = user || userInfo
+
             const transformedTemplates: QCTemplate[] = (data || []).map(row => ({
                 templateId: row.template_id,
                 templateName: row.template_name,
-                templateCategory: row.template_category,
-                description: row.description,
-                documentContent: row.document_content,
-                documentFormat: row.document_format,
-                variableSchema: row.variable_schema || [],
-                isSystemTemplate: row.is_system_template
+                templateCategory: row.contract_type || 'other',
+                description: row.description || '',
+                contractType: row.contract_type || 'other',
+                clauseCount: row.clause_count || 0,
+                timesUsed: row.times_used || 0,
+                isSystem: row.is_system || false,
+                isPublic: row.is_public || false,
+                companyId: row.company_id,
+                createdByUserId: row.created_by_user_id,
+                sourceContractId: row.source_contract_id || row.source_session_id || null,
+                // Legacy compatibility
+                documentContent: '',
+                documentFormat: '',
+                variableSchema: [],
+                isSystemTemplate: row.is_system || false
             }))
 
-            setTemplates(transformedTemplates)
+            // Filter: Company templates = public + same company, My templates = private + my user
+            const companyTemplates = transformedTemplates.filter(t =>
+                t.isPublic && t.companyId === currentUser?.companyId
+            )
+            const myTemplates = transformedTemplates.filter(t =>
+                !t.isPublic && t.createdByUserId === currentUser?.userId
+            )
+
+            // Combine: company first, then user's own
+            setTemplates([...companyTemplates, ...myTemplates])
         } catch (err) {
             console.error('Error loading templates:', err)
         }
-    }, [supabase])
+    }, [supabase, userInfo])
 
     const loadDuplicateContract = useCallback(async (contractId: string) => {
         try {
@@ -508,7 +541,7 @@ function CreateQuickContractContent() {
                 if (!isMounted) return
 
                 if (user) {
-                    await loadTemplates()
+                    await loadTemplates(user)
 
                     if (!isMounted) return
 
@@ -560,26 +593,20 @@ function CreateQuickContractContent() {
     }
 
     function handleTemplateSelect(template: QCTemplate) {
-        // Initialize variable values with defaults
-        const initialValues: Record<string, string> = {}
-        template.variableSchema.forEach(field => {
-            initialValues[field.key] = field.default || ''
-        })
-
-        setState(prev => ({
-            ...prev,
-            selectedTemplate: template,
-            contractType: template.templateCategory as ContractType,
-            contractName: template.templateName,
-            variableValues: initialValues,
-            documentContent: template.documentContent,
-            step: template.variableSchema.length > 0 ? 'variables' : 'details'
-        }))
+        if (!userInfo) return
 
         eventLogger.completed('quick_contract_create', 'template_selected', {
             templateId: template.templateId,
             templateName: template.templateName
         })
+
+        // Use loadFromTemplate which creates a contract, copies clauses, and jumps to invite
+        loadFromTemplate(
+            template.templateId,
+            template.templateName,
+            template.contractType,
+            userInfo
+        )
     }
 
     function handleVariablesComplete() {
@@ -1435,76 +1462,164 @@ function CreateQuickContractContent() {
                 {/* SECTION 22: STEP - TEMPLATE SELECTION */}
                 {/* ============================================================== */}
                 {state.step === 'template_select' && (
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h2 className="text-xl font-bold text-slate-800">Choose a Template</h2>
-                                <p className="text-slate-500 text-sm">Select a pre-built template to get started quickly</p>
+                    <div className="space-y-6">
+                        {/* Header */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">Choose a Template</h2>
+                                    <p className="text-slate-500 text-sm">Select a template to create your contract</p>
+                                </div>
+                                <button
+                                    onClick={handleBack}
+                                    className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Back
+                                </button>
                             </div>
-                            <button
-                                onClick={handleBack}
-                                className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                </svg>
-                                Back
-                            </button>
                         </div>
 
+                        {/* No templates at all */}
                         {templates.length === 0 ? (
-                            <div className="text-center py-12">
-                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                                <div className="text-center py-8">
+                                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-2">No templates available</h3>
+                                    <p className="text-slate-500 text-sm mb-4">
+                                        Templates are created from the Contract Library. Upload a contract there first, then it will appear here.
+                                    </p>
+                                    <div className="flex gap-3 justify-center">
+                                        <Link
+                                            href="/auth/contracts"
+                                            className="text-teal-600 hover:text-teal-700 font-medium text-sm"
+                                        >
+                                            Go to Contract Library
+                                        </Link>
+                                        <span className="text-slate-300">|</span>
+                                        <button
+                                            onClick={() => setState(prev => ({ ...prev, sourceType: 'upload', step: 'details' }))}
+                                            className="text-teal-600 hover:text-teal-700 font-medium text-sm"
+                                        >
+                                            Upload a document instead
+                                        </button>
+                                    </div>
                                 </div>
-                                <h3 className="text-lg font-semibold text-slate-800 mb-2">No templates available</h3>
-                                <p className="text-slate-500 text-sm mb-4">Templates will appear here once they&apos;re configured.</p>
-                                <button
-                                    onClick={() => setState(prev => ({ ...prev, sourceType: 'blank', step: 'details' }))}
-                                    className="text-teal-600 hover:text-teal-700 font-medium text-sm"
-                                >
-                                    Start with a blank contract instead                                 </button>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {templates.map(template => (
-                                    <button
-                                        key={template.templateId}
-                                        onClick={() => handleTemplateSelect(template)}
-                                        className="p-5 rounded-xl border-2 border-slate-200 hover:border-teal-500 hover:bg-teal-50/50 transition-all text-left group"
-                                    >
-                                        <div className="flex items-start justify-between mb-2">
-                                            <h3 className="font-semibold text-slate-800 group-hover:text-teal-700">
-                                                {template.templateName}
-                                            </h3>
-                                            {template.isSystemTemplate && (
-                                                <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">
-                                                    System
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="text-sm text-slate-500 mb-3">{template.description}</p>
-                                        <div className="flex items-center gap-3 text-xs text-slate-400">
-                                            <span className="flex items-center gap-1">
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                                                </svg>
-                                                {template.templateCategory}
-                                            </span>
-                                            {template.variableSchema.length > 0 && (
-                                                <span className="flex items-center gap-1">
-                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                            <>
+                                {/* Company Templates Section */}
+                                {templates.filter(t => t.isPublic).length > 0 && (
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
+                                                    <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                                     </svg>
-                                                    {template.variableSchema.length} fields
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-semibold text-slate-800">Company Templates</h3>
+                                                    <p className="text-xs text-slate-500">Shared templates from your organisation</p>
+                                                </div>
+                                                <span className="ml-auto px-2 py-0.5 bg-slate-200 text-slate-600 text-xs font-medium rounded-full">
+                                                    {templates.filter(t => t.isPublic).length}
                                                 </span>
-                                            )}
+                                            </div>
                                         </div>
-                                    </button>
-                                ))}
-                            </div>
+                                        <div className="p-6">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {templates.filter(t => t.isPublic).map(template => (
+                                                    <button
+                                                        key={template.templateId}
+                                                        onClick={() => handleTemplateSelect(template)}
+                                                        className="p-5 rounded-xl border-2 border-slate-200 hover:border-teal-500 hover:bg-teal-50/50 transition-all text-left group"
+                                                    >
+                                                        <div className="flex items-start justify-between mb-2">
+                                                            <h3 className="font-semibold text-slate-800 group-hover:text-teal-700">
+                                                                {template.templateName}
+                                                            </h3>
+                                                        </div>
+                                                        {template.description && (
+                                                            <p className="text-sm text-slate-500 mb-3 line-clamp-2">{template.description}</p>
+                                                        )}
+                                                        <div className="flex items-center gap-4 text-xs text-slate-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                                </svg>
+                                                                {template.clauseCount} clauses
+                                                            </span>
+                                                            {template.timesUsed > 0 && (
+                                                                <span>Used {template.timesUsed} time{template.timesUsed !== 1 ? 's' : ''}</span>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* My Templates Section */}
+                                {templates.filter(t => !t.isPublic).length > 0 && (
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
+                                                    <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-semibold text-slate-800">My Templates</h3>
+                                                    <p className="text-xs text-slate-500">Templates you created or uploaded</p>
+                                                </div>
+                                                <span className="ml-auto px-2 py-0.5 bg-slate-200 text-slate-600 text-xs font-medium rounded-full">
+                                                    {templates.filter(t => !t.isPublic).length}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="p-6">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {templates.filter(t => !t.isPublic).map(template => (
+                                                    <button
+                                                        key={template.templateId}
+                                                        onClick={() => handleTemplateSelect(template)}
+                                                        className="p-5 rounded-xl border-2 border-slate-200 hover:border-teal-500 hover:bg-teal-50/50 transition-all text-left group"
+                                                    >
+                                                        <div className="flex items-start justify-between mb-2">
+                                                            <h3 className="font-semibold text-slate-800 group-hover:text-teal-700">
+                                                                {template.templateName}
+                                                            </h3>
+                                                        </div>
+                                                        {template.description && (
+                                                            <p className="text-sm text-slate-500 mb-3 line-clamp-2">{template.description}</p>
+                                                        )}
+                                                        <div className="flex items-center gap-4 text-xs text-slate-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                                </svg>
+                                                                {template.clauseCount} clauses
+                                                            </span>
+                                                            {template.timesUsed > 0 && (
+                                                                <span>Used {template.timesUsed} time{template.timesUsed !== 1 ? 's' : ''}</span>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 )}
