@@ -220,10 +220,6 @@ function QuickContractStudioContent() {
     const [editingDraftText, setEditingDraftText] = useState('')
     const [savingDraft, setSavingDraft] = useState(false)
 
-    // Full text extraction state
-    const [extractingFullText, setExtractingFullText] = useState(false)
-    const [fullTextExtracted, setFullTextExtracted] = useState(false)
-
     // Chat state (CLARENCE AI chat - right panel)
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
@@ -1402,108 +1398,6 @@ function QuickContractStudioContent() {
         sendChatMessage(discussPrompt)
     }
 
-    // Extract Full Text - calls N8N workflow to get complete clause text
-    const handleExtractFullText = async () => {
-        if (!contract?.contractId || extractingFullText) return
-
-        setExtractingFullText(true)
-
-        // Add a chat message to show progress
-        const progressMessage: ChatMessage = {
-            id: `extract-progress-${Date.now()}`,
-            role: 'assistant',
-            content: `📄 Extracting full clause text from your document. This may take 30-60 seconds for longer contracts...`,
-            timestamp: new Date()
-        }
-        setChatMessages(prev => [...prev, progressMessage])
-
-        try {
-            const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/extract-full-clause-text', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contract_id: contract.contractId
-                })
-            })
-
-            const result = await response.json()
-
-            if (result.success) {
-                // Reload clauses from database to get the full text
-                const { data: updatedClauses, error } = await supabase
-                    .from('uploaded_contract_clauses')
-                    .select('*')
-                    .eq('contract_id', contract.contractId)
-                    .order('display_order', { ascending: true })
-
-                if (!error && updatedClauses) {
-                    // Re-map the clauses with updated data
-                    const mappedClauses: ContractClause[] = updatedClauses.map(c => ({
-                        clauseId: c.clause_id,
-                        positionId: c.clause_id,
-                        clauseNumber: c.clause_number,
-                        clauseName: c.clause_name,
-                        category: c.category || 'Other',
-                        clauseText: c.content || '',
-                        originalText: c.original_text || c.content || null,
-                        clauseLevel: c.clause_level || 1,
-                        displayOrder: c.display_order,
-                        isHeader: c.is_header || false,
-                        processingStatus: c.status || 'pending',
-                        parentClauseId: c.parent_clause_id,
-                        clarenceCertified: c.clarence_certified || false,
-                        clarencePosition: c.clarence_position,
-                        clarenceFairness: c.clarence_fairness,
-                        clarenceSummary: c.clarence_summary,
-                        clarenceAssessment: c.clarence_assessment,
-                        clarenceFlags: c.clarence_flags || [],
-                        clarenceCertifiedAt: c.clarence_certified_at,
-                        extractedValue: c.extracted_value,
-                        extractedUnit: c.extracted_unit,
-                        valueType: c.value_type,
-                        documentPosition: c.document_position,
-                        draftText: c.draft_text || null,
-                        draftModified: !!c.draft_text,
-                        positionOptions: DEFAULT_POSITION_OPTIONS
-                    }))
-
-                    setClauses(mappedClauses)
-                    setFullTextExtracted(true)
-
-                    // Success message
-                    const successMessage: ChatMessage = {
-                        id: `extract-success-${Date.now()}`,
-                        role: 'assistant',
-                        content: `✅ Full text extraction complete! I've retrieved the complete text for ${result.clauses_processed || mappedClauses.length} clauses. You can now view and edit the full clause language in the Draft tab.`,
-                        timestamp: new Date()
-                    }
-                    setChatMessages(prev => [...prev, successMessage])
-                }
-            } else {
-                throw new Error(result.error || 'Extraction failed')
-            }
-
-        } catch (err) {
-            console.error('Full text extraction error:', err)
-            const errorMessage: ChatMessage = {
-                id: `extract-error-${Date.now()}`,
-                role: 'assistant',
-                content: `⚠️ I wasn't able to extract the full text at this time. Error: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again in a moment.`,
-                timestamp: new Date()
-            }
-            setChatMessages(prev => [...prev, errorMessage])
-        } finally {
-            setExtractingFullText(false)
-        }
-    }
-
-    // Helper to check if clause text appears truncated
-    const isClauseTextTruncated = (clause: ContractClause): boolean => {
-        const text = clause.originalText || clause.clauseText || ''
-        // Text is likely truncated if it's short and ends with "..." or is exactly 100 chars
-        return text.length <= 150 || text.endsWith('...')
-    }
-
     // ========================================================================
     // SECTION 4E: FILTERED CLAUSES
     // ========================================================================
@@ -2608,47 +2502,6 @@ function QuickContractStudioContent() {
                                             ) : (
                                                 // Read-Only Mode
                                                 <div className="space-y-3">
-                                                    {/* Truncation Warning & Extract Button */}
-                                                    {isClauseTextTruncated(selectedClause) && (
-                                                        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                                                            <div className="flex items-start justify-between gap-4">
-                                                                <div className="flex items-start gap-3">
-                                                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                                                                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                                        </svg>
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="text-sm font-medium text-amber-800">Clause text appears truncated</p>
-                                                                        <p className="text-xs text-amber-600 mt-1">Click "Extract Full Text" to retrieve the complete clause language from your document.</p>
-                                                                    </div>
-                                                                </div>
-                                                                <button
-                                                                    onClick={handleExtractFullText}
-                                                                    disabled={extractingFullText}
-                                                                    className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors flex items-center gap-2 flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
-                                                                >
-                                                                    {extractingFullText ? (
-                                                                        <>
-                                                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                                            </svg>
-                                                                            Extracting...
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                                                            </svg>
-                                                                            Extract Full Text
-                                                                        </>
-                                                                    )}
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-
                                                     {/* Clause Text Display */}
                                                     <div className={`p-4 rounded-lg border ${selectedClause.draftModified
                                                         ? 'bg-purple-50 border-purple-200'
@@ -2662,14 +2515,6 @@ function QuickContractStudioContent() {
                                                             <span className="text-xs text-slate-400">
                                                                 {(selectedClause.draftText || selectedClause.originalText || selectedClause.clauseText || '').length} characters
                                                             </span>
-                                                            {fullTextExtracted && (
-                                                                <span className="text-xs text-emerald-600 flex items-center gap-1">
-                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                    </svg>
-                                                                    Full text extracted
-                                                                </span>
-                                                            )}
                                                         </div>
                                                     </div>
 
