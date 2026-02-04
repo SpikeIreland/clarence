@@ -99,8 +99,8 @@ const CONTRACT_TYPE_OPTIONS = [
 ]
 
 const CONTRACT_TYPE_ICONS: Record<string, string> = {
-    'bpo': 'ðŸ¢', 'saas': 'â˜ï¸', 'nda': 'ðŸ”’', 'msa': 'ðŸ“‹',
-    'employment': 'ðŸ‘”', 'it_services': 'ðŸ’»', 'consulting': 'ðŸ’¼', 'custom': 'ðŸ“„',
+    'bpo': '🏢', 'saas': '☁️', 'nda': '🔒', 'msa': '📋',
+    'employment': '👔', 'it_services': '💻', 'consulting': '💼', 'custom': '📄',
 }
 
 // ============================================================================
@@ -341,10 +341,56 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
 
         try {
             const contractId = await onUpload(selectedFile, templateName.trim(), contractType)
-            setUploadProgress('Redirecting to certification studio...')
+            setIsProcessing(true)
+            setUploadProgress('Processing contract clauses... This may take up to a minute.')
 
-            // Redirect to Quick Contract Studio in company template mode
-            // The Studio will handle certification, then save with is_public: true
+            // Poll get-uploaded-contract until clauses are parsed
+            const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+            const MAX_POLLS = 60
+            const POLL_INTERVAL = 3000
+            let pollCount = 0
+
+            const pollForCompletion = (): Promise<boolean> => {
+                return new Promise((resolve) => {
+                    const interval = setInterval(async () => {
+                        pollCount++
+                        if (pollCount > MAX_POLLS) {
+                            clearInterval(interval)
+                            resolve(false)
+                            return
+                        }
+                        try {
+                            const res = await fetch(`${API_BASE}/get-uploaded-contract?contract_id=${contractId}`)
+                            if (res.ok) {
+                                const data = await res.json()
+                                setUploadProgress(`Processing clauses... ${data.clauseCount || data.clause_count || 0} found so far`)
+                                if ((data.clauseCount || data.clause_count || 0) > 0 ||
+                                    data.status === 'ready' || data.status === 'complete') {
+                                    clearInterval(interval)
+                                    resolve(true)
+                                    return
+                                }
+                                if (data.status === 'failed' || data.status === 'error') {
+                                    clearInterval(interval)
+                                    resolve(false)
+                                    return
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Polling error:', err)
+                        }
+                    }, POLL_INTERVAL)
+                })
+            }
+
+            const parseComplete = await pollForCompletion()
+
+            if (!parseComplete) {
+                throw new Error('Document parsing timed out or failed. Please try again.')
+            }
+
+            // Parse complete - redirect to Studio for certification
+            setUploadProgress('Redirecting to certification studio...')
             router.push(`/auth/quick-contract/studio/${contractId}?mode=template&company=true`)
 
         } catch (e) {
@@ -507,7 +553,7 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
                                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${template.isActive ? 'bg-indigo-100' : 'bg-slate-200'}`}>
-                                        <span className="text-xl">{CONTRACT_TYPE_ICONS[template.contractType] || 'ðŸ“„'}</span>
+                                        <span className="text-xl">{CONTRACT_TYPE_ICONS[template.contractType] || '📄'}</span>
                                     </div>
                                     <div>
                                         <h4 className="font-medium text-slate-800">{template.templateName}</h4>
