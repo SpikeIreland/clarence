@@ -489,7 +489,6 @@ function CreateQuickContractContent() {
                         file_type: 'template',
                         file_size: 0,
                         status: 'ready',
-                        source_type: 'template',
                         clause_count: existingClauses.length
                     })
                     .select('contract_id')
