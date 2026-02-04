@@ -90,6 +90,22 @@ interface ClauseEvent {
 
 type CommitModalState = 'closed' | 'confirm' | 'processing' | 'success'
 
+// Party Chat message interface
+interface PartyMessage {
+    messageId: string
+    contractId: string
+    senderUserId: string
+    senderName: string
+    senderRole: 'initiator' | 'respondent'
+    messageText: string
+    relatedClauseId: string | null
+    relatedClauseNumber: string | null
+    relatedClauseName: string | null
+    isSystemMessage: boolean
+    isRead: boolean
+    createdAt: string
+}
+
 // ============================================================================
 // SECTION 2: CONSTANTS & CONFIGURATION
 // ============================================================================
@@ -193,11 +209,6 @@ function QuickContractStudioContent() {
     // Query input per clause
     const [queryText, setQueryText] = useState('')
 
-    // Progressive loading state
-    const [isPolling, setIsPolling] = useState(false)
-    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-
     // UI state
     const [selectedClauseIndex, setSelectedClauseIndex] = useState<number | null>(null)
     const [clauseSearchTerm, setClauseSearchTerm] = useState('')
@@ -209,10 +220,26 @@ function QuickContractStudioContent() {
     const [editingDraftText, setEditingDraftText] = useState('')
     const [savingDraft, setSavingDraft] = useState(false)
 
-    // Chat state
+    // Full text extraction state
+    const [extractingFullText, setExtractingFullText] = useState(false)
+    const [fullTextExtracted, setFullTextExtracted] = useState(false)
+
+    // Chat state (CLARENCE AI chat - right panel)
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
     const [chatLoading, setChatLoading] = useState(false)
+
+    // Party Chat state (human-to-human - slide-out panel)
+    const [partyChatOpen, setPartyChatOpen] = useState(false)
+    const [partyChatMessages, setPartyChatMessages] = useState<PartyMessage[]>([])
+    const [partyChatInput, setPartyChatInput] = useState('')
+    const [partyChatSending, setPartyChatSending] = useState(false)
+    const [partyChatUnread, setPartyChatUnread] = useState(0)
+    const [respondentInfo, setRespondentInfo] = useState<{
+        name: string
+        company: string | null
+        isOnline: boolean
+    } | null>(null)
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
@@ -220,6 +247,8 @@ function QuickContractStudioContent() {
     // Refs
     const clauseListRef = useRef<HTMLDivElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
+    const partyChatEndRef = useRef<HTMLDivElement>(null)
+    const partyChatInputRef = useRef<HTMLInputElement>(null)
 
     // ========================================================================
     // SECTION 4B: AUTHENTICATION & DATA LOADING
@@ -432,7 +461,7 @@ function QuickContractStudioContent() {
 
         if (pendingClauses.length === 0) return // All already certified
 
-        console.log(`Triggering certification for ${pendingClauses.length} pending clauses...`)
+        console.log(`Ã°Å¸â€Â Triggering certification for ${pendingClauses.length} pending clauses...`)
         setCertificationTriggered(true)
 
         // Fire and forget - the polling useEffect handles the rest
@@ -443,81 +472,6 @@ function QuickContractStudioContent() {
         }).catch(err => console.error('Failed to trigger certification:', err))
 
     }, [contractId, clauses.length, certificationTriggered])
-
-    // ========================================================================
-    // SECTION 4B-2: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
-    // ========================================================================
-
-    useEffect(() => {
-        if (!contractId || !clauses.length) return
-
-        // Check if there are any uncertified non-header clauses
-        const uncertified = clauses.filter(c =>
-            !c.isHeader && c.processingStatus !== 'certified' && c.processingStatus !== 'failed'
-        )
-
-        if (uncertified.length === 0) {
-            setIsPolling(false)
-            return
-        }
-
-        setIsPolling(true)
-
-        const pollInterval = setInterval(async () => {
-            try {
-                const { data: updatedClauses, error } = await supabase
-                    .from('uploaded_contract_clauses')
-                    .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
-                    .eq('contract_id', contractId)
-                    .order('display_order', { ascending: true })
-
-                if (error || !updatedClauses) return
-
-                // Update clause statuses without replacing entire array (preserves selection)
-                setClauses(prev => prev.map(clause => {
-                    const updated = updatedClauses.find(u => u.clause_id === clause.clauseId)
-                    if (!updated) return clause
-
-                    return {
-                        ...clause,
-                        processingStatus: updated.status || clause.processingStatus,
-                        isHeader: updated.is_header || false,
-                        clarenceCertified: updated.clarence_certified || false,
-                        clarencePosition: updated.clarence_position,
-                        clarenceFairness: updated.clarence_fairness,
-                        clarenceSummary: updated.clarence_summary,
-                        clarenceAssessment: updated.clarence_assessment,
-                        clarenceFlags: updated.clarence_flags || [],
-                        clauseText: updated.content || clause.clauseText,
-                        originalText: updated.original_text || clause.originalText,
-                        extractedValue: updated.extracted_value,
-                        extractedUnit: updated.extracted_unit,
-                        valueType: updated.value_type,
-                    }
-                }))
-
-                // Update progress
-                const certified = updatedClauses.filter(c => c.status === 'certified' && !c.is_header).length
-                const total = updatedClauses.filter(c => !c.is_header).length
-                const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
-                setCertificationProgress({ certified, total, failed })
-
-                // Stop polling when done
-                const stillProcessing = updatedClauses.some(c =>
-                    !c.is_header && (c.status === 'pending' || c.status === 'processing')
-                )
-                if (!stillProcessing) {
-                    setIsPolling(false)
-                    clearInterval(pollInterval)
-                }
-
-            } catch (err) {
-                console.error('Polling error:', err)
-            }
-        }, 4000) // Poll every 4 seconds
-
-        return () => clearInterval(pollInterval)
-    }, [contractId, clauses.length, isPolling])
 
     // ========================================================================
     // SECTION 4C: CHAT FUNCTIONS
@@ -639,7 +593,7 @@ function QuickContractStudioContent() {
                 'default': 'Retained by originator'
             },
             'Insurance': {
-                'currency': '\u00A31M-\u00A35M',
+                'currency': 'Ã‚Â£1M-Ã‚Â£5M',
                 'default': 'Industry standard coverage'
             },
             'Audit': {
@@ -676,7 +630,7 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 4C-3: CLAUSE CLICK -> RATIONALE
+    // SECTION 4C-3: CLAUSE CLICK Ã¢â€ â€™ RATIONALE
     // Auto-generate explanation when clause is selected
     // ========================================================================
 
@@ -731,7 +685,7 @@ function QuickContractStudioContent() {
             const posLabel = getPositionLabel(clause.clarencePosition)
 
             // Build the rationale message
-            let rationaleContent = `**${clause.clauseName}** (${clause.clauseNumber})\n\n`
+            let rationaleContent = `Ã°Å¸â€œâ€¹ **${clause.clauseName}** (${clause.clauseNumber})\n\n`
 
             // Show document position vs CLARENCE position if we have both
             if (clause.documentPosition !== null && clause.clarencePosition !== null) {
@@ -746,11 +700,11 @@ function QuickContractStudioContent() {
 
                 // Add comparison insight
                 if (difference < 0.5) {
-                    rationaleContent += `**Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
+                    rationaleContent += `Ã¢Å“â€¦ **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
                 } else if (clause.documentPosition > clause.clarencePosition) {
-                    rationaleContent += `**Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
+                    rationaleContent += `Ã¢Å¡Â Ã¯Â¸Â **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
                 } else {
-                    rationaleContent += `**Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
+                    rationaleContent += `Ã°Å¸â€™Â¡ **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
                 }
             } else if (clause.clarencePosition !== null) {
                 rationaleContent += `**CLARENCE Position:** ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
@@ -769,7 +723,7 @@ function QuickContractStudioContent() {
             if (clause.clarenceFlags && clause.clarenceFlags.length > 0) {
                 rationaleContent += `**Attention Points:**\n`
                 clause.clarenceFlags.forEach(flag => {
-                    rationaleContent += `- ${flag}\n`
+                    rationaleContent += `Ã¢â‚¬Â¢ ${flag}\n`
                 })
                 rationaleContent += '\n'
             }
@@ -795,7 +749,7 @@ function QuickContractStudioContent() {
     }, [selectedClause?.clauseId, lastExplainedClauseId, initialLoadComplete])
 
     // ========================================================================
-    // SECTION 4D: ACTION HANDLERS - AGREE, QUERY, COMMIT
+    // SECTION 4D: ACTION HANDLERS â€” AGREE, QUERY, COMMIT
     // ========================================================================
 
     // Determine party role for current user
@@ -869,7 +823,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `✅ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
+                content: `âœ… You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -916,6 +870,11 @@ function QuickContractStudioContent() {
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
+
+            // Push query into Party Chat for the other party to see
+            if (clause) {
+                pushQueryToPartyChat(clause, queryMessage)
+            }
         }
     }
 
@@ -1047,6 +1006,271 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
+    // SECTION 4D-1A: PARTY CHAT FUNCTIONS
+    // ========================================================================
+
+
+    // Get other party's display name
+    const getOtherPartyName = (): string => {
+        if (respondentInfo?.name) {
+            return getPartyRole() === 'initiator' ? respondentInfo.name : (userInfo?.fullName || 'Initiator')
+        }
+        return 'Other Party'
+    }
+
+    // Load respondent info from qc_recipients
+    const loadRespondentInfo = useCallback(async () => {
+        if (!contractId) return
+        try {
+            // Find the quick_contract record, then get recipient
+            const { data: qcData } = await supabase
+                .from('quick_contracts')
+                .select('quick_contract_id')
+                .eq('contract_id', contractId)
+                .single()
+
+            if (qcData) {
+                const { data: recipientData } = await supabase
+                    .from('qc_recipients')
+                    .select('recipient_name, recipient_company')
+                    .eq('quick_contract_id', qcData.quick_contract_id)
+                    .limit(1)
+                    .single()
+
+                if (recipientData) {
+                    setRespondentInfo({
+                        name: recipientData.recipient_name || 'Respondent',
+                        company: recipientData.recipient_company || null,
+                        isOnline: false // Will be enhanced with presence tracking later
+                    })
+                }
+            }
+        } catch (err) {
+            console.log('Could not load respondent info:', err)
+        }
+    }, [contractId])
+
+    // Fetch party chat messages from database
+    const fetchPartyChatMessages = useCallback(async () => {
+        if (!contractId) return
+        try {
+            const { data, error } = await supabase
+                .from('qc_party_messages')
+                .select('*')
+                .eq('contract_id', contractId)
+                .order('created_at', { ascending: true })
+
+            if (error) {
+                console.error('Failed to fetch party chat messages:', error)
+                return
+            }
+
+            if (data) {
+                const mapped: PartyMessage[] = data.map(m => ({
+                    messageId: m.message_id,
+                    contractId: m.contract_id,
+                    senderUserId: m.sender_user_id,
+                    senderName: m.sender_name,
+                    senderRole: m.sender_role,
+                    messageText: m.message_text,
+                    relatedClauseId: m.related_clause_id,
+                    relatedClauseNumber: m.related_clause_number,
+                    relatedClauseName: m.related_clause_name,
+                    isSystemMessage: m.is_system_message || false,
+                    isRead: m.is_read || false,
+                    createdAt: m.created_at
+                }))
+                setPartyChatMessages(mapped)
+
+                // Count unread messages from the other party
+                if (userInfo) {
+                    const unread = mapped.filter(
+                        m => m.senderUserId !== userInfo.userId && !m.isRead
+                    ).length
+                    setPartyChatUnread(unread)
+                }
+            }
+        } catch (err) {
+            console.error('Party chat fetch error:', err)
+        }
+    }, [contractId, userInfo])
+
+    // Send a party chat message
+    const sendPartyChatMessage = async (
+        text: string,
+        relatedClause?: { clauseId: string, clauseNumber: string, clauseName: string }
+    ) => {
+        if (!text.trim() || !userInfo || !contractId) return
+
+        setPartyChatSending(true)
+        try {
+            const { data, error } = await supabase
+                .from('qc_party_messages')
+                .insert({
+                    contract_id: contractId,
+                    sender_user_id: userInfo.userId,
+                    sender_name: userInfo.fullName,
+                    sender_role: getPartyRole(),
+                    message_text: text.trim(),
+                    related_clause_id: relatedClause?.clauseId || null,
+                    related_clause_number: relatedClause?.clauseNumber || null,
+                    related_clause_name: relatedClause?.clauseName || null,
+                    is_system_message: false
+                })
+                .select()
+                .single()
+
+            if (error) throw error
+
+            if (data) {
+                const newMsg: PartyMessage = {
+                    messageId: data.message_id,
+                    contractId: data.contract_id,
+                    senderUserId: data.sender_user_id,
+                    senderName: data.sender_name,
+                    senderRole: data.sender_role,
+                    messageText: data.message_text,
+                    relatedClauseId: data.related_clause_id,
+                    relatedClauseNumber: data.related_clause_number,
+                    relatedClauseName: data.related_clause_name,
+                    isSystemMessage: false,
+                    isRead: false,
+                    createdAt: data.created_at
+                }
+                setPartyChatMessages(prev => [...prev, newMsg])
+            }
+            setPartyChatInput('')
+        } catch (err) {
+            console.error('Failed to send party chat message:', err)
+        } finally {
+            setPartyChatSending(false)
+        }
+    }
+
+    // Mark messages as read when opening chat
+    const markPartyChatRead = async () => {
+        if (!contractId || !userInfo) return
+        try {
+            await supabase
+                .from('qc_party_messages')
+                .update({ is_read: true })
+                .eq('contract_id', contractId)
+                .neq('sender_user_id', userInfo.userId)
+                .eq('is_read', false)
+
+            setPartyChatUnread(0)
+        } catch (err) {
+            console.error('Failed to mark messages as read:', err)
+        }
+    }
+
+    // Push query into party chat automatically
+    const pushQueryToPartyChat = async (
+        clause: ContractClause,
+        queryMessage: string
+    ) => {
+        if (!userInfo || !contractId) return
+        const systemText = `❓ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
+        try {
+            await supabase
+                .from('qc_party_messages')
+                .insert({
+                    contract_id: contractId,
+                    sender_user_id: userInfo.userId,
+                    sender_name: userInfo.fullName,
+                    sender_role: getPartyRole(),
+                    message_text: systemText,
+                    related_clause_id: clause.clauseId,
+                    related_clause_number: clause.clauseNumber,
+                    related_clause_name: clause.clauseName,
+                    is_system_message: true
+                })
+            // Refresh messages
+            fetchPartyChatMessages()
+        } catch (err) {
+            console.error('Failed to push query to party chat:', err)
+        }
+    }
+
+    // Party Chat Effects: Load respondent info + messages + polling + realtime
+    useEffect(() => {
+        if (contractId && userInfo && !isTemplateMode) {
+            loadRespondentInfo()
+            fetchPartyChatMessages()
+        }
+    }, [contractId, userInfo, isTemplateMode, loadRespondentInfo, fetchPartyChatMessages])
+
+    // Polling for new messages (every 10s when open, 30s when closed)
+    useEffect(() => {
+        if (isTemplateMode || !contractId || !userInfo) return
+        const interval = setInterval(
+            fetchPartyChatMessages,
+            partyChatOpen ? 10000 : 30000
+        )
+        return () => clearInterval(interval)
+    }, [partyChatOpen, isTemplateMode, contractId, userInfo, fetchPartyChatMessages])
+
+    // Supabase Realtime subscription for instant messages
+    useEffect(() => {
+        if (isTemplateMode || !contractId) return
+        const channel = supabase
+            .channel(`qc-party-chat-${contractId}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'qc_party_messages',
+                filter: `contract_id=eq.${contractId}`
+            }, (payload) => {
+                const m = payload.new as Record<string, unknown>
+                // Only process messages from the OTHER user
+                if (m.sender_user_id !== userInfo?.userId) {
+                    const newMsg: PartyMessage = {
+                        messageId: m.message_id as string,
+                        contractId: m.contract_id as string,
+                        senderUserId: m.sender_user_id as string,
+                        senderName: m.sender_name as string,
+                        senderRole: m.sender_role as 'initiator' | 'respondent',
+                        messageText: m.message_text as string,
+                        relatedClauseId: m.related_clause_id as string | null,
+                        relatedClauseNumber: m.related_clause_number as string | null,
+                        relatedClauseName: m.related_clause_name as string | null,
+                        isSystemMessage: (m.is_system_message as boolean) || false,
+                        isRead: false,
+                        createdAt: m.created_at as string
+                    }
+                    setPartyChatMessages(prev => {
+                        // Avoid duplicates
+                        if (prev.some(p => p.messageId === newMsg.messageId)) return prev
+                        return [...prev, newMsg]
+                    })
+                    if (!partyChatOpen) {
+                        setPartyChatUnread(prev => prev + 1)
+                    }
+                }
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [contractId, userInfo?.userId, isTemplateMode, partyChatOpen])
+
+    // Auto-scroll party chat when new messages arrive
+    useEffect(() => {
+        if (partyChatOpen) {
+            partyChatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }
+    }, [partyChatMessages, partyChatOpen])
+
+    // Mark as read + focus input when opening
+    useEffect(() => {
+        if (partyChatOpen) {
+            markPartyChatRead()
+            setTimeout(() => partyChatInputRef.current?.focus(), 300)
+        }
+    }, [partyChatOpen])
+
+    // ========================================================================
     // SECTION 4D-2: DRAFT EDITING HANDLERS
     // ========================================================================
 
@@ -1095,7 +1319,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: `Draft saved for "${selectedClause.clauseName}". This modified text will be used when generating the final contract document.`,
+                content: `Ã¢Å“â€¦ Draft saved for "${selectedClause.clauseName}". This modified text will be used when generating the final contract document.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1105,7 +1329,7 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `draft-error-${Date.now()}`,
                 role: 'assistant',
-                content: `Failed to save draft. Please try again.`,
+                content: `Ã¢ÂÅ’ Failed to save draft. Please try again.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
@@ -1142,7 +1366,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-reset-${Date.now()}`,
                 role: 'assistant',
-                content: `Draft reset to original document text for "${selectedClause.clauseName}".`,
+                content: `Ã¢â€ Â©Ã¯Â¸Â Draft reset to original document text for "${selectedClause.clauseName}".`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1170,6 +1394,108 @@ function QuickContractStudioContent() {
 
         // Auto-send the message directly
         sendChatMessage(discussPrompt)
+    }
+
+    // Extract Full Text - calls N8N workflow to get complete clause text
+    const handleExtractFullText = async () => {
+        if (!contract?.contractId || extractingFullText) return
+
+        setExtractingFullText(true)
+
+        // Add a chat message to show progress
+        const progressMessage: ChatMessage = {
+            id: `extract-progress-${Date.now()}`,
+            role: 'assistant',
+            content: `Ã°Å¸â€â€ž Extracting full clause text from your document. This may take 30-60 seconds for longer contracts...`,
+            timestamp: new Date()
+        }
+        setChatMessages(prev => [...prev, progressMessage])
+
+        try {
+            const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/extract-full-clause-text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contract.contractId
+                })
+            })
+
+            const result = await response.json()
+
+            if (result.success) {
+                // Reload clauses from database to get the full text
+                const { data: updatedClauses, error } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('*')
+                    .eq('contract_id', contract.contractId)
+                    .order('display_order', { ascending: true })
+
+                if (!error && updatedClauses) {
+                    // Re-map the clauses with updated data
+                    const mappedClauses: ContractClause[] = updatedClauses.map(c => ({
+                        clauseId: c.clause_id,
+                        positionId: c.clause_id,
+                        clauseNumber: c.clause_number,
+                        clauseName: c.clause_name,
+                        category: c.category || 'Other',
+                        clauseText: c.content || '',
+                        originalText: c.original_text || c.content || null,
+                        clauseLevel: c.clause_level || 1,
+                        displayOrder: c.display_order,
+                        isHeader: c.is_header || false,
+                        processingStatus: c.status || 'pending',
+                        parentClauseId: c.parent_clause_id,
+                        clarenceCertified: c.clarence_certified || false,
+                        clarencePosition: c.clarence_position,
+                        clarenceFairness: c.clarence_fairness,
+                        clarenceSummary: c.clarence_summary,
+                        clarenceAssessment: c.clarence_assessment,
+                        clarenceFlags: c.clarence_flags || [],
+                        clarenceCertifiedAt: c.clarence_certified_at,
+                        extractedValue: c.extracted_value,
+                        extractedUnit: c.extracted_unit,
+                        valueType: c.value_type,
+                        documentPosition: c.document_position,
+                        draftText: c.draft_text || null,
+                        draftModified: !!c.draft_text,
+                        positionOptions: DEFAULT_POSITION_OPTIONS
+                    }))
+
+                    setClauses(mappedClauses)
+                    setFullTextExtracted(true)
+
+                    // Success message
+                    const successMessage: ChatMessage = {
+                        id: `extract-success-${Date.now()}`,
+                        role: 'assistant',
+                        content: `Ã¢Å“â€¦ Full text extraction complete! I've retrieved the complete text for ${result.clauses_processed || mappedClauses.length} clauses. You can now view and edit the full clause language in the Draft tab.`,
+                        timestamp: new Date()
+                    }
+                    setChatMessages(prev => [...prev, successMessage])
+                }
+            } else {
+                throw new Error(result.error || 'Extraction failed')
+            }
+
+        } catch (err) {
+            console.error('Full text extraction error:', err)
+            const errorMessage: ChatMessage = {
+                id: `extract-error-${Date.now()}`,
+                role: 'assistant',
+                content: `Ã¢Å¡Â Ã¯Â¸Â I wasn't able to extract the full text at this time. Error: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again in a moment.`,
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
+            setExtractingFullText(false)
+        }
+    }
+
+    // Helper to check if clause text appears truncated
+    const isClauseTextTruncated = (clause: ContractClause): boolean => {
+        const text = clause.originalText || clause.clauseText || ''
+        // Text is likely truncated if it's short and ends with "..." or is exactly 100 chars
+        return text.length <= 150 || text.endsWith('...')
     }
 
     // ========================================================================
@@ -1205,6 +1531,87 @@ function QuickContractStudioContent() {
     if (loading) {
         return <QuickContractStudioLoading />
     }
+
+    // Progressive loading state
+    const [isPolling, setIsPolling] = useState(false)
+    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
+
+    // ========================================================================
+    // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
+    // ========================================================================
+
+    useEffect(() => {
+        if (!contractId || !clauses.length) return
+
+        // Check if there are any uncertified non-header clauses
+        const uncertified = clauses.filter(c =>
+            !c.isHeader && c.processingStatus !== 'certified' && c.processingStatus !== 'failed'
+        )
+
+        if (uncertified.length === 0) {
+            setIsPolling(false)
+            return
+        }
+
+        setIsPolling(true)
+
+        const pollInterval = setInterval(async () => {
+            try {
+                const { data: updatedClauses, error } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
+                    .eq('contract_id', contractId)
+                    .order('display_order', { ascending: true })
+
+                if (error || !updatedClauses) return
+
+                // Update clause statuses without replacing entire array (preserves selection)
+                setClauses(prev => prev.map(clause => {
+                    const updated = updatedClauses.find(u => u.clause_id === clause.clauseId)
+                    if (!updated) return clause
+
+                    return {
+                        ...clause,
+                        processingStatus: updated.status || clause.processingStatus,
+                        isHeader: updated.is_header || false,
+                        clarenceCertified: updated.clarence_certified || false,
+                        clarencePosition: updated.clarence_position,
+                        clarenceFairness: updated.clarence_fairness,
+                        clarenceSummary: updated.clarence_summary,
+                        clarenceAssessment: updated.clarence_assessment,
+                        clarenceFlags: updated.clarence_flags || [],
+                        clauseText: updated.content || clause.clauseText,
+                        originalText: updated.original_text || clause.originalText,
+                        extractedValue: updated.extracted_value,
+                        extractedUnit: updated.extracted_unit,
+                        valueType: updated.value_type,
+                    }
+                }))
+
+                // Update progress
+                const certified = updatedClauses.filter(c => c.status === 'certified' && !c.is_header).length
+                const total = updatedClauses.filter(c => !c.is_header).length
+                const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
+                setCertificationProgress({ certified, total, failed })
+
+                // Stop polling when done
+                const stillProcessing = updatedClauses.some(c =>
+                    !c.is_header && (c.status === 'pending' || c.status === 'processing')
+                )
+                if (!stillProcessing) {
+                    setIsPolling(false)
+                    clearInterval(pollInterval)
+                }
+
+            } catch (err) {
+                console.error('Polling error:', err)
+            }
+        }, 4000) // Poll every 4 seconds
+
+        return () => clearInterval(pollInterval)
+    }, [contractId, clauses.length, isPolling])
 
     // ========================================================================
     // SECTION 6: ERROR STATE
@@ -1297,6 +1704,35 @@ function QuickContractStudioContent() {
 
                     {/* Right: Actions */}
                     <div className="flex items-center gap-3">
+
+                        {/* Party Chat Toggle (non-template mode only) */}
+                        {!isTemplateMode && (
+                            <button
+                                onClick={() => setPartyChatOpen(true)}
+                                className="relative p-2 hover:bg-slate-100 rounded-lg transition group"
+                                title={`Chat with ${getOtherPartyName()}`}
+                            >
+                                <svg
+                                    className="w-5 h-5 text-slate-500 group-hover:text-emerald-600 transition"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                    />
+                                </svg>
+                                {partyChatUnread > 0 && (
+                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                        {partyChatUnread > 9 ? '9+' : partyChatUnread}
+                                    </span>
+                                )}
+                            </button>
+                        )}
+
                         <button
                             onClick={() => router.push(isTemplateMode ? '/auth/contracts' : '/auth/quick-contract')}
                             className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
@@ -1352,241 +1788,220 @@ function QuickContractStudioContent() {
             {/* ============================================================ */}
             <div className="flex flex-1 overflow-hidden min-h-0">
 
-                {/* ======================================================== */}
-                {/* LEFT PANEL: Clause List */}
-                {/* ======================================================== */}
-                <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-hidden">
-                    {/* Search */}
-                    <div className="p-3 border-b border-slate-200">
-                        <input
-                            type="text"
-                            value={clauseSearchTerm}
-                            onChange={(e) => setClauseSearchTerm(e.target.value)}
-                            placeholder="Search clauses..."
-                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                        />
-                    </div>
-
-                    {/* ==================== CERTIFICATION PROGRESS ==================== */}
-                    {isPolling && (
-                        <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-emerald-50">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs font-medium text-teal-700">
-                                    Certifying clauses...
-                                </span>
-                                <span className="text-xs text-teal-600">
-                                    {certificationProgress.certified}/{certificationProgress.total}
-                                </span>
-                            </div>
-                            <div className="w-full h-2 bg-teal-100 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-teal-500 rounded-full transition-all duration-500"
-                                    style={{
-                                        width: `${certificationProgress.total > 0
-                                            ? (certificationProgress.certified / certificationProgress.total) * 100
-                                            : 0}%`
-                                    }}
-                                />
-                            </div>
-                            {certificationProgress.failed > 0 && (
-                                <p className="text-xs text-amber-600 mt-1">
-                                    {certificationProgress.failed} clause(s) failed certification
-                                </p>
-                            )}
+                {/* ==================== CERTIFICATION PROGRESS ==================== */}
+                {isPolling && (
+                    <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-emerald-50">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-teal-700">
+                                Certifying clauses...
+                            </span>
+                            <span className="text-xs text-teal-600">
+                                {certificationProgress.certified}/{certificationProgress.total}
+                            </span>
                         </div>
-                    )}
+                        <div className="w-full h-2 bg-teal-100 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-teal-500 rounded-full transition-all duration-500"
+                                style={{
+                                    width: `${certificationProgress.total > 0
+                                        ? (certificationProgress.certified / certificationProgress.total) * 100
+                                        : 0}%`
+                                }}
+                            />
+                        </div>
+                        {certificationProgress.failed > 0 && (
+                            <p className="text-xs text-amber-600 mt-1">
+                                {certificationProgress.failed} clause(s) failed certification
+                            </p>
+                        )}
+                    </div>
+                )}
 
-                    {/* Scrollable clause list */}
-                    <div ref={clauseListRef} className="flex-1 overflow-y-auto">
+                {/* ==================== CLAUSE TREE ==================== */}
+                {(() => {
+                    // Build parent-child tree
+                    const parentMap = new Map<string, ContractClause[]>()
+                    const topLevel: ContractClause[] = []
 
-                        {/* ==================== CLAUSE TREE ==================== */}
-                        {(() => {
-                            // Build parent-child tree
-                            const parentMap = new Map<string, ContractClause[]>()
-                            const topLevel: ContractClause[] = []
+                    filteredClauses.forEach(clause => {
+                        if (clause.parentClauseId) {
+                            const siblings = parentMap.get(clause.parentClauseId) || []
+                            siblings.push(clause)
+                            parentMap.set(clause.parentClauseId, siblings)
+                        } else {
+                            topLevel.push(clause)
+                        }
+                    })
 
-                            filteredClauses.forEach(clause => {
-                                if (clause.parentClauseId) {
-                                    const siblings = parentMap.get(clause.parentClauseId) || []
-                                    siblings.push(clause)
-                                    parentMap.set(clause.parentClauseId, siblings)
-                                } else {
-                                    topLevel.push(clause)
-                                }
-                            })
+                    // Status icon helper
+                    const StatusIcon = ({ status }: { status: string }) => {
+                        switch (status) {
+                            case 'certified':
+                                return <span className="text-emerald-500 text-xs">Ã¢Å“â€¦</span>
+                            case 'processing':
+                                return (
+                                    <span className="inline-block w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                                )
+                            case 'failed':
+                                return <span className="text-red-500 text-xs">Ã¢Å¡Â Ã¯Â¸Â</span>
+                            default: // pending
+                                return <span className="text-slate-300 text-xs">Ã°Å¸â€â€™</span>
+                        }
+                    }
 
-                            // Status icon helper
-                            const StatusIcon = ({ status }: { status: string }) => {
-                                switch (status) {
-                                    case 'certified':
-                                        return <span className="text-emerald-500 text-xs"><svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg></span>
-                                    case 'processing':
+                    return topLevel.map(parent => {
+                        const children = parentMap.get(parent.clauseId) || []
+                        const isSection = children.length > 0  // Has children = section header
+                        const isExpanded = expandedSections.has(parent.clauseId)
+
+                        if (isSection) {
+                            // ---- SECTION HEADER (collapsible) ----
+                            const certifiedChildren = children.filter(c => c.processingStatus === 'certified').length
+                            const processingChild = children.find(c => c.processingStatus === 'processing')
+
+                            return (
+                                <div key={parent.clauseId}>
+                                    {/* Section Header */}
+                                    <button
+                                        onClick={() => {
+                                            setExpandedSections(prev => {
+                                                const next = new Set(prev)
+                                                if (next.has(parent.clauseId)) {
+                                                    next.delete(parent.clauseId)
+                                                } else {
+                                                    next.add(parent.clauseId)
+                                                }
+                                                return next
+                                            })
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                                    >
+                                        <svg
+                                            className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                            fill="currentColor" viewBox="0 0 20 20"
+                                        >
+                                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex-1 truncate">
+                                            {parent.clauseNumber}. {parent.clauseName}
+                                        </span>
+                                        <span className="text-xs text-slate-400">
+                                            {certifiedChildren}/{children.length}
+                                        </span>
+                                        {processingChild && (
+                                            <span className="w-2 h-2 bg-teal-500 rounded-full animate-pulse" />
+                                        )}
+                                    </button>
+
+                                    {/* Children */}
+                                    {isExpanded && children.map(child => {
+                                        const isClickable = child.processingStatus === 'certified' || child.processingStatus === 'failed'
+                                        const isSelected = selectedClause?.clauseId === child.clauseId
+
                                         return (
-                                            <span className="inline-block w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-                                        )
-                                    case 'failed':
-                                        return <span className="text-red-500 text-xs"><svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></span>
-                                    default: // pending
-                                        return <span className="text-slate-300 text-xs"><svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} /></svg></span>
-                                }
-                            }
-
-                            return topLevel.map(parent => {
-                                const children = parentMap.get(parent.clauseId) || []
-                                const isSection = children.length > 0  // Has children = section header
-                                const isExpanded = expandedSections.has(parent.clauseId)
-
-                                if (isSection) {
-                                    // ---- SECTION HEADER (collapsible) ----
-                                    const certifiedChildren = children.filter(c => c.processingStatus === 'certified').length
-                                    const processingChild = children.find(c => c.processingStatus === 'processing')
-
-                                    return (
-                                        <div key={parent.clauseId}>
-                                            {/* Section Header */}
                                             <button
-                                                onClick={() => {
-                                                    setExpandedSections(prev => {
-                                                        const next = new Set(prev)
-                                                        if (next.has(parent.clauseId)) {
-                                                            next.delete(parent.clauseId)
-                                                        } else {
-                                                            next.add(parent.clauseId)
-                                                        }
-                                                        return next
-                                                    })
-                                                }}
-                                                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors"
+                                                key={child.clauseId}
+                                                onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
+                                                disabled={!isClickable}
+                                                className={`w-full flex items-center gap-2 pl-8 pr-3 py-2 text-left transition-colors ${isSelected
+                                                    ? 'bg-teal-50 border-l-2 border-teal-500'
+                                                    : isClickable
+                                                        ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                                        : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
+                                                    }`}
                                             >
-                                                <svg
-                                                    className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                                                    fill="currentColor" viewBox="0 0 20 20"
-                                                >
-                                                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                                                </svg>
-                                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex-1 truncate">
-                                                    {parent.clauseNumber}. {parent.clauseName}
-                                                </span>
-                                                <span className="text-xs text-slate-400">
-                                                    {certifiedChildren}/{children.length}
-                                                </span>
-                                                {processingChild && (
-                                                    <span className="w-2 h-2 bg-teal-500 rounded-full animate-pulse" />
+                                                <StatusIcon status={child.processingStatus} />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1">
+                                                        <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'
+                                                            }`}>
+                                                            {child.clauseNumber}
+                                                        </span>
+                                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'
+                                                            }`}>
+                                                            {child.clauseName}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {child.clarenceCertified && child.clarencePosition && (
+                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
+                                                        child.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
+                                                            'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        {child.clarencePosition.toFixed(1)}
+                                                    </span>
+                                                )}
+                                                {/* Agreement/Query status indicator */}
+                                                {agreedClauseIds.has(child.clauseId) && (
+                                                    <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Agreed">
+                                                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    </span>
+                                                )}
+                                                {queriedClauseIds.has(child.clauseId) && (
+                                                    <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
+                                                        <span className="text-white text-[9px] font-bold">?</span>
+                                                    </span>
                                                 )}
                                             </button>
+                                        )
+                                    })}
+                                </div>
+                            )
+                        } else {
+                            // ---- STANDALONE CLAUSE (no children) ----
+                            const isClickable = parent.processingStatus === 'certified' || parent.processingStatus === 'failed'
+                            const isSelected = selectedClause?.clauseId === parent.clauseId
 
-                                            {/* Children */}
-                                            {isExpanded && children.map(child => {
-                                                const isClickable = child.processingStatus === 'certified' || child.processingStatus === 'failed'
-                                                const isSelected = selectedClause?.clauseId === child.clauseId
-
-                                                return (
-                                                    <button
-                                                        key={child.clauseId}
-                                                        onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
-                                                        disabled={!isClickable}
-                                                        className={`w-full flex items-center gap-2 pl-8 pr-3 py-2 text-left transition-colors ${isSelected
-                                                            ? 'bg-teal-50 border-l-2 border-teal-500'
-                                                            : isClickable
-                                                                ? 'hover:bg-slate-50 border-l-2 border-transparent'
-                                                                : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
-                                                            }`}
-                                                    >
-                                                        <StatusIcon status={child.processingStatus} />
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-1">
-                                                                <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'
-                                                                    }`}>
-                                                                    {child.clauseNumber}
-                                                                </span>
-                                                                <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'
-                                                                    }`}>
-                                                                    {child.clauseName}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                        {child.clarenceCertified && child.clarencePosition && (
-                                                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
-                                                                child.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
-                                                                    'bg-red-100 text-red-700'
-                                                                }`}>
-                                                                {child.clarencePosition.toFixed(1)}
-                                                            </span>
-                                                        )}
-                                                        {/* Agreement/Query status indicator */}
-                                                        {agreedClauseIds.has(child.clauseId) && (
-                                                            <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Agreed">
-                                                                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                                </svg>
-                                                            </span>
-                                                        )}
-                                                        {queriedClauseIds.has(child.clauseId) && (
-                                                            <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
-                                                                <span className="text-white text-[9px] font-bold">?</span>
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                )
-                                            })}
-                                        </div>
-                                    )
-                                } else {
-                                    // ---- STANDALONE CLAUSE (no children) ----
-                                    const isClickable = parent.processingStatus === 'certified' || parent.processingStatus === 'failed'
-                                    const isSelected = selectedClause?.clauseId === parent.clauseId
-
-                                    return (
-                                        <button
-                                            key={parent.clauseId}
-                                            onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
-                                            disabled={!isClickable}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${isSelected
-                                                ? 'bg-teal-50 border-l-2 border-teal-500'
-                                                : isClickable
-                                                    ? 'hover:bg-slate-50 border-l-2 border-transparent'
-                                                    : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
-                                                }`}
-                                        >
-                                            <StatusIcon status={parent.processingStatus} />
-                                            <div className="flex-1 min-w-0">
-                                                <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
-                                                    {parent.clauseNumber}.
-                                                </span>
-                                                {' '}
-                                                <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
-                                                    {parent.clauseName}
-                                                </span>
-                                            </div>
-                                            {parent.clarenceCertified && parent.clarencePosition && (
-                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
-                                                    parent.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
-                                                        'bg-red-100 text-red-700'
-                                                    }`}>
-                                                    {parent.clarencePosition.toFixed(1)}
-                                                </span>
-                                            )}
-                                            {/* Agreement/Query status indicator */}
-                                            {agreedClauseIds.has(parent.clauseId) && (
-                                                <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Agreed">
-                                                    <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                </span>
-                                            )}
-                                            {queriedClauseIds.has(parent.clauseId) && (
-                                                <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
-                                                    <span className="text-white text-[9px] font-bold">?</span>
-                                                </span>
-                                            )}
-                                        </button>
-                                    )
-                                }
-                            })
-                        })()}
-
-                    </div>{/* end scrollable clause list */}
-                </div>{/* end LEFT PANEL */}
+                            return (
+                                <button
+                                    key={parent.clauseId}
+                                    onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
+                                    disabled={!isClickable}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${isSelected
+                                        ? 'bg-teal-50 border-l-2 border-teal-500'
+                                        : isClickable
+                                            ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                            : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
+                                        }`}
+                                >
+                                    <StatusIcon status={parent.processingStatus} />
+                                    <div className="flex-1 min-w-0">
+                                        <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
+                                            {parent.clauseNumber}.
+                                        </span>
+                                        {' '}
+                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
+                                            {parent.clauseName}
+                                        </span>
+                                    </div>
+                                    {parent.clarenceCertified && parent.clarencePosition && (
+                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
+                                            parent.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
+                                                'bg-red-100 text-red-700'
+                                            }`}>
+                                            {parent.clarencePosition.toFixed(1)}
+                                        </span>
+                                    )}
+                                    {/* Agreement/Query status indicator */}
+                                    {agreedClauseIds.has(parent.clauseId) && (
+                                        <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Agreed">
+                                            <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </span>
+                                    )}
+                                    {queriedClauseIds.has(parent.clauseId) && (
+                                        <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
+                                            <span className="text-white text-[9px] font-bold">?</span>
+                                        </span>
+                                    )}
+                                </button>
+                            )
+                        }
+                    })
+                })()}
 
                 {/* ======================================================== */}
                 {/* CENTER PANEL: Main Workspace */}
@@ -1795,7 +2210,7 @@ function QuickContractStudioContent() {
                                                         </div>
                                                         <div>
                                                             <div className="text-3xl font-bold text-purple-700">
-                                                                {selectedClause.clarencePosition?.toFixed(1) ?? '-'}
+                                                                {selectedClause.clarencePosition?.toFixed(1) ?? 'Ã¢â‚¬â€'}
                                                             </div>
                                                             <div className="text-sm text-purple-600">
                                                                 {getPositionLabel(selectedClause.clarencePosition)}
@@ -1813,7 +2228,7 @@ function QuickContractStudioContent() {
                                                             ? 'text-emerald-700'
                                                             : 'text-amber-700'
                                                             }`}>
-                                                            {selectedClause.clarenceFairness === 'balanced' ? 'Balanced' : 'Review Recommended'}
+                                                            {selectedClause.clarenceFairness === 'balanced' ? 'Ã¢Å“â€œ Balanced' : 'Ã¢Å¡Â  Review Recommended'}
                                                         </div>
                                                         <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
                                                     </div>
@@ -1833,12 +2248,12 @@ function QuickContractStudioContent() {
                                                         {selectedClause.extractedValue ? (
                                                             <div className="flex items-baseline gap-1">
                                                                 <span className="text-2xl font-bold text-slate-800">
-                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '\u00A3' && '\u00A3'}
+                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === 'Ã‚Â£' && 'Ã‚Â£'}
                                                                     {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '$' && '$'}
                                                                     {selectedClause.extractedValue}
                                                                 </span>
                                                                 <span className="text-sm text-slate-600">
-                                                                    {selectedClause.extractedUnit && !['\u00A3', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
+                                                                    {selectedClause.extractedUnit && !['Ã‚Â£', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
                                                                     {selectedClause.valueType === 'percentage' && '%'}
                                                                 </span>
                                                             </div>
@@ -2027,16 +2442,16 @@ function QuickContractStudioContent() {
                                                     <div className="space-y-3">
                                                         {clauseSpecificEvents.map((event) => {
                                                             const eventConfig: Record<string, { icon: string; color: string; label: string }> = {
-                                                                'agreed': { icon: 'Y', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
-                                                                'agreement_withdrawn': { icon: 'X', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
+                                                                'agreed': { icon: 'âœ“', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
+                                                                'agreement_withdrawn': { icon: 'â†©', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
                                                                 'queried': { icon: '?', color: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Query Raised' },
-                                                                'query_resolved': { icon: 'Y', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
-                                                                'position_changed': { icon: '~', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
-                                                                'redrafted': { icon: 'E', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
-                                                                'committed': { icon: 'C', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
+                                                                'query_resolved': { icon: 'âœ“', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
+                                                                'position_changed': { icon: 'â†•', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
+                                                                'redrafted': { icon: 'âœŽ', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
+                                                                'committed': { icon: 'ðŸ”’', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
                                                             }
 
-                                                            const config = eventConfig[event.eventType] || { icon: '-', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
+                                                            const config = eventConfig[event.eventType] || { icon: 'â€¢', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
                                                             const eventDate = new Date(event.createdAt)
 
                                                             return (
@@ -2118,8 +2533,8 @@ function QuickContractStudioContent() {
                                                     <h3 className="text-sm font-semibold text-slate-700">Draft Clause Language</h3>
                                                     <p className="text-xs text-slate-500 mt-1">
                                                         {selectedClause.draftModified
-                                                            ? 'Modified - Your edited version will be used in the final document'
-                                                            : 'Original document text'
+                                                            ? 'Ã¢Å“ÂÃ¯Â¸Â Modified - Your edited version will be used in the final document'
+                                                            : 'Ã°Å¸â€œâ€ž Original document text'
                                                         }
                                                     </p>
                                                 </div>
@@ -2183,6 +2598,47 @@ function QuickContractStudioContent() {
                                             ) : (
                                                 // Read-Only Mode
                                                 <div className="space-y-3">
+                                                    {/* Truncation Warning & Extract Button */}
+                                                    {isClauseTextTruncated(selectedClause) && (
+                                                        <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                                                            <div className="flex items-start justify-between gap-4">
+                                                                <div className="flex items-start gap-3">
+                                                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                                                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                                        </svg>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm font-medium text-amber-800">Clause text appears truncated</p>
+                                                                        <p className="text-xs text-amber-600 mt-1">Click "Extract Full Text" to retrieve the complete clause language from your document.</p>
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    onClick={handleExtractFullText}
+                                                                    disabled={extractingFullText}
+                                                                    className="px-4 py-2 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors flex items-center gap-2 flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {extractingFullText ? (
+                                                                        <>
+                                                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                            </svg>
+                                                                            Extracting...
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                            </svg>
+                                                                            Extract Full Text
+                                                                        </>
+                                                                    )}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {/* Clause Text Display */}
                                                     <div className={`p-4 rounded-lg border ${selectedClause.draftModified
                                                         ? 'bg-purple-50 border-purple-200'
@@ -2196,6 +2652,14 @@ function QuickContractStudioContent() {
                                                             <span className="text-xs text-slate-400">
                                                                 {(selectedClause.draftText || selectedClause.originalText || selectedClause.clauseText || '').length} characters
                                                             </span>
+                                                            {fullTextExtracted && (
+                                                                <span className="text-xs text-emerald-600 flex items-center gap-1">
+                                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                    Full text extracted
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -2265,10 +2729,10 @@ function QuickContractStudioContent() {
                                                 <div>
                                                     <h4 className="text-sm font-medium text-blue-800 mb-1">Editing Tips</h4>
                                                     <ul className="text-xs text-blue-700 space-y-1">
-                                                        <li>Click "Unlock to Edit" to modify the clause language</li>
-                                                        <li>Use "Discuss with CLARENCE" to get AI suggestions for improvements</li>
-                                                        <li>Your modified text will be used when generating the final contract</li>
-                                                        <li>You can always reset to the original document text</li>
+                                                        <li>Ã¢â‚¬Â¢ Click "Unlock to Edit" to modify the clause language</li>
+                                                        <li>Ã¢â‚¬Â¢ Use "Discuss with CLARENCE" to get AI suggestions for improvements</li>
+                                                        <li>Ã¢â‚¬Â¢ Your modified text will be used when generating the final contract</li>
+                                                        <li>Ã¢â‚¬Â¢ You can always reset to the original document text</li>
                                                     </ul>
                                                 </div>
                                             </div>
@@ -2559,6 +3023,162 @@ function QuickContractStudioContent() {
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 7F: PARTY CHAT SLIDE-OUT PANEL */}
+            {/* ============================================================ */}
+            {!isTemplateMode && (
+                <>
+                    {/* Backdrop */}
+                    {partyChatOpen && (
+                        <div
+                            className="fixed inset-0 bg-black/30 z-40 transition-opacity"
+                            onClick={() => setPartyChatOpen(false)}
+                        />
+                    )}
+
+                    {/* Slide-out Panel */}
+                    <div
+                        className={`fixed top-0 right-0 h-full w-[400px] max-w-[90vw] bg-slate-900 shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${partyChatOpen ? 'translate-x-0' : 'translate-x-full'
+                            }`}
+                    >
+                        {/* Panel Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center">
+                                    <span className="text-white font-bold text-sm">
+                                        {(getOtherPartyName()).charAt(0).toUpperCase()}
+                                    </span>
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-semibold text-sm">
+                                        {getOtherPartyName()}
+                                    </h3>
+                                    <p className="text-xs text-slate-400">
+                                        {respondentInfo?.company || 'Party Chat'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setPartyChatOpen(false)}
+                                className="p-2 hover:bg-slate-700 rounded-lg transition text-slate-400 hover:text-white"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Messages Area */}
+                        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+                            {partyChatMessages.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                                    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                                        <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                        </svg>
+                                    </div>
+                                    <p className="text-slate-400 text-sm font-medium mb-1">No messages yet</p>
+                                    <p className="text-slate-500 text-xs">
+                                        Send a message to start discussing this contract.
+                                        Queries on clauses will also appear here.
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Date Divider */}
+                                    <div className="flex items-center gap-3 mb-3 pt-2">
+                                        <div className="flex-1 h-px bg-slate-700" />
+                                        <span className="text-xs text-slate-500">
+                                            {new Date(partyChatMessages[0]?.createdAt).toLocaleDateString('en-GB', {
+                                                day: 'numeric', month: 'short', year: 'numeric'
+                                            })}
+                                        </span>
+                                        <div className="flex-1 h-px bg-slate-700" />
+                                    </div>
+
+                                    {partyChatMessages.map(msg => {
+                                        const isOwn = msg.senderUserId === userInfo?.userId
+                                        const time = new Date(msg.createdAt).toLocaleTimeString('en-GB', {
+                                            hour: '2-digit', minute: '2-digit'
+                                        })
+
+                                        return (
+                                            <div key={msg.messageId} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-3`}>
+                                                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${msg.isSystemMessage
+                                                        ? 'bg-amber-900/40 border border-amber-700/50'
+                                                        : isOwn
+                                                            ? 'bg-emerald-600 text-white'
+                                                            : 'bg-slate-700 text-white'
+                                                    }`}>
+                                                    {/* Clause reference badge */}
+                                                    {msg.relatedClauseNumber && (
+                                                        <div className={`text-xs font-medium mb-1 ${msg.isSystemMessage ? 'text-amber-400' : isOwn ? 'text-emerald-200' : 'text-slate-400'
+                                                            }`}>
+                                                            Re: {msg.relatedClauseNumber} - {msg.relatedClauseName}
+                                                        </div>
+                                                    )}
+                                                    <p className={`text-sm whitespace-pre-wrap ${msg.isSystemMessage ? 'text-amber-200' : 'text-white'
+                                                        }`}>
+                                                        {msg.messageText}
+                                                    </p>
+                                                    <div className={`flex items-center gap-2 mt-1 ${isOwn ? 'justify-end' : 'justify-start'
+                                                        }`}>
+                                                        {!isOwn && (
+                                                            <span className="text-xs text-slate-400">{msg.senderName}</span>
+                                                        )}
+                                                        <span className={`text-xs ${msg.isSystemMessage ? 'text-amber-500' : isOwn ? 'text-emerald-300' : 'text-slate-500'
+                                                            }`}>
+                                                            {time}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                    <div ref={partyChatEndRef} />
+                                </>
+                            )}
+                        </div>
+
+                        {/* Input Area */}
+                        <div className="border-t border-slate-700 p-4 bg-slate-900">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    ref={partyChatInputRef}
+                                    type="text"
+                                    value={partyChatInput}
+                                    onChange={(e) => setPartyChatInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault()
+                                            sendPartyChatMessage(partyChatInput)
+                                        }
+                                    }}
+                                    placeholder={`Message ${getOtherPartyName()}...`}
+                                    className="flex-1 bg-slate-700 text-white placeholder-slate-400 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <button
+                                    onClick={() => sendPartyChatMessage(partyChatInput)}
+                                    disabled={!partyChatInput.trim() || partyChatSending}
+                                    className={`p-2.5 rounded-lg transition-all ${partyChatInput.trim() && !partyChatSending
+                                            ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                                            : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                        }`}
+                                >
+                                    {partyChatSending ? (
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
 
         </div>
