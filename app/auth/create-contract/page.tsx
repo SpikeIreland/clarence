@@ -26,6 +26,7 @@ import React, { useState, useEffect, useRef, useCallback, Suspense, useMemo } fr
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import { createClient } from '@/lib/supabase'
 
 // Import TransitionModal and pathway utilities
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
@@ -123,6 +124,11 @@ interface Template {
     description: string
     isDefault: boolean
     clauseCount: number
+    // Visibility filtering
+    isSystem: boolean
+    isPublic: boolean
+    companyId: string | null
+    createdByUserId: string | null
 }
 
 // Transition state for modal
@@ -601,21 +607,79 @@ function ContractCreationContent() {
     const loadTemplates = async () => {
         setIsLoadingTemplates(true)
         try {
-            const response = await fetch(`${API_BASE}/get-contract-templates`)
-            if (response.ok) {
-                const data = await response.json()
-                const allTemplates: Template[] = data.templates || []
-                const matchingTypes = getMatchingContractTypes(assessment.contractType)
-                let filteredTemplates = matchingTypes.length === 0 ? allTemplates : allTemplates.filter(t => matchingTypes.some(type => (t.contractType || '').toLowerCase().includes(type.toLowerCase()) || (t.industry || '').toLowerCase().includes(type.toLowerCase())))
-                setTemplates(filteredTemplates)
-                if (filteredTemplates.length === 0) {
-                    addClarenceMessage(`I don't have any **${getContractTypeLabel(assessment.contractType)}** templates available yet.\n\nYou have a few options to proceed:`)
-                } else {
-                    addClarenceMessage(assessment.templateSource === 'modified_template' ? CLARENCE_MESSAGES.template_selection_modify : CLARENCE_MESSAGES.template_selection)
-                }
-            } else { setTemplates([]); addClarenceMessage(CLARENCE_MESSAGES.no_templates) }
-        } catch { setTemplates([]); addClarenceMessage(CLARENCE_MESSAGES.no_templates) }
-        finally { setIsLoadingTemplates(false) }
+            const supabase = createClient()
+            const { data, error } = await supabase
+                .from('contract_templates')
+                .select('*')
+                .eq('is_active', true)
+                .order('template_name', { ascending: true })
+
+            if (error) {
+                console.error('Error loading templates:', error)
+                setTemplates([])
+                addClarenceMessage(CLARENCE_MESSAGES.no_templates)
+                return
+            }
+
+            // Map database fields to Template interface
+            const allTemplates: Template[] = (data || []).map((t: Record<string, unknown>) => ({
+                templateId: t.template_id as string,
+                templateCode: (t.template_code as string) || '',
+                templateName: t.template_name as string,
+                contractType: (t.contract_type as string) || 'custom',
+                industry: (t.industry as string) || '',
+                description: (t.description as string) || '',
+                isDefault: (t.is_system as boolean) || false,
+                clauseCount: (t.clause_count as number) || 0,
+                isSystem: (t.is_system as boolean) || false,
+                isPublic: (t.is_public as boolean) || false,
+                companyId: t.company_id as string | null,
+                createdByUserId: t.created_by_user_id as string | null,
+            }))
+
+            // Filter to templates visible to this user:
+            // 1. System templates (visible to all)
+            // 2. Company templates (same company)
+            // 3. User templates (created by this user)
+            const visibleTemplates = allTemplates.filter(t =>
+                t.isSystem ||
+                (t.isPublic && t.companyId === userInfo?.companyId) ||
+                (!t.isPublic && t.createdByUserId === userInfo?.userId)
+            )
+
+            // Sort: matching contract types first, then others (never hide)
+            const matchingTypes = getMatchingContractTypes(assessment.contractType)
+            let sortedTemplates: Template[]
+
+            if (matchingTypes.length === 0) {
+                sortedTemplates = visibleTemplates
+            } else {
+                const matching = visibleTemplates.filter(t => matchingTypes.some(type =>
+                    (t.contractType || '').toLowerCase().includes(type.toLowerCase()) ||
+                    (t.industry || '').toLowerCase().includes(type.toLowerCase())
+                ))
+                const nonMatching = visibleTemplates.filter(t => !matching.includes(t))
+                sortedTemplates = [...matching, ...nonMatching]
+            }
+
+            setTemplates(sortedTemplates)
+
+            if (sortedTemplates.length === 0) {
+                addClarenceMessage(`I don't have any templates available yet.\n\nYou have a few options to proceed:`)
+            } else {
+                addClarenceMessage(
+                    assessment.templateSource === 'modified_template'
+                        ? CLARENCE_MESSAGES.template_selection_modify
+                        : CLARENCE_MESSAGES.template_selection
+                )
+            }
+        } catch (err) {
+            console.error('Error loading templates:', err)
+            setTemplates([])
+            addClarenceMessage(CLARENCE_MESSAGES.no_templates)
+        } finally {
+            setIsLoadingTemplates(false)
+        }
     }
 
     // ========================================================================
