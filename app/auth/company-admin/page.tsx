@@ -99,8 +99,8 @@ const CONTRACT_TYPE_OPTIONS = [
 ]
 
 const CONTRACT_TYPE_ICONS: Record<string, string> = {
-    'bpo': '🏢', 'saas': '☁️', 'nda': '🔒', 'msa': '📋',
-    'employment': '👔', 'it_services': '💻', 'consulting': '💼', 'custom': '📄',
+    'bpo': 'ðŸ¢', 'saas': 'â˜ï¸', 'nda': 'ðŸ”’', 'msa': 'ðŸ“‹',
+    'employment': 'ðŸ‘”', 'it_services': 'ðŸ’»', 'consulting': 'ðŸ’¼', 'custom': 'ðŸ“„',
 }
 
 // ============================================================================
@@ -297,13 +297,14 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 interface TemplatesTabProps {
     templates: CompanyTemplate[]
     isLoading: boolean
-    onUpload: (file: File, templateName: string, contractType: string) => Promise<void>
+    onUpload: (file: File, templateName: string, contractType: string) => Promise<string>
     onDelete: (templateId: string) => Promise<void>
     onToggleActive: (templateId: string, isActive: boolean) => Promise<void>
     onRefresh: () => void
 }
 
 function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive, onRefresh }: TemplatesTabProps) {
+    const router = useRouter()
     const [isDragging, setIsDragging] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [isProcessing, setIsProcessing] = useState(false)
@@ -336,25 +337,15 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
         if (!selectedFile || !templateName.trim()) return
         setIsUploading(true)
         setUploadError(null)
-        setUploadProgress('Uploading document...')
+        setUploadProgress('Uploading and parsing document...')
 
         try {
-            await onUpload(selectedFile, templateName.trim(), contractType)
-            setIsProcessing(true)
-            setUploadProgress('Processing contract clauses... This may take up to a minute.')
+            const contractId = await onUpload(selectedFile, templateName.trim(), contractType)
+            setUploadProgress('Redirecting to certification studio...')
 
-            // The parent component will handle polling and refresh
-            // For now, just wait and then reset
-            setTimeout(() => {
-                setShowUploadForm(false)
-                setSelectedFile(null)
-                setTemplateName('')
-                setContractType('custom')
-                setIsUploading(false)
-                setIsProcessing(false)
-                setUploadProgress('')
-                onRefresh()
-            }, 3000)
+            // Redirect to Quick Contract Studio in company template mode
+            // The Studio will handle certification, then save with is_public: true
+            router.push(`/auth/quick-contract/studio/${contractId}?mode=template&company=true`)
 
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to upload')
@@ -516,7 +507,7 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
                                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${template.isActive ? 'bg-indigo-100' : 'bg-slate-200'}`}>
-                                        <span className="text-xl">{CONTRACT_TYPE_ICONS[template.contractType] || '📄'}</span>
+                                        <span className="text-xl">{CONTRACT_TYPE_ICONS[template.contractType] || 'ðŸ“„'}</span>
                                     </div>
                                     <div>
                                         <h4 className="font-medium text-slate-800">{template.templateName}</h4>
@@ -854,7 +845,7 @@ function CompanyAdminContent() {
     }
 
     // NEW: Template handlers
-    const handleTemplateUpload = async (file: File, templateName: string, contractType: string) => {
+    const handleTemplateUpload = async (file: File, templateName: string, contractType: string): Promise<string> => {
         if (!userInfo?.companyId || !userInfo?.userId) throw new Error('Not authenticated')
 
         // Extract text from file (client-side)
@@ -877,7 +868,7 @@ function CompanyAdminContent() {
                 contract_type: contractType,
                 template_name: templateName,
                 create_as_template: true,
-                is_company_template: true  // NEW flag for company templates
+                is_company_template: true
             })
         })
 
@@ -889,6 +880,13 @@ function CompanyAdminContent() {
         if (!result.success) {
             throw new Error(result.error || 'Processing failed')
         }
+
+        // Return the contractId so TemplatesTab can redirect to Studio
+        const returnedContractId = result.contractId || result.contract_id
+        if (!returnedContractId) {
+            throw new Error('No contract ID returned from parse workflow')
+        }
+        return returnedContractId
     }
 
     const handleTemplateDelete = async (templateId: string) => {
