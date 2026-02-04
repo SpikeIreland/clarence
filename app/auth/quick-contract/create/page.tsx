@@ -245,6 +245,7 @@ function CreateQuickContractContent() {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [uploading, setUploading] = useState(false)
+    const [loadingTemplate, setLoadingTemplate] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     // Invite step state
@@ -373,8 +374,12 @@ function CreateQuickContractContent() {
     // ==========================================================================
 
     const loadFromTemplate = useCallback(async (templateId: string, templateName: string | null, contractType: string | null, user: UserInfo) => {
+        setLoadingTemplate(true)
+        setError(null)
+
         try {
-            console.log('Loading contract from template:', templateId)
+            console.log('=== loadFromTemplate START ===')
+            console.log('Template ID:', templateId)
 
             // Step 1: Fetch the template metadata from contract_templates
             const { data: templateData, error: templateError } = await supabase
@@ -386,146 +391,250 @@ function CreateQuickContractContent() {
             if (templateError || !templateData) {
                 console.error('Error loading template:', templateError)
                 setError('Could not load template. It may have been deleted.')
+                setLoadingTemplate(false)
                 return
             }
 
-            // Step 2: Check if this template has a source contract with parsed clauses
-            const sourceContractId = templateData.source_contract_id || templateData.source_session_id
+            console.log('Template record columns:', Object.keys(templateData).join(', '))
+            console.log('source_contract_id:', templateData.source_contract_id)
+            console.log('source_session_id:', templateData.source_session_id)
 
-            if (sourceContractId) {
-                // Template was created from a parsed contract - check for existing clauses
-                const { data: existingClauses, error: clauseError } = await supabase
+            // Step 2: Try multiple strategies to find clauses
+            let sourceContractId: string | null = null
+            let existingClauses: any[] = []
+
+            // Strategy A: Direct source_contract_id field
+            if (templateData.source_contract_id) {
+                console.log('Strategy A: Trying source_contract_id:', templateData.source_contract_id)
+                const { data: clauseData, error: clauseError } = await supabase
                     .from('uploaded_contract_clauses')
                     .select('*')
-                    .eq('contract_id', sourceContractId)
+                    .eq('contract_id', templateData.source_contract_id)
                     .order('display_order', { ascending: true })
 
-                if (!clauseError && existingClauses && existingClauses.length > 0) {
-                    console.log(`Found ${existingClauses.length} clauses from source contract ${sourceContractId}`)
-
-                    // Step 3: Create a new uploaded_contracts record for this contract instance
-                    const { data: newContract, error: createError } = await supabase
-                        .from('uploaded_contracts')
-                        .insert({
-                            company_id: user.companyId,
-                            uploaded_by_user_id: user.userId,
-                            contract_name: templateName || templateData.template_name,
-                            contract_type: contractType || templateData.contract_type || 'other',
-                            file_name: `${templateName || templateData.template_name}.template`,
-                            file_type: 'template',
-                            file_size: 0,
-                            status: 'ready',
-                            source_type: 'template',
-                            source_template_id: templateId,
-                            clause_count: existingClauses.length
-                        })
-                        .select('contract_id')
-                        .single()
-
-                    if (createError || !newContract) {
-                        console.error('Error creating contract from template:', createError)
-                        setError('Failed to create contract from template.')
-                        return
-                    }
-
-                    const newContractId = newContract.contract_id
-                    console.log('Created new contract:', newContractId)
-
-                    // Step 4: Copy clauses from source to new contract
-                    const clauseCopies = existingClauses.map(c => ({
-                        contract_id: newContractId,
-                        clause_number: c.clause_number,
-                        clause_name: c.clause_name,
-                        category: c.category,
-                        content: c.content,
-                        original_text: c.original_text || c.content,
-                        clause_level: c.clause_level,
-                        display_order: c.display_order,
-                        is_header: c.is_header || false,
-                        parent_clause_id: null,
-                        status: 'pending',
-                        clarence_certified: false,
-                        clarence_position: null,
-                        clarence_fairness: null,
-                        clarence_summary: null,
-                        clarence_assessment: null,
-                        clarence_flags: [],
-                        clarence_certified_at: null
-                    }))
-
-                    const { error: copyError } = await supabase
-                        .from('uploaded_contract_clauses')
-                        .insert(clauseCopies)
-
-                    if (copyError) {
-                        console.error('Error copying clauses:', copyError)
-                        setError('Failed to copy template clauses.')
-                        return
-                    }
-
-                    console.log(`Copied ${clauseCopies.length} clauses to new contract`)
-
-                    // Step 5: Map clauses for display and jump to invite step
-                    const parsedClauses: ParsedClause[] = existingClauses.map(c => ({
-                        clauseId: c.clause_id,
-                        clauseNumber: c.clause_number,
-                        clauseName: c.clause_name,
-                        category: c.category || 'Other',
-                        clauseText: c.content || '',
-                        level: c.clause_level || 1,
-                        parentClauseNumber: null,
-                        displayOrder: c.display_order,
-                        isExpanded: false,
-                        clarenceCertified: c.clarence_certified || false,
-                        clarencePosition: c.clarence_position,
-                        clarenceFairness: c.clarence_fairness,
-                        clarenceSummary: c.clarence_summary,
-                        clarenceAssessment: c.clarence_assessment,
-                        clarenceFlags: c.clarence_flags || [],
-                        clarenceCertifiedAt: c.clarence_certified_at
-                    }))
-
-                    // Update times_used on the template
-                    await supabase
-                        .from('contract_templates')
-                        .update({
-                            times_used: (templateData.times_used || 0) + 1,
-                            last_used_at: new Date().toISOString()
-                        })
-                        .eq('template_id', templateId)
-
-                    setState(prev => ({
-                        ...prev,
-                        step: 'invite',
-                        sourceType: 'template',
-                        contractName: templateName || templateData.template_name,
-                        contractType: (contractType || templateData.contract_type || 'other') as ContractType,
-                        uploadedContractId: newContractId,
-                        parsedClauses,
-                        parsingStatus: 'complete'
-                    }))
-
-                    eventLogger.completed('quick_contract_create', 'template_loaded', {
-                        templateId,
-                        contractId: newContractId,
-                        clauseCount: parsedClauses.length
-                    })
-
-                    return
+                if (!clauseError && clauseData && clauseData.length > 0) {
+                    sourceContractId = templateData.source_contract_id
+                    existingClauses = clauseData
+                    console.log(`Strategy A SUCCESS: Found ${existingClauses.length} clauses`)
+                } else {
+                    console.log('Strategy A: No clauses found', clauseError)
                 }
             }
 
-            // Fallback: Template has no source clauses - go to template_select step
-            console.log('Template has no pre-parsed clauses, falling back to template selection')
-            setState(prev => ({
-                ...prev,
-                step: 'template_select',
-                sourceType: 'template'
-            }))
+            // Strategy B: source_session_id field
+            if (existingClauses.length === 0 && templateData.source_session_id) {
+                console.log('Strategy B: Trying source_session_id:', templateData.source_session_id)
+                const { data: clauseData, error: clauseError } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('*')
+                    .eq('contract_id', templateData.source_session_id)
+                    .order('display_order', { ascending: true })
+
+                if (!clauseError && clauseData && clauseData.length > 0) {
+                    sourceContractId = templateData.source_session_id
+                    existingClauses = clauseData
+                    console.log(`Strategy B SUCCESS: Found ${existingClauses.length} clauses`)
+                } else {
+                    console.log('Strategy B: No clauses found', clauseError)
+                }
+            }
+
+            // Strategy C: Look for uploaded_contracts that reference this template
+            if (existingClauses.length === 0) {
+                console.log('Strategy C: Looking for uploaded_contracts with source_template_id:', templateId)
+                const { data: linkedContracts, error: linkedError } = await supabase
+                    .from('uploaded_contracts')
+                    .select('contract_id, clause_count, status')
+                    .eq('source_template_id', templateId)
+                    .eq('status', 'ready')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+
+                if (!linkedError && linkedContracts && linkedContracts.length > 0) {
+                    sourceContractId = linkedContracts[0].contract_id
+                    console.log('Strategy C: Found linked contract:', sourceContractId)
+
+                    const { data: clauseData } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('*')
+                        .eq('contract_id', sourceContractId)
+                        .order('display_order', { ascending: true })
+
+                    if (clauseData && clauseData.length > 0) {
+                        existingClauses = clauseData
+                        console.log(`Strategy C SUCCESS: Found ${existingClauses.length} clauses`)
+                    }
+                } else {
+                    console.log('Strategy C: No linked contracts found', linkedError)
+                }
+            }
+
+            // Strategy D: Search uploaded_contracts by template name match
+            if (existingClauses.length === 0) {
+                const searchName = templateName || templateData.template_name
+                console.log('Strategy D: Searching uploaded_contracts by name:', searchName)
+                const { data: namedContracts, error: namedError } = await supabase
+                    .from('uploaded_contracts')
+                    .select('contract_id, contract_name, clause_count, status')
+                    .ilike('contract_name', `%${searchName}%`)
+                    .eq('status', 'ready')
+                    .eq('company_id', user.companyId)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+
+                if (!namedError && namedContracts && namedContracts.length > 0) {
+                    sourceContractId = namedContracts[0].contract_id
+                    console.log('Strategy D: Found name-matched contract:', sourceContractId, namedContracts[0].contract_name)
+
+                    const { data: clauseData } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('*')
+                        .eq('contract_id', sourceContractId)
+                        .order('display_order', { ascending: true })
+
+                    if (clauseData && clauseData.length > 0) {
+                        existingClauses = clauseData
+                        console.log(`Strategy D SUCCESS: Found ${existingClauses.length} clauses`)
+                    }
+                } else {
+                    console.log('Strategy D: No name-matched contracts found', namedError)
+                }
+            }
+
+            // =====================================================
+            // SUCCESS PATH: Found clauses - create contract and go to invite
+            // =====================================================
+            if (existingClauses.length > 0 && sourceContractId) {
+                console.log(`Creating new contract from ${existingClauses.length} clauses...`)
+
+                const { data: newContract, error: createError } = await supabase
+                    .from('uploaded_contracts')
+                    .insert({
+                        company_id: user.companyId,
+                        uploaded_by_user_id: user.userId,
+                        contract_name: templateName || templateData.template_name,
+                        contract_type: contractType || templateData.contract_type || 'other',
+                        file_name: `${templateName || templateData.template_name}.template`,
+                        file_type: 'template',
+                        file_size: 0,
+                        status: 'ready',
+                        source_type: 'template',
+                        source_template_id: templateId,
+                        clause_count: existingClauses.length
+                    })
+                    .select('contract_id')
+                    .single()
+
+                if (createError || !newContract) {
+                    console.error('Error creating contract:', createError)
+                    setError('Failed to create contract from template. Check console for details.')
+                    setLoadingTemplate(false)
+                    return
+                }
+
+                const newContractId = newContract.contract_id
+                console.log('Created new contract:', newContractId)
+
+                // Copy clauses to new contract
+                const clauseCopies = existingClauses.map(c => ({
+                    contract_id: newContractId,
+                    clause_number: c.clause_number,
+                    clause_name: c.clause_name,
+                    category: c.category,
+                    content: c.content,
+                    original_text: c.original_text || c.content,
+                    clause_level: c.clause_level,
+                    display_order: c.display_order,
+                    is_header: c.is_header || false,
+                    parent_clause_id: null,
+                    status: 'pending',
+                    clarence_certified: false,
+                    clarence_position: null,
+                    clarence_fairness: null,
+                    clarence_summary: null,
+                    clarence_assessment: null,
+                    clarence_flags: [],
+                    clarence_certified_at: null
+                }))
+
+                const { error: copyError } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .insert(clauseCopies)
+
+                if (copyError) {
+                    console.error('Error copying clauses:', copyError)
+                    setError('Failed to copy template clauses. Check console for details.')
+                    setLoadingTemplate(false)
+                    return
+                }
+
+                console.log(`Copied ${clauseCopies.length} clauses to new contract`)
+
+                // Map for display
+                const parsedClauses: ParsedClause[] = existingClauses.map(c => ({
+                    clauseId: c.clause_id,
+                    clauseNumber: c.clause_number,
+                    clauseName: c.clause_name,
+                    category: c.category || 'Other',
+                    clauseText: c.content || '',
+                    level: c.clause_level || 1,
+                    parentClauseNumber: null,
+                    displayOrder: c.display_order,
+                    isExpanded: false,
+                    clarenceCertified: c.clarence_certified || false,
+                    clarencePosition: c.clarence_position,
+                    clarenceFairness: c.clarence_fairness,
+                    clarenceSummary: c.clarence_summary,
+                    clarenceAssessment: c.clarence_assessment,
+                    clarenceFlags: c.clarence_flags || [],
+                    clarenceCertifiedAt: c.clarence_certified_at
+                }))
+
+                // Update times_used
+                await supabase
+                    .from('contract_templates')
+                    .update({
+                        times_used: (templateData.times_used || 0) + 1,
+                        last_used_at: new Date().toISOString()
+                    })
+                    .eq('template_id', templateId)
+
+                setState(prev => ({
+                    ...prev,
+                    step: 'invite',
+                    sourceType: 'template',
+                    contractName: templateName || templateData.template_name,
+                    contractType: (contractType || templateData.contract_type || 'other') as ContractType,
+                    uploadedContractId: newContractId,
+                    parsedClauses,
+                    parsingStatus: 'complete'
+                }))
+
+                eventLogger.completed('quick_contract_create', 'template_loaded', {
+                    templateId,
+                    contractId: newContractId,
+                    clauseCount: parsedClauses.length
+                })
+
+                console.log('=== loadFromTemplate COMPLETE ===')
+                setLoadingTemplate(false)
+                return
+            }
+
+            // =====================================================
+            // FAILURE PATH: No clauses found by any strategy
+            // =====================================================
+            console.error('=== loadFromTemplate: No clauses found by any strategy ===')
+            setError(
+                'This template does not have parsed clauses yet. ' +
+                'Try uploading it via the Contract Library first, or use "Upload Document" instead.'
+            )
+            setLoadingTemplate(false)
 
         } catch (err) {
             console.error('Error loading from template:', err)
             setError('Failed to load template. Please try again.')
+            setLoadingTemplate(false)
         }
     }, [supabase])
 
@@ -1462,7 +1571,18 @@ function CreateQuickContractContent() {
                 {/* SECTION 22: STEP - TEMPLATE SELECTION */}
                 {/* ============================================================== */}
                 {state.step === 'template_select' && (
-                    <div className="space-y-6">
+                    <div className="space-y-6 relative">
+
+                        {/* Loading overlay when template is being processed */}
+                        {loadingTemplate && (
+                            <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center rounded-xl">
+                                <div className="text-center">
+                                    <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                    <p className="mt-4 text-slate-600 font-medium">Loading template...</p>
+                                    <p className="text-sm text-slate-400 mt-1">Creating contract from template clauses</p>
+                                </div>
+                            </div>
+                        )}
                         {/* Header */}
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                             <div className="flex items-center justify-between">
