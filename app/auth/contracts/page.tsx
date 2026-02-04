@@ -88,14 +88,14 @@ type UploadStage = 'idle' | 'selecting' | 'extracting' | 'parsing' | 'complete' 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 const CONTRACT_TYPE_ICONS: Record<string, string> = {
-    'bpo': '🏢',
-    'saas': '☁️',
-    'nda': '🔒',
-    'msa': '📋',
-    'employment': '👔',
-    'it_services': '💻',
-    'consulting': '💼',
-    'custom': '📄',
+    'bpo': 'B',
+    'saas': 'S',
+    'nda': 'N',
+    'msa': 'M',
+    'employment': 'E',
+    'it_services': 'IT',
+    'consulting': 'C',
+    'custom': 'D',
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -145,7 +145,7 @@ export default function ContractLibraryPage() {
         {
             id: 'system',
             title: 'System Templates',
-            icon: '🌐',
+            icon: 'SYS',
             description: 'Standard templates provided by CLARENCE',
             templates: [],
             isCollapsed: false,
@@ -157,7 +157,7 @@ export default function ContractLibraryPage() {
         {
             id: 'company',
             title: 'Company Templates',
-            icon: '🏢',
+            icon: 'CO',
             description: 'Managed by your Company Administrator',
             templates: [],
             isCollapsed: false,
@@ -169,7 +169,7 @@ export default function ContractLibraryPage() {
         {
             id: 'user',
             title: 'My Templates',
-            icon: '👤',
+            icon: 'MY',
             description: 'Created from your negotiations or uploaded documents',
             templates: [],
             isCollapsed: false,
@@ -313,15 +313,15 @@ export default function ContractLibraryPage() {
             contractType: template.contractType
         })
 
-        // Navigate to create-contract with pre-filled template data
+        // Navigate to Quick Contract Create with pre-filled template data
         const params = new URLSearchParams({
-            template_source: 'existing_template',
+            source: 'template',
             source_template_id: template.templateId,
             contract_type: template.contractType,
             template_name: template.templateName
         })
 
-        router.push(`/auth/create-contract?${params.toString()}`)
+        router.push(`/auth/quick-contract/create?${params.toString()}`)
     }
 
     const handleViewTemplate = (template: ContractTemplate) => {
@@ -642,7 +642,7 @@ export default function ContractLibraryPage() {
     }
 
     const getContractTypeIcon = (type: string) => {
-        return CONTRACT_TYPE_ICONS[type?.toLowerCase()] || '📄'
+        return CONTRACT_TYPE_ICONS[type?.toLowerCase()] || 'D'
     }
 
     const getContractTypeLabel = (type: string) => {
@@ -682,8 +682,8 @@ export default function ContractLibraryPage() {
             <div className="p-5 border-b border-slate-100">
                 <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-xl">
-                            {getContractTypeIcon(template.contractType)}
+                        <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                            <span className="text-xs font-bold text-emerald-700">{getContractTypeIcon(template.contractType)}</span>
                         </div>
                         <div>
                             <h3 className="font-semibold text-slate-800 text-sm group-hover:text-emerald-700 transition-colors">
@@ -708,7 +708,7 @@ export default function ContractLibraryPage() {
             {/* Card Stats */}
             <div className="px-5 py-3 bg-slate-50 grid grid-cols-3 gap-2 text-center">
                 <div>
-                    <div className="text-lg font-semibold text-slate-800">{template.clauseCount || '—'}</div>
+                    <div className="text-lg font-semibold text-slate-800">{template.clauseCount || '-'}</div>
                     <div className="text-xs text-slate-500">Clauses</div>
                 </div>
                 <div>
@@ -779,7 +779,9 @@ export default function ContractLibraryPage() {
                         className="flex-1 flex items-center justify-between p-4 bg-white rounded-t-xl border border-slate-200 hover:bg-slate-50 transition-colors"
                     >
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl">{section.icon}</span>
+                            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                <span className="text-xs font-bold text-emerald-700">{section.icon}</span>
+                            </div>
                             <div className="text-left">
                                 <h2 className="font-semibold text-slate-800">{section.title}</h2>
                                 <p className="text-sm text-slate-500">{section.description}</p>
@@ -820,7 +822,7 @@ export default function ContractLibraryPage() {
                             /* Empty State */
                             <div className="text-center py-8">
                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <span className="text-xl opacity-50">{section.icon}</span>
+                                    <span className="text-xs font-bold text-slate-400">{section.icon}</span>
                                 </div>
                                 <p className="text-slate-600 font-medium mb-1">{section.emptyMessage}</p>
                                 <p className="text-sm text-slate-400 mb-4">{section.emptySubMessage}</p>
@@ -839,8 +841,7 @@ export default function ContractLibraryPage() {
                                             href="/auth/contracts-dashboard"
                                             className="inline-flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors"
                                         >
-                                            Or start from a System Template →
-                                        </Link>
+                                            Or start from a System Template                                         </Link>
                                     </div>
                                 )}
                             </div>
@@ -867,7 +868,7 @@ export default function ContractLibraryPage() {
                                             <tr key={template.templateId} className="hover:bg-slate-50">
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
-                                                        <span className="text-xl">{getContractTypeIcon(template.contractType)}</span>
+                                                        <span className="w-8 h-8 bg-emerald-100 rounded flex items-center justify-center text-xs font-bold text-emerald-700">{getContractTypeIcon(template.contractType)}</span>
                                                         <div>
                                                             <div className="font-medium text-slate-800 text-sm">{template.templateName}</div>
                                                             {template.description && (
@@ -879,7 +880,7 @@ export default function ContractLibraryPage() {
                                                 <td className="px-6 py-4 text-sm text-slate-600">
                                                     {getContractTypeLabel(template.contractType)}
                                                 </td>
-                                                <td className="px-6 py-4 text-center text-sm text-slate-600">{template.clauseCount || '—'}</td>
+                                                <td className="px-6 py-4 text-center text-sm text-slate-600">{template.clauseCount || '-'}</td>
                                                 <td className="px-6 py-4 text-center text-sm text-slate-600">{template.timesUsed}</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center justify-end gap-3">
@@ -942,7 +943,7 @@ export default function ContractLibraryPage() {
                     {/* Modal Header */}
                     <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
                         <div className="flex items-center gap-3">
-                            <span className="text-2xl">{getContractTypeIcon(selectedTemplate.contractType)}</span>
+                            <span className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center text-sm font-bold text-emerald-700">{getContractTypeIcon(selectedTemplate.contractType)}</span>
                             <div>
                                 <h2 className="text-lg font-semibold text-slate-800">{selectedTemplate.templateName}</h2>
                                 <p className="text-sm text-slate-500">{getContractTypeLabel(selectedTemplate.contractType)}</p>
@@ -971,7 +972,7 @@ export default function ContractLibraryPage() {
                         {/* Details Grid */}
                         <div className="grid grid-cols-2 gap-4 mb-6">
                             <div className="bg-slate-50 rounded-lg p-4">
-                                <div className="text-2xl font-bold text-emerald-600">{selectedTemplate.clauseCount || '—'}</div>
+                                <div className="text-2xl font-bold text-emerald-600">{selectedTemplate.clauseCount || '-'}</div>
                                 <div className="text-sm text-slate-500">Clauses included</div>
                             </div>
                             <div className="bg-slate-50 rounded-lg p-4">
@@ -1029,8 +1030,7 @@ export default function ContractLibraryPage() {
                             }}
                             className="flex-1 py-2.5 px-4 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
                         >
-                            Use This Template →
-                        </button>
+                            Use This Template                         </button>
                     </div>
                 </div>
             </div>
@@ -1318,7 +1318,7 @@ export default function ContractLibraryPage() {
                 {/* Page Header */}
                 <div className="flex justify-between items-start mb-8">
                     <div>
-                        <h1 className="text-2xl font-bold text-slate-800 mb-1">📚 Contract Library</h1>
+                        <h1 className="text-2xl font-bold text-slate-800 mb-1">Contract Library</h1>
                         <p className="text-slate-500 text-sm">
                             Browse and use templates to start new negotiations
                         </p>

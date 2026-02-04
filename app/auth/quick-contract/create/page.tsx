@@ -116,26 +116,24 @@ interface CreateState {
 const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 const CONTRACT_TYPE_OPTIONS = [
-    { value: 'nda', label: 'Non-Disclosure Agreement', icon: '🔒', description: 'Protect confidential information' },
-    { value: 'service_agreement', label: 'Service Agreement', icon: '📋', description: 'Define service terms and deliverables' },
-    { value: 'lease', label: 'Lease Agreement', icon: '🏠', description: 'Property or equipment rental terms' },
-    { value: 'contractor', label: 'Contractor Agreement', icon: '🔧', description: 'Independent contractor terms' },
-    { value: 'vendor', label: 'Vendor Agreement', icon: '🤝', description: 'Supplier and vendor terms' },
-    { value: 'other', label: 'Other', icon: '📄', description: 'Custom contract type' }
+    { value: 'nda', label: 'Non-Disclosure Agreement', description: 'Protect confidential information' },
+    { value: 'service_agreement', label: 'Service Agreement', description: 'Define service terms and deliverables' },
+    { value: 'lease', label: 'Lease Agreement', description: 'Property or equipment rental terms' },
+    { value: 'contractor', label: 'Contractor Agreement', description: 'Independent contractor terms' },
+    { value: 'vendor', label: 'Vendor Agreement', description: 'Supplier and vendor terms' },
+    { value: 'other', label: 'Other', description: 'Custom contract type' }
 ]
 
 const SOURCE_OPTIONS = [
     {
-        value: 'upload',
-        label: 'Upload Document',
-        icon: '📤',
-        description: 'Upload an existing PDF, DOCX, or text file'
+        value: 'template',
+        label: 'Select Template',
+        description: 'Choose from your saved contract templates'
     },
     {
-        value: 'blank',
-        label: 'Start Blank',
-        icon: '✏️',
-        description: 'Write your contract from scratch'
+        value: 'upload',
+        label: 'Upload Document',
+        description: 'Upload an existing PDF, DOCX, or text file'
     }
 ]
 
@@ -249,6 +247,11 @@ function CreateQuickContractContent() {
     // Duplicate mode
     const duplicateId = searchParams.get('duplicate')
 
+    // Template mode - coming from Contracts page "Use Template"
+    const sourceTemplateId = searchParams.get('source_template_id')
+    const sourceTemplateName = searchParams.get('template_name')
+    const sourceContractType = searchParams.get('contract_type')
+
     // Review panel state
     const [selectedReviewClauseIndex, setSelectedReviewClauseIndex] = useState<number | null>(null)
     const [clauseSearchTerm, setClauseSearchTerm] = useState('')
@@ -257,7 +260,6 @@ function CreateQuickContractContent() {
     const selectedReviewClause = selectedReviewClauseIndex !== null
         ? state.parsedClauses[selectedReviewClauseIndex]
         : null
-
 
     // ==========================================================================
     // SECTION 9: DATA LOADING
@@ -334,8 +336,165 @@ function CreateQuickContractContent() {
     }, [supabase])
 
     // ==========================================================================
-    // SECTION 10: EFFECTS
+    // SECTION 9B: LOAD FROM TEMPLATE (Contracts page "Use Template")
     // ==========================================================================
+
+    const loadFromTemplate = useCallback(async (templateId: string, templateName: string | null, contractType: string | null, user: UserInfo) => {
+        try {
+            console.log('Loading contract from template:', templateId)
+
+            // Step 1: Fetch the template metadata from contract_templates
+            const { data: templateData, error: templateError } = await supabase
+                .from('contract_templates')
+                .select('*')
+                .eq('template_id', templateId)
+                .single()
+
+            if (templateError || !templateData) {
+                console.error('Error loading template:', templateError)
+                setError('Could not load template. It may have been deleted.')
+                return
+            }
+
+            // Step 2: Check if this template has a source contract with parsed clauses
+            const sourceContractId = templateData.source_contract_id || templateData.source_session_id
+
+            if (sourceContractId) {
+                // Template was created from a parsed contract - check for existing clauses
+                const { data: existingClauses, error: clauseError } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('*')
+                    .eq('contract_id', sourceContractId)
+                    .order('display_order', { ascending: true })
+
+                if (!clauseError && existingClauses && existingClauses.length > 0) {
+                    console.log(`Found ${existingClauses.length} clauses from source contract ${sourceContractId}`)
+
+                    // Step 3: Create a new uploaded_contracts record for this contract instance
+                    const { data: newContract, error: createError } = await supabase
+                        .from('uploaded_contracts')
+                        .insert({
+                            company_id: user.companyId,
+                            uploaded_by_user_id: user.userId,
+                            contract_name: templateName || templateData.template_name,
+                            contract_type: contractType || templateData.contract_type || 'other',
+                            file_name: `${templateName || templateData.template_name}.template`,
+                            file_type: 'template',
+                            file_size: 0,
+                            status: 'ready',
+                            source_type: 'template',
+                            source_template_id: templateId,
+                            clause_count: existingClauses.length
+                        })
+                        .select('contract_id')
+                        .single()
+
+                    if (createError || !newContract) {
+                        console.error('Error creating contract from template:', createError)
+                        setError('Failed to create contract from template.')
+                        return
+                    }
+
+                    const newContractId = newContract.contract_id
+                    console.log('Created new contract:', newContractId)
+
+                    // Step 4: Copy clauses from source to new contract
+                    const clauseCopies = existingClauses.map(c => ({
+                        contract_id: newContractId,
+                        clause_number: c.clause_number,
+                        clause_name: c.clause_name,
+                        category: c.category,
+                        content: c.content,
+                        original_text: c.original_text || c.content,
+                        clause_level: c.clause_level,
+                        display_order: c.display_order,
+                        is_header: c.is_header || false,
+                        parent_clause_id: null,
+                        status: 'pending',
+                        clarence_certified: false,
+                        clarence_position: null,
+                        clarence_fairness: null,
+                        clarence_summary: null,
+                        clarence_assessment: null,
+                        clarence_flags: [],
+                        clarence_certified_at: null
+                    }))
+
+                    const { error: copyError } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .insert(clauseCopies)
+
+                    if (copyError) {
+                        console.error('Error copying clauses:', copyError)
+                        setError('Failed to copy template clauses.')
+                        return
+                    }
+
+                    console.log(`Copied ${clauseCopies.length} clauses to new contract`)
+
+                    // Step 5: Map clauses for display and jump to invite step
+                    const parsedClauses: ParsedClause[] = existingClauses.map(c => ({
+                        clauseId: c.clause_id,
+                        clauseNumber: c.clause_number,
+                        clauseName: c.clause_name,
+                        category: c.category || 'Other',
+                        clauseText: c.content || '',
+                        level: c.clause_level || 1,
+                        parentClauseNumber: null,
+                        displayOrder: c.display_order,
+                        isExpanded: false,
+                        clarenceCertified: c.clarence_certified || false,
+                        clarencePosition: c.clarence_position,
+                        clarenceFairness: c.clarence_fairness,
+                        clarenceSummary: c.clarence_summary,
+                        clarenceAssessment: c.clarence_assessment,
+                        clarenceFlags: c.clarence_flags || [],
+                        clarenceCertifiedAt: c.clarence_certified_at
+                    }))
+
+                    // Update times_used on the template
+                    await supabase
+                        .from('contract_templates')
+                        .update({
+                            times_used: (templateData.times_used || 0) + 1,
+                            last_used_at: new Date().toISOString()
+                        })
+                        .eq('template_id', templateId)
+
+                    setState(prev => ({
+                        ...prev,
+                        step: 'invite',
+                        sourceType: 'template',
+                        contractName: templateName || templateData.template_name,
+                        contractType: (contractType || templateData.contract_type || 'other') as ContractType,
+                        uploadedContractId: newContractId,
+                        parsedClauses,
+                        parsingStatus: 'complete'
+                    }))
+
+                    eventLogger.completed('quick_contract_create', 'template_loaded', {
+                        templateId,
+                        contractId: newContractId,
+                        clauseCount: parsedClauses.length
+                    })
+
+                    return
+                }
+            }
+
+            // Fallback: Template has no source clauses - go to template_select step
+            console.log('Template has no pre-parsed clauses, falling back to template selection')
+            setState(prev => ({
+                ...prev,
+                step: 'template_select',
+                sourceType: 'template'
+            }))
+
+        } catch (err) {
+            console.error('Error loading from template:', err)
+            setError('Failed to load template. Please try again.')
+        }
+    }, [supabase])
 
     useEffect(() => {
         let isMounted = true
@@ -353,7 +512,12 @@ function CreateQuickContractContent() {
 
                     if (!isMounted) return
 
-                    if (duplicateId) {
+                    // Priority 1: Incoming template from Contracts page "Use Template"
+                    if (sourceTemplateId) {
+                        await loadFromTemplate(sourceTemplateId, sourceTemplateName, sourceContractType, user)
+                    }
+                    // Priority 2: Duplicate an existing contract
+                    else if (duplicateId) {
                         await loadDuplicateContract(duplicateId)
                     }
                 }
@@ -372,14 +536,14 @@ function CreateQuickContractContent() {
             isMounted = false
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [duplicateId])
+    }, [duplicateId, sourceTemplateId])
 
     // ==========================================================================
     // SECTION 11: NAVIGATION HANDLERS
     // ==========================================================================
 
     function handleSourceSelect(source: SourceType) {
-        console.log('📍 Source selected:', source)
+        console.log('Source selected:', source)
 
         setState(prev => ({
             ...prev,
@@ -389,7 +553,7 @@ function CreateQuickContractContent() {
 
         // If upload selected, trigger file picker after state updates
         if (source === 'upload') {
-            console.log('📂 Upload selected, will show upload area on details step')
+            console.log('Upload selected, will show upload area on details step')
         }
 
         eventLogger.completed('quick_contract_create', 'source_selected', { source })
@@ -489,15 +653,15 @@ function CreateQuickContractContent() {
     // ==========================================================================
 
     async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
-        console.log('📄 handleFileUpload triggered')
+        console.log('handleFileUpload triggered')
 
         const file = event.target.files?.[0]
         if (!file) {
-            console.log('❌ No file selected')
+            console.log('No file selected')
             return
         }
 
-        console.log('📄 File selected:', file.name, file.type, file.size)
+        console.log('File selected:', file.name, file.type, file.size)
         setUploading(true)
         setError(null)
 
@@ -521,7 +685,7 @@ function CreateQuickContractContent() {
             }
 
             // Extract text based on file type
-            console.log('📝 Extracting text from document...')
+            console.log('Extracting text from document...')
             let extractedText = ''
 
             if (file.type === 'application/pdf' || fileExtension === 'pdf') {
@@ -532,7 +696,7 @@ function CreateQuickContractContent() {
                 extractedText = await file.text()
             }
 
-            console.log('📝 Extracted text length:', extractedText.length)
+            console.log('Extracted text length:', extractedText.length)
 
             if (!extractedText || extractedText.length < 50) {
                 throw new Error('Could not extract sufficient text from document. Please try a different file.')
@@ -542,14 +706,14 @@ function CreateQuickContractContent() {
             const fileName = `${Date.now()}-${file.name}`
             const filePath = `quick-contracts/${userInfo.companyId}/${fileName}`
 
-            console.log('📤 Uploading to path:', filePath)
+            console.log('Uploading to path:', filePath)
 
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('documents')
                 .upload(filePath, file)
 
             if (uploadError) {
-                console.error('❌ Supabase upload error:', uploadError)
+                console.error('Supabase upload error:', uploadError)
                 throw new Error(`Failed to upload file: ${uploadError.message}`)
             }
 
@@ -558,7 +722,7 @@ function CreateQuickContractContent() {
                 .from('documents')
                 .getPublicUrl(filePath)
 
-            console.log('🔗 Public URL:', publicUrl)
+            console.log('Public URL:', publicUrl)
 
             // Format extracted text as HTML paragraphs
             const formattedContent = extractedText
@@ -576,7 +740,7 @@ function CreateQuickContractContent() {
                 step: 'details'
             }))
 
-            console.log('✅ Upload and extraction complete')
+            console.log('Upload and extraction complete')
 
             eventLogger.completed('quick_contract_create', 'file_uploaded', {
                 fileName: file.name,
@@ -586,7 +750,7 @@ function CreateQuickContractContent() {
             })
 
         } catch (err) {
-            console.error('❌ Upload error:', err)
+            console.error('Upload error:', err)
             setError(err instanceof Error ? err.message : 'Failed to upload file')
         } finally {
             setUploading(false)
@@ -602,7 +766,7 @@ function CreateQuickContractContent() {
 
     async function extractTextFromPDF(file: File): Promise<string> {
         try {
-            console.log('📄 Starting PDF extraction...')
+            console.log('Starting PDF extraction...')
 
             // Dynamic import to avoid SSR issues
             const pdfjsLib = await import('pdfjs-dist')
@@ -613,7 +777,7 @@ function CreateQuickContractContent() {
             const arrayBuffer = await file.arrayBuffer()
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
-            console.log(`📄 PDF has ${pdf.numPages} pages`)
+            console.log(`PDF has ${pdf.numPages} pages`)
 
             let fullText = ''
             for (let i = 1; i <= pdf.numPages; i++) {
@@ -623,10 +787,10 @@ function CreateQuickContractContent() {
                     .map((item: any) => item.str)
                     .join(' ')
                 fullText += pageText + '\n\n'
-                console.log(`📄 Extracted page ${i}/${pdf.numPages}`)
+                console.log(`Extracted page ${i}/${pdf.numPages}`)
             }
 
-            console.log('📄 PDF extraction complete, total length:', fullText.length)
+            console.log('PDF extraction complete, total length:', fullText.length)
             return fullText.trim()
         } catch (err) {
             console.error('PDF extraction error:', err)
@@ -636,10 +800,10 @@ function CreateQuickContractContent() {
 
     async function extractTextFromDOCX(file: File): Promise<string> {
         try {
-            console.log('📄 Starting DOCX extraction...')
+            console.log('Starting DOCX extraction...')
             const arrayBuffer = await file.arrayBuffer()
             const result = await mammoth.extractRawText({ arrayBuffer })
-            console.log('📄 DOCX extraction complete, length:', result.value.length)
+            console.log('DOCX extraction complete, length:', result.value.length)
             return result.value
         } catch (err) {
             console.error('DOCX extraction error:', err)
@@ -665,7 +829,7 @@ function CreateQuickContractContent() {
         }))
 
         try {
-            console.log('🔄 Starting document parsing...')
+            console.log('Starting document parsing...')
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
@@ -689,7 +853,7 @@ function CreateQuickContractContent() {
             }
 
             const result = await response.json()
-            console.log('📄 Parsing result:', result)
+            console.log('Parsing result:', result)
 
             if (result.success && result.contractId) {
                 // Start polling for parsing completion
@@ -699,7 +863,7 @@ function CreateQuickContractContent() {
             }
 
         } catch (err) {
-            console.error('❌ Parsing error:', err)
+            console.error('Parsing error:', err)
             setState(prev => ({
                 ...prev,
                 parsingStatus: 'error',
@@ -714,7 +878,7 @@ function CreateQuickContractContent() {
 
         const poll = async () => {
             attempts++
-            console.log(`🔄 Polling attempt ${attempts}/${maxAttempts}...`)
+            console.log(`Polling attempt ${attempts}/${maxAttempts}...`)
 
             try {
                 const { data: contractData, error: contractError } = await supabase
@@ -727,7 +891,7 @@ function CreateQuickContractContent() {
                     throw new Error('Failed to check parsing status')
                 }
 
-                console.log('📄 Contract status:', contractData.status)
+                console.log('Contract status:', contractData.status)
 
                 if (contractData.status === 'ready') {
                     // Fetch the parsed clauses
@@ -777,7 +941,7 @@ function CreateQuickContractContent() {
                         clarenceCertifiedAt: c.clarence_certified_at
                     }))
 
-                    console.log(`✅ Parsing complete! Found ${parsedClauses.length} clauses`)
+                    console.log(`Parsing complete! Found ${parsedClauses.length} clauses`)
 
                     // Clauses loaded - certification happens later in Studio page
                     setState(prev => ({
@@ -807,7 +971,7 @@ function CreateQuickContractContent() {
                 }
 
             } catch (err) {
-                console.error('❌ Polling error:', err)
+                console.error('Polling error:', err)
                 setState(prev => ({
                     ...prev,
                     parsingStatus: 'error',
@@ -866,7 +1030,7 @@ function CreateQuickContractContent() {
                 clarenceCertifiedAt: c.clarence_certified_at
             }))
 
-            console.log(`✅ Reloaded ${parsedClauses.length} clauses, ${parsedClauses.filter(c => c.clarenceCertified).length} certified`)
+            console.log(`Reloaded ${parsedClauses.length} clauses, ${parsedClauses.filter(c => c.clarenceCertified).length} certified`)
 
             setState(prev => ({
                 ...prev,
@@ -882,7 +1046,6 @@ function CreateQuickContractContent() {
             }))
         }
     }
-
 
     function handleClauseNameChange(index: number, newName: string) {
         setState(prev => ({
@@ -940,7 +1103,7 @@ function CreateQuickContractContent() {
         setError(null)
 
         try {
-            console.log('🚀 Creating Quick Contract session and sending invite...')
+            console.log('Creating Quick Contract session and sending invite...')
 
             // Create session via QC-Send workflow (Quick Contract specific)
             const response = await fetch(`${API_BASE}/qc-send`, {
@@ -978,7 +1141,7 @@ function CreateQuickContractContent() {
             }
 
             const result = await response.json()
-            console.log('✅ Quick Contract sent:', result)
+            console.log('Quick Contract sent:', result)
 
             if (result.success) {
                 const sessionId = result.sessionId || result.session_id
@@ -1000,7 +1163,7 @@ function CreateQuickContractContent() {
             }
 
         } catch (err) {
-            console.error('❌ Quick Contract send error:', err)
+            console.error('Quick Contract send error:', err)
             setError(err instanceof Error ? err.message : 'Failed to send contract')
         } finally {
             setSendingInvite(false)
@@ -1231,14 +1394,24 @@ function CreateQuickContractContent() {
                             <p className="text-slate-500">How would you like to start?</p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
                             {SOURCE_OPTIONS.map(option => (
                                 <button
                                     key={option.value}
                                     onClick={() => handleSourceSelect(option.value as SourceType)}
                                     className="p-6 rounded-xl border-2 border-slate-200 hover:border-teal-500 hover:bg-teal-50/50 transition-all text-left group"
                                 >
-                                    <div className="text-3xl mb-3">{option.icon}</div>
+                                    <div className="w-12 h-12 rounded-lg bg-teal-100 flex items-center justify-center mb-3">
+                                        {option.value === 'template' ? (
+                                            <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                            </svg>
+                                        )}
+                                    </div>
                                     <h3 className="font-semibold text-slate-800 mb-1 group-hover:text-teal-700">
                                         {option.label}
                                     </h3>
@@ -1292,8 +1465,7 @@ function CreateQuickContractContent() {
                                     onClick={() => setState(prev => ({ ...prev, sourceType: 'blank', step: 'details' }))}
                                     className="text-teal-600 hover:text-teal-700 font-medium text-sm"
                                 >
-                                    Start with a blank contract instead →
-                                </button>
+                                    Start with a blank contract instead                                 </button>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1431,7 +1603,7 @@ function CreateQuickContractContent() {
                             <div className="mb-6">
                                 <div
                                     onClick={() => {
-                                        console.log('🖱️ Dropzone clicked')
+                                        console.log('Dropzone clicked')
                                         console.log('File input ref:', fileInputRef.current)
                                         fileInputRef.current?.click()
                                     }}
@@ -1524,7 +1696,7 @@ function CreateQuickContractContent() {
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
-                                                <span>{option.icon}</span>
+                                                <div className={`w-2 h-2 rounded-full ${state.contractType === option.value ? 'bg-teal-500' : 'bg-slate-300'}`}></div>
                                                 <span className="font-medium text-sm text-slate-800">{option.label}</span>
                                             </div>
                                         </button>
@@ -1667,7 +1839,6 @@ function CreateQuickContractContent() {
                             </div>
                         )}
 
-
                         {/* Parsing Error - Keep in container */}
                         {state.parsingStatus === 'error' && (
                             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
@@ -1718,7 +1889,7 @@ function CreateQuickContractContent() {
                                     <div>
                                         <h1 className="text-lg font-bold text-slate-800">Review Extracted Clauses</h1>
                                         <p className="text-sm text-slate-500">
-                                            {state.contractName || 'Untitled Contract'} • {state.parsedClauses.length} clauses
+                                            {state.contractName || 'Untitled Contract'} {state.parsedClauses.length} clauses
                                         </p>
                                     </div>
                                 </div>
@@ -1810,7 +1981,7 @@ function CreateQuickContractContent() {
                                                                         ? 'bg-emerald-100 text-emerald-600'
                                                                         : 'bg-blue-100 text-blue-600'
                                                                 }`}>
-                                                                {!isCertified ? '○' : hasFlags ? '!' : '✓'}
+                                                                {!isCertified ? '' : hasFlags ? '!' : ''}
                                                             </div>
 
                                                             <div className="flex-1 min-w-0">
@@ -2235,11 +2406,11 @@ function CreateQuickContractContent() {
                                     </svg>
                                     <div>
                                         <p className="text-sm text-blue-800 font-medium">What the recipient will see</p>
-                                        <ul className="text-sm text-blue-700 mt-2 space-y-1">
-                                            <li>• Contract clauses in a read-only view</li>
-                                            <li>• Ability to discuss via party chat</li>
-                                            <li>• Chat with CLARENCE for questions</li>
-                                            <li>• Accept or request changes button</li>
+                                        <ul className="text-sm text-blue-700 mt-2 space-y-1 list-disc list-inside">
+                                            <li>Contract clauses in a read-only view</li>
+                                            <li>Ability to discuss via party chat</li>
+                                            <li>Chat with CLARENCE for questions</li>
+                                            <li>Accept or request changes button</li>
                                         </ul>
                                     </div>
                                 </div>
