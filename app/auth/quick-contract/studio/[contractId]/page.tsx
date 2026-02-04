@@ -219,6 +219,7 @@ function QuickContractStudioContent() {
     const [isDraftEditing, setIsDraftEditing] = useState(false)
     const [editingDraftText, setEditingDraftText] = useState('')
     const [savingDraft, setSavingDraft] = useState(false)
+    const [generatingBalancedDraft, setGeneratingBalancedDraft] = useState(false)
 
     // Chat state (CLARENCE AI chat - right panel)
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -462,7 +463,7 @@ function QuickContractStudioContent() {
 
         if (pendingClauses.length === 0) return // All already certified
 
-        console.log(`🚀 Triggering certification for ${pendingClauses.length} pending clauses...`)
+        console.log(`ðŸš€ Triggering certification for ${pendingClauses.length} pending clauses...`)
         setCertificationTriggered(true)
 
         // Fire and forget - the polling useEffect handles the rest
@@ -594,7 +595,7 @@ function QuickContractStudioContent() {
                 'default': 'Retained by originator'
             },
             'Insurance': {
-                'currency': '£1M-£5M',
+                'currency': 'Â£1M-Â£5M',
                 'default': 'Industry standard coverage'
             },
             'Audit': {
@@ -631,7 +632,7 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 4C-3: CLAUSE CLICK → RATIONALE
+    // SECTION 4C-3: CLAUSE CLICK â†’ RATIONALE
     // Auto-generate explanation when clause is selected
     // ========================================================================
 
@@ -686,7 +687,7 @@ function QuickContractStudioContent() {
             const posLabel = getPositionLabel(clause.clarencePosition)
 
             // Build the rationale message
-            let rationaleContent = `📋 **${clause.clauseName}** (${clause.clauseNumber})\n\n`
+            let rationaleContent = `ðŸ“‹ **${clause.clauseName}** (${clause.clauseNumber})\n\n`
 
             // Show document position vs CLARENCE position if we have both
             if (clause.documentPosition !== null && clause.clarencePosition !== null) {
@@ -701,11 +702,11 @@ function QuickContractStudioContent() {
 
                 // Add comparison insight
                 if (difference < 0.5) {
-                    rationaleContent += `✅ **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
+                    rationaleContent += `âœ… **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
                 } else if (clause.documentPosition > clause.clarencePosition) {
-                    rationaleContent += `⚠️ **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
+                    rationaleContent += `âš ï¸ **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
                 } else {
-                    rationaleContent += `💡 **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
+                    rationaleContent += `ðŸ’¡ **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
                 }
             } else if (clause.clarencePosition !== null) {
                 rationaleContent += `**CLARENCE Position:** ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
@@ -724,7 +725,7 @@ function QuickContractStudioContent() {
             if (clause.clarenceFlags && clause.clarenceFlags.length > 0) {
                 rationaleContent += `**Attention Points:**\n`
                 clause.clarenceFlags.forEach(flag => {
-                    rationaleContent += `• ${flag}\n`
+                    rationaleContent += `â€¢ ${flag}\n`
                 })
                 rationaleContent += '\n'
             }
@@ -750,7 +751,7 @@ function QuickContractStudioContent() {
     }, [selectedClause?.clauseId, lastExplainedClauseId, initialLoadComplete])
 
     // ========================================================================
-    // SECTION 4D: ACTION HANDLERS — AGREE, QUERY, COMMIT
+    // SECTION 4D: ACTION HANDLERS â€” AGREE, QUERY, COMMIT
     // ========================================================================
 
     // Determine party role for current user
@@ -824,7 +825,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `âœ… You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
+                content: `Ã¢Å“â€¦ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -867,7 +868,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `query-${Date.now()}`,
                 role: 'assistant',
-                content: `❓ Query raised on \"${clause?.clauseName}\" (${clause?.clauseNumber}):\n\n\"${queryMessage}\"\n\nThis has been recorded and the other party will be notified.`,
+                content: `â“ Query raised on \"${clause?.clauseName}\" (${clause?.clauseNumber}):\n\n\"${queryMessage}\"\n\nThis has been recorded and the other party will be notified.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -1172,7 +1173,7 @@ function QuickContractStudioContent() {
         queryMessage: string
     ) => {
         if (!userInfo || !contractId) return
-        const systemText = `❓ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
+        const systemText = `â“ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
         try {
             await supabase
                 .from('qc_party_messages')
@@ -1321,7 +1322,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: `✅ Draft saved for \"${selectedClause.clauseName}\". This modified text will be used when generating the final contract document.`,
+                content: `âœ… Draft saved for \"${selectedClause.clauseName}\". This modified text will be used when generating the final contract document.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1331,7 +1332,7 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `draft-error-${Date.now()}`,
                 role: 'assistant',
-                content: `❌ Failed to save draft. Please try again.`,
+                content: `âŒ Failed to save draft. Please try again.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
@@ -1368,7 +1369,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-reset-${Date.now()}`,
                 role: 'assistant',
-                content: `↩️ Draft reset to original document text for \"${selectedClause.clauseName}\".`,
+                content: `â†©ï¸ Draft reset to original document text for \"${selectedClause.clauseName}\".`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1396,6 +1397,139 @@ function QuickContractStudioContent() {
 
         // Auto-send the message directly
         sendChatMessage(discussPrompt)
+    }
+
+    // --------------------------------------------------------
+    // CREATE MORE BALANCED DRAFT
+    // Calls CLARENCE to rewrite the clause language toward position 5.0
+    // --------------------------------------------------------
+    const handleCreateBalancedDraft = async () => {
+        if (!selectedClause || !userInfo || generatingBalancedDraft) return
+
+        const currentText = selectedClause.draftText || selectedClause.originalText || selectedClause.clauseText || ''
+        if (!currentText.trim()) return
+
+        setGeneratingBalancedDraft(true)
+
+        // Add a chat message showing the request
+        const requestMessage: ChatMessage = {
+            id: `balance-request-${Date.now()}`,
+            role: 'user',
+            content: `Create a more balanced draft for "${selectedClause.clauseName}" (${selectedClause.clauseNumber})`,
+            timestamp: new Date()
+        }
+        setChatMessages(prev => [...prev, requestMessage])
+
+        // Build the direction hint based on current position
+        const currentPosition = selectedClause.clarencePosition
+        let directionHint = ''
+        if (currentPosition !== null) {
+            if (currentPosition < 4) {
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (customer-favoring). To create a more balanced version, moderate the customer protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
+            } else if (currentPosition > 6) {
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (provider-favoring). To create a more balanced version, strengthen customer protections and introduce more equitable terms. Add reasonable safeguards for the customer without being overly aggressive.`
+            } else {
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (near balanced). Fine-tune the language to ensure both parties have equitable obligations and protections. Aim for clearer, more neutral phrasing.`
+            }
+        }
+
+        // Truncate very long clause text for the prompt
+        const textForPrompt = currentText.length > 3000
+            ? currentText.substring(0, 3000) + '\n... [truncated]'
+            : currentText
+
+        try {
+            const response = await fetch('/api/n8n/clarence-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: `TASK: Rewrite the following clause to be more balanced (targeting position 5.0 on a 1-10 scale where 1 is maximum customer protection and 10 is maximum provider flexibility).
+
+CLAUSE: "${selectedClause.clauseName}" (${selectedClause.clauseNumber})
+CATEGORY: ${selectedClause.category}
+CURRENT POSITION: ${currentPosition !== null ? currentPosition.toFixed(1) : 'Unknown'}
+FAIRNESS: ${selectedClause.clarenceFairness || 'Not assessed'}
+
+${directionHint}
+
+CURRENT CLAUSE TEXT:
+${textForPrompt}
+
+${selectedClause.clarenceAssessment ? `CLARENCE ASSESSMENT: ${selectedClause.clarenceAssessment}` : ''}
+
+INSTRUCTIONS:
+- Return ONLY the rewritten clause text, no preamble or explanation
+- Maintain the same legal structure and clause numbering
+- Keep the same subject matter and intent
+- Adjust the balance of rights and obligations toward a more equitable position
+- Use clear, professional legal language
+- Do not add new topics or remove existing coverage areas
+- Preserve any specific values, dates, or defined terms from the original`,
+                    contractId: contractId,
+                    clauseId: selectedClause.clauseId,
+                    clauseName: selectedClause.clauseName,
+                    clauseCategory: selectedClause.category,
+                    context: 'balanced_draft_generation'
+                })
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                const balancedText = (data.response || data.message || '').trim()
+
+                if (balancedText && balancedText.length > 20) {
+                    // Put the balanced text into the editor for review
+                    setEditingDraftText(balancedText)
+                    setIsDraftEditing(true)
+
+                    // Chat confirmation with guidance
+                    const confirmMessage: ChatMessage = {
+                        id: `balance-result-${Date.now()}`,
+                        role: 'assistant',
+                        content: `I've generated a more balanced version of "${selectedClause.clauseName}".\n\n` +
+                            (currentPosition !== null && currentPosition < 4
+                                ? `The original was at position ${currentPosition.toFixed(1)} (customer-favoring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
+                                : currentPosition !== null && currentPosition > 6
+                                    ? `The original was at position ${currentPosition.toFixed(1)} (provider-favoring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
+                                    : `I've refined the language for clearer, more neutral phrasing.\n\n`) +
+                            `The draft is now in the editor for your review. You can:\n` +
+                            `\u2022 **Save Draft** to keep the balanced version\n` +
+                            `\u2022 **Edit** the text further before saving\n` +
+                            `\u2022 **Cancel** to discard and keep the original`,
+                        timestamp: new Date()
+                    }
+                    setChatMessages(prev => [...prev, confirmMessage])
+                } else {
+                    // Response was too short or empty - likely an error
+                    const errorMessage: ChatMessage = {
+                        id: `balance-error-${Date.now()}`,
+                        role: 'assistant',
+                        content: `I wasn't able to generate a balanced draft for this clause. You can try using "Discuss with CLARENCE" to get specific suggestions, or edit the text manually.`,
+                        timestamp: new Date()
+                    }
+                    setChatMessages(prev => [...prev, errorMessage])
+                }
+            } else {
+                const errorMessage: ChatMessage = {
+                    id: `balance-error-${Date.now()}`,
+                    role: 'assistant',
+                    content: `I wasn't able to connect to generate the balanced draft. Please try again in a moment.`,
+                    timestamp: new Date()
+                }
+                setChatMessages(prev => [...prev, errorMessage])
+            }
+        } catch (err) {
+            console.error('Balanced draft generation error:', err)
+            const errorMessage: ChatMessage = {
+                id: `balance-error-${Date.now()}`,
+                role: 'assistant',
+                content: `An error occurred while generating the balanced draft. Please try again.`,
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
+            setGeneratingBalancedDraft(false)
+        }
     }
 
     // ========================================================================
@@ -1739,15 +1873,15 @@ function QuickContractStudioContent() {
                             const StatusIcon = ({ status }: { status: string }) => {
                                 switch (status) {
                                     case 'certified':
-                                        return <span className="text-emerald-500 text-xs">✅</span>
+                                        return <span className="text-emerald-500 text-xs">âœ…</span>
                                     case 'processing':
                                         return (
                                             <span className="inline-block w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
                                         )
                                     case 'failed':
-                                        return <span className="text-red-500 text-xs">⚠️</span>
+                                        return <span className="text-red-500 text-xs">âš ï¸</span>
                                     default: // pending
-                                        return <span className="text-slate-300 text-xs">🕒</span>
+                                        return <span className="text-slate-300 text-xs">ðŸ•’</span>
                                 }
                             }
 
@@ -2114,7 +2248,7 @@ function QuickContractStudioContent() {
                                                         </div>
                                                         <div>
                                                             <div className="text-3xl font-bold text-purple-700">
-                                                                {selectedClause.clarencePosition?.toFixed(1) ?? '–'}
+                                                                {selectedClause.clarencePosition?.toFixed(1) ?? 'â€“'}
                                                             </div>
                                                             <div className="text-sm text-purple-600">
                                                                 {getPositionLabel(selectedClause.clarencePosition)}
@@ -2132,7 +2266,7 @@ function QuickContractStudioContent() {
                                                             ? 'text-emerald-700'
                                                             : 'text-amber-700'
                                                             }`}>
-                                                            {selectedClause.clarenceFairness === 'balanced' ? '✓ Balanced' : '⚠ Review Recommended'}
+                                                            {selectedClause.clarenceFairness === 'balanced' ? 'âœ“ Balanced' : 'âš  Review Recommended'}
                                                         </div>
                                                         <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
                                                     </div>
@@ -2152,12 +2286,12 @@ function QuickContractStudioContent() {
                                                         {selectedClause.extractedValue ? (
                                                             <div className="flex items-baseline gap-1">
                                                                 <span className="text-2xl font-bold text-slate-800">
-                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '£' && '£'}
+                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === 'Â£' && 'Â£'}
                                                                     {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '$' && '$'}
                                                                     {selectedClause.extractedValue}
                                                                 </span>
                                                                 <span className="text-sm text-slate-600">
-                                                                    {selectedClause.extractedUnit && !['£', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
+                                                                    {selectedClause.extractedUnit && !['Â£', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
                                                                     {selectedClause.valueType === 'percentage' && '%'}
                                                                 </span>
                                                             </div>
@@ -2346,16 +2480,16 @@ function QuickContractStudioContent() {
                                                     <div className="space-y-3">
                                                         {clauseSpecificEvents.map((event) => {
                                                             const eventConfig: Record<string, { icon: string; color: string; label: string }> = {
-                                                                'agreed': { icon: 'âœ“', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
-                                                                'agreement_withdrawn': { icon: 'â†©', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
+                                                                'agreed': { icon: 'Ã¢Å“â€œ', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
+                                                                'agreement_withdrawn': { icon: 'Ã¢â€ Â©', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
                                                                 'queried': { icon: '?', color: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Query Raised' },
-                                                                'query_resolved': { icon: 'âœ“', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
-                                                                'position_changed': { icon: 'â†•', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
-                                                                'redrafted': { icon: 'âœŽ', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
-                                                                'committed': { icon: 'ðŸ”’', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
+                                                                'query_resolved': { icon: 'Ã¢Å“â€œ', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
+                                                                'position_changed': { icon: 'Ã¢â€ â€¢', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
+                                                                'redrafted': { icon: 'Ã¢Å“Å½', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
+                                                                'committed': { icon: 'Ã°Å¸â€â€™', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
                                                             }
 
-                                                            const config = eventConfig[event.eventType] || { icon: '•', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
+                                                            const config = eventConfig[event.eventType] || { icon: 'â€¢', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
                                                             const eventDate = new Date(event.createdAt)
 
                                                             return (
@@ -2437,8 +2571,8 @@ function QuickContractStudioContent() {
                                                     <h3 className="text-sm font-semibold text-slate-700">Draft Clause Language</h3>
                                                     <p className="text-xs text-slate-500 mt-1">
                                                         {selectedClause.draftModified
-                                                            ? '✏️ Modified - Your edited version will be used in the final document'
-                                                            : '📄 Original document text'
+                                                            ? 'âœï¸ Modified - Your edited version will be used in the final document'
+                                                            : 'ðŸ“„ Original document text'
                                                         }
                                                     </p>
                                                 </div>
@@ -2532,6 +2666,31 @@ function QuickContractStudioContent() {
                                                                 Unlock to Edit
                                                             </button>
 
+                                                            {/* Create More Balanced Draft Button */}
+                                                            <button
+                                                                onClick={handleCreateBalancedDraft}
+                                                                disabled={generatingBalancedDraft || !selectedClause.clarenceCertified}
+                                                                className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                title={!selectedClause.clarenceCertified ? 'Clause must be certified before generating a balanced draft' : 'Generate a more balanced version of this clause'}
+                                                            >
+                                                                {generatingBalancedDraft ? (
+                                                                    <>
+                                                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                        </svg>
+                                                                        Generating...
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                                                        </svg>
+                                                                        Create More Balanced Draft
+                                                                    </>
+                                                                )}
+                                                            </button>
+
                                                             {/* Discuss with CLARENCE Button */}
                                                             <button
                                                                 onClick={handleDiscussClause}
@@ -2584,10 +2743,11 @@ function QuickContractStudioContent() {
                                                 <div>
                                                     <h4 className="text-sm font-medium text-blue-800 mb-1">Editing Tips</h4>
                                                     <ul className="text-xs text-blue-700 space-y-1">
-                                                        <li>• Click "Unlock to Edit" to modify the clause language</li>
-                                                        <li>• Use "Discuss with CLARENCE" to get AI suggestions for improvements</li>
-                                                        <li>• Your modified text will be used when generating the final contract</li>
-                                                        <li>• You can always reset to the original document text</li>
+                                                        <li>{'\u2022'} Click "Create More Balanced Draft" to have CLARENCE rewrite the clause toward a fairer position</li>
+                                                        <li>{'\u2022'} Click "Unlock to Edit" to manually modify the clause language</li>
+                                                        <li>{'\u2022'} Use "Discuss with CLARENCE" to get AI suggestions for improvements</li>
+                                                        <li>{'\u2022'} Your modified text will be used when generating the final contract</li>
+                                                        <li>{'\u2022'} You can always reset to the original document text</li>
                                                     </ul>
                                                 </div>
                                             </div>
@@ -2962,10 +3122,10 @@ function QuickContractStudioContent() {
                                         return (
                                             <div key={msg.messageId} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-3`}>
                                                 <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${msg.isSystemMessage
-                                                        ? 'bg-amber-900/40 border border-amber-700/50'
-                                                        : isOwn
-                                                            ? 'bg-emerald-600 text-white'
-                                                            : 'bg-slate-700 text-white'
+                                                    ? 'bg-amber-900/40 border border-amber-700/50'
+                                                    : isOwn
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-slate-700 text-white'
                                                     }`}>
                                                     {/* Clause reference badge */}
                                                     {msg.relatedClauseNumber && (
@@ -3018,8 +3178,8 @@ function QuickContractStudioContent() {
                                     onClick={() => sendPartyChatMessage(partyChatInput)}
                                     disabled={!partyChatInput.trim() || partyChatSending}
                                     className={`p-2.5 rounded-lg transition-all ${partyChatInput.trim() && !partyChatSending
-                                            ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                                            : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                                        : 'bg-slate-700 text-slate-500 cursor-not-allowed'
                                         }`}
                                 >
                                     {partyChatSending ? (
