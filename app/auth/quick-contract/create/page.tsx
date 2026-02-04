@@ -439,35 +439,7 @@ function CreateQuickContractContent() {
                 }
             }
 
-            // Strategy C: Look for uploaded_contracts that reference this template
-            if (existingClauses.length === 0) {
-                console.log('Strategy C: Looking for uploaded_contracts with source_template_id:', templateId)
-                const { data: linkedContracts, error: linkedError } = await supabase
-                    .from('uploaded_contracts')
-                    .select('contract_id, clause_count, status')
-                    .eq('source_template_id', templateId)
-                    .eq('status', 'ready')
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-
-                if (!linkedError && linkedContracts && linkedContracts.length > 0) {
-                    sourceContractId = linkedContracts[0].contract_id
-                    console.log('Strategy C: Found linked contract:', sourceContractId)
-
-                    const { data: clauseData } = await supabase
-                        .from('uploaded_contract_clauses')
-                        .select('*')
-                        .eq('contract_id', sourceContractId)
-                        .order('display_order', { ascending: true })
-
-                    if (clauseData && clauseData.length > 0) {
-                        existingClauses = clauseData
-                        console.log(`Strategy C SUCCESS: Found ${existingClauses.length} clauses`)
-                    }
-                } else {
-                    console.log('Strategy C: No linked contracts found', linkedError)
-                }
-            }
+            // Strategy C: Skip - uploaded_contracts does not have source_template_id column
 
             // Strategy D: Search uploaded_contracts by template name match
             if (existingClauses.length === 0) {
@@ -513,13 +485,11 @@ function CreateQuickContractContent() {
                         company_id: user.companyId,
                         uploaded_by_user_id: user.userId,
                         contract_name: templateName || templateData.template_name,
-                        contract_type: contractType || templateData.contract_type || 'other',
                         file_name: `${templateName || templateData.template_name}.template`,
                         file_type: 'template',
                         file_size: 0,
                         status: 'ready',
                         source_type: 'template',
-                        source_template_id: templateId,
                         clause_count: existingClauses.length
                     })
                     .select('contract_id')
