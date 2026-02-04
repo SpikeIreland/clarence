@@ -241,6 +241,11 @@ function QuickContractStudioContent() {
         isOnline: boolean
     } | null>(null)
 
+    // Progressive loading / certification polling state (must be before any early returns)
+    const [isPolling, setIsPolling] = useState(false)
+    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
 
@@ -1009,6 +1014,7 @@ function QuickContractStudioContent() {
     // SECTION 4D-1A: PARTY CHAT FUNCTIONS
     // ========================================================================
 
+    // Note: getPartyRole() is defined in SECTION 4D above
 
     // Get other party's display name
     const getOtherPartyName = (): string => {
@@ -1525,21 +1531,8 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 5: LOADING STATE
-    // ========================================================================
-
-    if (loading) {
-        return <QuickContractStudioLoading />
-    }
-
-    // Progressive loading state
-    const [isPolling, setIsPolling] = useState(false)
-    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-
-
-    // ========================================================================
     // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
+    // (Placed before early returns to comply with React hooks rules)
     // ========================================================================
 
     useEffect(() => {
@@ -1612,6 +1605,15 @@ function QuickContractStudioContent() {
 
         return () => clearInterval(pollInterval)
     }, [contractId, clauses.length, isPolling])
+
+    // ========================================================================
+    // SECTION 5: LOADING STATE
+    // ========================================================================
+
+    if (loading) {
+        return <QuickContractStudioLoading />
+    }
+
 
     // ========================================================================
     // SECTION 6: ERROR STATE
