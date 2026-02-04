@@ -193,6 +193,11 @@ function QuickContractStudioContent() {
     // Query input per clause
     const [queryText, setQueryText] = useState('')
 
+    // Progressive loading state
+    const [isPolling, setIsPolling] = useState(false)
+    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
     // UI state
     const [selectedClauseIndex, setSelectedClauseIndex] = useState<number | null>(null)
     const [clauseSearchTerm, setClauseSearchTerm] = useState('')
@@ -431,7 +436,7 @@ function QuickContractStudioContent() {
 
         if (pendingClauses.length === 0) return // All already certified
 
-        console.log(`ðŸ” Triggering certification for ${pendingClauses.length} pending clauses...`)
+        console.log(`Ã°Å¸â€Â Triggering certification for ${pendingClauses.length} pending clauses...`)
         setCertificationTriggered(true)
 
         // Fire and forget - the polling useEffect handles the rest
@@ -442,6 +447,81 @@ function QuickContractStudioContent() {
         }).catch(err => console.error('Failed to trigger certification:', err))
 
     }, [contractId, clauses.length, certificationTriggered])
+
+    // ========================================================================
+    // SECTION 4B-2: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
+    // ========================================================================
+
+    useEffect(() => {
+        if (!contractId || !clauses.length) return
+
+        // Check if there are any uncertified non-header clauses
+        const uncertified = clauses.filter(c =>
+            !c.isHeader && c.processingStatus !== 'certified' && c.processingStatus !== 'failed'
+        )
+
+        if (uncertified.length === 0) {
+            setIsPolling(false)
+            return
+        }
+
+        setIsPolling(true)
+
+        const pollInterval = setInterval(async () => {
+            try {
+                const { data: updatedClauses, error } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
+                    .eq('contract_id', contractId)
+                    .order('display_order', { ascending: true })
+
+                if (error || !updatedClauses) return
+
+                // Update clause statuses without replacing entire array (preserves selection)
+                setClauses(prev => prev.map(clause => {
+                    const updated = updatedClauses.find(u => u.clause_id === clause.clauseId)
+                    if (!updated) return clause
+
+                    return {
+                        ...clause,
+                        processingStatus: updated.status || clause.processingStatus,
+                        isHeader: updated.is_header || false,
+                        clarenceCertified: updated.clarence_certified || false,
+                        clarencePosition: updated.clarence_position,
+                        clarenceFairness: updated.clarence_fairness,
+                        clarenceSummary: updated.clarence_summary,
+                        clarenceAssessment: updated.clarence_assessment,
+                        clarenceFlags: updated.clarence_flags || [],
+                        clauseText: updated.content || clause.clauseText,
+                        originalText: updated.original_text || clause.originalText,
+                        extractedValue: updated.extracted_value,
+                        extractedUnit: updated.extracted_unit,
+                        valueType: updated.value_type,
+                    }
+                }))
+
+                // Update progress
+                const certified = updatedClauses.filter(c => c.status === 'certified' && !c.is_header).length
+                const total = updatedClauses.filter(c => !c.is_header).length
+                const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
+                setCertificationProgress({ certified, total, failed })
+
+                // Stop polling when done
+                const stillProcessing = updatedClauses.some(c =>
+                    !c.is_header && (c.status === 'pending' || c.status === 'processing')
+                )
+                if (!stillProcessing) {
+                    setIsPolling(false)
+                    clearInterval(pollInterval)
+                }
+
+            } catch (err) {
+                console.error('Polling error:', err)
+            }
+        }, 4000) // Poll every 4 seconds
+
+        return () => clearInterval(pollInterval)
+    }, [contractId, clauses.length, isPolling])
 
     // ========================================================================
     // SECTION 4C: CHAT FUNCTIONS
@@ -563,7 +643,7 @@ function QuickContractStudioContent() {
                 'default': 'Retained by originator'
             },
             'Insurance': {
-                'currency': 'Â£1M-Â£5M',
+                'currency': 'Ã‚Â£1M-Ã‚Â£5M',
                 'default': 'Industry standard coverage'
             },
             'Audit': {
@@ -600,7 +680,7 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 4C-3: CLAUSE CLICK â†’ RATIONALE
+    // SECTION 4C-3: CLAUSE CLICK Ã¢â€ â€™ RATIONALE
     // Auto-generate explanation when clause is selected
     // ========================================================================
 
@@ -655,7 +735,7 @@ function QuickContractStudioContent() {
             const posLabel = getPositionLabel(clause.clarencePosition)
 
             // Build the rationale message
-            let rationaleContent = `ðŸ“‹ **${clause.clauseName}** (${clause.clauseNumber})\n\n`
+            let rationaleContent = `Ã°Å¸â€œâ€¹ **${clause.clauseName}** (${clause.clauseNumber})\n\n`
 
             // Show document position vs CLARENCE position if we have both
             if (clause.documentPosition !== null && clause.clarencePosition !== null) {
@@ -670,11 +750,11 @@ function QuickContractStudioContent() {
 
                 // Add comparison insight
                 if (difference < 0.5) {
-                    rationaleContent += `âœ… **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
+                    rationaleContent += `Ã¢Å“â€¦ **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
                 } else if (clause.documentPosition > clause.clarencePosition) {
-                    rationaleContent += `âš ï¸ **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
+                    rationaleContent += `Ã¢Å¡Â Ã¯Â¸Â **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
                 } else {
-                    rationaleContent += `ðŸ’¡ **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
+                    rationaleContent += `Ã°Å¸â€™Â¡ **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
                 }
             } else if (clause.clarencePosition !== null) {
                 rationaleContent += `**CLARENCE Position:** ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
@@ -693,7 +773,7 @@ function QuickContractStudioContent() {
             if (clause.clarenceFlags && clause.clarenceFlags.length > 0) {
                 rationaleContent += `**Attention Points:**\n`
                 clause.clarenceFlags.forEach(flag => {
-                    rationaleContent += `â€¢ ${flag}\n`
+                    rationaleContent += `Ã¢â‚¬Â¢ ${flag}\n`
                 })
                 rationaleContent += '\n'
             }
@@ -719,7 +799,7 @@ function QuickContractStudioContent() {
     }, [selectedClause?.clauseId, lastExplainedClauseId, initialLoadComplete])
 
     // ========================================================================
-    // SECTION 4D: ACTION HANDLERS — AGREE, QUERY, COMMIT
+    // SECTION 4D: ACTION HANDLERS â€” AGREE, QUERY, COMMIT
     // ========================================================================
 
     // Determine party role for current user
@@ -793,7 +873,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `✅ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
+                content: `âœ… You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -836,7 +916,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `query-${Date.now()}`,
                 role: 'assistant',
-                content: `❓ Query raised on "${clause?.clauseName}" (${clause?.clauseNumber}):\n\n"${queryMessage}"\n\nThis has been recorded and the other party will be notified.`,
+                content: `â“ Query raised on "${clause?.clauseName}" (${clause?.clauseNumber}):\n\n"${queryMessage}"\n\nThis has been recorded and the other party will be notified.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -1019,7 +1099,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: `âœ… Draft saved for "${selectedClause.clauseName}". This modified text will be used when generating the final contract document.`,
+                content: `Ã¢Å“â€¦ Draft saved for "${selectedClause.clauseName}". This modified text will be used when generating the final contract document.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1029,7 +1109,7 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `draft-error-${Date.now()}`,
                 role: 'assistant',
-                content: `âŒ Failed to save draft. Please try again.`,
+                content: `Ã¢ÂÅ’ Failed to save draft. Please try again.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
@@ -1066,7 +1146,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-reset-${Date.now()}`,
                 role: 'assistant',
-                content: `â†©ï¸ Draft reset to original document text for "${selectedClause.clauseName}".`,
+                content: `Ã¢â€ Â©Ã¯Â¸Â Draft reset to original document text for "${selectedClause.clauseName}".`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1106,7 +1186,7 @@ function QuickContractStudioContent() {
         const progressMessage: ChatMessage = {
             id: `extract-progress-${Date.now()}`,
             role: 'assistant',
-            content: `ðŸ”„ Extracting full clause text from your document. This may take 30-60 seconds for longer contracts...`,
+            content: `Ã°Å¸â€â€ž Extracting full clause text from your document. This may take 30-60 seconds for longer contracts...`,
             timestamp: new Date()
         }
         setChatMessages(prev => [...prev, progressMessage])
@@ -1168,7 +1248,7 @@ function QuickContractStudioContent() {
                     const successMessage: ChatMessage = {
                         id: `extract-success-${Date.now()}`,
                         role: 'assistant',
-                        content: `âœ… Full text extraction complete! I've retrieved the complete text for ${result.clauses_processed || mappedClauses.length} clauses. You can now view and edit the full clause language in the Draft tab.`,
+                        content: `Ã¢Å“â€¦ Full text extraction complete! I've retrieved the complete text for ${result.clauses_processed || mappedClauses.length} clauses. You can now view and edit the full clause language in the Draft tab.`,
                         timestamp: new Date()
                     }
                     setChatMessages(prev => [...prev, successMessage])
@@ -1182,7 +1262,7 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `extract-error-${Date.now()}`,
                 role: 'assistant',
-                content: `âš ï¸ I wasn't able to extract the full text at this time. Error: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again in a moment.`,
+                content: `Ã¢Å¡Â Ã¯Â¸Â I wasn't able to extract the full text at this time. Error: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again in a moment.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
@@ -1231,87 +1311,6 @@ function QuickContractStudioContent() {
     if (loading) {
         return <QuickContractStudioLoading />
     }
-
-    // Progressive loading state
-    const [isPolling, setIsPolling] = useState(false)
-    const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-
-
-    // ========================================================================
-    // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
-    // ========================================================================
-
-    useEffect(() => {
-        if (!contractId || !clauses.length) return
-
-        // Check if there are any uncertified non-header clauses
-        const uncertified = clauses.filter(c =>
-            !c.isHeader && c.processingStatus !== 'certified' && c.processingStatus !== 'failed'
-        )
-
-        if (uncertified.length === 0) {
-            setIsPolling(false)
-            return
-        }
-
-        setIsPolling(true)
-
-        const pollInterval = setInterval(async () => {
-            try {
-                const { data: updatedClauses, error } = await supabase
-                    .from('uploaded_contract_clauses')
-                    .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
-                    .eq('contract_id', contractId)
-                    .order('display_order', { ascending: true })
-
-                if (error || !updatedClauses) return
-
-                // Update clause statuses without replacing entire array (preserves selection)
-                setClauses(prev => prev.map(clause => {
-                    const updated = updatedClauses.find(u => u.clause_id === clause.clauseId)
-                    if (!updated) return clause
-
-                    return {
-                        ...clause,
-                        processingStatus: updated.status || clause.processingStatus,
-                        isHeader: updated.is_header || false,
-                        clarenceCertified: updated.clarence_certified || false,
-                        clarencePosition: updated.clarence_position,
-                        clarenceFairness: updated.clarence_fairness,
-                        clarenceSummary: updated.clarence_summary,
-                        clarenceAssessment: updated.clarence_assessment,
-                        clarenceFlags: updated.clarence_flags || [],
-                        clauseText: updated.content || clause.clauseText,
-                        originalText: updated.original_text || clause.originalText,
-                        extractedValue: updated.extracted_value,
-                        extractedUnit: updated.extracted_unit,
-                        valueType: updated.value_type,
-                    }
-                }))
-
-                // Update progress
-                const certified = updatedClauses.filter(c => c.status === 'certified' && !c.is_header).length
-                const total = updatedClauses.filter(c => !c.is_header).length
-                const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
-                setCertificationProgress({ certified, total, failed })
-
-                // Stop polling when done
-                const stillProcessing = updatedClauses.some(c =>
-                    !c.is_header && (c.status === 'pending' || c.status === 'processing')
-                )
-                if (!stillProcessing) {
-                    setIsPolling(false)
-                    clearInterval(pollInterval)
-                }
-
-            } catch (err) {
-                console.error('Polling error:', err)
-            }
-        }, 4000) // Poll every 4 seconds
-
-        return () => clearInterval(pollInterval)
-    }, [contractId, clauses.length, isPolling])
 
     // ========================================================================
     // SECTION 6: ERROR STATE
@@ -1437,8 +1436,8 @@ function QuickContractStudioContent() {
                                         onClick={() => setCommitModalState('confirm')}
                                         disabled={leafClauses.length === 0}
                                         className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${allAgreed
-                                                ? 'bg-emerald-600 hover:bg-emerald-700'
-                                                : 'bg-amber-600 hover:bg-amber-700'
+                                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                                            : 'bg-amber-600 hover:bg-amber-700'
                                             } disabled:bg-slate-300`}
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1508,15 +1507,15 @@ function QuickContractStudioContent() {
                     const StatusIcon = ({ status }: { status: string }) => {
                         switch (status) {
                             case 'certified':
-                                return <span className="text-emerald-500 text-xs">âœ…</span>
+                                return <span className="text-emerald-500 text-xs">Ã¢Å“â€¦</span>
                             case 'processing':
                                 return (
                                     <span className="inline-block w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
                                 )
                             case 'failed':
-                                return <span className="text-red-500 text-xs">âš ï¸</span>
+                                return <span className="text-red-500 text-xs">Ã¢Å¡Â Ã¯Â¸Â</span>
                             default: // pending
-                                return <span className="text-slate-300 text-xs">ðŸ”’</span>
+                                return <span className="text-slate-300 text-xs">Ã°Å¸â€â€™</span>
                         }
                     }
 
@@ -1881,7 +1880,7 @@ function QuickContractStudioContent() {
                                                         </div>
                                                         <div>
                                                             <div className="text-3xl font-bold text-purple-700">
-                                                                {selectedClause.clarencePosition?.toFixed(1) ?? 'â€”'}
+                                                                {selectedClause.clarencePosition?.toFixed(1) ?? 'Ã¢â‚¬â€'}
                                                             </div>
                                                             <div className="text-sm text-purple-600">
                                                                 {getPositionLabel(selectedClause.clarencePosition)}
@@ -1899,7 +1898,7 @@ function QuickContractStudioContent() {
                                                             ? 'text-emerald-700'
                                                             : 'text-amber-700'
                                                             }`}>
-                                                            {selectedClause.clarenceFairness === 'balanced' ? 'âœ“ Balanced' : 'âš  Review Recommended'}
+                                                            {selectedClause.clarenceFairness === 'balanced' ? 'Ã¢Å“â€œ Balanced' : 'Ã¢Å¡Â  Review Recommended'}
                                                         </div>
                                                         <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
                                                     </div>
@@ -1919,12 +1918,12 @@ function QuickContractStudioContent() {
                                                         {selectedClause.extractedValue ? (
                                                             <div className="flex items-baseline gap-1">
                                                                 <span className="text-2xl font-bold text-slate-800">
-                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === 'Â£' && 'Â£'}
+                                                                    {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === 'Ã‚Â£' && 'Ã‚Â£'}
                                                                     {selectedClause.valueType === 'currency' && selectedClause.extractedUnit === '$' && '$'}
                                                                     {selectedClause.extractedValue}
                                                                 </span>
                                                                 <span className="text-sm text-slate-600">
-                                                                    {selectedClause.extractedUnit && !['Â£', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
+                                                                    {selectedClause.extractedUnit && !['Ã‚Â£', '$'].includes(selectedClause.extractedUnit) && selectedClause.extractedUnit}
                                                                     {selectedClause.valueType === 'percentage' && '%'}
                                                                 </span>
                                                             </div>
@@ -2113,16 +2112,16 @@ function QuickContractStudioContent() {
                                                     <div className="space-y-3">
                                                         {clauseSpecificEvents.map((event) => {
                                                             const eventConfig: Record<string, { icon: string; color: string; label: string }> = {
-                                                                'agreed': { icon: '✓', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
-                                                                'agreement_withdrawn': { icon: '↩', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
+                                                                'agreed': { icon: 'âœ“', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
+                                                                'agreement_withdrawn': { icon: 'â†©', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
                                                                 'queried': { icon: '?', color: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Query Raised' },
-                                                                'query_resolved': { icon: '✓', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
-                                                                'position_changed': { icon: '↕', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
-                                                                'redrafted': { icon: '✎', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
-                                                                'committed': { icon: '🔒', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
+                                                                'query_resolved': { icon: 'âœ“', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
+                                                                'position_changed': { icon: 'â†•', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
+                                                                'redrafted': { icon: 'âœŽ', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
+                                                                'committed': { icon: 'ðŸ”’', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
                                                             }
 
-                                                            const config = eventConfig[event.eventType] || { icon: '•', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
+                                                            const config = eventConfig[event.eventType] || { icon: 'â€¢', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
                                                             const eventDate = new Date(event.createdAt)
 
                                                             return (
@@ -2204,8 +2203,8 @@ function QuickContractStudioContent() {
                                                     <h3 className="text-sm font-semibold text-slate-700">Draft Clause Language</h3>
                                                     <p className="text-xs text-slate-500 mt-1">
                                                         {selectedClause.draftModified
-                                                            ? 'âœï¸ Modified - Your edited version will be used in the final document'
-                                                            : 'ðŸ“„ Original document text'
+                                                            ? 'Ã¢Å“ÂÃ¯Â¸Â Modified - Your edited version will be used in the final document'
+                                                            : 'Ã°Å¸â€œâ€ž Original document text'
                                                         }
                                                     </p>
                                                 </div>
@@ -2400,10 +2399,10 @@ function QuickContractStudioContent() {
                                                 <div>
                                                     <h4 className="text-sm font-medium text-blue-800 mb-1">Editing Tips</h4>
                                                     <ul className="text-xs text-blue-700 space-y-1">
-                                                        <li>â€¢ Click "Unlock to Edit" to modify the clause language</li>
-                                                        <li>â€¢ Use "Discuss with CLARENCE" to get AI suggestions for improvements</li>
-                                                        <li>â€¢ Your modified text will be used when generating the final contract</li>
-                                                        <li>â€¢ You can always reset to the original document text</li>
+                                                        <li>Ã¢â‚¬Â¢ Click "Unlock to Edit" to modify the clause language</li>
+                                                        <li>Ã¢â‚¬Â¢ Use "Discuss with CLARENCE" to get AI suggestions for improvements</li>
+                                                        <li>Ã¢â‚¬Â¢ Your modified text will be used when generating the final contract</li>
+                                                        <li>Ã¢â‚¬Â¢ You can always reset to the original document text</li>
                                                     </ul>
                                                 </div>
                                             </div>
