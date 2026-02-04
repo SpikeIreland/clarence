@@ -247,6 +247,14 @@ function QuickContractStudioContent() {
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
 
+    // Certification completeness tracking
+    const leafClauses = clauses.filter(c => !c.isHeader)
+    const certifiedLeafClauses = leafClauses.filter(c => c.clarenceCertified)
+    const isCertificationComplete = leafClauses.length > 0 && certifiedLeafClauses.length === leafClauses.length
+    const certificationPercent = leafClauses.length > 0
+        ? Math.round((certifiedLeafClauses.length / leafClauses.length) * 100)
+        : 0
+
     // Refs
     const clauseListRef = useRef<HTMLDivElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
@@ -1176,7 +1184,7 @@ function QuickContractStudioContent() {
         queryMessage: string
     ) => {
         if (!userInfo || !contractId) return
-        const systemText = `Ã¢Ââ€œ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
+        const systemText = `ÃƒÂ¢Ã‚ÂÃ¢â‚¬Å“ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
         try {
             await supabase
                 .from('qc_party_messages')
@@ -1682,38 +1690,46 @@ INSTRUCTIONS:
             {/* ============================================================ */}
             {/* SECTION 7A: HEADER */}
             {/* ============================================================ */}
-            <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
+            <header className={`border-b shadow-sm flex-shrink-0 ${isTemplateMode
+                    ? 'bg-purple-50 border-purple-200'
+                    : 'bg-white border-slate-200'
+                }`}>
                 <div className="flex items-center justify-between px-4 py-3">
                     {/* Left: Logo & Contract Info */}
                     <div className="flex items-center gap-4 min-w-0 flex-1">
                         <div className="flex items-center gap-3 flex-shrink-0">
-                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-md ${isTemplateMode
+                                    ? 'bg-gradient-to-br from-purple-500 to-purple-700'
+                                    : 'bg-gradient-to-br from-teal-500 to-emerald-700'
+                                }`}>
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
                             <div>
                                 <h1 className="font-semibold text-slate-800">Quick Contract Studio</h1>
-                                <p className="text-xs text-slate-500">
+                                <p className={`text-xs font-medium ${isTemplateMode ? 'text-purple-600' : 'text-teal-600'
+                                    }`}>
                                     {isTemplateMode
                                         ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
                                         : 'CLARENCE Certified Review'}
                                 </p>
                             </div>
                         </div>
-                        <div className="h-8 w-px bg-slate-200 flex-shrink-0"></div>
+                        <div className={`h-8 w-px flex-shrink-0 ${isTemplateMode ? 'bg-purple-200' : 'bg-slate-200'}`}></div>
                         <div className="min-w-0 flex-1">
                             <h2 className="font-medium text-slate-700 truncate" title={contract?.contractName}>
                                 {contract?.contractName}
                             </h2>
                             <p className="text-xs text-slate-500">
-                                {contract?.contractType} &middot; {clauses.filter(c => !c.isHeader).length} clauses &middot; {agreedClauseIds.size} agreed
+                                {contract?.contractType} &middot; {leafClauses.length} clauses
+                                {!isTemplateMode && <> &middot; {agreedClauseIds.size} agreed</>}
                             </p>
                         </div>
 
                         {/* Agreement Progress Indicator (non-template mode) */}
                         {!isTemplateMode && clauses.length > 0 && (() => {
-                            const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-                            const agreedCount = leafClauses.filter(c => agreedClauseIds.has(c.clauseId)).length
-                            const totalCount = leafClauses.length
+                            const certLeaf = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+                            const agreedCount = certLeaf.filter(c => agreedClauseIds.has(c.clauseId)).length
+                            const totalCount = certLeaf.length
                             const allAgreed = agreedCount === totalCount && totalCount > 0
                             const progressPercent = totalCount > 0 ? (agreedCount / totalCount) * 100 : 0
 
@@ -1786,8 +1802,12 @@ INSTRUCTIONS:
                                     setTemplateName(contract?.contractName || '')
                                     setShowSaveTemplateModal(true)
                                 }}
-                                disabled={clauses.filter(c => c.clarenceCertified).length === 0}
-                                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                                disabled={!isCertificationComplete}
+                                className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${isCertificationComplete
+                                        ? 'bg-purple-600 hover:bg-purple-700'
+                                        : 'bg-slate-300 cursor-not-allowed'
+                                    }`}
+                                title={!isCertificationComplete ? `Certification in progress (${certificationPercent}%)` : 'Save as template'}
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -1795,19 +1815,22 @@ INSTRUCTIONS:
                                 Save as Template
                             </button>
                         ) : (
-                            /* ---- NORMAL MODE: Commit Contract ---- */
+                            /* ---- CONTRACT MODE: Commit Contract ---- */
                             (() => {
-                                const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-                                const allAgreed = leafClauses.length > 0 && leafClauses.every(c => agreedClauseIds.has(c.clauseId))
+                                const certLeaf = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+                                const allAgreed = certLeaf.length > 0 && certLeaf.every(c => agreedClauseIds.has(c.clauseId))
 
                                 return (
                                     <button
                                         onClick={() => setCommitModalState('confirm')}
-                                        disabled={leafClauses.length === 0}
-                                        className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${allAgreed
-                                            ? 'bg-emerald-600 hover:bg-emerald-700'
-                                            : 'bg-amber-600 hover:bg-amber-700'
-                                            } disabled:bg-slate-300`}
+                                        disabled={!isCertificationComplete}
+                                        className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${!isCertificationComplete
+                                                ? 'bg-slate-300 cursor-not-allowed'
+                                                : allAgreed
+                                                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                                                    : 'bg-amber-600 hover:bg-amber-700'
+                                            }`}
+                                        title={!isCertificationComplete ? `Certification in progress (${certificationPercent}%)` : 'Commit contract'}
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -1820,6 +1843,78 @@ INSTRUCTIONS:
                     </div>
                 </div>
             </header>
+
+            {/* ============================================================ */}
+            {/* SECTION 7A-2: MODE BANNER & CERTIFICATION STATUS */}
+            {/* ============================================================ */}
+            <div className={`flex-shrink-0 px-4 py-2 flex items-center justify-between ${isTemplateMode
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white'
+                    : 'bg-gradient-to-r from-teal-600 to-emerald-700 text-white'
+                }`}>
+                {/* Left: Mode Label */}
+                <div className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${isTemplateMode ? 'bg-white/20' : 'bg-white/20'
+                        }`}>
+                        {isTemplateMode ? (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        )}
+                    </div>
+                    <span className="text-sm font-semibold tracking-wide">
+                        {isTemplateMode
+                            ? (isCompanyTemplate ? 'TEMPLATE MODE \u2014 Company Template' : 'TEMPLATE MODE \u2014 My Templates')
+                            : 'CONTRACT MODE \u2014 Live Contract Review'
+                        }
+                    </span>
+                </div>
+
+                {/* Center: Certification Progress */}
+                <div className="flex items-center gap-3">
+                    {!isCertificationComplete ? (
+                        <>
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                                <span className="text-xs font-medium text-white/90">
+                                    CLARENCE certifying: {certifiedLeafClauses.length}/{leafClauses.length} clauses
+                                </span>
+                            </div>
+                            <div className="w-24 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-white/80 rounded-full transition-all duration-700"
+                                    style={{ width: `${certificationPercent}%` }}
+                                />
+                            </div>
+                            <span className="text-xs font-bold text-white/90">{certificationPercent}%</span>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-xs font-medium text-white/90">
+                                All {leafClauses.length} clauses certified
+                                {isTemplateMode
+                                    ? ' \u2014 Ready to save as template'
+                                    : ' \u2014 Ready to review and commit'
+                                }
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right: Mode Hint */}
+                <div className="text-xs text-white/70">
+                    {isTemplateMode
+                        ? 'Reviewing clauses for template library'
+                        : 'Reviewing clauses for contract commitment'
+                    }
+                </div>
+            </div>
 
 
             {/* ============================================================ */}
