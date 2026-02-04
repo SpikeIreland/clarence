@@ -193,6 +193,7 @@ function QuickContractStudioContent() {
 
     // Template mode
     const isTemplateMode = searchParams.get('mode') === 'template'
+    const isCompanyTemplate = searchParams.get('company') === 'true'
     const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
     const [templateName, setTemplateName] = useState('')
     const [savingTemplate, setSavingTemplate] = useState(false)
@@ -953,7 +954,9 @@ function QuickContractStudioContent() {
         setSavingTemplate(true)
         try {
             const certifiedClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-            const templateCode = `USER-${contractId.substring(0, 8).toUpperCase()}`
+            const templateCode = isCompanyTemplate
+                ? `CO-${contractId.substring(0, 8).toUpperCase()}`
+                : `USER-${contractId.substring(0, 8).toUpperCase()}`
 
             const { data: template, error: templateError } = await supabase
                 .from('contract_templates')
@@ -963,7 +966,7 @@ function QuickContractStudioContent() {
                     description: `Certified from uploaded contract: ${contract?.contractName || 'Unknown'}`,
                     contract_type: contract?.contractType || 'custom',
                     is_system: false,
-                    is_public: false,
+                    is_public: isCompanyTemplate,
                     is_active: true,
                     company_id: userInfo.companyId,
                     created_by_user_id: userInfo.userId,
@@ -997,7 +1000,7 @@ function QuickContractStudioContent() {
             }
 
             setTemplateSaved(true)
-            setTimeout(() => router.push('/auth/contracts'), 1500)
+            setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
 
         } catch (error) {
             console.error('Failed to save template:', error)
@@ -1173,7 +1176,7 @@ function QuickContractStudioContent() {
         queryMessage: string
     ) => {
         if (!userInfo || !contractId) return
-        const systemText = `â“ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
+        const systemText = `Ã¢Ââ€œ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
         try {
             await supabase
                 .from('qc_party_messages')
@@ -1690,7 +1693,9 @@ INSTRUCTIONS:
                             <div>
                                 <h1 className="font-semibold text-slate-800">Quick Contract Studio</h1>
                                 <p className="text-xs text-slate-500">
-                                    {isTemplateMode ? 'Template Certification' : 'CLARENCE Certified Review'}
+                                    {isTemplateMode
+                                        ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
+                                        : 'CLARENCE Certified Review'}
                                 </p>
                             </div>
                         </div>
@@ -1764,7 +1769,11 @@ INSTRUCTIONS:
                         )}
 
                         <button
-                            onClick={() => router.push(isTemplateMode ? '/auth/contracts' : '/auth/quick-contract')}
+                            onClick={() => router.push(
+                                isTemplateMode
+                                    ? (isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
+                                    : '/auth/quick-contract'
+                            )}
                             className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
                         >
                             &larr; Back
@@ -2991,14 +3000,21 @@ INSTRUCTIONS:
                                     </svg>
                                 </div>
                                 <h3 className="text-lg font-semibold text-slate-800 mb-2">Template Saved!</h3>
-                                <p className="text-sm text-slate-500">Redirecting to your template library...</p>
+                                <p className="text-sm text-slate-500">
+                                    {isCompanyTemplate
+                                        ? 'Company template created. Redirecting to Company Admin...'
+                                        : 'Redirecting to your template library...'}
+                                </p>
                             </div>
                         ) : (
                             <>
                                 <div className="p-6 border-b border-slate-200">
-                                    <h3 className="text-lg font-semibold text-slate-800">Save as Template</h3>
+                                    <h3 className="text-lg font-semibold text-slate-800">
+                                        {isCompanyTemplate ? 'Save as Company Template' : 'Save as Template'}
+                                    </h3>
                                     <p className="text-sm text-slate-500 mt-1">
-                                        This will save {clauses.filter(c => c.clarenceCertified).length} certified clauses as a reusable template.
+                                        This will save {clauses.filter(c => c.clarenceCertified).length} certified clauses as a
+                                        {isCompanyTemplate ? ' company-wide template available to all staff.' : ' reusable template.'}
                                     </p>
                                 </div>
                                 <div className="p-6">
