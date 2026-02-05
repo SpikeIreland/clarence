@@ -482,23 +482,24 @@ function CreateQuickContractContent() {
                     .from('template_clauses')
                     .select('*')
                     .eq('template_id', templateId)
-                    .order('display_order', { ascending: true })
+                    .order('category_order', { ascending: true })
+                    .order('clause_order', { ascending: true })
 
                 if (!tcError && templateClauses && templateClauses.length > 0) {
                     console.log(`Strategy E SUCCESS: Found ${templateClauses.length} clauses in template_clauses`)
                     clausesFromTemplateTable = true
 
                     // Map template_clauses to the same format as uploaded_contract_clauses
-                    existingClauses = templateClauses.map(tc => ({
+                    existingClauses = templateClauses.map((tc, index) => ({
                         clause_id: tc.template_clause_id || crypto.randomUUID(),
-                        clause_number: tc.clause_number,
-                        clause_name: tc.clause_name,
-                        category: tc.category,
-                        content: tc.default_text,
-                        original_text: tc.default_text,
+                        clause_number: tc.clause_number || tc.display_number || String(index + 1),
+                        clause_name: tc.clause_name || 'Untitled Clause',
+                        category: tc.category || 'Other',
+                        content: tc.default_text || '',
+                        original_text: tc.default_text || '',
                         clause_level: tc.clause_level || 1,
-                        display_order: tc.display_order,
-                        parent_clause_id: tc.parent_clause_id,
+                        display_order: tc.display_order || (tc.category_order * 100) + tc.clause_order,
+                        parent_clause_id: tc.parent_clause_id || tc.parent_template_clause_id,
                         clarence_position: tc.clarence_position,
                         clarence_fairness: tc.clarence_fairness,
                         clarence_summary: tc.clarence_summary,
