@@ -654,6 +654,62 @@ function CreateQuickContractContent() {
     }, [supabase])
 
     // ==========================================================================
+    // SECTION 10: INITIALIZATION EFFECT
+    // ==========================================================================
+
+    useEffect(() => {
+        let isMounted = true
+
+        const init = async () => {
+            try {
+                setLoading(true)
+                console.log('🔵 INIT: Starting...')
+                console.log('🔵 INIT: sourceTemplateId =', sourceTemplateId)
+
+                const user = await loadUserInfo()
+                console.log('🔵 INIT: loadUserInfo complete, user =', user?.email)
+
+                if (!isMounted) return
+
+                if (user) {
+                    console.log('🔵 INIT: Calling loadTemplates...')
+                    await loadTemplates(user)
+                    console.log('🔵 INIT: loadTemplates complete')
+
+                    if (!isMounted) return
+
+                    // Priority 1: Incoming template from Contracts page "Use Template"
+                    if (sourceTemplateId) {
+                        console.log('🔵 INIT: Calling loadFromTemplate with', sourceTemplateId)
+                        await loadFromTemplate(sourceTemplateId, sourceTemplateName, sourceContractType, user)
+                    }
+                    // Priority 2: Duplicate an existing contract
+                    else if (duplicateId) {
+                        console.log('🔵 INIT: Calling loadDuplicateContract')
+                        await loadDuplicateContract(duplicateId)
+                    }
+                } else {
+                    console.log('🔵 INIT: No user found!')
+                }
+            } catch (err) {
+                console.error('🔴 INIT ERROR:', err)
+            } finally {
+                if (isMounted) {
+                    setLoading(false)
+                    console.log('🔵 INIT: Complete, loading = false')
+                }
+            }
+        }
+
+        init()
+
+        return () => {
+            isMounted = false
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [duplicateId, sourceTemplateId])
+
+    // ==========================================================================
     // SECTION 11: NAVIGATION HANDLERS
     // ==========================================================================
 
