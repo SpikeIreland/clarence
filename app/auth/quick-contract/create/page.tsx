@@ -398,10 +398,12 @@ function CreateQuickContractContent() {
             console.log('Template record columns:', Object.keys(templateData).join(', '))
             console.log('source_contract_id:', templateData.source_contract_id)
             console.log('source_session_id:', templateData.source_session_id)
+            console.log('certification_status:', templateData.certification_status)
 
             // Step 2: Try multiple strategies to find clauses
             let sourceContractId: string | null = null
             let existingClauses: any[] = []
+            let clausesFromTemplateTable = false  // Track if we loaded from template_clauses
 
             // Strategy A: Direct source_contract_id field
             if (templateData.source_contract_id) {
@@ -484,6 +486,7 @@ function CreateQuickContractContent() {
 
                 if (!tcError && templateClauses && templateClauses.length > 0) {
                     console.log(`Strategy E SUCCESS: Found ${templateClauses.length} clauses in template_clauses`)
+                    clausesFromTemplateTable = true
 
                     // Map template_clauses to the same format as uploaded_contract_clauses
                     existingClauses = templateClauses.map(tc => ({
@@ -506,9 +509,6 @@ function CreateQuickContractContent() {
                         status: tc.status || (tc.clarence_certified ? 'certified' : 'pending'),
                         is_header: tc.is_header || false
                     }))
-
-                    // Mark that we're using template_clauses directly (no source contract)
-                    sourceContractId = null
                 } else {
                     console.log('Strategy E: No clauses found in template_clauses', tcError)
                 }
@@ -517,8 +517,9 @@ function CreateQuickContractContent() {
             // =====================================================
             // SUCCESS PATH: Found clauses - create contract and go to invite
             // =====================================================
-            if (existingClauses.length > 0 && sourceContractId) {
+            if (existingClauses.length > 0) {
                 console.log(`Creating new contract from ${existingClauses.length} clauses...`)
+                console.log(`Source: ${clausesFromTemplateTable ? 'template_clauses (Strategy E)' : 'uploaded_contract_clauses'}`)
 
                 const { data: newContract, error: createError } = await supabase
                     .from('uploaded_contracts')
@@ -545,7 +546,7 @@ function CreateQuickContractContent() {
                 const newContractId = newContract.contract_id
                 console.log('Created new contract:', newContractId)
 
-                // Copy clauses to new contract
+                // Copy clauses to new contract - PRESERVE CLARENCE certification data!
                 const clauseCopies = existingClauses.map(c => ({
                     contract_id: newContractId,
                     clause_number: c.clause_number,
@@ -557,14 +558,15 @@ function CreateQuickContractContent() {
                     display_order: c.display_order,
                     is_header: c.is_header || false,
                     parent_clause_id: null,
-                    status: 'pending',
-                    clarence_certified: false,
-                    clarence_position: null,
-                    clarence_fairness: null,
-                    clarence_summary: null,
-                    clarence_assessment: null,
-                    clarence_flags: [],
-                    clarence_certified_at: null
+                    // PRESERVE certification data from template (don't reset to null!)
+                    status: c.clarence_certified ? 'certified' : (c.status || 'pending'),
+                    clarence_certified: c.clarence_certified || false,
+                    clarence_position: c.clarence_position,
+                    clarence_fairness: c.clarence_fairness,
+                    clarence_summary: c.clarence_summary,
+                    clarence_assessment: c.clarence_assessment,
+                    clarence_flags: c.clarence_flags || [],
+                    clarence_certified_at: c.clarence_certified_at
                 }))
 
                 const { error: copyError } = await supabase
@@ -578,7 +580,8 @@ function CreateQuickContractContent() {
                     return
                 }
 
-                console.log(`Copied ${clauseCopies.length} clauses to new contract`)
+                const certifiedCount = clauseCopies.filter(c => c.clarence_certified).length
+                console.log(`Copied ${clauseCopies.length} clauses to new contract (${certifiedCount} pre-certified)`)
 
                 // Map for display
                 const parsedClauses: ParsedClause[] = existingClauses.map(c => ({
@@ -623,7 +626,9 @@ function CreateQuickContractContent() {
                 eventLogger.completed('quick_contract_create', 'template_loaded', {
                     templateId,
                     contractId: newContractId,
-                    clauseCount: parsedClauses.length
+                    clauseCount: parsedClauses.length,
+                    certifiedCount,
+                    strategy: clausesFromTemplateTable ? 'template_clauses' : 'uploaded_contract_clauses'
                 })
 
                 console.log('=== loadFromTemplate COMPLETE ===')
@@ -647,48 +652,6 @@ function CreateQuickContractContent() {
             setLoadingTemplate(false)
         }
     }, [supabase])
-
-    useEffect(() => {
-        let isMounted = true
-
-        const init = async () => {
-            try {
-                setLoading(true)
-
-                const user = await loadUserInfo()
-
-                if (!isMounted) return
-
-                if (user) {
-                    await loadTemplates(user)
-
-                    if (!isMounted) return
-
-                    // Priority 1: Incoming template from Contracts page "Use Template"
-                    if (sourceTemplateId) {
-                        await loadFromTemplate(sourceTemplateId, sourceTemplateName, sourceContractType, user)
-                    }
-                    // Priority 2: Duplicate an existing contract
-                    else if (duplicateId) {
-                        await loadDuplicateContract(duplicateId)
-                    }
-                }
-            } catch (err) {
-                console.error('Initialization error:', err)
-            } finally {
-                if (isMounted) {
-                    setLoading(false)
-                }
-            }
-        }
-
-        init()
-
-        return () => {
-            isMounted = false
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [duplicateId, sourceTemplateId])
 
     // ==========================================================================
     // SECTION 11: NAVIGATION HANDLERS
