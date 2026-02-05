@@ -183,7 +183,7 @@ function ProviderFooter() {
                         <span className="text-slate-500 text-sm">Provider Portal</span>
                     </div>
                     <div className="text-sm">
-                        © {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                        &copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.
                     </div>
                 </div>
             </div>
@@ -281,18 +281,13 @@ function ProviderIntakeContent() {
             dealValue?: string
         } | null = null
 
-        console.log('Intake validation - URL params:', { sessionId, token, providerId })
-
         // Try localStorage for missing params AND registration data
         try {
-            // Check both localStorage keys for compatibility
             const storedSession = localStorage.getItem('clarence_provider_session') ||
                 localStorage.getItem('providerSession')
-            console.log('Intake validation - localStorage raw:', storedSession)
 
             if (storedSession) {
                 storedRegistrationData = JSON.parse(storedSession)
-                console.log('Intake validation - localStorage parsed:', storedRegistrationData)
 
                 if (storedRegistrationData) {
                     if (!sessionId && storedRegistrationData.sessionId) {
@@ -305,8 +300,6 @@ function ProviderIntakeContent() {
                         providerId = storedRegistrationData.providerId
                     }
                 }
-
-                console.log('Intake validation - After localStorage merge:', { sessionId, token, providerId })
             }
         } catch (e) {
             console.error('Error reading localStorage:', e)
@@ -314,7 +307,6 @@ function ProviderIntakeContent() {
 
         // Must have sessionId at minimum
         if (!sessionId) {
-            console.log('Intake validation - FAILED: Missing session_id')
             setErrorMessage('Invalid session. Please check your email for the correct link.')
             setValidating(false)
             setLoading(false)
@@ -356,16 +348,11 @@ function ProviderIntakeContent() {
 
         if (providerId) {
             // Provider is already registered - validate using session_id + provider_id
-            console.log('Intake validation - Using provider_id validation:', { sessionId, providerId })
-
             try {
                 const response = await fetch(`${API_BASE}/validate-provider-session-access?session_id=${sessionId}&provider_id=${providerId}`)
 
-                console.log('Intake validation - API response status:', response.status)
-
                 if (response.ok) {
                     const data = await response.json()
-                    console.log('Intake validation - API response data:', data)
 
                     if (data.valid) {
                         setInviteData({
@@ -394,7 +381,6 @@ function ProviderIntakeContent() {
                         })
 
                         setIsValid(true)
-                        console.log('Intake validation - SUCCESS: Valid session access')
                         setValidating(false)
                         setLoading(false)
                         return
@@ -407,16 +393,11 @@ function ProviderIntakeContent() {
 
         // Fallback: Try token-based validation (for pre-registration or if provider_id validation failed)
         if (token) {
-            console.log('Intake validation - Falling back to token validation:', { sessionId, token })
-
             try {
                 const response = await fetch(`${API_BASE}/validate-provider-invite?session_id=${sessionId}&token=${token}`)
 
-                console.log('Intake validation - API response status:', response.status)
-
                 if (response.ok) {
                     const data = await response.json()
-                    console.log('Intake validation - API response data:', data)
 
                     if (data.valid) {
                         setInviteData({
@@ -445,12 +426,9 @@ function ProviderIntakeContent() {
                         })
 
                         setIsValid(true)
-                        console.log('Intake validation - SUCCESS: Valid invite token')
                         setValidating(false)
                         setLoading(false)
                         return
-                    } else {
-                        console.log('Intake validation - FAILED: API said invalid -', data.message)
                     }
                 }
             } catch (error) {
@@ -460,8 +438,6 @@ function ProviderIntakeContent() {
 
         // Final fallback: Use localStorage data directly
         if (storedRegistrationData && storedRegistrationData.sessionId) {
-            console.log('Intake validation - Using localStorage fallback')
-
             setInviteData({
                 bidId: '',
                 sessionId: sessionId,
@@ -488,7 +464,6 @@ function ProviderIntakeContent() {
             })
 
             setIsValid(true)
-            console.log('Intake validation - SUCCESS via localStorage fallback')
             setValidating(false)
             setLoading(false)
             return
@@ -699,12 +674,12 @@ function ProviderIntakeContent() {
                             </div>
                             <div>
                                 <span className="text-blue-600 text-xs font-medium">Customer</span>
-                                <div className="text-slate-800 font-medium">{inviteData?.customerCompany || '—'}</div>
+                                <div className="text-slate-800 font-medium">{inviteData?.customerCompany || '\u2014'}</div>
                             </div>
                             <div>
                                 <span className="text-blue-600 text-xs font-medium">Est. Value</span>
                                 <div className="text-slate-800 font-medium">
-                                    {inviteData?.dealValue ? `£${Number(inviteData.dealValue).toLocaleString()}` : '—'}
+                                    {inviteData?.dealValue ? `\u00A3${Number(inviteData.dealValue).toLocaleString()}` : '\u2014'}
                                 </div>
                             </div>
                         </div>
@@ -746,7 +721,7 @@ function ProviderIntakeContent() {
                                             : 'bg-slate-200 text-slate-500'
                                         }`}
                                 >
-                                    {step < currentStep ? '✓' : step}
+                                    {step < currentStep ? '\u2713' : step}
                                 </button>
                             ))}
                         </div>
@@ -788,7 +763,7 @@ function ProviderIntakeContent() {
                                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                 }`}
                         >
-                            ← Previous
+                            &larr; Previous
                         </button>
 
                         {currentStep < totalSteps ? (
@@ -796,7 +771,7 @@ function ProviderIntakeContent() {
                                 onClick={nextStep}
                                 className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all cursor-pointer font-medium"
                             >
-                                Next →
+                                Next &rarr;
                             </button>
                         ) : (
                             <button
@@ -810,7 +785,7 @@ function ProviderIntakeContent() {
                                         Submitting...
                                     </>
                                 ) : (
-                                    <>Continue to Strategic Questions →</>
+                                    <>Continue to Strategic Questions &rarr;</>
                                 )}
                             </button>
                         )}
@@ -826,8 +801,8 @@ function ProviderIntakeContent() {
     )
 }
 
-// ========================================================================
-// SECTION 15: MAIN RENDER
+// ============================================================================
+// SECTION 18: STEP COMPONENT INTERFACES
 // ============================================================================
 
 interface StepProps {
@@ -1467,8 +1442,8 @@ function ReviewStep({ formData, inviteData }: { formData: Partial<ProviderCapabi
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                     <h3 className="font-medium text-blue-600 mb-2 text-sm uppercase tracking-wide">Company</h3>
                     <p className="text-slate-800 font-medium">{formData.companyName}</p>
-                    <p className="text-sm text-slate-500">{formData.contactName} • {formData.contactEmail}</p>
-                    <p className="text-sm text-slate-500">{formData.companySize} • {formData.yearsInBusiness} years • {formData.annualRevenue}</p>
+                    <p className="text-sm text-slate-500">{formData.contactName} &bull; {formData.contactEmail}</p>
+                    <p className="text-sm text-slate-500">{formData.companySize} &bull; {formData.yearsInBusiness} years &bull; {formData.annualRevenue}</p>
                 </div>
 
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
@@ -1486,10 +1461,10 @@ function ReviewStep({ formData, inviteData }: { formData: Partial<ProviderCapabi
                     <h3 className="font-medium text-blue-600 mb-2 text-sm uppercase tracking-wide">Commercial</h3>
                     <p className="text-slate-800">£{formData.dailyRateMin} - £{formData.dailyRateMax} / day</p>
                     <p className="text-sm text-slate-500">
-                        Min Project: {formData.minimumProjectValue} • Duration: {formData.preferredContractDuration}
+                        Min Project: {formData.minimumProjectValue} &bull; Duration: {formData.preferredContractDuration}
                     </p>
                     <p className="text-sm text-slate-500">
-                        Payment: {formData.paymentTerms} • Flexibility: {formData.pricingFlexibility}
+                        Payment: {formData.paymentTerms} &bull; Flexibility: {formData.pricingFlexibility}
                     </p>
                 </div>
 
@@ -1520,9 +1495,9 @@ function ReviewStep({ formData, inviteData }: { formData: Partial<ProviderCapabi
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                 <h3 className="font-medium text-amber-700 mb-2">What Happens Next?</h3>
                 <ul className="text-sm text-amber-600 space-y-1">
-                    <li>• CLARENCE will ask you strategic questions about this opportunity</li>
-                    <li>• Your responses help calculate accurate leverage positions</li>
-                    <li>• Once complete, you&apos;ll access the Contract Studio to negotiate with {inviteData?.customerCompany || 'the customer'}</li>
+                    <li>&bull; CLARENCE will ask you strategic questions about this opportunity</li>
+                    <li>&bull; Your responses help calculate accurate leverage positions</li>
+                    <li>&bull; Once complete, you&apos;ll access the Contract Studio to negotiate with {inviteData?.customerCompany || 'the customer'}</li>
                 </ul>
             </div>
         </div>
