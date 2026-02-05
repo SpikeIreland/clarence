@@ -159,8 +159,8 @@ function ProcessingIndicator() {
 function ReadyIndicator() {
     return (
         <div className="flex flex-col items-center gap-4">
-            <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center">
-                <svg className="w-12 h-12 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center">
+                <svg className="w-12 h-12 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
             </div>
@@ -452,7 +452,7 @@ function ProviderConfirmationContent() {
 
                         {/* Submission Receipt */}
                         <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
-                            <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
                                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
@@ -487,8 +487,8 @@ function ProviderConfirmationContent() {
                             <div className="space-y-4">
                                 {/* Step 1: Analysis - always complete at this point */}
                                 <div className="flex items-start gap-4">
-                                    <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                         </svg>
                                     </div>
@@ -504,14 +504,14 @@ function ProviderConfirmationContent() {
                                 <div className="flex items-start gap-4">
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5
                                         ${readinessStatus === 'ready'
-                                            ? 'bg-emerald-100'
+                                            ? 'bg-blue-100'
                                             : readinessStatus === 'processing' || readinessStatus === 'checking'
                                                 ? 'bg-blue-100'
                                                 : 'bg-amber-100'
                                         }`}
                                     >
                                         {readinessStatus === 'ready' ? (
-                                            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                             </svg>
                                         ) : readinessStatus === 'processing' || readinessStatus === 'checking' ? (
