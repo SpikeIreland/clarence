@@ -10,6 +10,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+// ============================================================================
+// SECTION 1: LAZY CLIENT INITIALIZATION
+// ============================================================================
+
 function getAdminClient() {
     return createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,7 +28,7 @@ function getAdminClient() {
 }
 
 // ============================================================================
-// SECTION 1: AUTH VERIFICATION
+// SECTION 2: AUTH VERIFICATION
 // ============================================================================
 
 async function verifyAdmin(request: NextRequest) {
@@ -46,7 +50,7 @@ async function verifyAdmin(request: NextRequest) {
 }
 
 // ============================================================================
-// SECTION 2: POST HANDLER
+// SECTION 3: POST HANDLER
 // ============================================================================
 
 export async function POST(request: NextRequest) {

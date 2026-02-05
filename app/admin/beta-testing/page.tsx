@@ -5,12 +5,14 @@
 // ============================================================================
 // File: app/admin/beta-testing/page.tsx
 // Purpose: Admin interface for managing beta testers, feedback, and videos
+// Updated: 6 Feb 2026 - Added Company Admin management, fixed SSR issues
 // ============================================================================
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
@@ -31,6 +33,16 @@ interface UserProfile {
 interface Company {
     company_id: string
     company_name: string
+}
+
+interface CompanyUserRecord {
+    company_user_id: string
+    company_id: string
+    user_id: string
+    role: string
+    status: string
+    email: string | null
+    full_name: string | null
 }
 
 interface Session {
@@ -74,16 +86,6 @@ interface UserDetails {
     companyUserRecord: CompanyUserRecord | null
     sessions: Session[]
     feedback: BetaFeedback[]
-}
-
-interface CompanyUserRecord {
-    company_user_id: string
-    company_id: string
-    user_id: string
-    role: string
-    status: string
-    email: string | null
-    full_name: string | null
 }
 
 interface DashboardStats {
@@ -150,20 +152,11 @@ const VIDEO_STATUSES: Record<string, { label: string; color: string }> = {
     published: { label: 'Published', color: 'bg-emerald-100 text-emerald-700' }
 }
 
-// Company admin management state
-const [allCompanies, setAllCompanies] = useState<Company[]>([])
-const [companiesLoaded, setCompaniesLoaded] = useState(false)
-const [companyActionLoading, setCompanyActionLoading] = useState(false)
-const [companyActionMessage, setCompanyActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
-const [newCompanyName, setNewCompanyName] = useState('')
-const [showCreateCompany, setShowCreateCompany] = useState(false)
-
 // ============================================================================
 // SECTION 2: MAIN COMPONENT
 // ============================================================================
 
-export default function BetaTestingAdminDashboard() {
+function BetaTestingAdminDashboard() {
     const router = useRouter()
     const supabase = createClient()
 
@@ -176,7 +169,7 @@ export default function BetaTestingAdminDashboard() {
     const [adminEmail, setAdminEmail] = useState('')
     const [loading, setLoading] = useState(true)
 
-    // Tab state - Added 'videos' to the type
+    // Tab state
     const [activeTab, setActiveTab] = useState<'create' | 'users' | 'feedback' | 'stats' | 'videos'>('users')
 
     // Create user state
@@ -232,6 +225,15 @@ export default function BetaTestingAdminDashboard() {
         script_notes: ''
     })
 
+    // Company admin management state
+    const [allCompanies, setAllCompanies] = useState<Company[]>([])
+    const [companiesLoaded, setCompaniesLoaded] = useState(false)
+    const [companyActionLoading, setCompanyActionLoading] = useState(false)
+    const [companyActionMessage, setCompanyActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+    const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
+    const [newCompanyName, setNewCompanyName] = useState('')
+    const [showCreateCompany, setShowCreateCompany] = useState(false)
+
     // -------------------------------------------------------------------------
     // SECTION 2.2: EFFECTS
     // -------------------------------------------------------------------------
@@ -267,7 +269,7 @@ export default function BetaTestingAdminDashboard() {
     async function checkAdminAccess() {
         try {
             const { data: { user }, error: authError } = await supabase.auth.getUser()
-            console.log('🔍 Admin check - User:', user?.id, user?.email)
+            console.log('🔑 Admin check - User:', user?.id, user?.email)
 
             if (authError) {
                 console.error('❌ Auth error:', authError)
@@ -288,9 +290,9 @@ export default function BetaTestingAdminDashboard() {
                 .eq('auth_id', user.id)
                 .single()
 
-            console.log('🔍 Admin check - Profile:', profile)
-            console.log('🔍 Admin check - Profile Error:', profileError)
-            console.log('🔍 Admin check - Role:', profile?.role)
+            console.log('🔑 Admin check - Profile:', profile)
+            console.log('🔑 Admin check - Profile Error:', profileError)
+            console.log('🔑 Admin check - Role:', profile?.role)
 
             if (profileError) {
                 console.error('❌ Profile fetch error:', profileError)
@@ -366,21 +368,23 @@ export default function BetaTestingAdminDashboard() {
             const { userId } = await response.json()
 
             // Log admin action
-            await supabase.from('admin_actions').insert({
-                admin_id: (await supabase.auth.getUser()).data.user?.id,
-                admin_email: adminEmail,
-                action_type: 'create_user',
-                target_user_id: userId,
-                target_user_email: createForm.email,
-                details: {
-                    firstName: createForm.firstName,
-                    lastName: createForm.lastName,
-                    companyName: createForm.companyName
-                }
-            })
+            try {
+                await supabase.from('admin_actions').insert({
+                    admin_id: (await supabase.auth.getUser()).data.user?.id,
+                    admin_email: adminEmail,
+                    action_type: 'create_user',
+                    target_user_id: userId,
+                    target_user_email: createForm.email,
+                    details: {
+                        firstName: createForm.firstName,
+                        lastName: createForm.lastName,
+                        companyName: createForm.companyName
+                    }
+                })
+            } catch { }
 
             // Trigger welcome email workflow (update URL to your N8N instance)
-            await fetch('https://your-n8n-instance.app.n8n.cloud/webhook/admin-send-welcome-email', {
+            fetch('https://your-n8n-instance.app.n8n.cloud/webhook/admin-send-welcome-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -412,7 +416,6 @@ export default function BetaTestingAdminDashboard() {
 
     async function loadUsers() {
         try {
-            // Show all users, not just beta testers - any feedback is valuable
             const { data } = await supabase
                 .from('users')
                 .select('*')
@@ -542,7 +545,7 @@ export default function BetaTestingAdminDashboard() {
                     target_user_id: params.targetUserId,
                     details: params
                 })
-            } catch { } // Don't fail if logging fails
+            } catch { }
 
             return result
         } catch (error: any) {
@@ -565,7 +568,6 @@ export default function BetaTestingAdminDashboard() {
         })
 
         if (result) {
-            // Reload user details to reflect changes
             await loadUserDetails(selectedUser.profile.user_id)
             await loadUsers()
             setSelectedCompanyId('')
@@ -621,7 +623,6 @@ export default function BetaTestingAdminDashboard() {
 
     async function loadAllFeedback() {
         try {
-            // First, get all feedback
             let query = supabase
                 .from('beta_feedback')
                 .select('*')
@@ -645,11 +646,9 @@ export default function BetaTestingAdminDashboard() {
                 return
             }
 
-            // Get unique user IDs and company IDs
             const userIds = [...new Set(feedbackData.map(f => f.user_id).filter(Boolean))]
             const companyIds = [...new Set(feedbackData.map(f => f.company_id).filter(Boolean))]
 
-            // Fetch users
             let usersMap: Record<string, any> = {}
             if (userIds.length > 0) {
                 const { data: usersData } = await supabase
@@ -664,7 +663,6 @@ export default function BetaTestingAdminDashboard() {
                 }
             }
 
-            // Fetch companies
             let companiesMap: Record<string, any> = {}
             if (companyIds.length > 0) {
                 const { data: companiesData } = await supabase
@@ -679,7 +677,6 @@ export default function BetaTestingAdminDashboard() {
                 }
             }
 
-            // Combine the data
             const enrichedFeedback = feedbackData.map(fb => ({
                 ...fb,
                 user: fb.user_id ? usersMap[fb.user_id] : null,
@@ -720,13 +717,14 @@ export default function BetaTestingAdminDashboard() {
                 })
                 .eq('feedback_id', feedbackId)
 
-            // Log admin action
-            await supabase.from('admin_actions').insert({
-                admin_id: adminUser.data.user?.id,
-                admin_email: adminEmail,
-                action_type: 'review_feedback',
-                details: { feedback_id: feedbackId, notes }
-            })
+            try {
+                await supabase.from('admin_actions').insert({
+                    admin_id: adminUser.data.user?.id,
+                    admin_email: adminEmail,
+                    action_type: 'review_feedback',
+                    details: { feedback_id: feedbackId, notes }
+                })
+            } catch { }
 
             loadAllFeedback()
         } catch (error) {
@@ -753,13 +751,11 @@ export default function BetaTestingAdminDashboard() {
 
     async function loadStats() {
         try {
-            // Total beta testers
             const { count: totalBeta } = await supabase
                 .from('users')
                 .select('*', { count: 'exact', head: true })
                 .eq('is_beta_tester', true)
 
-            // Active this week
             const oneWeekAgo = new Date()
             oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
 
@@ -769,18 +765,15 @@ export default function BetaTestingAdminDashboard() {
                 .eq('is_beta_tester', true)
                 .gte('last_login_at', oneWeekAgo.toISOString())
 
-            // Total sessions created by beta testers
             const { count: sessionsCount } = await supabase
                 .from('sessions')
                 .select('*', { count: 'exact', head: true })
 
-            // Pending feedback count
             const { count: pendingCount } = await supabase
                 .from('beta_feedback')
                 .select('*', { count: 'exact', head: true })
                 .is('reviewed_at', null)
 
-            // Average rating from feedback
             const { data: ratings } = await supabase
                 .from('beta_feedback')
                 .select('rating')
@@ -851,7 +844,6 @@ export default function BetaTestingAdminDashboard() {
 
             setVideos(data || [])
 
-            // Calculate stats
             const calcStats: VideoStats = {
                 total: data?.length || 0,
                 published: data?.filter(v => v.youtube_id).length || 0,
@@ -888,13 +880,14 @@ export default function BetaTestingAdminDashboard() {
 
             if (error) throw error
 
-            // Log admin action
-            await supabase.from('admin_actions').insert({
-                admin_id: adminUser.data.user?.id,
-                admin_email: adminEmail,
-                action_type: 'update_video',
-                details: { video_id: videoId, youtube_id: youtubeId }
-            })
+            try {
+                await supabase.from('admin_actions').insert({
+                    admin_id: adminUser.data.user?.id,
+                    admin_email: adminEmail,
+                    action_type: 'update_video',
+                    details: { video_id: videoId, youtube_id: youtubeId }
+                })
+            } catch { }
 
             setEditingYoutubeId(null)
             setNewYoutubeId('')
@@ -1054,7 +1047,6 @@ export default function BetaTestingAdminDashboard() {
             <div className="bg-white border-b border-slate-200">
                 <div className="container mx-auto px-6">
                     <div className="flex gap-8">
-                        {/* Create User Tab */}
                         <button
                             onClick={() => setActiveTab('create')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'create'
@@ -1065,7 +1057,6 @@ export default function BetaTestingAdminDashboard() {
                             ➕ Create Tester
                         </button>
 
-                        {/* Users Tab */}
                         <button
                             onClick={() => setActiveTab('users')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'users'
@@ -1076,7 +1067,6 @@ export default function BetaTestingAdminDashboard() {
                             👥 Users ({users.length})
                         </button>
 
-                        {/* Feedback Tab */}
                         <button
                             onClick={() => setActiveTab('feedback')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'feedback'
@@ -1087,7 +1077,6 @@ export default function BetaTestingAdminDashboard() {
                             💬 Feedback ({allFeedback.length})
                         </button>
 
-                        {/* Stats Tab */}
                         <button
                             onClick={() => setActiveTab('stats')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'stats'
@@ -1098,7 +1087,6 @@ export default function BetaTestingAdminDashboard() {
                             📊 Stats
                         </button>
 
-                        {/* Videos Tab */}
                         <button
                             onClick={() => setActiveTab('videos')}
                             className={`py-4 px-2 border-b-2 font-semibold transition-colors ${activeTab === 'videos'
@@ -1128,7 +1116,6 @@ export default function BetaTestingAdminDashboard() {
                             </h2>
 
                             <div className="space-y-4">
-                                {/* First Name */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                                         First Name <span className="text-red-500">*</span>
@@ -1142,7 +1129,6 @@ export default function BetaTestingAdminDashboard() {
                                     />
                                 </div>
 
-                                {/* Last Name */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                                         Last Name <span className="text-red-500">*</span>
@@ -1156,7 +1142,6 @@ export default function BetaTestingAdminDashboard() {
                                     />
                                 </div>
 
-                                {/* Email */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                                         Email <span className="text-red-500">*</span>
@@ -1170,7 +1155,6 @@ export default function BetaTestingAdminDashboard() {
                                     />
                                 </div>
 
-                                {/* Company Name (Optional) */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                                         Company Name <span className="text-slate-400">(optional)</span>
@@ -1184,7 +1168,6 @@ export default function BetaTestingAdminDashboard() {
                                     />
                                 </div>
 
-                                {/* Temporary Password */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-2">
                                         Temporary Password <span className="text-red-500">*</span>
@@ -1207,7 +1190,6 @@ export default function BetaTestingAdminDashboard() {
                                     </div>
                                 </div>
 
-                                {/* Submit Button */}
                                 <div className="pt-4">
                                     <button
                                         onClick={createUser}
@@ -1218,7 +1200,6 @@ export default function BetaTestingAdminDashboard() {
                                     </button>
                                 </div>
 
-                                {/* Success Message */}
                                 {createSuccess && (
                                     <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
                                         <p className="text-emerald-800 font-semibold">✅ Beta tester created successfully!</p>
@@ -1228,7 +1209,6 @@ export default function BetaTestingAdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Info Box */}
                         <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
                             <p className="text-sm text-blue-900 font-semibold">📋 What happens:</p>
                             <ul className="text-sm text-blue-800 mt-2 space-y-1 ml-4 list-disc">
@@ -1382,6 +1362,7 @@ export default function BetaTestingAdminDashboard() {
                                                 <p className="text-slate-600">No feedback submitted yet</p>
                                             </div>
                                         )}
+
                                         {/* Company & Admin Management */}
                                         <div className="pt-4 border-t border-slate-200">
                                             <h3 className="font-semibold text-slate-900 mb-3">🏢 Company & Admin</h3>
@@ -1389,8 +1370,8 @@ export default function BetaTestingAdminDashboard() {
                                             {/* Status Message */}
                                             {companyActionMessage && (
                                                 <div className={`p-3 rounded-lg mb-3 text-sm font-medium ${companyActionMessage.type === 'success'
-                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                                    : 'bg-red-50 text-red-700 border border-red-200'
+                                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                        : 'bg-red-50 text-red-700 border border-red-200'
                                                     }`}>
                                                     {companyActionMessage.type === 'success' ? '✅' : '❌'} {companyActionMessage.text}
                                                 </div>
@@ -1404,8 +1385,8 @@ export default function BetaTestingAdminDashboard() {
                                                     </p>
                                                     <p className="text-xs text-blue-700 mt-1">
                                                         Role: <span className={`font-semibold ${selectedUser.companyUserRecord?.role === 'admin'
-                                                            ? 'text-purple-700'
-                                                            : 'text-blue-700'
+                                                                ? 'text-purple-700'
+                                                                : 'text-blue-700'
                                                             }`}>
                                                             {selectedUser.companyUserRecord?.role || 'user'}
                                                         </span>
@@ -1532,7 +1513,6 @@ export default function BetaTestingAdminDashboard() {
                             <div className="flex items-center justify-between mb-6">
                                 <h2 className="text-2xl font-bold text-slate-900">Beta Feedback</h2>
 
-                                {/* Filter Buttons */}
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => setFeedbackFilter('all')}
@@ -1575,7 +1555,6 @@ export default function BetaTestingAdminDashboard() {
                                                 : 'bg-white border-blue-200'
                                             }`}
                                     >
-                                        {/* Header */}
                                         <div className="flex items-start justify-between mb-2">
                                             <div>
                                                 <p className="font-semibold text-slate-900">
@@ -1604,20 +1583,17 @@ export default function BetaTestingAdminDashboard() {
                                             </div>
                                         </div>
 
-                                        {/* Title & Description */}
                                         {fb.title && (
                                             <p className="font-medium text-slate-800 mb-1">{fb.title}</p>
                                         )}
                                         <p className="text-slate-700 mb-3">{fb.description}</p>
 
-                                        {/* Priority Badge */}
                                         {fb.priority && (
                                             <span className={`inline-block px-2 py-1 rounded text-xs font-medium border mb-3 ${getPriorityColor(fb.priority)}`}>
                                                 {fb.priority.toUpperCase()}
                                             </span>
                                         )}
 
-                                        {/* Admin Notes */}
                                         {fb.admin_notes && (
                                             <div className="p-2 bg-amber-50 border border-amber-200 rounded mb-3">
                                                 <p className="text-xs font-semibold text-amber-900">Admin Notes:</p>
@@ -1625,14 +1601,12 @@ export default function BetaTestingAdminDashboard() {
                                             </div>
                                         )}
 
-                                        {/* Footer */}
                                         <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                                             <p className="text-xs text-slate-500">
                                                 {new Date(fb.created_at).toLocaleDateString()} at {new Date(fb.created_at).toLocaleTimeString()}
                                             </p>
 
                                             <div className="flex gap-2">
-                                                {/* Priority Selector */}
                                                 <select
                                                     value={fb.priority || ''}
                                                     onChange={(e) => updateFeedbackPriority(fb.feedback_id, e.target.value)}
@@ -1645,7 +1619,6 @@ export default function BetaTestingAdminDashboard() {
                                                     <option value="critical">Critical</option>
                                                 </select>
 
-                                                {/* Flag Button */}
                                                 <button
                                                     onClick={() => toggleFeedbackFlag(fb.feedback_id, fb.is_flagged)}
                                                     className="text-sm px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded font-semibold"
@@ -1653,7 +1626,6 @@ export default function BetaTestingAdminDashboard() {
                                                     {fb.is_flagged ? '🚩 Unflag' : 'Flag'}
                                                 </button>
 
-                                                {/* Mark Reviewed Button */}
                                                 {!fb.reviewed_at && (
                                                     <button
                                                         onClick={() => markFeedbackReviewed(fb.feedback_id)}
@@ -1686,35 +1658,30 @@ export default function BetaTestingAdminDashboard() {
                         <h2 className="text-2xl font-bold text-slate-900 mb-6">Beta Testing Dashboard</h2>
 
                         <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
-                            {/* Total Beta Testers */}
                             <div className="bg-white rounded-2xl shadow-lg p-6">
                                 <div className="text-4xl mb-2">👥</div>
                                 <div className="text-3xl font-bold text-slate-900">{stats.totalBetaTesters}</div>
                                 <div className="text-sm text-slate-600">Total Beta Testers</div>
                             </div>
 
-                            {/* Active This Week */}
                             <div className="bg-white rounded-2xl shadow-lg p-6">
                                 <div className="text-4xl mb-2">🟢</div>
                                 <div className="text-3xl font-bold text-slate-900">{stats.activeThisWeek}</div>
                                 <div className="text-sm text-slate-600">Active This Week</div>
                             </div>
 
-                            {/* Total Sessions */}
                             <div className="bg-white rounded-2xl shadow-lg p-6">
                                 <div className="text-4xl mb-2">📋</div>
                                 <div className="text-3xl font-bold text-slate-900">{stats.totalSessions}</div>
                                 <div className="text-sm text-slate-600">Total Sessions</div>
                             </div>
 
-                            {/* Pending Feedback */}
                             <div className="bg-white rounded-2xl shadow-lg p-6">
                                 <div className="text-4xl mb-2">⏳</div>
                                 <div className="text-3xl font-bold text-slate-900">{stats.pendingFeedback}</div>
                                 <div className="text-sm text-slate-600">Pending Feedback</div>
                             </div>
 
-                            {/* Average Rating */}
                             <div className="bg-white rounded-2xl shadow-lg p-6">
                                 <div className="text-4xl mb-2">⭐</div>
                                 <div className="text-3xl font-bold text-slate-900">{stats.averageRating.toFixed(1)}</div>
@@ -1835,7 +1802,6 @@ export default function BetaTestingAdminDashboard() {
                                     {getFilteredVideos().map(video => (
                                         <div key={video.video_id} className="p-4 hover:bg-slate-50">
                                             <div className="flex items-start gap-4">
-                                                {/* Thumbnail / Preview */}
                                                 <div className="flex-shrink-0">
                                                     {video.youtube_id ? (
                                                         <a
@@ -1860,7 +1826,6 @@ export default function BetaTestingAdminDashboard() {
                                                     )}
                                                 </div>
 
-                                                {/* Content */}
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 flex-wrap mb-1">
                                                         <h4 className="font-semibold text-slate-800">{video.title}</h4>
@@ -1892,9 +1857,7 @@ export default function BetaTestingAdminDashboard() {
                                                     </div>
                                                 </div>
 
-                                                {/* Actions */}
                                                 <div className="flex-shrink-0 space-y-2">
-                                                    {/* YouTube ID Input */}
                                                     {editingYoutubeId === video.video_id ? (
                                                         <div className="flex gap-2">
                                                             <input
@@ -1933,7 +1896,6 @@ export default function BetaTestingAdminDashboard() {
                                                         </button>
                                                     )}
 
-                                                    {/* Quick Actions */}
                                                     <div className="flex gap-1">
                                                         <button
                                                             onClick={() => toggleVideoFeatured(video.video_id, video.is_featured)}
@@ -1966,7 +1928,6 @@ export default function BetaTestingAdminDashboard() {
                                                 </div>
                                             </div>
 
-                                            {/* Script Notes (expandable) */}
                                             {video.script_notes && (
                                                 <details className="mt-3 ml-36">
                                                     <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
@@ -2129,7 +2090,6 @@ export default function BetaTestingAdminDashboard() {
                                     </div>
 
                                     <div className="p-6">
-                                        {/* Preview */}
                                         {selectedVideo.youtube_id ? (
                                             <div className="aspect-video mb-6 rounded-lg overflow-hidden bg-black">
                                                 <iframe
@@ -2148,7 +2108,6 @@ export default function BetaTestingAdminDashboard() {
                                             </div>
                                         )}
 
-                                        {/* Details */}
                                         <div className="space-y-4">
                                             <div>
                                                 <h4 className="text-sm font-medium text-slate-500">Description</h4>
@@ -2207,4 +2166,24 @@ export default function BetaTestingAdminDashboard() {
             </main>
         </div>
     )
+}
+
+// ============================================================================
+// SECTION 11: DYNAMIC EXPORT (prevents SSR of client-only page)
+// ============================================================================
+
+const BetaTestingPage = dynamic(() => Promise.resolve(BetaTestingAdminDashboard), {
+    ssr: false,
+    loading: () => (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="text-center">
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-600">Loading admin dashboard...</p>
+            </div>
+        </div>
+    )
+})
+
+export default function Page() {
+    return <BetaTestingPage />
 }

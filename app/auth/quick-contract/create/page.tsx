@@ -473,6 +473,47 @@ function CreateQuickContractContent() {
                 }
             }
 
+            // Strategy E: Query template_clauses directly (for user-created templates from "Save as Template")
+            if (existingClauses.length === 0) {
+                console.log('Strategy E: Querying template_clauses directly for template_id:', templateId)
+                const { data: templateClauses, error: tcError } = await supabase
+                    .from('template_clauses')
+                    .select('*')
+                    .eq('template_id', templateId)
+                    .order('display_order', { ascending: true })
+
+                if (!tcError && templateClauses && templateClauses.length > 0) {
+                    console.log(`Strategy E SUCCESS: Found ${templateClauses.length} clauses in template_clauses`)
+
+                    // Map template_clauses to the same format as uploaded_contract_clauses
+                    existingClauses = templateClauses.map(tc => ({
+                        clause_id: tc.template_clause_id || crypto.randomUUID(),
+                        clause_number: tc.clause_number,
+                        clause_name: tc.clause_name,
+                        category: tc.category,
+                        content: tc.default_text,
+                        original_text: tc.default_text,
+                        clause_level: tc.clause_level || 1,
+                        display_order: tc.display_order,
+                        parent_clause_id: tc.parent_clause_id,
+                        clarence_position: tc.clarence_position,
+                        clarence_fairness: tc.clarence_fairness,
+                        clarence_summary: tc.clarence_summary,
+                        clarence_assessment: tc.clarence_assessment,
+                        clarence_flags: tc.clarence_flags || [],
+                        clarence_certified: tc.clarence_certified || false,
+                        clarence_certified_at: tc.clarence_certified_at,
+                        status: tc.status || (tc.clarence_certified ? 'certified' : 'pending'),
+                        is_header: tc.is_header || false
+                    }))
+
+                    // Mark that we're using template_clauses directly (no source contract)
+                    sourceContractId = null
+                } else {
+                    console.log('Strategy E: No clauses found in template_clauses', tcError)
+                }
+            }
+
             // =====================================================
             // SUCCESS PATH: Found clauses - create contract and go to invite
             // =====================================================
