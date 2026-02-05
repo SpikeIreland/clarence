@@ -832,7 +832,7 @@ function CompanyAdminContent() {
             const supabase = createClient()
             const { data, error } = await supabase.from('company_users').select('*').eq('company_id', companyId).neq('status', 'removed').order('created_at', { ascending: false })
             if (error) { if (error.code === '42P01') { setCompanyUsers([]); return }; throw error }
-            setCompanyUsers((data || []).map(u => ({ id: u.id, userId: u.user_id, email: u.email, fullName: u.full_name || '', role: u.role || 'user', status: u.status || 'invited', invitedAt: u.invited_at || u.created_at, lastActiveAt: u.last_active_at })))
+            setCompanyUsers((data || []).map(u => ({ id: u.company_user_id, userId: u.user_id, email: u.email || '', fullName: u.full_name || '', role: u.role || 'user', status: u.status || 'invited', invitedAt: u.invited_at || u.created_at, lastActiveAt: u.last_active_at })))
         } catch (e) { console.error('Load company users error:', e); setCompanyUsers([]) } finally { setUsersLoading(false) }
     }, [])
 
@@ -1023,11 +1023,11 @@ function CompanyAdminContent() {
         await handleSendCompanyInvite('', email); await loadCompanyUsers(userInfo.companyId)
     }
 
-    const handleRemoveCompanyUser = async (id: string) => { if (!userInfo?.companyId) return; const supabase = createClient(); await supabase.from('company_users').update({ status: 'removed' }).eq('id', id); await loadCompanyUsers(userInfo.companyId) }
+    const handleRemoveCompanyUser = async (id: string) => { if (!userInfo?.companyId) return; const supabase = createClient(); await supabase.from('company_users').update({ status: 'removed' }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
 
     const handleSendCompanyInvite = async (id: string, email: string) => {
         try { await fetch(`${API_BASE}/send-user-invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, company_name: companyName, inviter_name: `${userInfo?.firstName || ''} ${userInfo?.lastName || ''}`.trim() || userInfo?.email, inviter_email: userInfo?.email, invite_type: 'platform' }) }) } catch (e) { console.log('Invite error:', e) }
-        if (id && userInfo?.companyId) { const supabase = createClient(); await supabase.from('company_users').update({ invitation_sent: true, invitation_sent_at: new Date().toISOString() }).eq('id', id); await loadCompanyUsers(userInfo.companyId) }
+        if (id && userInfo?.companyId) { const supabase = createClient(); await supabase.from('company_users').update({ invitation_sent: true, invitation_sent_at: new Date().toISOString() }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
     }
 
     useEffect(() => {
