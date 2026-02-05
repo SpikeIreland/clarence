@@ -108,7 +108,7 @@ function ProviderHeader() {
                         href="/auth/login"
                         className="text-sm text-slate-400 hover:text-white transition-colors"
                     >
-                        Customer Portal →
+                        Customer Portal â†’
                     </Link>
                 </nav>
             </div>
@@ -133,7 +133,7 @@ function ProviderFooter() {
                         <span className="text-slate-500 text-sm">Provider Portal</span>
                     </div>
                     <div className="text-sm">
-                        © {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                        Â© {new Date().getFullYear()} CLARENCE. The Honest Broker.
                     </div>
                 </div>
             </div>
@@ -267,6 +267,15 @@ function ProviderAuthContent() {
                     setSignupForm(prev => ({
                         ...prev,
                         email: data.invitedEmail
+                    }));
+                }
+
+                // Pre-fill company name from invitation (what customer entered)
+                // Provider can still edit this if needed
+                if (data.providerCompany) {
+                    setSignupForm(prev => ({
+                        ...prev,
+                        companyName: data.providerCompany
                     }));
                 }
 
@@ -784,12 +793,12 @@ function ProviderAuthContent() {
 
                             {/* Success Message */}
                             {successMessage && (
-                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-                                    <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    <span className="text-emerald-700 text-sm flex-1">{successMessage}</span>
-                                    <button onClick={() => setSuccessMessage('')} className="text-emerald-400 hover:text-emerald-600">
+                                    <span className="text-blue-700 text-sm flex-1">{successMessage}</span>
+                                    <button onClick={() => setSuccessMessage('')} className="text-blue-400 hover:text-blue-600">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                         </svg>
@@ -817,7 +826,7 @@ function ProviderAuthContent() {
                                                 placeholder="e.g., INV-XXXXXXXX-XXXXXX"
                                                 className={`w-full px-4 py-3 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm font-mono
                                                     ${tokenValidated
-                                                        ? 'border-emerald-300 bg-emerald-50'
+                                                        ? 'border-blue-300 bg-blue-50'
                                                         : signupForm.token && !isValidatingToken
                                                             ? 'border-red-300 bg-red-50'
                                                             : 'border-slate-300'
@@ -827,7 +836,7 @@ function ProviderAuthContent() {
                                                 {isValidatingToken ? (
                                                     <div className="w-5 h-5 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
                                                 ) : tokenValidated ? (
-                                                    <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                     </svg>
                                                 ) : signupForm.token ? (
@@ -863,7 +872,7 @@ function ProviderAuthContent() {
                                                 {tokenValidation.dealValue && (
                                                     <div>
                                                         <span className="text-slate-500">Value:</span>
-                                                        <p className="font-medium text-blue-600">£{parseInt(tokenValidation.dealValue).toLocaleString()}</p>
+                                                        <p className="font-medium text-blue-600">Â£{parseInt(tokenValidation.dealValue).toLocaleString()}</p>
                                                     </div>
                                                 )}
                                                 <div>
@@ -951,6 +960,14 @@ function ProviderAuthContent() {
                                             disabled={!tokenValidated}
                                             className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
                                         />
+                                        {tokenValidated && tokenValidation?.providerCompany && signupForm.companyName === tokenValidation.providerCompany && (
+                                            <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Pre-filled from invitation. Edit if this isn&apos;t correct.
+                                            </p>
+                                        )}
                                     </div>
 
                                     {/* Contact Name */}
@@ -1018,8 +1035,8 @@ function ProviderAuthContent() {
                                     {/* Activation Email Sent Success */}
                                     {activationEmailSent ? (
                                         <div className="text-center py-6">
-                                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                                <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                                 </svg>
                                             </div>
@@ -1040,7 +1057,7 @@ function ProviderAuthContent() {
                                                 }}
                                                 className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                                             >
-                                                ← Back to Login
+                                                â† Back to Login
                                             </button>
                                         </div>
                                     ) : showActivateAccount ? (
@@ -1088,7 +1105,7 @@ function ProviderAuthContent() {
                                                 }}
                                                 className="text-slate-500 hover:text-slate-700 text-sm"
                                             >
-                                                ← Try different credentials
+                                                â† Try different credentials
                                             </button>
                                         </div>
                                     ) : (
