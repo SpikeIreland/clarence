@@ -588,11 +588,59 @@ export default function ContractLibraryPage() {
 
             console.log('Parse result:', result)
 
-            // Stage 3: Redirect to Studio for certification
+            // Stage 3: Wait for parsing to complete, then redirect
             const returnedContractId = result.contractId || result.contract_id
 
             if (returnedContractId) {
-                // Redirect to Studio in template mode for progressive certification
+                // If status is 'processing', poll until ready
+                if (result.status === 'processing') {
+                    console.log('Contract processing, polling for completion...')
+                    setUploadStage('parsing')  // Keep showing "Parsing Contract..." during polling
+
+                    const maxAttempts = 60  // 2 minutes max
+                    let attempts = 0
+
+                    const pollForReady = async (): Promise<boolean> => {
+                        const { data, error } = await supabase
+                            .from('uploaded_contracts')
+                            .select('status, clause_count')
+                            .eq('contract_id', returnedContractId)
+                            .single()
+
+                        if (error) {
+                            console.error('Polling error:', error)
+                            return false
+                        }
+
+                        console.log(`Poll attempt ${attempts + 1}: status=${data.status}, clauses=${data.clause_count}`)
+
+                        if (data.status === 'ready' && data.clause_count > 0) {
+                            return true
+                        }
+                        if (data.status === 'failed') {
+                            throw new Error('Document parsing failed')
+                        }
+                        return false
+                    }
+
+                    while (attempts < maxAttempts) {
+                        const isReady = await pollForReady()
+                        if (isReady) {
+                            console.log('Contract ready, redirecting to Studio...')
+                            router.push(`/auth/quick-contract/studio/${returnedContractId}?mode=template`)
+                            return
+                        }
+                        attempts++
+                        await new Promise(resolve => setTimeout(resolve, 2000))  // Wait 2 seconds
+                    }
+
+                    // Timeout - redirect anyway, Studio will handle it
+                    console.warn('Polling timeout, redirecting anyway...')
+                    router.push(`/auth/quick-contract/studio/${returnedContractId}?mode=template`)
+                    return
+                }
+
+                // Already ready, redirect immediately
                 router.push(`/auth/quick-contract/studio/${returnedContractId}?mode=template`)
                 return
             }
