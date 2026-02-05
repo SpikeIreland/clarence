@@ -1,7 +1,7 @@
 'use client'
 
 // ============================================================================
-// PROVIDER CONFIRMATION PAGE - UPDATED
+// PROVIDER CONFIRMATION PAGE - FIXED
 // Location: app/provider/providerConfirmation/page.tsx
 //
 // This page is shown after the provider completes the strategic questionnaire.
@@ -12,7 +12,11 @@
 // 3. Shows "Ready" state with Contract Studio CTA when negotiation_ready
 // 4. Falls back to "We'll notify you" if polling times out
 //
-// Uses consistent ProviderHeader/ProviderFooter matching all provider pages.
+// FIX (05-Feb-2026): Status check now examines BOTH 'status' (bid status)
+// AND 'sessionStatus' (session status) fields from provider-sessions-api.
+// Previously only checked 'status' which returns 'questionnaire_complete'
+// (a non-ready bid status), missing 'sessionStatus: negotiation_ready'.
+// This caused infinite polling as the page never detected readiness.
 // ============================================================================
 
 // ============================================================================
@@ -45,6 +49,7 @@ interface SessionStatus {
     serviceRequired: string
     dealValue: string
     status: string
+    sessionStatus?: string
     intakeComplete: boolean
     questionnaireComplete: boolean
 }
@@ -68,12 +73,9 @@ function ProviderHeader() {
                         </div>
                     </Link>
 
-                    <Link
-                        href="/auth/login"
-                        className="text-sm text-slate-400 hover:text-white transition-colors"
-                    >
-                        Customer Portal →
-                    </Link>
+                    <span className="text-sm text-slate-400">
+                        Provider Portal
+                    </span>
                 </nav>
             </div>
         </header>
@@ -97,7 +99,7 @@ function ProviderFooter() {
                         <span className="text-slate-500 text-sm">Provider Portal</span>
                     </div>
                     <div className="text-sm">
-                        © {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                        &copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.
                     </div>
                 </div>
             </div>
@@ -247,7 +249,6 @@ function ProviderConfirmationContent() {
             checkReadiness(resolvedSessionId, resolvedProviderId)
         } else {
             // No session ID at all — show ready state as fallback
-            // (the CTA will still work if they have localStorage)
             setReadinessStatus('ready')
         }
 
@@ -257,10 +258,23 @@ function ProviderConfirmationContent() {
                 clearTimeout(pollTimerRef.current)
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams])
 
     // ========================================================================
-    // SECTION 8C: STATUS POLLING LOGIC
+    // SECTION 8C: STATUS POLLING LOGIC (FIXED)
+    //
+    // FIX: The provider-sessions-api returns TWO status fields:
+    //   - status: bid status (e.g. "questionnaire_complete", "ready", "active")
+    //   - sessionStatus: session status (e.g. "negotiation_ready", "active")
+    //
+    // Previously only checked 'status', which for a provider who just
+    // completed the questionnaire returns "questionnaire_complete" — NOT
+    // in the ready list. This caused infinite polling because the page
+    // never detected that the session was actually ready.
+    //
+    // Now checks BOTH fields so either a ready bid status OR a ready
+    // session status will correctly stop polling and show the CTA.
     // ========================================================================
 
     const checkReadiness = useCallback(async (sid: string, pid: string | null) => {
@@ -299,18 +313,38 @@ function ProviderConfirmationContent() {
                 setCustomerCompany(ourSession.customerCompany)
             }
 
-            // Check session/bid status
-            const readyStatuses = ['negotiation_ready', 'active', 'completed']
-            const bidReadyStatuses = ['ready', 'active', 'selected']
+            // ----------------------------------------------------------------
+            // FIX: Check BOTH bid status AND session status fields
+            // The API returns:
+            //   status = bid status (e.g. "questionnaire_complete")
+            //   sessionStatus = session status (e.g. "negotiation_ready")
+            //
+            // Either one indicating "ready" means the Contract Studio is
+            // available for this provider.
+            // ----------------------------------------------------------------
 
-            if (readyStatuses.includes(ourSession.status) ||
-                bidReadyStatuses.includes(ourSession.status)) {
+            const readyBidStatuses = ['ready', 'active', 'selected']
+            const readySessionStatuses = ['negotiation_ready', 'active', 'completed']
+
+            const bidStatus = ourSession.status || ''
+            const sessStatus = ourSession.sessionStatus || ''
+
+            const isReady =
+                readyBidStatuses.includes(bidStatus) ||
+                readySessionStatuses.includes(sessStatus) ||
+                // Also treat questionnaire_complete as ready if the session
+                // is negotiation_ready — the provider has done their part
+                (bidStatus === 'questionnaire_complete' && sessStatus === 'negotiation_ready')
+
+            if (isReady) {
                 // Leverage calculation is done — Contract Studio is ready
                 setReadinessStatus('ready')
 
                 eventLogger.completed('provider_onboarding', 'leverage_calculation_ready', {
                     sessionId: sid,
                     providerId: pid,
+                    bidStatus: bidStatus,
+                    sessionStatus: sessStatus,
                     pollAttempts: pollCountRef.current
                 })
 
@@ -361,11 +395,24 @@ function ProviderConfirmationContent() {
 
     const getStoredEmail = (): string | null => {
         try {
+            // Try clarence_auth first
             const authStr = localStorage.getItem('clarence_auth')
             if (authStr) {
                 const auth = JSON.parse(authStr)
-                return auth?.userInfo?.email || null
+                if (auth?.userInfo?.email) return auth.userInfo.email
             }
+
+            // Try clarence_provider_session as fallback
+            const providerStr = localStorage.getItem('clarence_provider_session')
+            if (providerStr) {
+                const provider = JSON.parse(providerStr)
+                if (provider?.email) return provider.email
+                if (provider?.providerEmail) return provider.providerEmail
+            }
+
+            // Try direct email key
+            const directEmail = localStorage.getItem('userEmail')
+            if (directEmail) return directEmail
         } catch {
             // localStorage not available
         }
@@ -529,7 +576,7 @@ function ProviderConfirmationContent() {
                                                 ? 'Fair leverage positions have been calculated for both parties.'
                                                 : readinessStatus === 'processing' || readinessStatus === 'checking'
                                                     ? 'Analysing market data, strategic positions, and BATNA to calculate fair leverage...'
-                                                    : 'Analysis is still in progress. You\'ll be notified when it\'s complete.'
+                                                    : 'Analysis is still in progress. You\u0027ll be notified when it\u0027s complete.'
                                             }
                                         </p>
                                     </div>
