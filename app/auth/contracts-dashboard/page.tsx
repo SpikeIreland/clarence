@@ -183,6 +183,13 @@ export default function ContractsDashboard() {
   const [editingName, setEditingName] = useState<string>('')
   const [isSavingName, setIsSavingName] = useState(false)
 
+  // Chat overlay state
+  const [showChatOverlay, setShowChatOverlay] = useState(false)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const [chatMinimized, setChatMinimized] = useState(false)
+
   // ==========================================================================
   // SECTION 7: DATA LOADING FUNCTIONS
   // ==========================================================================
@@ -460,6 +467,78 @@ export default function ContractsDashboard() {
     }
   }
 
+  // ==========================================================================
+  // SECTION 12B: DASHBOARD CHAT FUNCTIONS
+  // ==========================================================================
+
+  async function sendChatMessage() {
+    if (!chatInput.trim() || isChatLoading) return
+
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: chatInput,
+      timestamp: new Date()
+    }
+
+    setChatMessages(prev => [...prev, userMessage])
+    setChatInput('')
+    setIsChatLoading(true)
+
+    try {
+      const dashboardContext = {
+        userInfo: userInfo,
+        totalContracts: sessions.length,
+        activeContracts: sessions.filter(s => s.status !== 'completed' && !s.isTraining).length,
+        completedContracts: sessions.filter(s => s.status === 'completed').length,
+        totalValue: sessions.reduce((sum, s) => {
+          const mapped = dealValueMap[s.dealValue] || parseInt(s.dealValue || '0') || 0
+          return sum + mapped
+        }, 0),
+        contractTypes: [...new Set(sessions.map(s => s.serviceRequired))],
+        currentSessions: sessions.map(s => ({
+          sessionNumber: s.sessionNumber,
+          status: s.status,
+          serviceRequired: s.serviceRequired
+        }))
+      }
+
+      const response = await fetch(`${API_BASE}/clarence-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: chatInput,
+          context: 'dashboard',
+          dashboardData: dashboardContext,
+          sessionId: null,
+          userId: userInfo?.userId || 'unknown'
+        })
+      })
+
+      const data = await response.json()
+
+      const clarenceMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'clarence',
+        content: data.response || data.message || "I can help you understand your contracts and guide you through the negotiation process. What would you like to know?",
+        timestamp: new Date()
+      }
+
+      setChatMessages(prev => [...prev, clarenceMessage])
+    } catch (error) {
+      console.error('Chat error:', error)
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'clarence',
+        content: "I'm having trouble connecting right now. Please try again in a moment.",
+        timestamp: new Date()
+      }
+      setChatMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
   function openMediationStudio(sessionId: string, providerId: string) {
     eventLogger.completed('mediation_studio', 'studio_opened', {
       sessionId: sessionId,
@@ -630,6 +709,22 @@ export default function ContractsDashboard() {
     loadSessions()
   }, [loadUserInfo])
 
+  // Chat effects
+  useEffect(() => {
+    if (showChatOverlay && chatMessages.length === 0) {
+      const welcomeMessage: ChatMessage = {
+        id: '1',
+        type: 'clarence',
+        content: `Hello ${userInfo?.firstName || 'there'}! I'm CLARENCE, your contract negotiation assistant. I can help you understand your contracts, explain the negotiation process, or answer general legal and commercial questions. What would you like to explore today?`,
+        timestamp: new Date()
+      }
+      setChatMessages([welcomeMessage])
+    }
+  }, [showChatOverlay, chatMessages.length, userInfo])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
 
   // ==========================================================================
   // SECTION 16: EVENT LOGGING
@@ -1293,6 +1388,129 @@ export default function ContractsDashboard() {
           </div>
         </div>
       </div>
+
+      {/* ================================================================== */}
+      {/* SECTION 30: CHAT OVERLAY */}
+      {/* ================================================================== */}
+      {showChatOverlay && (
+        <div className={`fixed ${chatMinimized ? 'bottom-4 right-4' : 'inset-0'} z-50 ${chatMinimized ? '' : 'bg-black/50'}`}>
+          <div className={`${chatMinimized ? 'w-80' : 'absolute right-0 top-0 h-full w-full md:w-96'} bg-white ${chatMinimized ? 'rounded-xl shadow-xl' : ''} flex flex-col`}>
+            {/* Chat Header */}
+            <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                  <span className="font-bold text-sm">C</span>
+                </div>
+                <div>
+                  <div className="font-semibold text-sm">CLARENCE</div>
+                  <div className="text-xs text-slate-400">Your negotiation assistant</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setChatMinimized(!chatMinimized)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={chatMinimized ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setShowChatOverlay(false)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {!chatMinimized && (
+              <>
+                {/* Chat Messages */}
+                <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+                  {chatMessages.map(message => (
+                    <div key={message.id} className={`mb-4 ${message.type === 'user' ? 'text-right' : ''}`}>
+                      <div className={`inline-block max-w-[85%] ${message.type === 'user'
+                        ? 'bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-2'
+                        : 'bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200'
+                        }`}>
+                        {message.type === 'clarence' && (
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-5 h-5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">C</span>
+                            </div>
+                            <span className="text-xs font-medium text-emerald-600">CLARENCE</span>
+                          </div>
+                        )}
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                        <p className={`text-xs mt-1 ${message.type === 'user' ? 'text-blue-200' : 'text-slate-400'}`}>
+                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="mb-4">
+                      <div className="inline-block bg-white rounded-2xl rounded-bl-md px-4 py-3 shadow-sm border border-slate-200">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Chat Input */}
+                <div className="p-4 border-t border-slate-200 bg-white">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                      placeholder="Ask about contracts, process, or guidance..."
+                      className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
+                    />
+                    <button
+                      onClick={sendChatMessage}
+                      disabled={isChatLoading || !chatInput.trim()}
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================== */}
+      {/* SECTION 31: FLOATING CHAT BUTTON */}
+      {/* ================================================================== */}
+      {!showChatOverlay && (
+        <button
+          onClick={() => setShowChatOverlay(true)}
+          className="fixed bottom-6 right-6 bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all z-40 group"
+          title="Chat with CLARENCE"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z" />
+          </svg>
+          {/* Tooltip */}
+          <span className="absolute bottom-full right-0 mb-2 px-3 py-1.5 bg-slate-800 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            Ask CLARENCE anything
+          </span>
+        </button>
+      )}
     </div>
   )
 }
