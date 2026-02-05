@@ -10,7 +10,6 @@ import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger';
 import FeedbackButton from '@/app/components/FeedbackButton';
 
-
 // ============================================================================
 // SECTION 2: CONSTANTS & TYPES
 // ============================================================================
@@ -174,14 +173,9 @@ function ProviderHeader() {
                         </div>
                     </Link>
 
-                    {/* Right: Customer Portal Link */}
+                    {/* Right: Provider Portal badge */}
                     <div className="flex items-center gap-4">
-                        <Link
-                            href="/auth/login"
-                            className="text-sm text-slate-400 hover:text-white transition-colors"
-                        >
-                            Customer Portal →
-                        </Link>
+                        <span className="text-sm text-slate-500">Provider Portal</span>
                     </div>
                 </nav>
             </div>
@@ -206,7 +200,7 @@ function ProviderFooter() {
                         <span className="text-slate-500 text-sm">Provider Portal</span>
                     </div>
                     <div className="text-sm">
-                        © {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                        &copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.
                     </div>
                 </div>
             </div>
@@ -261,22 +255,14 @@ function ProviderQuestionnaireContent() {
     // ========================================================================
 
     const loadSessionData = useCallback(async () => {
-        console.log('=== loadSessionData CALLED ===')
-
         const sessionId = searchParams.get('session_id')
         const providerId = searchParams.get('provider_id')
 
-        console.log('URL sessionId:', sessionId)
-        console.log('URL providerId:', providerId)
-
         if (!sessionId) {
-            console.log('=== NO SESSION ID IN URL ===')
+            // No session_id in URL — try localStorage
             const stored = localStorage.getItem('clarence_provider_session')
-            console.log('localStorage stored:', stored)
             if (stored) {
                 const parsed = JSON.parse(stored)
-                console.log('=== SETTING sessionData from localStorage ===')
-                console.log('parsed data:', parsed)
                 setSessionData({
                     sessionId: parsed.sessionId,
                     sessionNumber: parsed.sessionNumber || '',
@@ -285,7 +271,6 @@ function ProviderQuestionnaireContent() {
                     serviceRequired: parsed.serviceRequired || 'Service Contract',
                     dealValue: parsed.dealValue || ''
                 })
-                console.log('=== sessionData SET from localStorage ===')
 
                 if (parsed.sessionId) {
                     eventLogger.setSession(parsed.sessionId)
@@ -296,18 +281,14 @@ function ProviderQuestionnaireContent() {
                     })
                 }
             } else {
-                console.log('=== NO localStorage DATA ===')
                 eventLogger.failed('provider_onboarding', 'provider_questionnaire_page_loaded', 'No session data available', 'NO_SESSION')
             }
             setLoading(false)
-            console.log('=== EARLY RETURN - setLoading(false) called ===')
             return
         }
 
-        console.log('=== HAS SESSION ID - CONTINUING ===')
-
+        // Has session_id in URL
         eventLogger.setSession(sessionId)
-        console.log('=== eventLogger.setSession called ===')
 
         let finalProviderId = providerId || ''
         if (!finalProviderId) {
@@ -317,27 +298,16 @@ function ProviderQuestionnaireContent() {
                 finalProviderId = parsed.providerId || ''
             }
         }
-        console.log('=== finalProviderId:', finalProviderId)
 
         try {
             const fetchUrl = `${API_BASE}/contract-studio-api?session_id=${sessionId}`
-            console.log('=== ABOUT TO FETCH ===')
-            console.log('=== Fetch URL:', fetchUrl)
-
             const response = await fetch(fetchUrl)
-
-            console.log('=== FETCH COMPLETE ===')
-            console.log('=== response.ok:', response.ok)
-            console.log('=== response.status:', response.status)
 
             if (response.ok) {
                 const data = await response.json()
-                console.log('=== API DATA RECEIVED ===')
-                console.log('=== data:', data)
 
                 // Handle nested session object from API
                 const sessionInfo = data.session || data
-                console.log('=== sessionInfo:', sessionInfo)
 
                 const newSessionData = {
                     sessionId: sessionId,
@@ -347,9 +317,7 @@ function ProviderQuestionnaireContent() {
                     serviceRequired: sessionInfo.contractType || sessionInfo.contract_type || 'Service Contract',
                     dealValue: sessionInfo.dealValue || sessionInfo.deal_value || ''
                 }
-                console.log('=== SETTING sessionData:', newSessionData)
                 setSessionData(newSessionData)
-                console.log('=== sessionData SET from API ===')
 
                 eventLogger.completed('provider_onboarding', 'provider_questionnaire_page_loaded', {
                     sessionId: sessionId,
@@ -358,11 +326,10 @@ function ProviderQuestionnaireContent() {
                     source: 'api'
                 })
             } else {
-                console.log('=== FETCH NOT OK - status:', response.status)
+                // API returned non-OK — fallback to localStorage
                 const stored = localStorage.getItem('clarence_provider_session')
                 if (stored) {
                     const parsed = JSON.parse(stored)
-                    console.log('=== FALLING BACK to localStorage ===')
                     setSessionData({
                         sessionId: sessionId,
                         sessionNumber: parsed.sessionNumber || '',
@@ -380,7 +347,7 @@ function ProviderQuestionnaireContent() {
                 }
             }
         } catch (error) {
-            console.error('=== FETCH ERROR ===', error)
+            console.error('Session data fetch error:', error)
             eventLogger.failed('provider_onboarding', 'provider_questionnaire_page_loaded',
                 error instanceof Error ? error.message : 'Failed to load session',
                 'API_ERROR'
@@ -390,7 +357,6 @@ function ProviderQuestionnaireContent() {
             const stored = localStorage.getItem('clarence_provider_session')
             if (stored) {
                 const parsed = JSON.parse(stored)
-                console.log('=== ERROR FALLBACK to localStorage ===')
                 setSessionData({
                     sessionId: sessionId,
                     sessionNumber: parsed.sessionNumber || '',
@@ -402,12 +368,10 @@ function ProviderQuestionnaireContent() {
             }
         }
 
-        console.log('=== setLoading(false) ===')
         setLoading(false)
     }, [searchParams])
 
     useEffect(() => {
-        console.log('=== useEffect RUNNING ===')
         loadSessionData()
     }, [loadSessionData])
 
@@ -456,18 +420,11 @@ function ProviderQuestionnaireContent() {
     // ========================================================================
 
     const handleSubmit = async () => {
-        console.log('handleSubmit called')
-        console.log('sessionData:', sessionData)
-        console.log('sessionData?.sessionId:', sessionData?.sessionId)
-
-        if (!sessionData?.sessionId) {
-            console.log('EARLY RETURN - no sessionId')
-            return
-        }
+        if (!sessionData?.sessionId) return
 
         setSubmitting(true)
 
-        // LOG: Final question answered (question 13)
+        // LOG: Final question answered
         const lastQuestion = STRATEGIC_QUESTIONS[currentQuestion]
         eventLogger.completed('provider_onboarding', `provider_questionnaire_q${currentQuestion + 1}_answered`, {
             questionKey: lastQuestion.id,
@@ -524,7 +481,7 @@ function ProviderQuestionnaireContent() {
                 throw new Error('Submission failed')
             }
         } catch (error) {
-            console.error('Submission error:', error)
+            console.error('Questionnaire submission error:', error)
 
             // LOG: Submission failed
             eventLogger.failed('provider_onboarding', 'provider_questionnaire_submitted',
@@ -630,7 +587,7 @@ function ProviderQuestionnaireContent() {
                                     <div className="flex items-center gap-3">
                                         <div className="text-xs text-blue-600 font-medium">Opportunity:</div>
                                         <div className="text-slate-800 font-medium">{sessionData.customerCompany}</div>
-                                        <div className="text-slate-400">•</div>
+                                        <div className="text-slate-400">&bull;</div>
                                         <div className="text-slate-600">{sessionData.serviceRequired}</div>
                                     </div>
                                 </div>
@@ -739,7 +696,7 @@ function ProviderQuestionnaireContent() {
                                     <div className="flex justify-between items-center">
                                         <span className="text-slate-500 text-sm">Not confident</span>
                                         <span className="text-2xl font-semibold text-slate-800">
-                                            {(answers[question.id] as number) || '—'}
+                                            {(answers[question.id] as number) || '\u2014'}
                                         </span>
                                         <span className="text-slate-500 text-sm">Very confident</span>
                                     </div>
