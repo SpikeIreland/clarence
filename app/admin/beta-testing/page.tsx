@@ -71,8 +71,19 @@ interface BetaFeedbackWithDetails extends BetaFeedback {
 interface UserDetails {
     profile: UserProfile
     company: Company | null
+    companyUserRecord: CompanyUserRecord | null
     sessions: Session[]
     feedback: BetaFeedback[]
+}
+
+interface CompanyUserRecord {
+    company_user_id: string
+    company_id: string
+    user_id: string
+    role: string
+    status: string
+    email: string | null
+    full_name: string | null
 }
 
 interface DashboardStats {
@@ -138,6 +149,15 @@ const VIDEO_STATUSES: Record<string, { label: string; color: string }> = {
     recorded: { label: 'Recorded', color: 'bg-amber-100 text-amber-700' },
     published: { label: 'Published', color: 'bg-emerald-100 text-emerald-700' }
 }
+
+// Company admin management state
+const [allCompanies, setAllCompanies] = useState<Company[]>([])
+const [companiesLoaded, setCompaniesLoaded] = useState(false)
+const [companyActionLoading, setCompanyActionLoading] = useState(false)
+const [companyActionMessage, setCompanyActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+const [selectedCompanyId, setSelectedCompanyId] = useState<string>('')
+const [newCompanyName, setNewCompanyName] = useState('')
+const [showCreateCompany, setShowCreateCompany] = useState(false)
 
 // ============================================================================
 // SECTION 2: MAIN COMPONENT
@@ -232,6 +252,7 @@ export default function BetaTestingAdminDashboard() {
     useEffect(() => {
         if (isAdmin && activeTab === 'users') {
             loadUsers()
+            if (!companiesLoaded) loadCompanies()
         } else if (isAdmin && activeTab === 'feedback') {
             loadAllFeedback()
         } else if (isAdmin && activeTab === 'stats') {
@@ -405,6 +426,7 @@ export default function BetaTestingAdminDashboard() {
 
     async function loadUserDetails(userId: string) {
         setLoadingUser(true)
+        setCompanyActionMessage(null)
         try {
             // Get profile
             const { data: profile } = await supabase
@@ -422,6 +444,18 @@ export default function BetaTestingAdminDashboard() {
                     .eq('company_id', profile.company_id)
                     .single()
                 company = companyData
+            }
+
+            // Get company_users record (for admin role check)
+            let companyUserRecord = null
+            if (profile?.company_id) {
+                const { data: cuData } = await supabase
+                    .from('company_users')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .eq('company_id', profile.company_id)
+                    .single()
+                companyUserRecord = cuData
             }
 
             // Get sessions
@@ -442,6 +476,7 @@ export default function BetaTestingAdminDashboard() {
             setSelectedUser({
                 profile,
                 company,
+                companyUserRecord,
                 sessions: sessions || [],
                 feedback: feedback || []
             })
@@ -450,6 +485,133 @@ export default function BetaTestingAdminDashboard() {
             console.error('Error loading user details:', error)
         } finally {
             setLoadingUser(false)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // SECTION 2.4B: COMPANY ADMIN MANAGEMENT FUNCTIONS
+    // -------------------------------------------------------------------------
+
+    async function loadCompanies() {
+        try {
+            const { data } = await supabase
+                .from('companies')
+                .select('company_id, company_name')
+                .order('company_name', { ascending: true })
+            setAllCompanies(data || [])
+            setCompaniesLoaded(true)
+        } catch (error) {
+            console.error('Error loading companies:', error)
+        }
+    }
+
+    async function callCompanyAdminApi(action: string, params: Record<string, string>) {
+        setCompanyActionLoading(true)
+        setCompanyActionMessage(null)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            if (!session) {
+                setCompanyActionMessage({ type: 'error', text: 'Session expired. Please refresh.' })
+                return false
+            }
+
+            const response = await fetch('/api/admin/assign-company', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
+                body: JSON.stringify({ action, ...params })
+            })
+
+            const result = await response.json()
+
+            if (!response.ok) {
+                setCompanyActionMessage({ type: 'error', text: result.error || 'Action failed' })
+                return false
+            }
+
+            setCompanyActionMessage({ type: 'success', text: result.message })
+
+            // Log admin action
+            try {
+                await supabase.from('admin_actions').insert({
+                    admin_id: (await supabase.auth.getUser()).data.user?.id,
+                    admin_email: adminEmail,
+                    action_type: action,
+                    target_user_id: params.targetUserId,
+                    details: params
+                })
+            } catch { } // Don't fail if logging fails
+
+            return result
+        } catch (error: any) {
+            setCompanyActionMessage({ type: 'error', text: error.message || 'Network error' })
+            return false
+        } finally {
+            setCompanyActionLoading(false)
+        }
+    }
+
+    async function handleAssignCompany() {
+        if (!selectedUser || !selectedCompanyId) return
+        const company = allCompanies.find(c => c.company_id === selectedCompanyId)
+        if (!company) return
+
+        const result = await callCompanyAdminApi('assign_company', {
+            targetUserId: selectedUser.profile.user_id,
+            companyId: company.company_id,
+            companyName: company.company_name
+        })
+
+        if (result) {
+            // Reload user details to reflect changes
+            await loadUserDetails(selectedUser.profile.user_id)
+            await loadUsers()
+            setSelectedCompanyId('')
+        }
+    }
+
+    async function handleCreateAndAssignCompany() {
+        if (!selectedUser || !newCompanyName.trim()) return
+
+        const result = await callCompanyAdminApi('create_company', {
+            targetUserId: selectedUser.profile.user_id,
+            companyName: newCompanyName.trim()
+        })
+
+        if (result) {
+            await loadUserDetails(selectedUser.profile.user_id)
+            await loadUsers()
+            await loadCompanies()
+            setNewCompanyName('')
+            setShowCreateCompany(false)
+        }
+    }
+
+    async function handleSetAdmin() {
+        if (!selectedUser?.company) return
+
+        const result = await callCompanyAdminApi('set_admin', {
+            targetUserId: selectedUser.profile.user_id,
+            companyId: selectedUser.company.company_id
+        })
+
+        if (result) {
+            await loadUserDetails(selectedUser.profile.user_id)
+        }
+    }
+
+    async function handleRemoveAdmin() {
+        if (!selectedUser?.company) return
+
+        const result = await callCompanyAdminApi('remove_admin', {
+            targetUserId: selectedUser.profile.user_id,
+            companyId: selectedUser.company.company_id
+        })
+
+        if (result) {
+            await loadUserDetails(selectedUser.profile.user_id)
         }
     }
 
@@ -1220,6 +1382,125 @@ export default function BetaTestingAdminDashboard() {
                                                 <p className="text-slate-600">No feedback submitted yet</p>
                                             </div>
                                         )}
+                                        {/* Company & Admin Management */}
+                                        <div className="pt-4 border-t border-slate-200">
+                                            <h3 className="font-semibold text-slate-900 mb-3">🏢 Company & Admin</h3>
+
+                                            {/* Status Message */}
+                                            {companyActionMessage && (
+                                                <div className={`p-3 rounded-lg mb-3 text-sm font-medium ${companyActionMessage.type === 'success'
+                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                    : 'bg-red-50 text-red-700 border border-red-200'
+                                                    }`}>
+                                                    {companyActionMessage.type === 'success' ? '✅' : '❌'} {companyActionMessage.text}
+                                                </div>
+                                            )}
+
+                                            {/* Current Company Status */}
+                                            {selectedUser.company ? (
+                                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 mb-3">
+                                                    <p className="text-sm font-medium text-blue-900">
+                                                        🏢 {selectedUser.company.company_name}
+                                                    </p>
+                                                    <p className="text-xs text-blue-700 mt-1">
+                                                        Role: <span className={`font-semibold ${selectedUser.companyUserRecord?.role === 'admin'
+                                                            ? 'text-purple-700'
+                                                            : 'text-blue-700'
+                                                            }`}>
+                                                            {selectedUser.companyUserRecord?.role || 'user'}
+                                                        </span>
+                                                    </p>
+
+                                                    {/* Admin Toggle */}
+                                                    <div className="mt-2">
+                                                        {selectedUser.companyUserRecord?.role === 'admin' ? (
+                                                            <button
+                                                                onClick={handleRemoveAdmin}
+                                                                disabled={companyActionLoading}
+                                                                className="w-full px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                                            >
+                                                                {companyActionLoading ? '⏳ Processing...' : '⬇️ Demote from Company Admin'}
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={handleSetAdmin}
+                                                                disabled={companyActionLoading}
+                                                                className="w-full px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                                            >
+                                                                {companyActionLoading ? '⏳ Processing...' : '👑 Promote to Company Admin'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 mb-3">
+                                                    <p className="text-sm text-amber-700">⚠️ No company assigned</p>
+                                                </div>
+                                            )}
+
+                                            {/* Assign to Existing Company */}
+                                            <div className="space-y-2 mb-3">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">
+                                                    Assign to Company
+                                                </label>
+                                                <div className="flex gap-2">
+                                                    <select
+                                                        value={selectedCompanyId}
+                                                        onChange={(e) => setSelectedCompanyId(e.target.value)}
+                                                        className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2563eb] focus:border-transparent"
+                                                    >
+                                                        <option value="">Select company...</option>
+                                                        {allCompanies.map(c => (
+                                                            <option key={c.company_id} value={c.company_id}>
+                                                                {c.company_name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        onClick={handleAssignCompany}
+                                                        disabled={!selectedCompanyId || companyActionLoading}
+                                                        className="px-4 py-2 bg-[#2563eb] hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                                    >
+                                                        {companyActionLoading ? '⏳' : 'Assign'}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Create New Company */}
+                                            {!showCreateCompany ? (
+                                                <button
+                                                    onClick={() => setShowCreateCompany(true)}
+                                                    className="w-full px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                                                >
+                                                    ➕ Create New Company
+                                                </button>
+                                            ) : (
+                                                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newCompanyName}
+                                                        onChange={(e) => setNewCompanyName(e.target.value)}
+                                                        placeholder="Company name..."
+                                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2563eb] focus:border-transparent"
+                                                    />
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={handleCreateAndAssignCompany}
+                                                            disabled={!newCompanyName.trim() || companyActionLoading}
+                                                            className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                                        >
+                                                            {companyActionLoading ? '⏳ Creating...' : '✅ Create & Assign as Admin'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setShowCreateCompany(false); setNewCompanyName('') }}
+                                                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-lg text-sm font-medium transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
 
                                         {/* Quick Actions */}
                                         <div className="pt-4 border-t border-slate-200 space-y-2">
@@ -1227,7 +1508,7 @@ export default function BetaTestingAdminDashboard() {
                                                 ✉️ Send Email
                                             </button>
                                             <button className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors">
-                                                🔐 Reset Password
+                                                🔑 Reset Password
                                             </button>
                                         </div>
                                     </div>
