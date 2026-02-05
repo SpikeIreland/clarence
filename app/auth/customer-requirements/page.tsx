@@ -1,2274 +1,2267 @@
 'use client'
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import { eventLogger } from '@/lib/eventLogger';
+import { eventLogger } from '@/lib/eventLogger'
+import { createClient } from '@/lib/supabase'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
-// SECTION 1: INTERFACES
+// SECTION 1: INTERFACES & TYPES
 // ============================================================================
-interface CustomerRequirements {
-    // Session & Company
-    sessionId: string
-    sessionNumber: string
-    companyName: string
-    companySize: string
-    contactName: string
-    contactEmail: string
-    industry: string
-    annualRevenue: string
 
-    // Contract Type & Template (NEW)
-    contractTypeId: string
-    contractTypeCode: string
-    serviceRequired: string
-    templatePackId: string
-    templateName: string
+type DocumentStatus = 'locked' | 'generating' | 'in_progress' | 'ready' | 'final'
 
-    // Market Dynamics (for leverage - Algorithm 25% weight)
-    numberOfBidders: string
-    marketPosition: string
-    decisionTimeline: string
-    incumbentStatus: string
+type DocumentId =
+    | 'executive-summary'
+    | 'leverage-report'
+    | 'position-history'
+    | 'chat-transcript'
+    | 'trade-off-register'
+    | 'timeline-audit'
+    | 'contract-draft'
+    | 'contract-roadmap'
 
-    // Service Requirements
-    serviceCriticality: string
-    businessChallenge: string
-    desiredOutcome: string
+type SourceType = 'session' | 'quick_contract'
 
-    // BATNA (for leverage - Algorithm 25% weight)
-    alternativeOptions: string
-    inHouseCapability: string
-    walkAwayPoint: string
-
-    // Economic Factors (for leverage - Algorithm 25% weight)
-    dealValue: string
-    switchingCosts: string
-    budgetFlexibility: string
-
-    // Commercial Terms
-    budgetMin: number
-    budgetMax: number
-    paymentTermsPreference: string
-    contractDuration: string
-
-    // Contract Positions (Customer's starting positions)
-    contractPositions: {
-        liabilityCap: number
-        paymentTerms: number
-        slaTarget: number
-        dataRetention: number
-        terminationNotice: number
-    }
-
-    // Priorities (point allocation per algorithm)
-    priorities: {
-        cost: number
-        quality: number
-        speed: number
-        innovation: number
-        riskMitigation: number
-    }
-
-    // Technical & Compliance Requirements
-    securityRequirements: string[]
-    integrationNeeds: string
-    dataLocation: string
-    auditRequirements: string
-
-    // Additional Context
-    previousSimilarProjects: string
-    internalResourcesAvailable: string
-    competitiveSituation: string
-    additionalContext: string
+interface DocumentItem {
+    id: DocumentId;
+    name: string;
+    description: string;
+    category: string;
+    icon: string;
+    status: DocumentStatus;
+    progress?: number;
+    prerequisites: string[];
+    downloadUrl?: string;
+    generatedAt?: string;
+    documentDbId?: string;
+    canGenerate?: boolean;
+    availableFor: SourceType[];
 }
 
-// ============================================================================
-// SECTION 1A: CONTRACT TYPE & TEMPLATE INTERFACES (NEW)
-// ============================================================================
-interface ContractTemplate {
-    packId: string
-    packName: string
-    version: string
-    isDefault: boolean
-    isCustom: boolean
-    isPublic: boolean
+interface Session {
+    sessionId: string
+    sessionNumber: string
+    customerCompany: string
+    providerCompany: string
+    providerId: string | null
+    customerContactName: string | null
+    providerContactName: string | null
+    serviceType: string
+    dealValue: string
+    phase: number
+    status: string
+    alignmentPercentage: number
+    isTraining?: boolean
+    contractType?: string
+}
+
+interface QCContract {
+    contractId: string
+    fileName: string
+    uploaderCompany: string
+    uploaderName: string
+    uploaderId: string
+    recipients: QCRecipient[]
     clauseCount: number
+    averageFairnessScore: number
+    contractType: string
+    status: string
+    committedAt: string | null
+    dealValue: string | null
+    currency: string
+}
+
+interface QCRecipient {
+    recipientId: string
+    name: string
+    email: string
+    company: string
+    role: string
+    status: string
+}
+
+interface ClarenceChatMessage {
+    messageId: string
+    sessionId: string
+    sender: 'user' | 'clarence'
+    message: string
     createdAt: string
 }
 
-interface ContractType {
-    typeId: string
-    typeName: string
-    typeCode: string
-    description: string
-    icon: string
-    displayOrder: number
-    isActive: boolean
-    templateCount: number
-    defaultTemplate: {
-        packId: string
-        packName: string
-        version: string
-        clauseCount: number
-    } | null
-    templates: ContractTemplate[]
-}
-
-interface ChatMessage {
-    id: string
-    type: 'user' | 'clarence'
-    content: string
-    timestamp: Date
-}
-
-type NestedKeyOf<T> = keyof T | 'contractPositions' | 'priorities'
-
-interface StepComponentProps {
-    formData: Partial<CustomerRequirements>
-    updateFormData: (field: keyof CustomerRequirements, value: string | number | string[]) => void
-}
-
-interface NestedStepComponentProps {
-    formData: Partial<CustomerRequirements>
-    updateNestedData: (section: NestedKeyOf<CustomerRequirements>, field: string, value: string | number) => void
-}
-
-interface PrioritiesStepProps extends NestedStepComponentProps {
-    priorityPoints: number
-}
-
-// NEW: Service Requirements Step Props with contract types
-interface ServiceRequirementsStepProps extends StepComponentProps {
-    contractTypes: ContractType[]
-    contractTypesLoading: boolean
-    selectedContractType: ContractType | null
-    onContractTypeChange: (typeId: string) => void
-}
-
-// NEW: Template Selection Step Props
-interface TemplateSelectionStepProps {
-    formData: Partial<CustomerRequirements>
-    selectedContractType: ContractType | null
-    selectedTemplate: ContractTemplate | null
-    onTemplateSelect: (template: ContractTemplate) => void
+interface UserInfo {
+    firstName?: string
+    lastName?: string
+    email?: string
+    company?: string
+    role?: 'customer' | 'provider'
+    userId?: string
 }
 
 // ============================================================================
-// SECTION 2: CONSTANTS
-// ============================================================================
-const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
-
-// ============================================================================
-// ENHANCED TRUST BANNER COMPONENT
-// Location: Replace SECTION 2A in customer-requirements.tsx
-// 
-// This updated component addresses John's data protection feedback:
-// - Minimal personal data collection (name + work email only)
-// - Data sovereignty messaging
-// - AI training data assurance
-// - Third-party platform security
+// SECTION 2: CONSTANTS & CONFIGURATION
 // ============================================================================
 
-function TrustBanner({ onLearnMore }: { onLearnMore: () => void }) {
-    const [isExpanded, setIsExpanded] = useState(false)
+const N8N_BASE_URL = 'https://spikeislandstudios.app.n8n.cloud/webhook';
 
-    return (
-        <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl shadow-lg mb-8 overflow-hidden">
-            {/* Main Banner */}
-            <div className="p-6">
-                <div className="flex items-start gap-4">
-                    {/* Shield Icon */}
-                    <div className="w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                    </div>
+// Document generation endpoints
+const DOCUMENT_ENDPOINTS: Record<string, string> = {
+    'executive-summary': `${N8N_BASE_URL}/document-executive-summary`,
+    'leverage-report': `${N8N_BASE_URL}/document-leverage-report`,
+    'position-history': `${N8N_BASE_URL}/document-position-history`,
+    'chat-transcript': `${N8N_BASE_URL}/document-chat-transcript`,
+    'trade-off-register': `${N8N_BASE_URL}/document-trade-off-register`,
+    'timeline-audit': `${N8N_BASE_URL}/document-timeline-audit`,
+    'contract-draft': `${N8N_BASE_URL}/document-contract-draft`,
+    'contract-roadmap': `${N8N_BASE_URL}/document-contract-roadmap`,
+};
 
-                    {/* Content */}
-                    <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-2">
-                            Your Information is Protected
-                        </h3>
-                        <p className="text-slate-300 text-sm leading-relaxed">
-                            CLARENCE uses the information you provide to calculate leverage, identify fair positions, and broker effective compromises.
-                            <span className="text-emerald-400 font-medium"> Your sensitive details—like budget limits, walk-away points, and BATNA—are never shared directly with the other party.</span>
-                        </p>
+const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook';
 
-                        {/* Expand/Collapse */}
-                        <button
-                            onClick={() => setIsExpanded(!isExpanded)}
-                            className="mt-3 text-sm text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
-                        >
-                            {isExpanded ? 'Hide details' : 'How does CLARENCE protect my data?'}
-                            <svg
-                                className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Expanded Details */}
-            {isExpanded && (
-                <div className="bg-slate-900/50 border-t border-slate-700 p-6">
-                    <div className="grid md:grid-cols-2 gap-6">
-
-                        {/* What CLARENCE Does */}
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                </div>
-                                <h4 className="font-medium text-emerald-400">What CLARENCE Does</h4>
-                            </div>
-                            <ul className="space-y-2 text-sm text-slate-300">
-                                <li className="flex items-start gap-2">
-                                    <span className="text-emerald-400 mt-1">•</span>
-                                    Calculates your leverage position
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-emerald-400 mt-1">•</span>
-                                    Identifies fair compromise zones
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-emerald-400 mt-1">•</span>
-                                    Suggests strategic trade-offs
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-emerald-400 mt-1">•</span>
-                                    Recommends optimal positions
-                                </li>
-                            </ul>
-                        </div>
-
-                        {/* What CLARENCE Never Shares */}
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                    </svg>
-                                </div>
-                                <h4 className="font-medium text-red-400">Never Shared with Other Party</h4>
-                            </div>
-                            <ul className="space-y-2 text-sm text-slate-300">
-                                <li className="flex items-start gap-2">
-                                    <span className="text-red-400 mt-1">•</span>
-                                    Your budget limits or ranges
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-red-400 mt-1">•</span>
-                                    Walk-away points or BATNA
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-red-400 mt-1">•</span>
-                                    Internal constraints or pressures
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-red-400 mt-1">•</span>
-                                    Priority weightings or flexibility
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    {/* Data Protection Section - NEW */}
-                    <div className="mt-6 pt-6 border-t border-slate-700">
-                        <div className="flex items-center gap-2 mb-4">
-                            <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
-                            </div>
-                            <h4 className="font-medium text-blue-400">Data Protection & Privacy</h4>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div className="bg-slate-800/50 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-200">Minimal Personal Data</p>
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            We only collect your name and work email address. No phone numbers or personal identifiers.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-slate-800/50 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-200">Secure Data Storage</p>
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            Your data is stored securely with enterprise-grade encryption. Multi-tenant architecture ensures complete isolation.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-slate-800/50 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-200">No AI Training on Your Data</p>
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            Your business data is never used to train CLARENCE or any AI models. We use only anonymised, generic data for improvements.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="bg-slate-800/50 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-6 h-6 bg-emerald-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-3 h-3 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-200">The Honest Broker Principle</p>
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            CLARENCE works equally with both parties, finding genuine common ground without advantaging either side.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Security Link */}
-                        <div className="mt-4 text-center">
-                            <a
-                                href="/security"
-                                className="text-xs text-slate-400 hover:text-blue-400 transition-colors inline-flex items-center gap-1"
-                            >
-                                View our Security & Privacy Policy
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    )
-}
-
-// ============================================================================
-// SECTION 2B: CONFIDENTIALITY NOTICE COMPONENT (for sensitive sections)
-// ============================================================================
-function ConfidentialityNotice({ type }: { type: 'batna' | 'budget' | 'priority' | 'context' }) {
-    const notices = {
-        batna: {
-            icon: '🔐',
-            title: 'Confidential Information',
-            message: 'Your alternatives and walk-away points are never revealed to the other party. CLARENCE uses this to understand your true negotiating flexibility and recommend positions accordingly.',
-            color: 'amber'
-        },
-        budget: {
-            icon: '💰',
-            title: 'Budget Confidentiality',
-            message: 'Your budget range remains strictly confidential. CLARENCE uses this to ensure recommendations fall within your means, not to inform the other party of your limits.',
-            color: 'green'
-        },
-        priority: {
-            icon: '⚖️',
-            title: 'Strategic Priorities Protected',
-            message: 'Your priority allocation reveals what you value most. CLARENCE uses this internally to identify trade-off opportunities—your weightings are never disclosed.',
-            color: 'purple'
-        },
-        context: {
-            icon: '📋',
-            title: 'Context for Better Mediation',
-            message: 'This additional context helps CLARENCE understand the full picture. Sensitive details about your situation, constraints, or alternatives remain confidential.',
-            color: 'blue'
-        }
+// Document definitions with source availability
+// 'session' = Mediation Studio, 'quick_contract' = QC flow
+const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downloadUrl' | 'progress' | 'documentDbId'>[] = [
+    {
+        id: 'executive-summary',
+        name: 'Executive Summary',
+        description: 'One-page overview of the negotiation outcome for leadership sign-off',
+        category: 'assessment',
+        icon: '📋',
+        prerequisites: [],
+        availableFor: ['session', 'quick_contract']
+    },
+    {
+        id: 'leverage-report',
+        name: 'Leverage Assessment Report',
+        description: 'Detailed breakdown of how leverage was calculated and applied',
+        category: 'assessment',
+        icon: '⚖️',
+        prerequisites: [],
+        availableFor: ['session']  // QC doesn't have full leverage calculations
+    },
+    {
+        id: 'position-history',
+        name: 'Position Movement History',
+        description: 'Complete record of how each clause evolved during negotiation',
+        category: 'negotiation',
+        icon: '📊',
+        prerequisites: [],
+        availableFor: ['session', 'quick_contract']
+    },
+    {
+        id: 'chat-transcript',
+        name: 'Chat Transcript',
+        description: 'All party communications and CLARENCE conversations',
+        category: 'negotiation',
+        icon: '💬',
+        prerequisites: [],
+        availableFor: ['session', 'quick_contract']
+    },
+    {
+        id: 'trade-off-register',
+        name: 'Trade-Off Register',
+        description: 'Formal record of all linked concessions and exchanges',
+        category: 'negotiation',
+        icon: '🔄',
+        prerequisites: [],
+        availableFor: ['session']  // QC doesn't have two-party trade-offs
+    },
+    {
+        id: 'timeline-audit',
+        name: 'Timeline & Audit Log',
+        description: 'Chronological record of every event in the negotiation',
+        category: 'negotiation',
+        icon: '📅',
+        prerequisites: [],
+        availableFor: ['session', 'quick_contract']
+    },
+    {
+        id: 'contract-draft',
+        name: 'Contract Draft',
+        description: 'Complete clause-by-clause agreement ready for signature',
+        category: 'agreement',
+        icon: '📄',
+        prerequisites: ['executive-summary'],
+        availableFor: ['session', 'quick_contract']
+    },
+    {
+        id: 'contract-roadmap',
+        name: 'Contract Roadmap',
+        description: 'Governance guide for managing the contract relationship',
+        category: 'governance',
+        icon: '🗺️',
+        prerequisites: ['contract-draft'],
+        availableFor: ['session', 'quick_contract']
     }
+]
 
-    const notice = notices[type]
-    const colorClasses = {
-        amber: 'bg-amber-50 border-amber-200 text-amber-800',
-        green: 'bg-green-50 border-green-200 text-green-800',
-        purple: 'bg-purple-50 border-purple-200 text-purple-800',
-        blue: 'bg-blue-50 border-blue-200 text-blue-800'
+// Contract type options for Save as Template
+const CONTRACT_TYPE_OPTIONS = [
+    { value: 'bpo', label: 'BPO (Business Process Outsourcing)' },
+    { value: 'saas', label: 'SaaS (Software as a Service)' },
+    { value: 'nda', label: 'NDA (Non-Disclosure Agreement)' },
+    { value: 'msa', label: 'MSA (Master Service Agreement)' },
+    { value: 'employment', label: 'Employment Contract' },
+    { value: 'consulting', label: 'Consulting Agreement' },
+    { value: 'procurement', label: 'Procurement Contract' },
+    { value: 'partnership', label: 'Partnership Agreement' },
+    { value: 'custom', label: 'Custom / Other' }
+]
+
+// ============================================================================
+// SECTION 3: HELPER FUNCTIONS
+// ============================================================================
+
+function getStatusColor(status: DocumentStatus): string {
+    switch (status) {
+        case 'locked': return 'text-slate-400 bg-slate-100'
+        case 'generating': return 'text-amber-600 bg-amber-100'
+        case 'in_progress': return 'text-blue-600 bg-blue-100'
+        case 'ready': return 'text-emerald-600 bg-emerald-100'
+        case 'final': return 'text-purple-600 bg-purple-100'
+        default: return 'text-slate-400 bg-slate-100'
     }
+}
 
+function getStatusIcon(status: DocumentStatus): string {
+    switch (status) {
+        case 'locked': return '🔒'
+        case 'generating': return '⏳'
+        case 'in_progress': return '📝'
+        case 'ready': return '✅'
+        case 'final': return '🎯'
+        default: return '○'
+    }
+}
+
+function getStatusLabel(status: DocumentStatus): string {
+    switch (status) {
+        case 'locked': return 'Locked'
+        case 'generating': return 'Generating...'
+        case 'in_progress': return 'In Progress'
+        case 'ready': return 'Ready'
+        case 'final': return 'Final'
+        default: return 'Unknown'
+    }
+}
+
+function formatCurrency(value: string | number | null, currency: string = 'GBP'): string {
+    if (!value) return '£0'
+    const num = typeof value === 'string' ? parseFloat(value) : value
+    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : '€'
+    if (num >= 1000000) {
+        return `${symbol}${(num / 1000000).toFixed(1)}M`
+    } else if (num >= 1000) {
+        return `${symbol}${(num / 1000).toFixed(0)}K`
+    }
+    return `${symbol}${num.toFixed(0)}`
+}
+
+// ============================================================================
+// SECTION 4: LOADING COMPONENT
+// ============================================================================
+
+function DocumentCentreLoading() {
     return (
-        <div className={`border rounded-lg p-4 mb-6 ${colorClasses[notice.color as keyof typeof colorClasses]}`}>
-            <div className="flex items-start gap-3">
-                <span className="text-xl">{notice.icon}</span>
-                <div>
-                    <p className="font-medium text-sm">{notice.title}</p>
-                    <p className="text-sm mt-1 opacity-90">{notice.message}</p>
-                </div>
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="text-center">
+                <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-600">Loading Document Centre...</p>
             </div>
         </div>
     )
 }
 
 // ============================================================================
-// SECTION 3: MAIN COMPONENT WRAPPER (for Suspense)
+// SECTION 5: DOCUMENT ITEM COMPONENT
 // ============================================================================
-export default function CustomerRequirementsPage() {
+
+interface DocumentItemProps {
+    document: DocumentItem
+    isSelected: boolean
+    onClick: () => void
+}
+
+function DocumentListItem({ document, isSelected, onClick }: DocumentItemProps) {
+    const isLocked = document.status === 'locked'
+
     return (
-        <Suspense fallback={
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-8 h-8 border-4 border-slate-300 border-t-slate-600 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-600">Loading form...</p>
+        <button
+            onClick={onClick}
+            disabled={isLocked}
+            className={`w-full px-4 py-3 flex items-center gap-3 transition-all text-left ${isSelected
+                ? 'bg-emerald-50 border-l-4 border-emerald-600'
+                : isLocked
+                    ? 'opacity-50 cursor-not-allowed hover:bg-slate-50 border-l-4 border-transparent'
+                    : 'hover:bg-slate-50 border-l-4 border-transparent'
+                }`}
+        >
+            {/* Icon */}
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${isSelected ? 'bg-emerald-100' : 'bg-slate-100'
+                }`}>
+                {document.icon}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <span className={`font-medium truncate ${isSelected ? 'text-emerald-800' : 'text-slate-800'
+                        }`}>
+                        {document.name}
+                    </span>
+                </div>
+                <div className="text-xs text-slate-500 truncate mt-0.5">
+                    {document.description}
                 </div>
             </div>
-        }>
-            <CustomerRequirementsForm />
-        </Suspense>
+
+            {/* Status Badge */}
+            <div className={`flex-shrink-0 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
+                {getStatusIcon(document.status)} {getStatusLabel(document.status)}
+            </div>
+        </button>
     )
 }
 
 // ============================================================================
-// SECTION 4: MAIN FORM COMPONENT
+// SECTION 6: EVIDENCE PACKAGE COMPONENT
 // ============================================================================
-function CustomerRequirementsForm() {
-    const router = useRouter()
-    const searchParams = useSearchParams()
-    const chatEndRef = useRef<HTMLDivElement>(null)
 
-    // ========================================================================
-    // SECTION 5: STATE DECLARATIONS
-    // ========================================================================
-    const [loading, setLoading] = useState(false)
-    const [initialLoading, setInitialLoading] = useState(true)
-    const [currentStep, setCurrentStep] = useState(1)
-    const [totalSteps] = useState(10) // UPDATED: Now 10 steps
-    const [priorityPoints, setPriorityPoints] = useState(25)
+interface EvidencePackageProps {
+    documents: DocumentItem[]
+    onDownload: () => void
+    isGenerating: boolean
+}
 
-    // Session state
-    const [sessionId, setSessionId] = useState<string | null>(null)
-    const [sessionNumber, setSessionNumber] = useState<string | null>(null)
+function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePackageProps) {
+    const readyCount = documents.filter(d => d.status === 'ready' || d.status === 'final').length
+    const totalCount = documents.length
+    const isUnlocked = readyCount === totalCount
 
-    // Chat state
-    const [chatOpen, setChatOpen] = useState(false)
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-    const [chatInput, setChatInput] = useState('')
-    const [chatLoading, setChatLoading] = useState(false)
+    return (
+        <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${isUnlocked
+            ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300'
+            : 'bg-slate-50 border-slate-200'
+            }`}>
+            <div className="flex items-center gap-3 mb-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isUnlocked ? 'bg-emerald-100' : 'bg-slate-200'
+                    }`}>
+                    📦
+                </div>
+                <div className="flex-1">
+                    <h3 className={`font-semibold ${isUnlocked ? 'text-emerald-800' : 'text-slate-600'}`}>
+                        Evidence Package
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                        {isUnlocked
+                            ? 'All documents ready - download complete package'
+                            : `${readyCount}/${totalCount} documents ready`
+                        }
+                    </p>
+                </div>
+            </div>
 
-    // NEW: Contract Types & Template State
-    const [contractTypes, setContractTypes] = useState<ContractType[]>([])
-    const [contractTypesLoading, setContractTypesLoading] = useState(true)
-    const [selectedContractType, setSelectedContractType] = useState<ContractType | null>(null)
-    const [selectedTemplate, setSelectedTemplate] = useState<ContractTemplate | null>(null)
+            {/* Progress Bar */}
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-3">
+                <div
+                    className={`h-full transition-all duration-500 ${isUnlocked ? 'bg-emerald-500' : 'bg-blue-500'
+                        }`}
+                    style={{ width: `${(readyCount / totalCount) * 100}%` }}
+                />
+            </div>
 
-    // ========================================================================
-    // SECTION 6: FORM STATE
-    // ========================================================================
-    const [formData, setFormData] = useState<Partial<CustomerRequirements>>({
-        // Contract type & template (NEW)
-        contractTypeId: '',
-        contractTypeCode: '',
-        serviceRequired: '',
-        templatePackId: '',
-        templateName: '',
-        // Contract positions defaults
-        contractPositions: {
-            liabilityCap: 200,
-            paymentTerms: 45,
-            slaTarget: 99.5,
-            dataRetention: 5,
-            terminationNotice: 60
-        },
-        // Priority defaults
-        priorities: {
-            cost: 5,
-            quality: 5,
-            speed: 5,
-            innovation: 5,
-            riskMitigation: 5
-        },
-        // Commercial defaults
-        budgetMin: 0,
-        budgetMax: 0,
-        paymentTermsPreference: '',
-        contractDuration: '',
-        // Technical defaults
-        securityRequirements: [],
-        integrationNeeds: '',
-        dataLocation: '',
-        auditRequirements: ''
-    })
+            {/* Download Button */}
+            <button
+                onClick={onDownload}
+                disabled={!isUnlocked || isGenerating}
+                className={`w-full py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 ${isUnlocked && !isGenerating
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+            >
+                {isGenerating ? (
+                    <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Generating Package...
+                    </>
+                ) : isUnlocked ? (
+                    <>
+                        <span>⬇️</span>
+                        Download ZIP Package
+                    </>
+                ) : (
+                    <>
+                        <span>🔒</span>
+                        Complete All Documents First
+                    </>
+                )}
+            </button>
+        </div>
+    )
+}
 
-    // ========================================================================
-    // SECTION 7: FETCH CONTRACT TYPES ON MOUNT
-    // ========================================================================
-    useEffect(() => {
-        const fetchContractTypes = async () => {
-            try {
-                setContractTypesLoading(true)
-                const response = await fetch(`${API_BASE}/contract-types-api`)
-                if (response.ok) {
-                    const data = await response.json()
-                    if (data.success && data.contractTypes) {
-                        setContractTypes(data.contractTypes)
-                        console.log('Contract types loaded:', data.contractTypes.length)
-                    }
-                }
-            } catch (error) {
-                console.error('Error fetching contract types:', error)
-            } finally {
-                setContractTypesLoading(false)
-            }
-        }
+// ============================================================================
+// SECTION 7: DOCUMENT PREVIEW PANEL COMPONENT
+// ============================================================================
 
-        fetchContractTypes()
-    }, [])
+interface DocumentPreviewProps {
+    document: DocumentItem | null
+    session: Session | null
+    qcContract: QCContract | null
+    sourceType: SourceType
+    onGenerate: (docId: DocumentId) => void
+    onDownload: (docId: DocumentId, format: 'pdf' | 'docx') => void
+    isGenerating: boolean
+}
 
-    // ========================================================================
-    // SECTION 8: INITIALIZE FROM URL PARAMS
-    // ========================================================================
-    useEffect(() => {
-        const urlSessionId = searchParams.get('session_id')
-        const urlSessionNumber = searchParams.get('session_number')
-
-        if (urlSessionId) {
-            setSessionId(urlSessionId)
-            setFormData(prev => ({ ...prev, sessionId: urlSessionId }))
-            eventLogger.setSession(urlSessionId)
-        }
-
-        if (urlSessionNumber) {
-            setSessionNumber(urlSessionNumber)
-            setFormData(prev => ({ ...prev, sessionNumber: urlSessionNumber }))
-        }
-
-        // Load user info from localStorage
-        const auth = localStorage.getItem('clarence_auth')
-        if (auth) {
-            try {
-                const authData = JSON.parse(auth)
-                setFormData(prev => ({
-                    ...prev,
-                    companyName: authData.userInfo?.company || '',
-                    contactName: `${authData.userInfo?.firstName || ''} ${authData.userInfo?.lastName || ''}`.trim(),
-                    contactEmail: authData.userInfo?.email || ''
-                }))
-                if (authData.userInfo?.userId) {
-                    eventLogger.setUser(authData.userInfo.userId)
-                }
-            } catch (e) {
-                console.error('Error parsing auth data:', e)
-            }
-        }
-
-        // Welcome message
-        setChatMessages([{
-            id: '1',
-            type: 'clarence',
-            content: `Welcome! I'm CLARENCE, your contract negotiation mediator.
-
-**Important:** I work as a neutral broker between you and your provider. While I'll use the information you share to calculate leverage and find fair positions, I will never share your sensitive details—like budget limits, walk-away points, or priorities—directly with the other party.
-
-Think of me as a trusted advisor who understands both sides but keeps confidences.
-
-I'm here to help you complete your requirements. Feel free to ask about:
-• What information to provide
-• How your answers affect leverage
-• How I protect your confidentiality
-
-How can I help you today?`,
-            timestamp: new Date()
-        }])
-
-        eventLogger.completed('customer_requirements', 'requirements_form_loaded', {
-            sessionId: urlSessionId,
-            sessionNumber: urlSessionNumber
-        })
-
-        setInitialLoading(false)
-    }, [searchParams])
-
-    // ========================================================================
-    // SECTION 9: CONTRACT TYPE CHANGE HANDLER (NEW)
-    // ========================================================================
-    const handleContractTypeChange = (typeId: string) => {
-        const contractType = contractTypes.find(ct => ct.typeId === typeId)
-        setSelectedContractType(contractType || null)
-
-        if (contractType) {
-            // Update form data with contract type info
-            setFormData(prev => ({
-                ...prev,
-                contractTypeId: contractType.typeId,
-                contractTypeCode: contractType.typeCode,
-                serviceRequired: contractType.typeName
-            }))
-
-            // Auto-select default template if available
-            if (contractType.defaultTemplate) {
-                const defaultTpl = contractType.templates.find(t => t.isDefault) || contractType.templates[0]
-                if (defaultTpl) {
-                    handleTemplateSelect(defaultTpl)
-                }
-            } else {
-                // Clear template selection if no templates available
-                setSelectedTemplate(null)
-                setFormData(prev => ({
-                    ...prev,
-                    templatePackId: '',
-                    templateName: ''
-                }))
-            }
-        } else {
-            // Clear selections
-            setSelectedTemplate(null)
-            setFormData(prev => ({
-                ...prev,
-                contractTypeId: '',
-                contractTypeCode: '',
-                serviceRequired: '',
-                templatePackId: '',
-                templateName: ''
-            }))
-        }
-    }
-
-    // ========================================================================
-    // SECTION 10: TEMPLATE SELECTION HANDLER (NEW)
-    // ========================================================================
-    const handleTemplateSelect = (template: ContractTemplate) => {
-        setSelectedTemplate(template)
-        setFormData(prev => ({
-            ...prev,
-            templatePackId: template.packId,
-            templateName: template.packName
-        }))
-    }
-
-    // ========================================================================
-    // SECTION 11: VALIDATION FUNCTIONS
-    // ========================================================================
-    const validatePriorityPoints = useCallback(() => {
-        const total = Object.values(formData.priorities || {}).reduce((sum, val) => sum + val, 0)
-        const remaining = 25 - total
-        setPriorityPoints(remaining)
-        return remaining >= 0
-    }, [formData.priorities])
-
-    useEffect(() => {
-        validatePriorityPoints()
-    }, [validatePriorityPoints])
-
-    // ========================================================================
-    // SECTION 12: FORM HANDLERS
-    // ========================================================================
-    const updateFormData = (field: keyof CustomerRequirements, value: string | number | string[]) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: value
-        }))
-    }
-
-    const updateNestedData = (section: NestedKeyOf<CustomerRequirements>, field: string, value: string | number) => {
-        setFormData(prev => ({
-            ...prev,
-            [section]: {
-                ...(prev[section as keyof CustomerRequirements] as Record<string, unknown>),
-                [field]: value
-            }
-        }))
-    }
-
-    // ========================================================================
-    // SECTION 13: FORM SUBMISSION
-    // ========================================================================
-    const handleSubmit = async () => {
-        if (!validatePriorityPoints()) {
-            alert('Please adjust priority points to not exceed 25')
-            eventLogger.failed('customer_requirements', 'requirements_form_validated', 'Priority points exceed 25', 'VALIDATION_ERROR')
-            return
-        }
-
-        if (!sessionId) {
-            alert('Session ID is missing. Please go back to dashboard and create a new contract.')
-            eventLogger.failed('customer_requirements', 'requirements_form_validated', 'Session ID missing', 'SESSION_MISSING')
-            return
-        }
-
-        // NEW: Validate template selection
-        if (!formData.templatePackId) {
-            alert('Please select a contract template in Step 10 before submitting.')
-            setCurrentStep(10)
-            return
-        }
-
-        eventLogger.completed('customer_requirements', 'requirements_form_validated', {
-            sessionId: sessionId,
-            totalSteps: totalSteps
-        })
-
-        setLoading(true)
-        eventLogger.started('customer_requirements', 'requirements_form_submitted')
-
-        try {
-            const submissionData = {
-                ...formData,
-                sessionId: sessionId,
-                sessionNumber: sessionNumber,
-                timestamp: new Date().toISOString(),
-                formVersion: '8.0', // Updated version
-                formSource: 'customer-requirements-form'
-            }
-
-            const response = await fetch(`${API_BASE}/customer-requirements`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(submissionData)
-            })
-
-            if (response.ok) {
-                let result = null
-                const responseText = await response.text()
-
-                if (responseText && responseText.trim()) {
-                    try {
-                        result = JSON.parse(responseText)
-                        console.log('Requirements submitted:', result)
-                    } catch (parseError) {
-                        console.log('Requirements submitted (no JSON response)')
-                    }
-                } else {
-                    console.log('Requirements submitted (empty response)')
-                }
-
-                eventLogger.completed('customer_requirements', 'requirements_form_submitted', {
-                    sessionId: sessionId,
-                    sessionNumber: sessionNumber,
-                    formVersion: '8.0',
-                    contractTypeCode: formData.contractTypeCode,
-                    templatePackId: formData.templatePackId
-                })
-
-                eventLogger.completed('customer_requirements', 'redirect_to_questionnaire', {
-                    sessionId: sessionId
-                })
-
-                // Redirect to strategic assessment
-                router.push(`/auth/strategic-assessment?session_id=${sessionId}&session_number=${sessionNumber}`)
-            } else {
-                let errorMessage = 'Submission failed'
-                try {
-                    const errorText = await response.text()
-                    if (errorText) {
-                        const errorData = JSON.parse(errorText)
-                        errorMessage = errorData.error || errorData.message || errorMessage
-                    }
-                } catch {
-                    errorMessage = `HTTP ${response.status}: ${response.statusText}`
-                }
-                throw new Error(errorMessage)
-            }
-        } catch (error) {
-            console.error('Submission error:', error)
-            eventLogger.failed(
-                'customer_requirements',
-                'requirements_form_submitted',
-                error instanceof Error ? error.message : 'Unknown error',
-                'SUBMISSION_ERROR'
-            )
-            alert('Failed to submit requirements. Please try again.')
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    // ========================================================================
-    // SECTION 14: CHAT FUNCTIONS
-    // ========================================================================
-    const sendChatMessage = async () => {
-        if (!chatInput.trim() || chatLoading) return
-
-        const userMessage: ChatMessage = {
-            id: Date.now().toString(),
-            type: 'user',
-            content: chatInput.trim(),
-            timestamp: new Date()
-        }
-
-        setChatMessages(prev => [...prev, userMessage])
-        setChatInput('')
-        setChatLoading(true)
-
-        try {
-            const context = {
-                currentStep,
-                stepName: getStepName(currentStep),
-                formData: formData,
-                sessionId,
-                sessionNumber
-            }
-
-            const response = await fetch(`${API_BASE}/clarence-chat`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: userMessage.content,
-                    context: context,
-                    chatHistory: chatMessages.slice(-10)
-                })
-            })
-
-            if (response.ok) {
-                const data = await response.json()
-                const clarenceMessage: ChatMessage = {
-                    id: (Date.now() + 1).toString(),
-                    type: 'clarence',
-                    content: data.response || data.message || 'I apologize, I could not process that request.',
-                    timestamp: new Date()
-                }
-                setChatMessages(prev => [...prev, clarenceMessage])
-            } else {
-                throw new Error('Chat request failed')
-            }
-        } catch (error) {
-            console.error('Chat error:', error)
-            const errorMessage: ChatMessage = {
-                id: (Date.now() + 1).toString(),
-                type: 'clarence',
-                content: 'I apologize, I encountered an issue. Please try again or continue with the form.',
-                timestamp: new Date()
-            }
-            setChatMessages(prev => [...prev, errorMessage])
-        } finally {
-            setChatLoading(false)
-        }
-    }
-
-    // UPDATED: Step names for 10 steps
-    const getStepName = (step: number): string => {
-        const stepNames: Record<number, string> = {
-            1: 'Company Information',
-            2: 'Market Context & Leverage',
-            3: 'Contract Type & Service', // UPDATED
-            4: 'Alternative Options (BATNA)',
-            5: 'Commercial Terms',
-            6: 'Priority Allocation',
-            7: 'Contract Positions',
-            8: 'Technical & Compliance',
-            9: 'Additional Context',
-            10: 'Contract Template' // NEW
-        }
-        return stepNames[step] || 'Unknown Step'
-    }
-
-    // Scroll chat to bottom when new messages arrive
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [chatMessages])
-
-    // ========================================================================
-    // SECTION 15: STEP NAVIGATION
-    // ========================================================================
-    const nextStep = () => {
-        eventLogger.completed('customer_requirements', `requirements_section_${currentStep}_completed`, {
-            sectionName: getStepName(currentStep),
-            sessionId: sessionId
-        })
-        setCurrentStep(prev => Math.min(prev + 1, totalSteps))
-    }
-
-    const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
-
-    // ========================================================================
-    // SECTION 16: RENDER STEPS - UPDATED FOR 10 STEPS
-    // ========================================================================
-    const renderStep = () => {
-        switch (currentStep) {
-            case 1:
-                return <CompanyInfoStep formData={formData} updateFormData={updateFormData} />
-            case 2:
-                return <MarketContextStep formData={formData} updateFormData={updateFormData} />
-            case 3:
-                return (
-                    <ServiceRequirementsStep
-                        formData={formData}
-                        updateFormData={updateFormData}
-                        contractTypes={contractTypes}
-                        contractTypesLoading={contractTypesLoading}
-                        selectedContractType={selectedContractType}
-                        onContractTypeChange={handleContractTypeChange}
-                    />
-                )
-            case 4:
-                return <BATNAStep formData={formData} updateFormData={updateFormData} />
-            case 5:
-                return <CommercialTermsStep formData={formData} updateFormData={updateFormData} />
-            case 6:
-                return <PrioritiesStep formData={formData} updateNestedData={updateNestedData} priorityPoints={priorityPoints} />
-            case 7:
-                return <ContractPositionsStep formData={formData} updateNestedData={updateNestedData} />
-            case 8:
-                return <TechnicalRequirementsStep formData={formData} updateFormData={updateFormData} />
-            case 9:
-                return <AdditionalContextStep formData={formData} updateFormData={updateFormData} />
-            case 10:
-                return (
-                    <TemplateSelectionStep
-                        formData={formData}
-                        selectedContractType={selectedContractType}
-                        selectedTemplate={selectedTemplate}
-                        onTemplateSelect={handleTemplateSelect}
-                    />
-                )
-            default:
-                return null
-        }
-    }
-
-    // ========================================================================
-    // SECTION 17: LOADING STATE
-    // ========================================================================
-    if (initialLoading) {
+function DocumentPreviewPanel({ document, session, qcContract, sourceType, onGenerate, onDownload, isGenerating }: DocumentPreviewProps) {
+    if (!document) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center bg-slate-50 p-8">
                 <div className="text-center">
-                    <div className="w-8 h-8 border-4 border-slate-300 border-t-slate-600 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-600">Loading form...</p>
+                    <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <span className="text-4xl">📋</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-700 mb-2">Select a Document</h3>
+                    <p className="text-slate-500 max-w-sm">
+                        Choose a document from the list to preview, generate, or download.
+                    </p>
                 </div>
             </div>
         )
     }
 
-    // ========================================================================
-    // SECTION 18: MAIN RENDER
-    // ========================================================================
     return (
-        <div className="min-h-screen bg-slate-50 flex">
-            {/* ================================================================ */}
-            {/* SECTION 19: MAIN CONTENT AREA */}
-            {/* ================================================================ */}
-            <div className={`flex-1 transition-all duration-300 ${chatOpen ? 'mr-96' : ''}`}>
-                {/* Navigation */}
-                <nav className="bg-white shadow-sm border-b border-slate-200">
-                    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex justify-between h-16">
-                            <div className="flex items-center">
-                                <Link href="/auth/contracts-dashboard" className="flex items-center">
-                                    <div>
-                                        <div className="text-2xl font-medium text-slate-700">CLARENCE</div>
-                                        <div className="text-xs text-slate-500 tracking-widest font-light">THE HONEST BROKER</div>
-                                    </div>
-                                </Link>
-                                <span className="ml-4 text-slate-600 text-sm">Customer Requirements</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                {sessionNumber && (
-                                    <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                                        {sessionNumber}
-                                    </span>
-                                )}
-                                <button
-                                    onClick={() => setChatOpen(!chatOpen)}
-                                    className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm transition-all ${chatOpen
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white'
-                                        }`}
-                                >
-                                    💬 {chatOpen ? 'Close Chat' : 'Ask CLARENCE'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
-
-                {/* Session Info Banner */}
-                {sessionNumber && (
-                    <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white py-3">
-                        <div className="max-w-5xl mx-auto px-4 flex items-center justify-between">
-                            <div className="flex items-center gap-6">
-                                <div>
-                                    <span className="text-slate-300 text-xs">Session</span>
-                                    <div className="font-mono text-sm">{sessionNumber}</div>
-                                </div>
-                                <div>
-                                    <span className="text-slate-300 text-xs">Status</span>
-                                    <div className="text-sm">
-                                        <span className="bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded text-xs">
-                                            Requirements In Progress
-                                        </span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <span className="text-slate-300 text-xs">Phase</span>
-                                    <div className="text-sm">1 - Deal Profile</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                <div className="max-w-3xl mx-auto px-4 py-8">
-                    {/* TRUST BANNER - Shows on Step 1 */}
-                    {currentStep === 1 && (
-                        <TrustBanner onLearnMore={() => setChatOpen(true)} />
-                    )}
-
-                    {/* Progress Bar */}
-                    <div className="mb-8">
-                        <div className="flex justify-between mb-2">
-                            <span className="text-sm text-slate-600">Step {currentStep} of {totalSteps}: {getStepName(currentStep)}</span>
-                            <span className="text-sm text-slate-600">
-                                {Math.round((currentStep / totalSteps) * 100)}% Complete
-                            </span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
-                            <div
-                                className="bg-gradient-to-r from-slate-600 to-slate-700 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${(currentStep / totalSteps) * 100}%` }}
-                            />
-                        </div>
-
-                        {/* Step Indicators - Updated for 10 steps */}
-                        <div className="flex justify-between mt-4">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((step) => (
-                                <button
-                                    key={step}
-                                    onClick={() => setCurrentStep(step)}
-                                    className={`w-8 h-8 rounded-full text-xs font-medium transition-all ${step === currentStep
-                                        ? 'bg-slate-700 text-white'
-                                        : step < currentStep
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-slate-200 text-slate-500'
-                                        }`}
-                                    title={getStepName(step)}
-                                >
-                                    {step < currentStep ? '✓' : step}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Form Content */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                        {renderStep()}
-                    </div>
-
-                    {/* Navigation Buttons */}
-                    <div className="mt-6 flex justify-between">
-                        <button
-                            onClick={prevStep}
-                            disabled={currentStep === 1}
-                            className={`px-6 py-2 rounded-lg transition-all ${currentStep === 1
-                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                                : 'bg-slate-600 text-white hover:bg-slate-700'
-                                }`}
-                        >
-                            ← Previous
-                        </button>
-
-                        {currentStep < totalSteps ? (
-                            <button
-                                onClick={nextStep}
-                                className="px-6 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-all"
-                            >
-                                Next →
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleSubmit}
-                                disabled={loading || priorityPoints < 0 || !formData.templatePackId}
-                                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:from-slate-400 disabled:to-slate-500 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                            >
-                                {loading ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Submitting...
-                                    </>
-                                ) : (
-                                    <>Submit & Continue to Strategic Assessment →</>
-                                )}
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Save & Exit Option */}
-                    <div className="mt-4 text-center">
-                        <button
-                            onClick={() => router.push('/auth/contracts-dashboard')}
-                            className="text-sm text-slate-500 hover:text-slate-700 underline"
-                        >
-                            Save & Return to Dashboard
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* ================================================================ */}
-            {/* SECTION 20: CLARENCE CHAT PANEL */}
-            {/* ================================================================ */}
-            <div className={`fixed right-0 top-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl transform transition-transform duration-300 z-50 ${chatOpen ? 'translate-x-0' : 'translate-x-full'
-                }`}>
-                {/* Chat Header */}
-                <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white p-4 flex items-center justify-between">
+        <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Document Header */}
+            <div className="flex-shrink-0 p-4 border-b border-slate-200 bg-white">
+                <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-xl">
-                            🎓
+                        <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
+                            {document.icon}
                         </div>
                         <div>
-                            <div className="font-medium">CLARENCE</div>
-                            <div className="text-xs text-slate-300">Your Confidential Advisor</div>
+                            <h2 className="text-lg font-semibold text-slate-800">{document.name}</h2>
+                            <p className="text-sm text-slate-500">{document.description}</p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => setChatOpen(false)}
-                        className="text-white/70 hover:text-white p-1"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
 
-                {/* Chat Context */}
-                <div className="bg-slate-50 px-4 py-2 border-b border-slate-200">
-                    <div className="text-xs text-slate-500">
-                        Currently on: <span className="font-medium text-slate-700">{getStepName(currentStep)}</span>
-                    </div>
-                </div>
-
-                {/* Chat Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ height: 'calc(100vh - 200px)' }}>
-                    {chatMessages.map((msg) => (
-                        <div
-                            key={msg.id}
-                            className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                            <div
-                                className={`max-w-[80%] rounded-lg p-3 ${msg.type === 'user'
-                                    ? 'bg-slate-700 text-white'
-                                    : 'bg-slate-100 text-slate-800'
-                                    }`}
-                            >
-                                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                                <p className={`text-xs mt-1 ${msg.type === 'user' ? 'text-slate-300' : 'text-slate-400'
-                                    }`}>
-                                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                            </div>
-                        </div>
-                    ))}
-                    {chatLoading && (
-                        <div className="flex justify-start">
-                            <div className="bg-slate-100 rounded-lg p-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={chatEndRef} />
-                </div>
-
-                {/* Chat Input */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200">
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                            placeholder="Ask CLARENCE anything..."
-                            className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm"
-                        />
-                        <button
-                            onClick={sendChatMessage}
-                            disabled={chatLoading || !chatInput.trim()}
-                            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all"
-                        >
-                            Send
-                        </button>
-                    </div>
-                    <div className="mt-2 flex gap-2 flex-wrap">
-                        <button
-                            onClick={() => setChatInput('What information should I provide here?')}
-                            className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
-                        >
-                            What info needed?
-                        </button>
-                        <button
-                            onClick={() => setChatInput('How does this affect my leverage?')}
-                            className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
-                        >
-                            Leverage impact?
-                        </button>
-                        <button
-                            onClick={() => setChatInput('How do you protect my confidentiality?')}
-                            className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
-                        >
-                            Confidentiality?
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ============================================================================
-// SECTION 21: STEP COMPONENTS
-// ============================================================================
-
-// STEP 1 - COMPANY INFO
-function CompanyInfoStep({ formData, updateFormData }: StepComponentProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Company Information</h2>
-
-            {formData.sessionId && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-slate-600">Session ID:</span>
-                        <span className="font-mono text-sm text-slate-800">{formData.sessionNumber || formData.sessionId}</span>
-                        <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded">Auto-assigned</span>
+                        {/* Status Badge */}
+                        <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${getStatusColor(document.status)}`}>
+                            {getStatusIcon(document.status)} {getStatusLabel(document.status)}
+                        </span>
+
+                        {/* Action Buttons */}
+                        {document.status === 'in_progress' && (
+                            <button
+                                onClick={() => onGenerate(document.id)}
+                                disabled={isGenerating}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50"
+                            >
+                                {isGenerating ? 'Generating...' : '⚡ Generate'}
+                            </button>
+                        )}
+
+                        {document.status === 'ready' && (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => onGenerate(document.id)}
+                                    disabled={isGenerating}
+                                    className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-sm transition"
+                                >
+                                    🔄 Regenerate
+                                </button>
+                                <button
+                                    onClick={() => onDownload(document.id, 'pdf')}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition"
+                                >
+                                    ⬇️ Download PDF
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Company Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.companyName || ''}
-                        onChange={(e) => updateFormData('companyName', e.target.value)}
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Company Size</label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.companySize || ''}
-                        onChange={(e) => updateFormData('companySize', e.target.value)}
-                    >
-                        <option value="">Select Size</option>
-                        <option value="1-50">Small (1-50)</option>
-                        <option value="51-200">Medium (51-200)</option>
-                        <option value="201-1000">Large (201-1000)</option>
-                        <option value="1000+">Enterprise (1000+)</option>
-                    </select>
-                </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Annual Revenue
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.annualRevenue || ''}
-                        onChange={(e) => updateFormData('annualRevenue', e.target.value)}
-                    >
-                        <option value="">Select Revenue</option>
-                        <option value="<1M">Less than £1M</option>
-                        <option value="1M-10M">£1M - £10M</option>
-                        <option value="10M-50M">£10M - £50M</option>
-                        <option value="50M-100M">£50M - £100M</option>
-                        <option value="100M+">More than £100M</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Industry</label>
-                    <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.industry || ''}
-                        onChange={(e) => updateFormData('industry', e.target.value)}
-                        placeholder="e.g., Financial Services, Healthcare, Technology"
-                    />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Contact Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.contactName || ''}
-                        onChange={(e) => updateFormData('contactName', e.target.value)}
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Contact Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="email"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.contactEmail || ''}
-                        onChange={(e) => updateFormData('contactEmail', e.target.value)}
-                    />
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// STEP 2: Market Context & Leverage
-function MarketContextStep({ formData, updateFormData }: StepComponentProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Market Context & Leverage</h2>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                    💡 This information is critical for CLARENCE&apos;s leverage calculation algorithm, which determines negotiation dynamics.
-                </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Number of Competing Providers
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.numberOfBidders || ''}
-                        onChange={(e) => updateFormData('numberOfBidders', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="1">Sole source (no competition)</option>
-                        <option value="2-3">2-3 providers</option>
-                        <option value="4-6">4-6 providers</option>
-                        <option value="7+">7+ providers</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Your Market Position
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.marketPosition || ''}
-                        onChange={(e) => updateFormData('marketPosition', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="Dominant">Dominant buyer</option>
-                        <option value="Strong">Strong position</option>
-                        <option value="Neutral">Neutral position</option>
-                        <option value="Weak">Limited options</option>
-                    </select>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Deal Value (£)
-                    </label>
-                    <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.dealValue || ''}
-                        onChange={(e) => updateFormData('dealValue', e.target.value)}
-                        placeholder="e.g., 1800000"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Annual contract value</p>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Time to Agree Contract
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.decisionTimeline || ''}
-                        onChange={(e) => updateFormData('decisionTimeline', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="Immediate">Immediate (this week)</option>
-                        <option value="Fast">Fast (2 weeks)</option>
-                        <option value="Normal">Normal (1 month)</option>
-                        <option value="Extended">Extended (2-3 months)</option>
-                    </select>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Incumbent Status
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.incumbentStatus || ''}
-                        onChange={(e) => updateFormData('incumbentStatus', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="no-incumbent">No current provider</option>
-                        <option value="replacing-poor">Replacing poor performer</option>
-                        <option value="replacing-good">Replacing good performer</option>
-                        <option value="expanding">Expanding current provider</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Estimated Switching Costs
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.switchingCosts || ''}
-                        onChange={(e) => updateFormData('switchingCosts', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="minimal">Minimal (&lt;£10k)</option>
-                        <option value="moderate">Moderate (£10-50k)</option>
-                        <option value="high">High (£50-200k)</option>
-                        <option value="prohibitive">Prohibitive (&gt;£200k)</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ============================================================================
-// STEP 3: SERVICE REQUIREMENTS - UPDATED WITH DYNAMIC CONTRACT TYPES
-// ============================================================================
-function ServiceRequirementsStep({
-    formData,
-    updateFormData,
-    contractTypes,
-    contractTypesLoading,
-    selectedContractType,
-    onContractTypeChange
-}: ServiceRequirementsStepProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Contract Type & Service Requirements</h2>
-
-            {/* Contract Type Selection */}
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Contract Type <span className="text-red-500">*</span>
-                </label>
-                {contractTypesLoading ? (
-                    <div className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500">
-                        Loading contract types...
-                    </div>
-                ) : (
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.contractTypeId || ''}
-                        onChange={(e) => onContractTypeChange(e.target.value)}
-                    >
-                        <option value="">Select Contract Type</option>
-                        {contractTypes.map((ct) => (
-                            <option key={ct.typeId} value={ct.typeId}>
-                                {ct.icon} {ct.typeName}
-                                {ct.templateCount > 0 && ` (${ct.templateCount} template${ct.templateCount > 1 ? 's' : ''})`}
-                            </option>
-                        ))}
-                    </select>
-                )}
-            </div>
-
-            {/* Selected Contract Type Info */}
-            {selectedContractType && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                        <span className="text-2xl">{selectedContractType.icon}</span>
-                        <div className="flex-1">
-                            <h3 className="font-medium text-slate-800">{selectedContractType.typeName}</h3>
-                            <p className="text-sm text-slate-600 mt-1">{selectedContractType.description}</p>
-
-                            {/* Default Template Preview */}
-                            {selectedContractType.defaultTemplate ? (
-                                <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <span className="text-xs text-slate-500">Recommended Template</span>
-                                            <div className="font-medium text-slate-700">
-                                                {selectedContractType.defaultTemplate.packName}
-                                            </div>
-                                        </div>
-                                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
-                                            {selectedContractType.defaultTemplate.clauseCount} clauses
-                                        </span>
+            {/* Document Content / Preview */}
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                    {document.status === 'generating' && (
+                        <div className="text-center py-12">
+                            <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <p className="text-slate-600 font-medium">Generating {document.name}...</p>
+                            <p className="text-sm text-slate-400 mt-2">This typically takes 15-30 seconds</p>
+                            {document.progress !== undefined && (
+                                <div className="mt-4 w-48 mx-auto">
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-emerald-500 transition-all duration-1000"
+                                            style={{ width: `${document.progress}%` }}
+                                        />
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-2">
-                                        ℹ️ You can customize or change the template in Step 10
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                                    <p className="text-sm text-amber-800">
-                                        ⚠️ No templates available for this contract type. You can build a custom contract in Step 10.
-                                    </p>
+                                    <p className="text-xs text-slate-400 mt-1">{document.progress}%</p>
                                 </div>
                             )}
                         </div>
-                    </div>
-                </div>
-            )}
+                    )}
 
-            {/* Service Criticality */}
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Service Criticality
-                </label>
-                <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    value={formData.serviceCriticality || ''}
-                    onChange={(e) => updateFormData('serviceCriticality', e.target.value)}
-                >
-                    <option value="">Select</option>
-                    <option value="mission-critical">Mission Critical</option>
-                    <option value="business-critical">Business Critical</option>
-                    <option value="important">Important</option>
-                    <option value="standard">Standard</option>
-                    <option value="non-core">Non-core</option>
-                </select>
-            </div>
-
-            {/* Business Challenge */}
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Business Challenge <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={4}
-                    value={formData.businessChallenge || ''}
-                    onChange={(e) => updateFormData('businessChallenge', e.target.value)}
-                    placeholder="Describe the specific business challenge you're trying to solve..."
-                />
-            </div>
-
-            {/* Desired Outcome */}
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Desired Outcome <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={4}
-                    value={formData.desiredOutcome || ''}
-                    onChange={(e) => updateFormData('desiredOutcome', e.target.value)}
-                    placeholder="What does success look like for this engagement?"
-                />
-            </div>
-        </div>
-    )
-}
-
-// STEP 4: BATNA Assessment
-function BATNAStep({ formData, updateFormData }: StepComponentProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Alternative Options (BATNA)</h2>
-
-            <ConfidentialityNotice type="batna" />
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    What are your alternatives if this negotiation fails?
-                </label>
-                <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    value={formData.alternativeOptions || ''}
-                    onChange={(e) => updateFormData('alternativeOptions', e.target.value)}
-                >
-                    <option value="">Select</option>
-                    <option value="strong-alternatives">Multiple strong alternatives available</option>
-                    <option value="some-alternatives">Some viable alternatives exist</option>
-                    <option value="limited-alternatives">Limited alternatives</option>
-                    <option value="no-alternatives">No real alternatives</option>
-                    <option value="in-house">Could bring in-house (with investment)</option>
-                    <option value="delay">Could delay/defer the requirement</option>
-                </select>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    In-house capability to deliver this service?
-                </label>
-                <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    value={formData.inHouseCapability || ''}
-                    onChange={(e) => updateFormData('inHouseCapability', e.target.value)}
-                >
-                    <option value="">Select</option>
-                    <option value="full">Full capability exists</option>
-                    <option value="partial">Partial capability (would need investment)</option>
-                    <option value="buildable">Could build capability over time</option>
-                    <option value="none">No in-house capability</option>
-                </select>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Walk-away Point / Exit Strategy
-                </label>
-                <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    value={formData.walkAwayPoint || ''}
-                    onChange={(e) => updateFormData('walkAwayPoint', e.target.value)}
-                >
-                    <option value="">Select</option>
-                    <option value="can-delay">Can delay decision if necessary</option>
-                    <option value="hard-deadline">Hard deadline - must decide by specific date</option>
-                    <option value="in-house-fallback">Could bring in-house as fallback</option>
-                    <option value="alternative-provider">Have alternative provider ready</option>
-                    <option value="status-quo">Can continue with current situation</option>
-                    <option value="no-alternative">No viable alternative - must reach agreement</option>
-                </select>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Budget Flexibility
-                </label>
-                <select
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    value={formData.budgetFlexibility || ''}
-                    onChange={(e) => updateFormData('budgetFlexibility', e.target.value)}
-                >
-                    <option value="">Select</option>
-                    <option value="fixed">Fixed budget - no flexibility</option>
-                    <option value="limited">Limited flexibility (up to 10%)</option>
-                    <option value="moderate">Moderate flexibility (10-15%)</option>
-                    <option value="flexible">Flexible (15-25%)</option>
-                    <option value="very-flexible">Very flexible (25%+)</option>
-                </select>
-            </div>
-        </div>
-    )
-}
-
-// STEP 5: Commercial Terms
-function CommercialTermsStep({ formData, updateFormData }: StepComponentProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Commercial Terms</h2>
-
-            <ConfidentialityNotice type="budget" />
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Budget Minimum (£)
-                    </label>
-                    <input
-                        type="number"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.budgetMin || ''}
-                        onChange={(e) => updateFormData('budgetMin', parseInt(e.target.value) || 0)}
-                        placeholder="e.g., 1500000"
-                    />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Budget Maximum (£)
-                    </label>
-                    <input
-                        type="number"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.budgetMax || ''}
-                        onChange={(e) => updateFormData('budgetMax', parseInt(e.target.value) || 0)}
-                        placeholder="e.g., 2000000"
-                    />
-                </div>
-            </div>
-
-            {formData.budgetMin && formData.budgetMax && formData.budgetMin > 0 && formData.budgetMax > 0 && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                    <p className="text-sm text-slate-700">
-                        <span className="font-medium">Budget Range:</span> £{formData.budgetMin.toLocaleString()} - £{formData.budgetMax.toLocaleString()}
-                        <span className="text-slate-500 ml-2">(kept confidential)</span>
-                    </p>
-                </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Payment Terms Preference
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.paymentTermsPreference || ''}
-                        onChange={(e) => updateFormData('paymentTermsPreference', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="NET-15">NET 15 days</option>
-                        <option value="NET-30">NET 30 days</option>
-                        <option value="NET-45">NET 45 days</option>
-                        <option value="NET-60">NET 60 days</option>
-                        <option value="NET-90">NET 90 days</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Contract Duration
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.contractDuration || ''}
-                        onChange={(e) => updateFormData('contractDuration', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="12">12 months</option>
-                        <option value="24">24 months</option>
-                        <option value="36">36 months</option>
-                        <option value="48">48 months</option>
-                        <option value="60">60 months</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// STEP 6: Priorities with Point System
-function PrioritiesStep({ formData, updateNestedData, priorityPoints }: PrioritiesStepProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Priority Allocation</h2>
-
-            <ConfidentialityNotice type="priority" />
-
-            <div className={`border rounded-lg p-4 mb-6 ${priorityPoints >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'
-                }`}>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-medium">
-                            Priority Points Remaining: <span className={`text-lg ${priorityPoints >= 0 ? 'text-green-700' : 'text-red-700'}`}>{priorityPoints}</span> / 25
-                        </p>
-                        <p className="text-xs text-slate-600 mt-1">
-                            Allocate 25 points total across priorities. This forces realistic trade-offs and informs CLARENCE&apos;s negotiation strategy.
-                        </p>
-                    </div>
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${priorityPoints >= 0 ? 'bg-green-200 text-green-700' : 'bg-red-200 text-red-700'
-                        }`}>
-                        {priorityPoints}
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-6">
-                {Object.entries({
-                    cost: 'Cost Optimization',
-                    quality: 'Quality Standards',
-                    speed: 'Speed of Delivery',
-                    innovation: 'Innovation & Technology',
-                    riskMitigation: 'Risk Mitigation'
-                }).map(([key, label]) => (
-                    <div key={key}>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            {label}: <span className="font-bold text-slate-800">{(formData.priorities as Record<string, number>)?.[key]} points</span>
-                        </label>
-                        <input
-                            type="range"
-                            min="0"
-                            max="10"
-                            step="1"
-                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                            value={(formData.priorities as Record<string, number>)?.[key] || 5}
-                            onChange={(e) => updateNestedData('priorities', key, parseInt(e.target.value))}
+                    {document.status !== 'generating' && (
+                        <DocumentContentPreview
+                            document={document}
+                            session={session}
+                            qcContract={qcContract}
+                            sourceType={sourceType}
                         />
-                        <div className="flex justify-between text-xs text-slate-500 mt-1">
-                            <span>0 (Not important)</span>
-                            <span>5 (Moderate)</span>
-                            <span>10 (Critical)</span>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 8: DOCUMENT VIEW SUB-COMPONENTS
+// ============================================================================
+
+function DocumentContentPreview({
+    document,
+    session,
+    qcContract,
+    sourceType
+}: {
+    document: DocumentItem;
+    session: Session | null;
+    qcContract: QCContract | null;
+    sourceType: SourceType;
+}) {
+    // Helper to get display names regardless of source
+    const customerName = sourceType === 'quick_contract'
+        ? (qcContract?.uploaderCompany || 'Initiator')
+        : (session?.customerCompany || 'Customer')
+
+    const providerName = sourceType === 'quick_contract'
+        ? (qcContract?.recipients?.[0]?.company || 'Respondent')
+        : (session?.providerCompany || 'Provider')
+
+    const alignmentScore = sourceType === 'quick_contract'
+        ? (qcContract?.averageFairnessScore || 0)
+        : (session?.alignmentPercentage || 0)
+
+    switch (document.id) {
+        case 'executive-summary':
+            return (
+                <div className="prose prose-sm max-w-none">
+                    <div className="text-center mb-6">
+                        <h1 className="text-2xl font-bold text-slate-800 mb-2">📋 EXECUTIVE SUMMARY</h1>
+                        <p className="text-slate-500">
+                            {sourceType === 'quick_contract'
+                                ? `Contract Review for ${customerName}`
+                                : `Negotiation Outcome for ${customerName} & ${providerName}`
+                            }
+                        </p>
+                        {sourceType === 'quick_contract' && (
+                            <span className="inline-block mt-2 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full">
+                                Quick Contract
+                            </span>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="p-4 bg-emerald-50 rounded-lg">
+                            <div className="text-xs text-emerald-600 mb-1">
+                                {sourceType === 'quick_contract' ? 'Initiator' : 'Customer'}
+                            </div>
+                            <div className="font-semibold text-emerald-800">{customerName}</div>
+                        </div>
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                            <div className="text-xs text-blue-600 mb-1">
+                                {sourceType === 'quick_contract' ? 'Respondent' : 'Provider'}
+                            </div>
+                            <div className="font-semibold text-blue-800">{providerName}</div>
                         </div>
                     </div>
-                ))}
-            </div>
-
-            {priorityPoints < 0 && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
-                    <p className="font-medium">Points exceeded!</p>
-                    <p className="text-sm">Please reduce point allocations to stay within 25 total points.</p>
+                    <div className="text-center p-6 bg-slate-50 rounded-lg">
+                        <div className="text-4xl font-bold text-emerald-600">{alignmentScore}%</div>
+                        <div className="text-sm text-slate-500 mt-1">
+                            {sourceType === 'quick_contract' ? 'Average Fairness Score' : 'Overall Alignment'}
+                        </div>
+                    </div>
+                    <p className="text-xs text-slate-400 text-center mt-6">
+                        Generated by CLARENCE - The Honest Broker
+                    </p>
                 </div>
-            )}
-        </div>
-    )
+            )
+
+        case 'contract-draft':
+            return (
+                <div className="prose prose-sm max-w-none">
+                    <div className="text-center mb-6">
+                        <h1 className="text-2xl font-bold text-slate-800 mb-2">📄 CONTRACT DRAFT</h1>
+                        <p className="text-slate-500">Agreement between {customerName} & {providerName}</p>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="border-l-4 border-emerald-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">Preamble</h3>
+                            <p className="text-sm text-slate-500">Parties, definitions, and scope</p>
+                        </div>
+                        <div className="border-l-4 border-blue-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">Commercial Terms</h3>
+                            <p className="text-sm text-slate-500">Pricing, payment, and financial obligations</p>
+                        </div>
+                        <div className="border-l-4 border-purple-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">Service Levels</h3>
+                            <p className="text-sm text-slate-500">Performance standards and remedies</p>
+                        </div>
+                        <div className="border-l-4 border-amber-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">Legal Provisions</h3>
+                            <p className="text-sm text-slate-500">Liability, indemnity, and termination</p>
+                        </div>
+                    </div>
+                    <p className="text-xs text-slate-400 text-center mt-6">
+                        Generated by CLARENCE - The Honest Broker
+                    </p>
+                </div>
+            )
+
+        case 'contract-roadmap':
+            return (
+                <div className="prose prose-sm max-w-none">
+                    <div className="text-center mb-6">
+                        <h1 className="text-2xl font-bold text-slate-800 mb-2">🗺️ CONTRACT ROADMAP</h1>
+                        <p className="text-slate-500">Governance Guide for {customerName} & {providerName}</p>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="border-l-4 border-emerald-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">1. Governance Framework</h3>
+                            <p className="text-sm text-slate-500">Decision-making structures and responsibilities</p>
+                        </div>
+                        <div className="border-l-4 border-blue-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">2. Escalation Procedures</h3>
+                            <p className="text-sm text-slate-500">How to handle disputes and escalations</p>
+                        </div>
+                        <div className="border-l-4 border-purple-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">3. Key Obligations Summary</h3>
+                            <p className="text-sm text-slate-500">Plain-English guide to each party&apos;s duties</p>
+                        </div>
+                        <div className="border-l-4 border-amber-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">4. Review Schedules</h3>
+                            <p className="text-sm text-slate-500">When to revisit terms and performance</p>
+                        </div>
+                        <div className="border-l-4 border-red-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">5. Contact Matrix</h3>
+                            <p className="text-sm text-slate-500">Who to call for what</p>
+                        </div>
+                        <div className="border-l-4 border-teal-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">6. Performance Monitoring</h3>
+                            <p className="text-sm text-slate-500">SLA tracking and reporting guidelines</p>
+                        </div>
+                        <div className="border-l-4 border-indigo-500 pl-4">
+                            <h3 className="font-semibold text-slate-700">7. Change Management</h3>
+                            <p className="text-sm text-slate-500">How to handle contract amendments</p>
+                        </div>
+                    </div>
+                </div>
+            )
+
+        default:
+            return (
+                <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="text-2xl">{document.icon}</span>
+                    </div>
+                    <h3 className="font-semibold text-slate-700 mb-2">{document.name}</h3>
+                    <p className="text-sm text-slate-500">{document.description}</p>
+                    <p className="text-xs text-slate-400 mt-4">
+                        Full document content will appear here after generation.
+                    </p>
+                </div>
+            )
+    }
 }
 
-// STEP 7: Contract Positions
-function ContractPositionsStep({ formData, updateNestedData }: NestedStepComponentProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Initial Contract Positions</h2>
+// ============================================================================
+// SECTION 9: CLARENCE CHAT PANEL COMPONENT
+// ============================================================================
 
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-purple-800">
-                    📋 Set your starting positions on key contract terms. These positions <span className="font-medium">will be visible</span> to the provider during negotiation, as they form the basis for finding common ground.
-                </p>
-            </div>
-
-            <div className="space-y-6">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Liability Cap (% of annual contract value): <span className="font-bold text-slate-800">{formData.contractPositions?.liabilityCap}%</span>
-                    </label>
-                    <input
-                        type="range"
-                        min="100"
-                        max="250"
-                        step="25"
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        value={formData.contractPositions?.liabilityCap || 150}
-                        onChange={(e) => updateNestedData('contractPositions', 'liabilityCap', parseInt(e.target.value))}
-                    />
-                    <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>100% (Provider-friendly)</span>
-                        <span>175%</span>
-                        <span>250% (Customer-friendly)</span>
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Payment Terms: <span className="font-bold text-slate-800">{formData.contractPositions?.paymentTerms} days</span>
-                    </label>
-                    <input
-                        type="range"
-                        min="15"
-                        max="90"
-                        step="15"
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        value={formData.contractPositions?.paymentTerms || 45}
-                        onChange={(e) => updateNestedData('contractPositions', 'paymentTerms', parseInt(e.target.value))}
-                    />
-                    <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>15 days (Provider-friendly)</span>
-                        <span>45 days</span>
-                        <span>90 days (Customer-friendly)</span>
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        SLA Target: <span className="font-bold text-slate-800">{formData.contractPositions?.slaTarget}%</span>
-                    </label>
-                    <input
-                        type="range"
-                        min="95"
-                        max="99.9"
-                        step="0.1"
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        value={formData.contractPositions?.slaTarget || 99.5}
-                        onChange={(e) => updateNestedData('contractPositions', 'slaTarget', parseFloat(e.target.value))}
-                    />
-                    <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>95% (Basic)</span>
-                        <span>99% (Standard)</span>
-                        <span>99.9% (Premium)</span>
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Data Retention: <span className="font-bold text-slate-800">{formData.contractPositions?.dataRetention} years</span>
-                    </label>
-                    <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        step="1"
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        value={formData.contractPositions?.dataRetention || 5}
-                        onChange={(e) => updateNestedData('contractPositions', 'dataRetention', parseInt(e.target.value))}
-                    />
-                    <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>1 year</span>
-                        <span>5 years</span>
-                        <span>10 years</span>
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Termination Notice: <span className="font-bold text-slate-800">{formData.contractPositions?.terminationNotice} days</span>
-                    </label>
-                    <input
-                        type="range"
-                        min="30"
-                        max="180"
-                        step="30"
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
-                        value={formData.contractPositions?.terminationNotice || 60}
-                        onChange={(e) => updateNestedData('contractPositions', 'terminationNotice', parseInt(e.target.value))}
-                    />
-                    <div className="flex justify-between text-xs text-slate-500 mt-1">
-                        <span>30 days (Customer-friendly)</span>
-                        <span>90 days</span>
-                        <span>180 days (Provider-friendly)</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
+interface ClarenceChatPanelProps {
+    contextId: string
+    selectedDocument: DocumentItem | null
+    messages: ClarenceChatMessage[]
+    onSendMessage: (message: string) => void
+    isLoading: boolean
 }
 
-// STEP 8: Technical Requirements
-function TechnicalRequirementsStep({ formData, updateFormData }: StepComponentProps) {
-    const securityOptions = [
-        'ISO 27001',
-        'SOC2 Type II',
-        'GDPR Compliance',
-        'PCI-DSS',
-        'Cyber Essentials',
-        'Cyber Essentials Plus',
-        'HIPAA'
-    ]
+function ClarenceChatPanel({ contextId, selectedDocument, messages, onSendMessage, isLoading }: ClarenceChatPanelProps) {
+    const [input, setInput] = useState('')
+    const messagesEndRef = useRef<HTMLDivElement>(null)
 
-    const handleSecurityChange = (option: string, checked: boolean) => {
-        const current = formData.securityRequirements || []
-        if (checked) {
-            updateFormData('securityRequirements', [...current, option])
-        } else {
-            updateFormData('securityRequirements', current.filter(s => s !== option))
-        }
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [messages])
+
+    const handleSend = () => {
+        if (!input.trim() || isLoading) return
+        onSendMessage(input.trim())
+        setInput('')
     }
 
     return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Technical & Compliance Requirements</h2>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                    🔒 Define your security, compliance, and integration requirements. These often become non-negotiable contract terms.
-                </p>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-3">
-                    Security & Compliance Certifications Required
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                    {securityOptions.map((option) => (
-                        <label key={option} className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={(formData.securityRequirements || []).includes(option)}
-                                onChange={(e) => handleSecurityChange(option, e.target.checked)}
-                                className="w-4 h-4 text-slate-600 rounded focus:ring-slate-500"
-                            />
-                            <span className="text-sm text-slate-700">{option}</span>
-                        </label>
-                    ))}
-                </div>
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Integration Requirements
-                </label>
-                <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={3}
-                    value={formData.integrationNeeds || ''}
-                    onChange={(e) => updateFormData('integrationNeeds', e.target.value)}
-                    placeholder="e.g., SAP integration, Oracle Financials, Salesforce CRM, REST API access..."
-                />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Data Location Requirements
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.dataLocation || ''}
-                        onChange={(e) => updateFormData('dataLocation', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="uk-only">UK only</option>
-                        <option value="uk-eu">UK or EU</option>
-                        <option value="eu-only">EU only</option>
-                        <option value="eea">EEA (European Economic Area)</option>
-                        <option value="global">No restrictions</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Audit Requirements
-                    </label>
-                    <select
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                        value={formData.auditRequirements || ''}
-                        onChange={(e) => updateFormData('auditRequirements', e.target.value)}
-                    >
-                        <option value="">Select</option>
-                        <option value="full">Full audit rights (annual on-site)</option>
-                        <option value="limited">Limited audit rights (with notice)</option>
-                        <option value="third-party">Third-party audit reports only</option>
-                        <option value="none">No specific requirements</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// STEP 9: Additional Context
-function AdditionalContextStep({ formData, updateFormData }: StepComponentProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Additional Context</h2>
-
-            <ConfidentialityNotice type="context" />
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Previous Similar Projects
-                </label>
-                <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={3}
-                    value={formData.previousSimilarProjects || ''}
-                    onChange={(e) => updateFormData('previousSimilarProjects', e.target.value)}
-                    placeholder="Describe any previous similar engagements, what worked, what didn't..."
-                />
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Internal Resources Available
-                </label>
-                <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={3}
-                    value={formData.internalResourcesAvailable || ''}
-                    onChange={(e) => updateFormData('internalResourcesAvailable', e.target.value)}
-                    placeholder="e.g., Project manager available, IT team for integration, dedicated budget for change management..."
-                />
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Competitive Situation
-                </label>
-                <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={3}
-                    value={formData.competitiveSituation || ''}
-                    onChange={(e) => updateFormData('competitiveSituation', e.target.value)}
-                    placeholder="Describe your evaluation criteria, decision-making process, other providers being considered..."
-                />
-            </div>
-
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Any Other Relevant Information
-                </label>
-                <textarea
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent"
-                    rows={3}
-                    value={formData.additionalContext || ''}
-                    onChange={(e) => updateFormData('additionalContext', e.target.value)}
-                    placeholder="Anything else CLARENCE should know about this engagement..."
-                />
-            </div>
-        </div>
-    )
-}
-
-// ============================================================================
-// STEP 10: TEMPLATE SELECTION (NEW)
-// ============================================================================
-function TemplateSelectionStep({
-    formData,
-    selectedContractType,
-    selectedTemplate,
-    onTemplateSelect
-}: TemplateSelectionStepProps) {
-    return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-medium text-slate-800 mb-4">Contract Template</h2>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-blue-800">
-                    📋 Select and confirm your contract template. This defines the clauses that will be negotiated with providers.
-                    You can customize individual clauses in the Clause Builder after completing this form.
-                </p>
-            </div>
-
-            {/* No Contract Type Selected */}
-            {!selectedContractType && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
-                    <span className="text-3xl mb-3 block">⚠️</span>
-                    <h3 className="font-medium text-amber-800 mb-2">No Contract Type Selected</h3>
-                    <p className="text-sm text-amber-700">
-                        Please go back to Step 3 and select a contract type to see available templates.
-                    </p>
-                </div>
-            )}
-
-            {/* Contract Type Selected but No Templates */}
-            {selectedContractType && selectedContractType.templates.length === 0 && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 text-center">
-                    <span className="text-3xl mb-3 block">✏️</span>
-                    <h3 className="font-medium text-slate-800 mb-2">Custom Contract</h3>
-                    <p className="text-sm text-slate-600 mb-4">
-                        No pre-built templates are available for {selectedContractType.typeName}.
-                        You&apos;ll be able to build a custom contract in the Clause Builder.
-                    </p>
-                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg">
-                        <span>✓</span>
-                        <span>Custom contract will be configured after submission</span>
+        <div className="h-full flex flex-col bg-white">
+            {/* Chat Header */}
+            <div className="flex-shrink-0 p-4 border-b border-slate-200">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <span className="text-white font-bold">C</span>
+                    </div>
+                    <div>
+                        <div className="font-semibold text-slate-800">CLARENCE</div>
+                        <div className="text-xs text-slate-500">
+                            {selectedDocument
+                                ? `Discussing: ${selectedDocument.name}`
+                                : 'Document Centre Assistant'
+                            }
+                        </div>
                     </div>
                 </div>
-            )}
+            </div>
 
-            {/* Templates Available */}
-            {selectedContractType && selectedContractType.templates.length > 0 && (
-                <>
-                    {/* Selected Contract Type Summary */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
-                        <div className="flex items-center gap-3">
-                            <span className="text-2xl">{selectedContractType.icon}</span>
-                            <div>
-                                <h3 className="font-medium text-slate-800">{selectedContractType.typeName}</h3>
-                                <p className="text-sm text-slate-600">{selectedContractType.templateCount} template(s) available</p>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+                {messages.map(msg => (
+                    <div
+                        key={msg.messageId}
+                        className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                        <div className={`max-w-[85%] rounded-lg p-3 ${msg.sender === 'clarence'
+                            ? 'bg-white text-slate-700 border border-slate-200'
+                            : 'bg-emerald-500 text-white'
+                            }`}>
+                            <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                            <div className={`text-xs mt-2 ${msg.sender === 'clarence' ? 'text-slate-400' : 'text-white/70'}`}>
+                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+
+                {isLoading && (
+                    <div className="flex justify-start">
+                        <div className="bg-white rounded-lg p-3 border border-slate-200">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="flex-shrink-0 p-4 border-t border-slate-200">
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        placeholder="Ask CLARENCE about documents..."
+                        className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        disabled={isLoading}
+                    />
+                    <button
+                        onClick={handleSend}
+                        disabled={!input.trim() || isLoading}
+                        className="px-4 py-2 bg-violet-500 hover:bg-violet-600 disabled:bg-slate-300 text-white rounded-lg transition"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 10: HEADER COMPONENT
+// ============================================================================
+
+interface DocumentCentreHeaderProps {
+    session: Session | null
+    qcContract: QCContract | null
+    sourceType: SourceType
+    userInfo: UserInfo | null
+    onBack: () => void
+}
+
+function DocumentCentreHeader({ session, qcContract, sourceType, userInfo, onBack }: DocumentCentreHeaderProps) {
+    const isQC = sourceType === 'quick_contract'
+
+    // Derive display values from the correct source
+    const customerLabel = isQC ? 'Initiator' : 'Customer'
+    const providerLabel = isQC ? 'Respondent' : 'Provider'
+    const customerName = isQC ? (qcContract?.uploaderCompany || '—') : (session?.customerCompany || '—')
+    const providerName = isQC
+        ? (qcContract?.recipients?.[0]?.company || '—')
+        : (session?.providerCompany || '—')
+    const referenceLabel = isQC ? 'Contract' : 'Session'
+    const referenceValue = isQC
+        ? (qcContract?.fileName || '—')
+        : (session?.sessionNumber || '—')
+    const dealValue = isQC
+        ? (qcContract?.dealValue ? formatCurrency(qcContract.dealValue, qcContract.currency) : '—')
+        : (session?.dealValue || '—')
+    const alignmentLabel = isQC ? 'Fairness' : 'Alignment'
+    const alignmentValue = isQC
+        ? (qcContract?.averageFairnessScore || 0)
+        : (session?.alignmentPercentage || 0)
+    const backLabel = isQC ? 'Quick Contract' : 'Contract Studio'
+    const isCustomer = userInfo?.role === 'customer'
+
+    return (
+        <div className="bg-slate-800 text-white">
+            {/* Navigation Row */}
+            <div className="px-6 py-2 border-b border-slate-700">
+                <div className="flex items-center justify-between">
+                    {/* Left: Back Button */}
+                    <button
+                        onClick={onBack}
+                        className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        <span className="text-sm">{backLabel}</span>
+                    </button>
+
+                    {/* Center: Title */}
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">C</span>
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-semibold text-white tracking-wide">CLARENCE</span>
+                                <span className="font-semibold text-violet-400">Agree</span>
+                                {isQC && (
+                                    <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full font-medium">
+                                        QC
+                                    </span>
+                                )}
+                            </div>
+                            <span className="text-slate-500 text-xs">The Honest Broker</span>
+                        </div>
+                    </div>
+
+                    {/* Right: User Info */}
+                    <div className="text-right">
+                        <div className="text-sm text-slate-300">
+                            {userInfo?.firstName} {userInfo?.lastName}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                            {isCustomer ? customerLabel : providerLabel}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Context Row */}
+            <div className="px-6 py-3">
+                <div className="flex items-center justify-between">
+                    {/* Left: Customer / Initiator */}
+                    <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full bg-emerald-400" />
+                        <div>
+                            <div className="text-xs text-slate-400">{customerLabel}</div>
+                            <div className="text-sm font-medium text-emerald-400">{customerName}</div>
+                        </div>
+                    </div>
+
+                    {/* Center: Reference Details */}
+                    <div className="flex items-center gap-8">
+                        <div className="text-center">
+                            <div className="text-xs text-slate-400">{referenceLabel}</div>
+                            <div className="text-sm font-mono text-white truncate max-w-[200px]">{referenceValue}</div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-xs text-slate-400">Deal Value</div>
+                            <div className="text-sm font-semibold text-emerald-400">{dealValue}</div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-xs text-slate-400">{alignmentLabel}</div>
+                            <div className={`text-sm font-semibold ${alignmentValue >= 80 ? 'text-emerald-400' :
+                                alignmentValue >= 50 ? 'text-amber-400' :
+                                    'text-red-400'
+                                }`}>
+                                {alignmentValue}%
                             </div>
                         </div>
                     </div>
 
-                    {/* Template Options */}
-                    <div className="space-y-3">
-                        {selectedContractType.templates.map((template) => (
-                            <div
-                                key={template.packId}
-                                onClick={() => onTemplateSelect(template)}
-                                className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${selectedTemplate?.packId === template.packId
-                                    ? 'border-emerald-500 bg-emerald-50'
-                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                                    }`}
-                            >
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-start gap-3">
-                                        {/* Selection Indicator */}
-                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${selectedTemplate?.packId === template.packId
-                                            ? 'border-emerald-500 bg-emerald-500'
-                                            : 'border-slate-300'
-                                            }`}>
-                                            {selectedTemplate?.packId === template.packId && (
-                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                            )}
-                                        </div>
+                    {/* Right: Provider / Respondent */}
+                    <div className="flex items-center gap-3">
+                        <div>
+                            <div className="text-xs text-slate-400">{providerLabel}</div>
+                            <div className="text-sm font-medium text-blue-400">{providerName}</div>
+                        </div>
+                        <div className="w-3 h-3 rounded-full bg-blue-400" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
 
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <h4 className="font-medium text-slate-800">{template.packName}</h4>
-                                                {template.isDefault && (
-                                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                                                        Recommended
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-sm text-slate-600 mt-1">
-                                                Version {template.version} • {template.clauseCount} clauses
-                                            </p>
-                                        </div>
-                                    </div>
+// ============================================================================
+// SECTION 11: MAIN DOCUMENT CENTRE COMPONENT
+// ============================================================================
 
-                                    <span className="px-3 py-1 bg-slate-100 text-slate-600 text-sm font-medium rounded-full">
-                                        {template.clauseCount} clauses
-                                    </span>
+function DocumentCentreContent() {
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const supabase = createClient()
+
+    // Core State
+    const [loading, setLoading] = useState(true)
+    const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+    const [sourceType, setSourceType] = useState<SourceType>('session')
+    const [session, setSession] = useState<Session | null>(null)
+    const [qcContract, setQcContract] = useState<QCContract | null>(null)
+    const [documents, setDocuments] = useState<DocumentItem[]>([])
+    const [selectedDocument, setSelectedDocument] = useState<DocumentItem | null>(null)
+    const [chatMessages, setChatMessages] = useState<ClarenceChatMessage[]>([])
+    const [isChatLoading, setIsChatLoading] = useState(false)
+    const [isGeneratingDocument, setIsGeneratingDocument] = useState(false)
+    const [isGeneratingPackage, setIsGeneratingPackage] = useState(false)
+
+    // ============================================================================
+    // SECTION 11A: SAVE AS TEMPLATE STATE
+    // ============================================================================
+
+    const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
+    const [saveTemplateName, setSaveTemplateName] = useState('')
+    const [saveTemplateContractType, setSaveTemplateContractType] = useState('')
+    const [saveTemplateDescription, setSaveTemplateDescription] = useState('')
+    const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+    const [saveTemplateResult, setSaveTemplateResult] = useState<{
+        success: boolean
+        templateName?: string
+        clauseCount?: number
+        error?: string
+    } | null>(null)
+
+    // ============================================================================
+    // SECTION 11B: DATA LOADING
+    // ============================================================================
+
+    const loadUserInfo = useCallback(() => {
+        const authData = localStorage.getItem('clarence_auth')
+        if (!authData) {
+            router.push('/auth/login')
+            return null
+        }
+
+        try {
+            const parsed = JSON.parse(authData)
+            return {
+                firstName: parsed.userInfo?.firstName || 'User',
+                lastName: parsed.userInfo?.lastName || '',
+                email: parsed.userInfo?.email || '',
+                company: parsed.userInfo?.company || '',
+                role: parsed.userInfo?.role || 'customer',
+                userId: parsed.userInfo?.userId || ''
+            } as UserInfo
+        } catch {
+            router.push('/auth/login')
+            return null
+        }
+    }, [router])
+
+    // Load session data (Mediation Studio flow)
+    const loadSessionData = useCallback(async (sessionId: string): Promise<Session | null> => {
+        try {
+            const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+            if (!response.ok) throw new Error('Failed to fetch session')
+
+            const data = await response.json()
+
+            console.log('=== SESSION API RESPONSE ===', JSON.stringify(data, null, 2))
+
+            return {
+                sessionId: data.session?.sessionId || sessionId,
+                sessionNumber: data.session?.sessionNumber || '',
+                customerCompany: data.session?.customerCompany || '',
+                providerCompany: data.session?.providerCompany || '',
+                providerId: data.session?.providerId || null,
+                customerContactName: data.session?.customerContactName || null,
+                providerContactName: data.session?.providerContactName || null,
+                serviceType: data.session?.contractType || 'Service Agreement',
+                dealValue: formatCurrency(data.session?.dealValue, data.session?.currency || 'GBP'),
+                phase: data.session?.phase || 0,
+                status: data.session?.status || '',
+                alignmentPercentage: data.leverage?.alignmentPercentage || 0,
+                isTraining: data.session?.is_training || data.session?.isTraining || false,
+                contractType: data.session?.contractType || data.session?.contract_type || ''
+            }
+        } catch (error) {
+            console.error('Error loading session:', error)
+            return null
+        }
+    }, [])
+
+    // Load Quick Contract data (QC flow)
+    const loadQCContractData = useCallback(async (contractId: string): Promise<QCContract | null> => {
+        try {
+            // Fetch uploaded contract
+            const { data: contractData, error: contractError } = await supabase
+                .from('uploaded_contracts')
+                .select('*')
+                .eq('id', contractId)
+                .single()
+
+            if (contractError || !contractData) {
+                console.error('Error fetching QC contract:', contractError)
+                return null
+            }
+
+            // Fetch recipients
+            const { data: recipientsData, error: recipientsError } = await supabase
+                .from('qc_recipients')
+                .select('*')
+                .eq('quick_contract_id', contractId)
+
+            if (recipientsError) {
+                console.error('Error fetching QC recipients:', recipientsError)
+            }
+
+            // Fetch clause count and average fairness score
+            const { data: clausesData, error: clausesError } = await supabase
+                .from('uploaded_contract_clauses')
+                .select('id, fairness_score, clarence_position')
+                .eq('contract_id', contractId)
+
+            if (clausesError) {
+                console.error('Error fetching QC clauses:', clausesError)
+            }
+
+            const clauseCount = clausesData?.length || 0
+            const fairnessScores = clausesData
+                ?.map(c => c.fairness_score)
+                .filter((s): s is number => s !== null && s !== undefined) || []
+            const averageFairnessScore = fairnessScores.length > 0
+                ? Math.round(fairnessScores.reduce((a, b) => a + b, 0) / fairnessScores.length)
+                : 0
+
+            // Fetch uploader info
+            const { data: uploaderData } = await supabase
+                .from('users')
+                .select('first_name, last_name, company_name')
+                .eq('user_id', contractData.user_id)
+                .single()
+
+            const recipients: QCRecipient[] = (recipientsData || []).map((r: Record<string, unknown>) => ({
+                recipientId: r.id as string,
+                name: r.recipient_name as string || '',
+                email: r.recipient_email as string || '',
+                company: r.company_name as string || '',
+                role: r.role as string || 'respondent',
+                status: r.status as string || 'pending'
+            }))
+
+            console.log('=== QC CONTRACT LOADED ===', {
+                contractId,
+                fileName: contractData.file_name,
+                clauseCount,
+                averageFairnessScore,
+                recipientCount: recipients.length
+            })
+
+            return {
+                contractId: contractData.id,
+                fileName: contractData.file_name || 'Untitled Contract',
+                uploaderCompany: uploaderData?.company_name || contractData.company_name || 'Unknown',
+                uploaderName: uploaderData
+                    ? `${uploaderData.first_name || ''} ${uploaderData.last_name || ''}`.trim()
+                    : 'Unknown',
+                uploaderId: contractData.user_id,
+                recipients,
+                clauseCount,
+                averageFairnessScore,
+                contractType: contractData.contract_type || 'custom',
+                status: contractData.status || 'draft',
+                committedAt: contractData.committed_at || null,
+                dealValue: contractData.deal_value || null,
+                currency: contractData.currency || 'GBP'
+            }
+        } catch (error) {
+            console.error('Error loading QC contract:', error)
+            return null
+        }
+    }, [supabase])
+
+    // Initialize documents filtered by source type
+    const initializeDocuments = useCallback((
+        source: SourceType,
+        sessionData: Session | null,
+        qcData: QCContract | null
+    ): DocumentItem[] => {
+        // Filter documents by source availability
+        const availableDefs = DOCUMENT_DEFINITIONS.filter(def =>
+            def.availableFor.includes(source)
+        )
+
+        return availableDefs.map(def => {
+            let status: DocumentStatus = 'locked'
+            let progress = 0
+
+            const prerequisitesMet = def.prerequisites.every(prereqId => {
+                return false // Will be updated when we query generated_documents
+            })
+
+            if (def.prerequisites.length === 0) {
+                status = 'in_progress'
+                progress = 0
+            } else if (prerequisitesMet) {
+                status = 'in_progress'
+                progress = 0
+            } else {
+                status = 'locked'
+            }
+
+            // For session mode: if alignment is high, some docs might be ready
+            if (source === 'session' && sessionData) {
+                if (sessionData.alignmentPercentage >= 50) {
+                    if (def.id === 'executive-summary' || def.id === 'leverage-report') {
+                        status = 'ready'
+                        progress = 100
+                    }
+                }
+            }
+
+            // For QC mode: if contract is committed, executive summary can proceed
+            if (source === 'quick_contract' && qcData) {
+                if (qcData.status === 'committed' || qcData.committedAt) {
+                    if (def.id === 'executive-summary') {
+                        status = 'in_progress'
+                        progress = 0
+                    }
+                }
+            }
+
+            return {
+                ...def,
+                status,
+                progress,
+                generatedAt: status === 'ready' ? new Date().toISOString() : undefined,
+                downloadUrl: undefined
+            }
+        })
+    }, [])
+
+    // ============================================================================
+    // SECTION 11B2: INITIAL LOAD EFFECT
+    // ============================================================================
+
+    useEffect(() => {
+        const init = async () => {
+            const user = loadUserInfo()
+            if (!user) return
+
+            setUserInfo(user)
+
+            // SOURCE DETECTION: Check URL params for contract_id or session_id
+            const contractId = searchParams.get('contract_id')
+            const sessionId = searchParams.get('session_id') || searchParams.get('session')
+
+            if (contractId) {
+                // ── QC MODE ──
+                console.log('=== DOCUMENT CENTRE: QC MODE ===', { contractId })
+                setSourceType('quick_contract')
+
+                const qcData = await loadQCContractData(contractId)
+                if (qcData) {
+                    setQcContract(qcData)
+                    const docs = initializeDocuments('quick_contract', null, qcData)
+                    setDocuments(docs)
+
+                    // Auto-select first available document
+                    const firstAvailable = docs.find(d => d.status !== 'locked')
+                    if (firstAvailable) {
+                        setSelectedDocument(firstAvailable)
+                    }
+
+                    // Welcome message for QC mode
+                    setChatMessages([{
+                        messageId: 'welcome-1',
+                        sessionId: contractId,
+                        sender: 'clarence',
+                        message: `Welcome to the Document Centre for "${qcData.fileName}".\n\nThis contract has ${qcData.clauseCount} clauses with an average fairness score of ${qcData.averageFairnessScore}%. You can generate documents to create a complete evidence trail of the review process.\n\nSelect a document from the list to get started.`,
+                        createdAt: new Date().toISOString()
+                    }])
+
+                    // Log page view
+                    eventLogger.setUser(user.userId || '')
+                    eventLogger.completed('documentation', 'document_centre_loaded', {
+                        contractId,
+                        sourceType: 'quick_contract',
+                        clauseCount: qcData.clauseCount,
+                        averageFairnessScore: qcData.averageFairnessScore
+                    })
+                } else {
+                    console.error('Failed to load QC contract data')
+                    router.push('/auth/contracts-dashboard')
+                    return
+                }
+
+            } else if (sessionId) {
+                // ── SESSION MODE ──
+                console.log('=== DOCUMENT CENTRE: SESSION MODE ===', { sessionId })
+                setSourceType('session')
+
+                const sessionData = await loadSessionData(sessionId)
+                if (sessionData) {
+                    setSession(sessionData)
+                    const docs = initializeDocuments('session', sessionData, null)
+                    setDocuments(docs)
+
+                    // Auto-select first available document
+                    const firstAvailable = docs.find(d => d.status !== 'locked')
+                    if (firstAvailable) {
+                        setSelectedDocument(firstAvailable)
+                    }
+
+                    // Welcome message for session mode
+                    setChatMessages([{
+                        messageId: 'welcome-1',
+                        sessionId: sessionId,
+                        sender: 'clarence',
+                        message: `Welcome to the Document Centre. I'm here to help you prepare all documentation for the ${sessionData.customerCompany} and ${sessionData.providerCompany} negotiation.\n\nYou can generate individual documents or ask me questions about any of them. When all documents are ready, you'll be able to download the complete Evidence Package.`,
+                        createdAt: new Date().toISOString()
+                    }])
+
+                    // Log page view
+                    eventLogger.setSession(sessionId)
+                    eventLogger.setUser(user.userId || '')
+                    eventLogger.completed('documentation', 'document_centre_loaded', {
+                        sessionId,
+                        sourceType: 'session',
+                        alignmentPercentage: sessionData.alignmentPercentage
+                    })
+                } else {
+                    console.error('Failed to load session data')
+                    router.push('/auth/contracts-dashboard')
+                    return
+                }
+
+            } else {
+                // No valid identifier — redirect
+                console.error('No contract_id or session_id in URL params')
+                router.push('/auth/contracts-dashboard')
+                return
+            }
+
+            setLoading(false)
+        }
+
+        init()
+    }, [loadUserInfo, loadSessionData, loadQCContractData, initializeDocuments, searchParams, router])
+
+    // ============================================================================
+    // SECTION 11C: EVENT HANDLERS
+    // ============================================================================
+
+    const handleDocumentSelect = (doc: DocumentItem) => {
+        if (doc.status !== 'locked') {
+            setSelectedDocument(doc)
+        }
+    }
+
+    // ============================================================================
+    // SECTION 11D: GENERATE DOCUMENT HANDLER (DUAL-PATH)
+    // ============================================================================
+
+    const handleGenerateDocument = async (documentId: string) => {
+        if (!userInfo) {
+            console.error('Missing user info')
+            return
+        }
+
+        // Validate we have the correct source data
+        if (sourceType === 'session' && !session) {
+            console.error('Session mode but no session data')
+            return
+        }
+        if (sourceType === 'quick_contract' && !qcContract) {
+            console.error('QC mode but no contract data')
+            return
+        }
+
+        const endpoint = DOCUMENT_ENDPOINTS[documentId]
+        if (!endpoint) {
+            console.error(`No endpoint configured for document: ${documentId}`)
+            return
+        }
+
+        // Get the context ID for chat messages
+        const contextId = sourceType === 'quick_contract'
+            ? qcContract!.contractId
+            : session!.sessionId
+
+        // Update document status to generating
+        setDocuments(prev => prev.map(doc =>
+            doc.id === documentId
+                ? { ...doc, status: 'generating' as DocumentStatus, progress: 0 }
+                : doc
+        ))
+        setIsGeneratingDocument(true)
+
+        // Add CLARENCE message
+        const generatingMessage: ClarenceChatMessage = {
+            messageId: `msg-${Date.now()}`,
+            sessionId: contextId,
+            sender: 'clarence',
+            message: `I'm generating the ${documentId.replace(/-/g, ' ')} now. This typically takes 15-30 seconds...`,
+            createdAt: new Date().toISOString()
+        }
+        setChatMessages(prev => [...prev, generatingMessage])
+
+        // Simulate progress while waiting for API
+        const progressInterval = setInterval(() => {
+            setDocuments(prev => prev.map(doc =>
+                doc.id === documentId && doc.status === 'generating'
+                    ? { ...doc, progress: Math.min((doc.progress || 0) + 10, 90) }
+                    : doc
+            ))
+        }, 2000)
+
+        try {
+            // Build request body based on source type
+            const requestBody = sourceType === 'quick_contract'
+                ? {
+                    contract_id: qcContract!.contractId,
+                    source_type: 'quick_contract',
+                    user_id: userInfo.userId,
+                    format: 'pdf',
+                    regenerate: false
+                }
+                : {
+                    session_id: session!.sessionId,
+                    source_type: 'session',
+                    user_id: userInfo.userId,
+                    provider_id: session!.providerId,
+                    format: 'pdf',
+                    regenerate: false
+                }
+
+            console.log(`=== GENERATING ${documentId} ===`, {
+                endpoint,
+                sourceType,
+                requestBody
+            })
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestBody)
+            })
+
+            clearInterval(progressInterval)
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+            }
+
+            const result = await response.json()
+
+            if (result.success) {
+                // Update document with result
+                setDocuments(prev => prev.map(doc =>
+                    doc.id === documentId
+                        ? {
+                            ...doc,
+                            status: 'ready' as DocumentStatus,
+                            progress: 100,
+                            downloadUrl: result.downloads?.pdf || result.pdf_public_url,
+                            generatedAt: result.generated_at,
+                            documentDbId: result.document_id
+                        }
+                        : doc
+                ))
+
+                // Success message from CLARENCE
+                const successMessage: ClarenceChatMessage = {
+                    messageId: `msg-${Date.now()}`,
+                    sessionId: contextId,
+                    sender: 'clarence',
+                    message: `✅ Your ${documentId.replace(/-/g, ' ')} is ready! Click the download button to get your PDF.`,
+                    createdAt: new Date().toISOString()
+                }
+                setChatMessages(prev => [...prev, successMessage])
+
+                // Update selected document if it's the one we just generated
+                if (selectedDocument?.id === documentId) {
+                    setSelectedDocument(prev => prev ? {
+                        ...prev,
+                        status: 'ready' as DocumentStatus,
+                        downloadUrl: result.downloads?.pdf || result.pdf_public_url
+                    } : null)
+                }
+
+            } else {
+                throw new Error(result.error || 'Generation failed')
+            }
+
+        } catch (error) {
+            clearInterval(progressInterval)
+            console.error('Document generation error:', error)
+
+            const contextId = sourceType === 'quick_contract'
+                ? qcContract!.contractId
+                : session!.sessionId
+
+            // Update document status to show error
+            setDocuments(prev => prev.map(doc =>
+                doc.id === documentId
+                    ? { ...doc, status: 'in_progress' as DocumentStatus, progress: 0 }
+                    : doc
+            ))
+
+            // Error message from CLARENCE
+            const errorMessage: ClarenceChatMessage = {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: `❌ Sorry, I encountered an error generating the document: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+
+        } finally {
+            setIsGeneratingDocument(false)
+        }
+    }
+
+    // ============================================================================
+    // SECTION 11D2: DOWNLOAD & PACKAGE HANDLERS
+    // ============================================================================
+
+    const handleDownloadDocument = async (docId: string, format: 'pdf' | 'docx') => {
+        const doc = documents.find(d => d.id === docId)
+        const contextId = sourceType === 'quick_contract'
+            ? (qcContract?.contractId || '')
+            : (session?.sessionId || '')
+
+        if (!doc?.downloadUrl) {
+            console.error('No download URL available for document:', docId)
+
+            const errorMessage: ClarenceChatMessage = {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: `❌ Sorry, the download URL for this document isn't available. Try regenerating the document.`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+            return
+        }
+
+        if (format === 'pdf') {
+            window.open(doc.downloadUrl, '_blank')
+        } else if (format === 'docx') {
+            const infoMessage: ClarenceChatMessage = {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: `📘 DOCX format is coming soon. For now, please download the PDF version.`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, infoMessage])
+        }
+    }
+
+    const handleDownloadPackage = async () => {
+        if (sourceType === 'session' && !session) return
+        if (sourceType === 'quick_contract' && !qcContract) return
+
+        setIsGeneratingPackage(true)
+
+        try {
+            // TODO: Call API to generate and download package
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            alert('Evidence Package download - Coming soon!')
+        } catch (error) {
+            console.error('Error downloading package:', error)
+        } finally {
+            setIsGeneratingPackage(false)
+        }
+    }
+
+    // ============================================================================
+    // SECTION 11D3: CHAT & NAVIGATION HANDLERS
+    // ============================================================================
+
+    const handleSendChatMessage = async (message: string) => {
+        const contextId = sourceType === 'quick_contract'
+            ? (qcContract?.contractId || '')
+            : (session?.sessionId || '')
+
+        if (!contextId) return
+
+        const userMessage: ClarenceChatMessage = {
+            messageId: `user-${Date.now()}`,
+            sessionId: contextId,
+            sender: 'user',
+            message,
+            createdAt: new Date().toISOString()
+        }
+        setChatMessages(prev => [...prev, userMessage])
+
+        setIsChatLoading(true)
+
+        try {
+            // TODO: Call CLARENCE AI API
+            await new Promise(resolve => setTimeout(resolve, 1500))
+
+            const response: ClarenceChatMessage = {
+                messageId: `clarence-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: `I understand you're asking about "${message}". I can help you with document generation, explain what each document contains, or answer questions about the ${sourceType === 'quick_contract' ? 'contract review' : 'negotiation'} outcome. What would you like to know?`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, response])
+
+        } catch (error) {
+            console.error('Chat error:', error)
+        } finally {
+            setIsChatLoading(false)
+        }
+    }
+
+    // Back navigation — routes to the correct source page
+    const handleBack = () => {
+        if (sourceType === 'quick_contract' && qcContract) {
+            router.push(`/auth/qc-studio/${qcContract.contractId}`)
+        } else {
+            const sessionId = searchParams.get('session_id') || searchParams.get('session')
+            router.push(`/auth/contract-studio?session_id=${sessionId}`)
+        }
+    }
+
+    // ============================================================================
+    // SECTION 11E: SAVE AS TEMPLATE HANDLER
+    // ============================================================================
+
+    const openSaveTemplateModal = () => {
+        if (sourceType === 'session' && !session) return
+        if (sourceType === 'quick_contract' && !qcContract) return
+
+        if (sourceType === 'quick_contract' && qcContract) {
+            // Pre-fill from QC data
+            const defaultName = `${qcContract.fileName} (Quick Contract)`
+            setSaveTemplateName(defaultName)
+            const matchedType = CONTRACT_TYPE_OPTIONS.find(opt =>
+                qcContract.contractType.toLowerCase().includes(opt.value)
+            )
+            setSaveTemplateContractType(matchedType?.value || 'custom')
+        } else if (session) {
+            // Pre-fill from session data
+            const sessionSource = session.isTraining ? 'Training' : 'Negotiation'
+            const defaultName = `${session.customerCompany} vs ${session.providerCompany} (${sessionSource})`
+            setSaveTemplateName(defaultName)
+            const contractType = session.contractType || session.serviceType || ''
+            const matchedType = CONTRACT_TYPE_OPTIONS.find(opt =>
+                contractType.toLowerCase().includes(opt.value)
+            )
+            setSaveTemplateContractType(matchedType?.value || 'custom')
+        }
+
+        setSaveTemplateDescription('')
+        setSaveTemplateResult(null)
+        setShowSaveTemplateModal(true)
+    }
+
+    const handleSaveAsTemplate = async () => {
+        if (!userInfo || !saveTemplateName.trim()) return
+
+        // For QC mode, save from uploaded_contract_clauses
+        // For session mode, save from session_clause_positions
+        if (sourceType === 'quick_contract' && qcContract) {
+            await handleSaveQCTemplate()
+        } else if (sourceType === 'session' && session) {
+            await handleSaveSessionTemplate()
+        }
+    }
+
+    // Save template from QC data (uploaded_contract_clauses)
+    const handleSaveQCTemplate = async () => {
+        if (!qcContract || !userInfo) return
+
+        setIsSavingTemplate(true)
+        setSaveTemplateResult(null)
+
+        try {
+            // Fetch uploaded_contract_clauses
+            const { data: clausesData, error: clausesError } = await supabase
+                .from('uploaded_contract_clauses')
+                .select('*')
+                .eq('contract_id', qcContract.contractId)
+                .order('display_order', { ascending: true })
+
+            if (clausesError) {
+                throw new Error(`Failed to fetch clauses: ${clausesError.message}`)
+            }
+
+            if (!clausesData || clausesData.length === 0) {
+                throw new Error('No clauses found for this contract')
+            }
+
+            // Generate template
+            const templateId = crypto.randomUUID()
+            const templateCode = `QC-${templateId.substring(0, 8).toUpperCase()}`
+
+            const { error: templateError } = await supabase
+                .from('contract_templates')
+                .insert({
+                    template_id: templateId,
+                    template_code: templateCode,
+                    template_name: saveTemplateName.trim(),
+                    description: saveTemplateDescription.trim() || `Template created from Quick Contract - ${qcContract.fileName}`,
+                    contract_type: saveTemplateContractType || 'custom',
+                    industry: null,
+                    is_system: false,
+                    is_public: false,
+                    is_active: true,
+                    company_id: null,
+                    created_by_user_id: userInfo.userId || null,
+                    source_contract_id: qcContract.contractId,
+                    clause_count: clausesData.length,
+                    version: 1,
+                    times_used: 0,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+
+            if (templateError) {
+                throw new Error(`Failed to create template: ${templateError.message}`)
+            }
+
+            // Map clauses to template_clauses
+            const templateClauses = clausesData.map((clause: Record<string, unknown>, index: number) => {
+                const position = clause.clarence_position
+                    ? parseFloat(String(clause.clarence_position))
+                    : 5
+
+                return {
+                    template_clause_id: crypto.randomUUID(),
+                    template_id: templateId,
+                    clause_id: clause.master_clause_id || clause.id,
+                    clause_name: clause.clause_name || `Clause ${index + 1}`,
+                    category_name: clause.category_name || 'General',
+                    display_number: clause.clause_number || `${index + 1}`,
+                    clause_level: clause.clause_level || 1,
+                    category_order: clause.category_order || 0,
+                    clause_order: clause.clause_order || index,
+                    display_order: clause.display_order || (index + 1) * 10,
+                    description: clause.description || null,
+                    clause_content: clause.clause_content || clause.original_text || null,
+                    default_customer_position_override: position,
+                    default_provider_position_override: position,
+                    default_weight_override: 3,
+                    is_required: true,
+                    is_active: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }
+            })
+
+            const { error: clausesInsertError } = await supabase
+                .from('template_clauses')
+                .insert(templateClauses)
+
+            if (clausesInsertError) {
+                await supabase
+                    .from('contract_templates')
+                    .delete()
+                    .eq('template_id', templateId)
+                throw new Error(`Failed to save template clauses: ${clausesInsertError.message}`)
+            }
+
+            setSaveTemplateResult({
+                success: true,
+                templateName: saveTemplateName.trim(),
+                clauseCount: templateClauses.length
+            })
+
+            const templateMessage: ClarenceChatMessage = {
+                messageId: `msg-template-${Date.now()}`,
+                sessionId: qcContract.contractId,
+                sender: 'clarence',
+                message: `✅ I've saved the contract as a template: "${saveTemplateName.trim()}" with ${templateClauses.length} clauses. You can find it in your Contract Library under "My Templates".`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, templateMessage])
+
+        } catch (error) {
+            console.error('Save QC template error:', error)
+            setSaveTemplateResult({
+                success: false,
+                error: error instanceof Error ? error.message : 'An unexpected error occurred'
+            })
+        } finally {
+            setIsSavingTemplate(false)
+        }
+    }
+
+    // Save template from session data (session_clause_positions) — EXISTING LOGIC
+    const handleSaveSessionTemplate = async () => {
+        if (!session || !userInfo) return
+
+        setIsSavingTemplate(true)
+        setSaveTemplateResult(null)
+
+        try {
+            const { data: positionsData, error: positionsError } = await supabase
+                .from('session_clause_positions')
+                .select('*')
+                .eq('session_id', session.sessionId)
+                .eq('is_applicable', true)
+                .order('display_order', { ascending: true })
+
+            if (positionsError) {
+                throw new Error(`Failed to fetch clause positions: ${positionsError.message}`)
+            }
+
+            if (!positionsData || positionsData.length === 0) {
+                throw new Error('No clause positions found for this session')
+            }
+
+            const templateId = crypto.randomUUID()
+            const templateCode = `USER-${templateId.substring(0, 8).toUpperCase()}`
+            const sessionSource = session.isTraining ? 'training_outcome' : 'negotiation_outcome'
+
+            const { error: templateError } = await supabase
+                .from('contract_templates')
+                .insert({
+                    template_id: templateId,
+                    template_code: templateCode,
+                    template_name: saveTemplateName.trim(),
+                    description: saveTemplateDescription.trim() || `Template created from ${sessionSource.replace('_', ' ')} - Session ${session.sessionNumber}`,
+                    contract_type: saveTemplateContractType || 'custom',
+                    industry: null,
+                    is_system: false,
+                    is_public: false,
+                    is_active: true,
+                    company_id: null,
+                    created_by_user_id: userInfo.userId || null,
+                    source_session_id: session.sessionId,
+                    clause_count: positionsData.length,
+                    version: 1,
+                    times_used: 0,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                })
+
+            if (templateError) {
+                throw new Error(`Failed to create template: ${templateError.message}`)
+            }
+
+            const templateClauses = positionsData.map((pos: Record<string, unknown>, index: number) => {
+                const customerPos = pos.original_customer_position
+                    ? parseFloat(String(pos.original_customer_position))
+                    : (pos.customer_position ? parseFloat(String(pos.customer_position)) : 5)
+                const providerPos = pos.original_provider_position
+                    ? parseFloat(String(pos.original_provider_position))
+                    : (pos.provider_position ? parseFloat(String(pos.provider_position)) : 5)
+
+                const outcomeCustomerPos = pos.customer_position ? parseFloat(String(pos.customer_position)) : null
+                const outcomeProviderPos = pos.provider_position ? parseFloat(String(pos.provider_position)) : null
+
+                const customerWeight = pos.customer_weight ? parseFloat(String(pos.customer_weight)) : 3
+                const providerWeight = pos.provider_weight ? parseFloat(String(pos.provider_weight)) : 3
+                const avgWeight = Math.round((customerWeight + providerWeight) / 2)
+
+                return {
+                    template_clause_id: crypto.randomUUID(),
+                    template_id: templateId,
+                    clause_id: pos.source_master_clause_id || pos.clause_id,
+                    clause_name: pos.clause_name || `Clause ${index + 1}`,
+                    category_name: pos.category_name || 'General',
+                    display_number: pos.clause_number || `${index + 1}`,
+                    clause_level: pos.clause_level || 1,
+                    category_order: pos.category_order || Math.floor((pos.display_order as number || 0) / 100),
+                    clause_order: pos.clause_order || ((pos.display_order as number || 0) % 100),
+                    display_order: pos.display_order || (index + 1) * 10,
+                    description: pos.description || null,
+                    clause_content: pos.clause_content || null,
+                    default_customer_position_override: customerPos,
+                    default_provider_position_override: providerPos,
+                    outcome_customer_position: outcomeCustomerPos,
+                    outcome_provider_position: outcomeProviderPos,
+                    default_weight_override: avgWeight,
+                    is_required: true,
+                    is_active: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }
+            })
+
+            const { error: clausesError } = await supabase
+                .from('template_clauses')
+                .insert(templateClauses)
+
+            if (clausesError) {
+                await supabase
+                    .from('contract_templates')
+                    .delete()
+                    .eq('template_id', templateId)
+                throw new Error(`Failed to save template clauses: ${clausesError.message}`)
+            }
+
+            console.log('Template saved:', {
+                sessionId: session.sessionId,
+                templateId,
+                templateName: saveTemplateName.trim(),
+                clauseCount: templateClauses.length,
+                source: sessionSource
+            })
+
+            setSaveTemplateResult({
+                success: true,
+                templateName: saveTemplateName.trim(),
+                clauseCount: templateClauses.length
+            })
+
+            const templateMessage: ClarenceChatMessage = {
+                messageId: `msg-template-${Date.now()}`,
+                sessionId: session.sessionId,
+                sender: 'clarence',
+                message: `✅ I've saved the negotiation outcome as a template: "${saveTemplateName.trim()}" with ${templateClauses.length} clauses. You can find it in your Contract Library under "My Templates" and use it to start new negotiations with the same clause structure and positions.`,
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [...prev, templateMessage])
+
+        } catch (error) {
+            console.error('Save as template error:', error)
+            setSaveTemplateResult({
+                success: false,
+                error: error instanceof Error ? error.message : 'An unexpected error occurred'
+            })
+        } finally {
+            setIsSavingTemplate(false)
+        }
+    }
+
+    const closeSaveTemplateModal = () => {
+        if (!isSavingTemplate) {
+            setShowSaveTemplateModal(false)
+            setSaveTemplateResult(null)
+            setSaveTemplateName('')
+            setSaveTemplateContractType('')
+            setSaveTemplateDescription('')
+        }
+    }
+
+    // ============================================================================
+    // SECTION 11F: SAVE AS TEMPLATE MODAL
+    // ============================================================================
+
+    const SaveAsTemplateModal = () => {
+        if (!showSaveTemplateModal) return null
+
+        const isTraining = session?.isTraining || false
+        const accentColor = isTraining ? 'amber' : 'emerald'
+        const isQC = sourceType === 'quick_contract'
+
+        const displaySessionNumber = isQC
+            ? (qcContract?.fileName || '—')
+            : (session?.sessionNumber || '—')
+        const displayParties = isQC
+            ? `${qcContract?.uploaderCompany || '—'} → ${qcContract?.recipients?.[0]?.company || 'Respondent'}`
+            : `${session?.customerCompany || '—'} vs ${session?.providerCompany || '—'}`
+        const displayAlignment = isQC
+            ? (qcContract?.averageFairnessScore || 0)
+            : (session?.alignmentPercentage || 0)
+        const alignmentLabel = isQC ? 'Fairness' : 'Alignment'
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+                    {/* Header */}
+                    <div className={`px-6 py-4 border-b border-slate-200 bg-gradient-to-r ${isTraining ? 'from-amber-50 to-orange-50' : isQC ? 'from-blue-50 to-indigo-50' : 'from-emerald-50 to-teal-50'}`}>
+                        <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isTraining ? 'bg-amber-100' : isQC ? 'bg-blue-100' : 'bg-emerald-100'}`}>
+                                <span className="text-xl">{isTraining ? '🎓' : isQC ? '⚡' : '💾'}</span>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-800">
+                                    {isTraining ? 'Save Training Outcome as Template' : isQC ? 'Save Contract as Template' : 'Save as Template'}
+                                </h3>
+                                <p className="text-sm text-slate-500">
+                                    Capture this {isTraining ? 'training outcome' : isQC ? 'contract' : 'negotiation'} for reuse in future contracts
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="px-6 py-5">
+                        {/* Success State */}
+                        {saveTemplateResult?.success ? (
+                            <div className="text-center py-4">
+                                <div className={`w-16 h-16 ${isTraining ? 'bg-amber-100' : 'bg-emerald-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                                    <span className="text-3xl">✅</span>
+                                </div>
+                                <h4 className="text-lg font-semibold text-slate-800 mb-2">Template Saved!</h4>
+                                <p className="text-sm text-slate-600 mb-1">
+                                    <span className="font-medium">&quot;{saveTemplateResult.templateName}&quot;</span>
+                                </p>
+                                <p className="text-sm text-slate-500 mb-6">
+                                    {saveTemplateResult.clauseCount} clauses captured{isQC ? ' from contract' : ' with agreed positions'}
+                                </p>
+
+                                <div className="flex gap-3 justify-center">
+                                    <button
+                                        onClick={() => router.push('/auth/contracts')}
+                                        className={`px-4 py-2 ${isTraining ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white rounded-lg font-medium transition`}
+                                    >
+                                        View in Template Library
+                                    </button>
+                                    <button
+                                        onClick={closeSaveTemplateModal}
+                                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                                    >
+                                        Close
+                                    </button>
                                 </div>
                             </div>
+                        ) : saveTemplateResult?.error ? (
+                            /* Error State */
+                            <div className="text-center py-4">
+                                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-3xl">❌</span>
+                                </div>
+                                <h4 className="text-lg font-semibold text-red-800 mb-2">Save Failed</h4>
+                                <p className="text-sm text-red-600 mb-6">{saveTemplateResult.error}</p>
+
+                                <div className="flex gap-3 justify-center">
+                                    <button
+                                        onClick={() => {
+                                            setSaveTemplateResult(null)
+                                            handleSaveAsTemplate()
+                                        }}
+                                        className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition"
+                                    >
+                                        Try Again
+                                    </button>
+                                    <button
+                                        onClick={closeSaveTemplateModal}
+                                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            /* Form State */
+                            <div className="space-y-4">
+                                {/* Context Summary */}
+                                <div className="bg-slate-50 rounded-lg p-3">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-slate-500">{isQC ? 'Contract' : 'Session'}</span>
+                                        <span className="font-mono text-slate-700 truncate max-w-[200px]">{displaySessionNumber}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm mt-1">
+                                        <span className="text-slate-500">Parties</span>
+                                        <span className="text-slate-700">{displayParties}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm mt-1">
+                                        <span className="text-slate-500">{alignmentLabel}</span>
+                                        <span className={`font-semibold ${displayAlignment >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                            {displayAlignment}%
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Template Name */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        Template Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={saveTemplateName}
+                                        onChange={(e) => setSaveTemplateName(e.target.value)}
+                                        placeholder="e.g., BPO Standard Terms - Agreed"
+                                        maxLength={200}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                                        autoFocus
+                                    />
+                                    <p className="text-xs text-slate-400 mt-1">{saveTemplateName.length}/200 characters</p>
+                                </div>
+
+                                {/* Contract Type */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        Contract Type
+                                    </label>
+                                    <select
+                                        value={saveTemplateContractType}
+                                        onChange={(e) => setSaveTemplateContractType(e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                                    >
+                                        <option value="">Select type...</option>
+                                        {CONTRACT_TYPE_OPTIONS.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Description */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                                        Description <span className="text-slate-400">(optional)</span>
+                                    </label>
+                                    <textarea
+                                        value={saveTemplateDescription}
+                                        onChange={(e) => setSaveTemplateDescription(e.target.value)}
+                                        placeholder="Notes about this template, e.g., includes agreed liability caps..."
+                                        rows={3}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-none"
+                                    />
+                                </div>
+
+                                {/* Info Box */}
+                                <div className={`${isTraining ? 'bg-amber-50 border-amber-200' : isQC ? 'bg-blue-50 border-blue-200' : 'bg-blue-50 border-blue-200'} border rounded-lg p-3`}>
+                                    <p className={`text-sm ${isTraining ? 'text-amber-800' : 'text-blue-800'}`}>
+                                        <strong>What gets saved:</strong> {isQC
+                                            ? `All ${qcContract?.clauseCount || 0} clauses from this contract with their CLARENCE-certified positions will be captured as the template defaults.`
+                                            : `All clause positions from this ${isTraining ? 'training session' : 'negotiation'} will be captured as the template defaults. You can use this template to start new contracts with the same clause structure.`
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer - only show for form state */}
+                    {!saveTemplateResult && (
+                        <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                            <button
+                                onClick={closeSaveTemplateModal}
+                                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                                disabled={isSavingTemplate}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveAsTemplate}
+                                disabled={isSavingTemplate || !saveTemplateName.trim()}
+                                className={`px-6 py-2 ${isTraining
+                                    ? 'bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'
+                                    } text-white rounded-lg font-medium transition disabled:cursor-not-allowed flex items-center gap-2`}
+                            >
+                                {isSavingTemplate ? (
+                                    <>
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                        Saving...
+                                    </>
+                                ) : (
+                                    '💾 Save Template'
+                                )}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
+    // ============================================================================
+    // SECTION 11G: RENDER
+    // ============================================================================
+
+    if (loading) {
+        return <DocumentCentreLoading />
+    }
+
+    // Check we have at least one valid data source
+    const hasValidData = (sourceType === 'session' && session) || (sourceType === 'quick_contract' && qcContract)
+
+    if (!hasValidData || !userInfo) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                <div className="text-center">
+                    <p className="text-red-600 mb-4">Failed to load {sourceType === 'quick_contract' ? 'contract' : 'session'} data</p>
+                    <button
+                        onClick={() => router.push('/auth/contracts-dashboard')}
+                        className="px-6 py-2 text-slate-600 hover:text-slate-800 transition"
+                    >
+                        ← Return to Dashboard
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
+    const readyCount = documents.filter(d => d.status === 'ready' || d.status === 'final').length
+    const totalCount = documents.length
+    const isCustomer = userInfo?.role === 'customer'
+    const isQC = sourceType === 'quick_contract'
+    const isTraining = session?.isTraining || false
+    const contextId = isQC ? (qcContract?.contractId || '') : (session?.sessionId || '')
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            {/* Header */}
+            <DocumentCentreHeader
+                session={session}
+                qcContract={qcContract}
+                sourceType={sourceType}
+                userInfo={userInfo}
+                onBack={handleBack}
+            />
+
+            {/* Main Layout */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* LEFT PANEL: Document List */}
+                <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+                    {/* Progress Header */}
+                    <div className="flex-shrink-0 p-4 border-b border-slate-200">
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="font-semibold text-slate-800">Documents</h2>
+                            <span className="text-sm text-slate-500">
+                                {readyCount}/{totalCount} ready
+                            </span>
+                        </div>
+
+                        {/* Source Type Indicator */}
+                        {isQC && (
+                            <div className="mb-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center gap-2 text-xs text-blue-700">
+                                    <span>⚡</span>
+                                    <span className="font-medium">Quick Contract Mode</span>
+                                    <span className="text-blue-500">— Some documents are not available</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Overall Progress */}
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-emerald-500 transition-all duration-500"
+                                style={{ width: `${(readyCount / totalCount) * 100}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Document List */}
+                    <div className="flex-1 overflow-y-auto py-2">
+                        {documents.map(doc => (
+                            <DocumentListItem
+                                key={doc.id}
+                                document={doc}
+                                isSelected={selectedDocument?.id === doc.id}
+                                onClick={() => handleDocumentSelect(doc)}
+                            />
                         ))}
                     </div>
 
-                    {/* Selected Template Confirmation */}
-                    {selectedTemplate && (
-                        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-                            <div className="flex items-start gap-3">
-                                <span className="text-emerald-600 text-xl">✓</span>
-                                <div>
-                                    <h4 className="font-medium text-emerald-800">Template Selected</h4>
-                                    <p className="text-sm text-emerald-700 mt-1">
-                                        <strong>{selectedTemplate.packName}</strong> with {selectedTemplate.clauseCount} clauses will be used as your contract foundation.
-                                    </p>
-                                    <p className="text-xs text-emerald-600 mt-2">
-                                        ℹ️ After completing the Strategic Assessment, you&apos;ll be directed to the Clause Builder where you can customize these clauses before inviting providers.
+                    {/* Evidence Package Card */}
+                    <EvidencePackageCard
+                        documents={documents}
+                        onDownload={handleDownloadPackage}
+                        isGenerating={isGeneratingPackage}
+                    />
+
+                    {/* Save as Template Card - Customers / Initiators Only */}
+                    {isCustomer && (
+                        <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${isTraining
+                            ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
+                            : isQC
+                                ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200'
+                                : 'bg-gradient-to-br from-violet-50 to-purple-50 border-violet-200'
+                            }`}>
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${isTraining ? 'bg-amber-100' : isQC ? 'bg-blue-100' : 'bg-violet-100'
+                                    }`}>
+                                    {isTraining ? '🎓' : isQC ? '⚡' : '💾'}
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className={`font-semibold text-sm ${isTraining ? 'text-amber-800' : isQC ? 'text-blue-800' : 'text-violet-800'}`}>
+                                        Save as Template
+                                    </h3>
+                                    <p className="text-xs text-slate-500">
+                                        Reuse this clause structure
                                     </p>
                                 </div>
                             </div>
+
+                            <button
+                                onClick={openSaveTemplateModal}
+                                className={`w-full py-2 rounded-lg font-medium text-sm transition flex items-center justify-center gap-2 ${isTraining
+                                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                    : isQC
+                                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                        : 'bg-violet-600 hover:bg-violet-700 text-white'
+                                    }`}
+                            >
+                                💾 Save {isQC ? 'Contract' : 'Outcome'} as Template
+                            </button>
                         </div>
                     )}
-                </>
-            )}
+                </div>
 
-            {/* Summary Card */}
-            <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-6 mt-8">
-                <h3 className="text-lg font-medium text-slate-800 mb-4">📋 Ready to Submit</h3>
-                <p className="text-sm text-slate-600 mb-4">
-                    After submitting, you&apos;ll proceed to the Strategic Assessment where CLARENCE will ask probing questions
-                    to calculate your leverage position and prepare for negotiation.
-                </p>
+                {/* CENTER PANEL: Document Preview */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <DocumentPreviewPanel
+                        document={selectedDocument}
+                        session={session}
+                        qcContract={qcContract}
+                        sourceType={sourceType}
+                        onGenerate={handleGenerateDocument}
+                        onDownload={handleDownloadDocument}
+                        isGenerating={isGeneratingDocument}
+                    />
+                </div>
 
-                <div className="space-y-3">
-                    <div className="flex items-start gap-2 text-sm text-emerald-700 bg-emerald-50 rounded-lg p-3">
-                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        <span>
-                            <span className="font-medium">Confidential information protected:</span> Your budget limits, BATNA, walk-away points, and priority weightings will never be shared with the provider.
-                        </span>
-                    </div>
-
-                    <div className="flex items-start gap-2 text-sm text-blue-700 bg-blue-50 rounded-lg p-3">
-                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                        </svg>
-                        <span>
-                            <span className="font-medium">CLARENCE as honest broker:</span> I use information from both parties to find fair compromises—not to advantage one side over the other.
-                        </span>
-                    </div>
+                {/* RIGHT PANEL: CLARENCE Chat */}
+                <div className="w-96 border-l border-slate-200">
+                    <ClarenceChatPanel
+                        contextId={contextId}
+                        selectedDocument={selectedDocument}
+                        messages={chatMessages}
+                        onSendMessage={handleSendChatMessage}
+                        isLoading={isChatLoading}
+                    />
                 </div>
             </div>
+
+            {/* Save as Template Modal */}
+            <SaveAsTemplateModal />
+
         </div>
+    )
+}
+
+// ============================================================================
+// SECTION 12: DEFAULT EXPORT WITH SUSPENSE
+// ============================================================================
+
+export default function DocumentCentrePage() {
+    return (
+        <Suspense fallback={<DocumentCentreLoading />}>
+            <DocumentCentreContent />
+        </Suspense>
     )
 }
