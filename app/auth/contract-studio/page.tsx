@@ -1234,13 +1234,13 @@ function recalculateLeverageTracker(
             if (custDelta < 0) {
                 const impact = Math.abs(custDelta) * (weight / 5) * 1.0
                 customerLeverageShift += impact  // Customer GAINS
-                console.log(`${clause.clauseName}: Customer moved toward agreement (${origCustPos.toFixed(1)}â†’${currCustPos.toFixed(1)}), Customer gains +${impact.toFixed(2)} (weight ${weight})`)
+                console.log(`${clause.clauseName}: Customer moved toward agreement (${origCustPos.toFixed(1)}←’${currCustPos.toFixed(1)}), Customer gains +${impact.toFixed(2)} (weight ${weight})`)
             }
             // Customer moving UP = moving away from agreement = CUSTOMER LOSES
             if (custDelta > 0) {
                 const impact = Math.abs(custDelta) * (weight / 5) * 1.0
                 customerLeverageShift -= impact  // Customer LOSES
-                console.log(`${clause.clauseName}: Customer moved away from agreement (${origCustPos.toFixed(1)}â†’${currCustPos.toFixed(1)}), Customer loses -${impact.toFixed(2)} (weight ${weight})`)
+                console.log(`${clause.clauseName}: Customer moved away from agreement (${origCustPos.toFixed(1)}←’${currCustPos.toFixed(1)}), Customer loses -${impact.toFixed(2)} (weight ${weight})`)
             }
         }
 
@@ -1256,13 +1256,13 @@ function recalculateLeverageTracker(
             if (provDelta > 0) {
                 const impact = provDelta * (weight / 5) * 1.0
                 customerLeverageShift -= impact  // Customer LOSES (provider gained)
-                console.log(`${clause.clauseName}: Provider moved toward agreement (${origProvPos.toFixed(1)}â†’${currProvPos.toFixed(1)}), Provider gains +${impact.toFixed(2)} (weight ${weight})`)
+                console.log(`${clause.clauseName}: Provider moved toward agreement (${origProvPos.toFixed(1)}←’${currProvPos.toFixed(1)}), Provider gains +${impact.toFixed(2)} (weight ${weight})`)
             }
             // Provider moving DOWN = moving away from agreement = PROVIDER LOSES (customer gains)
             if (provDelta < 0) {
                 const impact = Math.abs(provDelta) * (weight / 5) * 1.0
                 customerLeverageShift += impact  // Customer GAINS (provider lost)
-                console.log(`${clause.clauseName}: Provider moved away from agreement (${origProvPos.toFixed(1)}â†’${currProvPos.toFixed(1)}), Provider loses -${impact.toFixed(2)} (weight ${weight})`)
+                console.log(`${clause.clauseName}: Provider moved away from agreement (${origProvPos.toFixed(1)}←’${currProvPos.toFixed(1)}), Provider loses -${impact.toFixed(2)} (weight ${weight})`)
             }
         }
     })
@@ -1381,8 +1381,8 @@ function formatHistoryTimestamp(timestamp: string): string {
 
 function getHistoryEventIcon(eventType: string): string {
     switch (eventType) {
-        case 'position_change': return 'â†”'
-        case 'agreement': return 'âœ“'
+        case 'position_change': return '←”'
+        case 'agreement': return '✓'
         case 'comment': return '💬'
         case 'tradeoff_accepted': return '⇄'
         case 'session_started': return '🚀'
@@ -1931,7 +1931,7 @@ function MovesTrackerOverlay({ isOpen, onClose, negotiationHistory, userRole, se
                                                 <div className="flex items-center gap-1.5 text-xs">
                                                     <span className="text-slate-400">Position:</span>
                                                     <span className="text-red-500 line-through">{entry.oldValue}</span>
-                                                    <span className="text-slate-400">â†’</span>
+                                                    <span className="text-slate-400">←’</span>
                                                     <span className="text-emerald-600 font-medium">{entry.newValue}</span>
                                                 </div>
                                             )}
@@ -3741,7 +3741,7 @@ function ContractStudioContent() {
                         clauseId: clause.clauseId,
                         clauseName: clause.clauseName,
                         clauseNumber: clause.clauseNumber,
-                        description: `ðŸ”’ Agreement locked on ${clause.clauseName} at position ${clause.finalAgreedPosition?.toFixed(1)}`,
+                        description: `🎓’ Agreement locked on ${clause.clauseName} at position ${clause.finalAgreedPosition?.toFixed(1)}`,
                         newValue: clause.finalAgreedPosition || undefined,
                         seen: true
                     })
@@ -4857,7 +4857,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     sessionNumber: session.sessionNumber,
                     customerCompany: session.customerCompany,
                     serviceRequired: session.serviceType,
-                    dealValue: session.dealValue.replace(/[£$â‚¬,]/g, ''),
+                    dealValue: session.dealValue.replace(/[£$€,]/g, ''),
                     provider: {
                         companyName: '',
                         contactName: '',
@@ -5011,7 +5011,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         positionId: selectedClause.positionId,
                         sender: 'clarence',
                         senderUserId: null,
-                        message: `â³ **${session.providerContactName || 'AI Opponent'}** is reviewing your confirmation...`,
+                        message: `⏳ **${session.providerContactName || 'AI Opponent'}** is reviewing your confirmation...`,
                         messageType: 'notification',
                         relatedPositionChange: false,
                         triggeredBy: 'training_auto_confirm',
@@ -5041,7 +5041,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 positionId: selectedClause.positionId,
                                 sender: 'clarence',
                                 senderUserId: null,
-                                message: `âœ… **${session.providerContactName || 'AI Opponent'}** has confirmed the agreement!\n\nðŸŽ‰ **Clause Locked:** ${selectedClause.clauseName} is now agreed at position ${providerPosition.toFixed(1)}.`,
+                                message: `✅ **${session.providerContactName || 'AI Opponent'}** has confirmed the agreement!\n\n⚠ **Clause Locked:** ${selectedClause.clauseName} is now agreed at position ${providerPosition.toFixed(1)}.`,
                                 messageType: 'notification',
                                 relatedPositionChange: true,
                                 triggeredBy: 'training_auto_confirm',
@@ -5276,7 +5276,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
                         className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
                     >
-                        {userInfo?.role === 'provider' ? 'â† Sign Out' : 'â† Return to Dashboard'}
+                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
                     </button>
                 </div>
             </div>
@@ -5315,7 +5315,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
     ): number {
         // DB scale: 1-10
         // Option scale: 1-optionCount
-        // Linear mapping: dbPosition 1 â†’ option 1, dbPosition 10 â†’ option optionCount
+        // Linear mapping: dbPosition 1 → option 1, dbPosition 10 → option optionCount
         const normalized = (dbPosition - 1) / 9  // 0 to 1
         const optionValue = normalized * (optionCount - 1) + 1
         return Math.round(optionValue)
@@ -5326,7 +5326,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         optionValue: number,
         optionCount: number
     ): number {
-        // Option scale: 1-optionCount â†’ DB scale: 1-10
+        // Option scale: 1-optionCount → DB scale: 1-10
         const normalized = (optionValue - 1) / (optionCount - 1)  // 0 to 1
         const dbPosition = normalized * 9 + 1
         return Math.round(dbPosition * 10) / 10  // Round to 1 decimal
@@ -5595,7 +5595,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 }}
                                                 title={`Aligned at ${myDbPosition?.toFixed(1)}`}
                                             >
-                                                âœ“
+                                                ✓
                                             </div>
                                         ) : myBarPercent !== null && (
                                             <div
@@ -5629,7 +5629,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 }}
                                                 title={`Proposed: ${proposedPosition?.toFixed(1)}`}
                                             >
-                                                â†’
+                                                →
                                             </div>
                                         )}
                                     </div>
@@ -5815,7 +5815,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 }}
                                                 title={`Aligned at ${myDbPosition?.toFixed(1)}`}
                                             >
-                                                âœ“
+                                                ✓
                                             </div>
                                         ) : myBarPercent !== null && (
                                             <div
@@ -5844,7 +5844,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 }}
                                                 title={`Proposed: ${proposedPosition?.toFixed(1)}`}
                                             >
-                                                â†’
+                                                →
                                             </div>
                                         )}
                                     </div>
@@ -5889,7 +5889,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 </span>
                                                 <div className="font-medium text-slate-800">
                                                     {(proposedPosition ?? myDbPosition)?.toFixed(1)} / 10
-                                                    {hasProviderInvited && isAligned && <span className="ml-2 text-emerald-600">âœ“ Aligned with {isCustomer ? 'Provider' : 'Customer'}</span>}
+                                                    {hasProviderInvited && isAligned && <span className="ml-2 text-emerald-600">✓ Aligned with {isCustomer ? 'Provider' : 'Customer'}</span>}
                                                 </div>
                                             </div>
                                             {isProposing && (
@@ -6026,9 +6026,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     'text-red-600'
                             }`}>
                             {selectedClause.gapSize < 0.5
-                                ? '0 points apart âœ“ Fully Aligned'
+                                ? '0 points apart ✓ Fully Aligned'
                                 : selectedClause.gapSize <= 1
-                                    ? `${selectedClause.gapSize.toFixed(1)} points apart âœ“ Nearly Aligned`
+                                    ? `${selectedClause.gapSize.toFixed(1)} points apart ✓ Nearly Aligned`
                                     : selectedClause.gapSize <= 3
                                         ? `${selectedClause.gapSize.toFixed(1)} points apart`
                                         : `${selectedClause.gapSize.toFixed(1)} points apart ⚠ Significant Gap`
@@ -6039,7 +6039,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         <div className="text-xs text-slate-400 mt-1">
                             {selectedClause.gapSize < 0.5
                                 ? `Both parties at: ${getPositionLabel(myDbPosition)}`
-                                : `You: ${getPositionLabel(myDbPosition)} â†’ ${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}`
+                                : `You: ${getPositionLabel(myDbPosition)} → ${isCustomer ? 'Provider' : 'Customer'}: ${getPositionLabel(otherDbPosition)}`
                             }
                         </div>
                     )}
@@ -6497,7 +6497,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </span>
                             ) : (
                                 <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded">
-                                    âœ“ Ready
+                                    ✓ Ready
                                 </span>
                             )
                         )}
@@ -7143,9 +7143,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-emerald-800">ðŸ”’ Agreement Locked</h4>
+                            <h4 className="font-semibold text-emerald-800">🎓 Agreement Locked</h4>
                             <p className="text-sm text-emerald-600">
-                                Both parties confirmed position {selectedClause.finalAgreedPosition?.toFixed(1)} â€” Ready for drafting
+                                Both parties confirmed position {selectedClause.finalAgreedPosition?.toFixed(1)} — Ready for drafting
                             </p>
                             <p className="text-xs text-emerald-500 mt-1">
                                 Agreed on {selectedClause.agreementReachedAt
@@ -7169,7 +7169,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-amber-800">â³ Awaiting {otherPartyName}</h4>
+                            <h4 className="font-semibold text-amber-800">⏳ Awaiting {otherPartyName}</h4>
                             <p className="text-sm text-amber-600">
                                 You confirmed position {myConfirmedPosition?.toFixed(1)}. Waiting for the other party to confirm.
                             </p>
@@ -7208,7 +7208,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-blue-800">ðŸ“© {otherPartyName} Has Confirmed</h4>
+                            <h4 className="font-semibold text-blue-800">📩 {otherPartyName} Has Confirmed</h4>
                             <p className="text-sm text-blue-600">
                                 They confirmed position {otherConfirmedPosition?.toFixed(1)} on {otherConfirmedAt
                                     ? new Date(otherConfirmedAt).toLocaleString()
@@ -7256,7 +7256,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-emerald-800">âœ“ Positions Aligned</h4>
+                            <h4 className="font-semibold text-emerald-800">✓ Positions Aligned</h4>
                             <p className="text-sm text-emerald-600">
                                 Both parties are at position {myPosition?.toFixed(1)}. Ready to confirm agreement.
                             </p>
@@ -7871,10 +7871,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                             selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
                                                                 'bg-slate-100 text-slate-700'
                                             }`}>
-                                            {selectedClause.status === 'agreed' ? 'ðŸ”’ Agreed' :
-                                                selectedClause.status === 'customer_confirmed' ? 'â³ Awaiting Provider' :
-                                                    selectedClause.status === 'provider_confirmed' ? 'â³ Awaiting Customer' :
-                                                        selectedClause.status === 'aligned' ? 'âœ“ Aligned' :
+                                            {selectedClause.status === 'agreed' ? '🔒 Agreed' :
+                                                selectedClause.status === 'customer_confirmed' ? '⏳ Awaiting Provider' :
+                                                    selectedClause.status === 'provider_confirmed' ? '⏳ Awaiting Customer' :
+                                                        selectedClause.status === 'aligned' ? '✓ Aligned' :
                                                             selectedClause.status}
                                         </span>
                                     </div>
@@ -7982,7 +7982,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 'text-red-600'
                                             }`}>
                                             {selectedClause.gapSize?.toFixed(1)} points
-                                            {selectedClause.gapSize <= 1 && ' âœ“ Aligned'}
+                                            {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
                                         </span>
                                     </div>
                                     {selectedClause.clarenceRecommendation && (
@@ -8135,7 +8135,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                             {/* Clause names */}
                                                             <div className="text-sm text-slate-700">
                                                                 <span className="font-medium">{tradeOff.clauseA.clauseName}</span>
-                                                                <span className="text-slate-400 mx-1">â†”</span>
+                                                                <span className="text-slate-400 mx-1">↔</span>
                                                                 <span className="font-medium">{tradeOff.clauseB.clauseName}</span>
                                                             </div>
 
@@ -8246,10 +8246,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                             ? 'border-blue-400 bg-white text-blue-600'
                                                                             : 'border-slate-400 bg-slate-100 text-slate-600'
                                                                 }`}>
-                                                                {entry.eventType === 'position_change' ? 'â†”' :
-                                                                    entry.eventType === 'agreement' ? 'âœ“' :
-                                                                        entry.eventType === 'clause_locked' ? 'ðŸ”’' :
-                                                                            entry.eventType === 'clause_unlocked' ? 'ðŸ”“' :
+                                                                {entry.eventType === 'position_change' ? '↔' :
+                                                                    entry.eventType === 'agreement' ? '✓' :
+                                                                        entry.eventType === 'clause_locked' ? '🔒' :
+                                                                            entry.eventType === 'clause_unlocked' ? '🔓' :
                                                                                 entry.eventType === 'session_started' ? '🚀' : '•'}
                                                             </div>
 
@@ -8290,7 +8290,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                             ? 'bg-slate-200 text-slate-700'
                                                                             : 'bg-emerald-100 text-emerald-700'
                                                                             }`}>
-                                                                            {isLocked ? 'ðŸ”’ Locked' : 'ðŸ”“ Unlocked'}
+                                                                            {isLocked ? '🔒 Locked' : '🔓 Unlocked'}
                                                                         </span>
                                                                     </div>
                                                                 )}
@@ -8299,7 +8299,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                     <div className="flex items-center gap-2 mt-2 text-xs">
                                                                         <span className="text-slate-500">Position:</span>
                                                                         <span className="text-red-500 line-through">{entry.oldValue}</span>
-                                                                        <span className="text-slate-400">â†’</span>
+                                                                        <span className="text-slate-400">→</span>
                                                                         <span className="text-emerald-600 font-medium">{entry.newValue}</span>
                                                                         {entry.leverageImpact !== undefined && entry.leverageImpact !== 0 && (
                                                                             <span className={`ml-2 px-1.5 py-0.5 rounded ${entry.leverageImpact > 0
@@ -8327,7 +8327,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             {negotiationHistory.filter(e => e.clauseId === selectedClause.clauseId).length === 0 && (
                                                 <div className="text-center py-8 pl-10">
                                                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                                        <span className="text-2xl">ðŸ“‹</span>
+                                                        <span className="text-2xl">📋</span>
                                                     </div>
                                                     <p className="text-slate-600">No changes to this clause yet</p>
                                                     <p className="text-sm text-slate-400 mt-1">
@@ -8404,7 +8404,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         ) : lastDraftedClauseId === selectedClause.clauseId && draftLanguage ? (
                                             'Regenerate Draft'
                                         ) : (
-                                            'âš–ï¸ Generate Balanced Draft'
+                                            '⚠️ Generate Balanced Draft'
                                         )}
                                     </button>
                                 </div>
@@ -8414,7 +8414,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <div className="border border-slate-200 rounded-lg overflow-hidden">
                                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                             <span className="text-sm font-medium text-slate-700">
-                                                âš–ï¸ Balanced Draft Language
+                                                ⚠️ Balanced Draft Language
                                             </span>
                                             <div className="flex gap-2">
                                                 <button
@@ -8424,7 +8424,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     }}
                                                     className="px-3 py-1 text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded transition"
                                                 >
-                                                    ðŸ“‹ Copy
+                                                    📋 Copy
                                                 </button>
                                             </div>
                                         </div>
@@ -8443,7 +8443,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 {(!draftLanguage || lastDraftedClauseId !== selectedClause.clauseId) && !isLoadingDraft && (
                                     <div className="text-center py-6 text-slate-500">
                                         <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                            <span className="text-2xl">ðŸ“„</span>
+                                            <span className="text-2xl">📄</span>
                                         </div>
                                         <p>Click &quot;Generate Balanced Draft&quot; to create contract text</p>
                                         <p className="text-sm text-slate-400 mt-1">
@@ -8612,7 +8612,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                             {/* Training badge */}
                             <div className="ml-2 px-3 py-1 bg-white/20 rounded-full text-xs font-medium">
-                                ðŸŽ“ Training
+                                🎓 Training
                             </div>
                         </div>
                     </div>
@@ -8620,7 +8620,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {/* Optional: Top notification bar */}
                     <div className="fixed top-0 left-0 right-0 z-50">
                         <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium shadow-lg">
-                            â³ Waiting for {session?.providerContactName || 'AI Opponent'} to respond...
+                            ⏳ Waiting for {session?.providerContactName || 'AI Opponent'} to respond...
                         </div>
                     </div>
                 </>
@@ -8679,7 +8679,7 @@ function PendingProviderView({
                         onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
                         className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
                     >
-                        {userInfo?.role === 'provider' ? 'â† Sign Out' : 'â† Return to Dashboard'}
+                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
                     </button>
                 </div>
             </div>
@@ -8726,7 +8726,7 @@ function PendingProviderView({
                                 onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
                                 className="text-slate-400 hover:text-white transition"
                             >
-                                {userInfo?.role === 'provider' ? 'â† Sign Out' : 'â† Back to Dashboard'}
+                                {userInfo?.role === 'provider' ? '← Sign Out' : '← Back to Dashboard'}
                             </button>
                         )}
                     </div>
