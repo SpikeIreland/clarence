@@ -601,9 +601,10 @@ export default function ContractLibraryPage() {
                     let attempts = 0
 
                     const pollForReady = async (): Promise<boolean> => {
+                        // Get contract status
                         const { data, error } = await supabase
                             .from('uploaded_contracts')
-                            .select('status, clause_count')
+                            .select('status')
                             .eq('contract_id', returnedContractId)
                             .single()
 
@@ -612,17 +613,25 @@ export default function ContractLibraryPage() {
                             return false
                         }
 
+                        // Count actual clauses inserted (updates incrementally)
+                        const { count: actualClauseCount } = await supabase
+                            .from('uploaded_contract_clauses')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('contract_id', returnedContractId)
+
+                        const clauseCount = actualClauseCount || 0
+
                         // Update clause count display during polling
-                        if (data.clause_count && data.clause_count > 0) {
+                        if (clauseCount > 0) {
                             setUploadResult({
-                                clauseCount: data.clause_count,
+                                clauseCount: clauseCount,
                                 templateName: uploadTemplateName.trim()
                             })
                         }
 
-                        console.log(`Poll attempt ${attempts + 1}: status=${data.status}, clauses=${data.clause_count}`)
+                        console.log(`Poll attempt ${attempts + 1}: status=${data.status}, clauses=${clauseCount}`)
 
-                        if (data.status === 'ready' && data.clause_count > 0) {
+                        if (data.status === 'ready' && clauseCount > 0) {
                             return true
                         }
                         if (data.status === 'failed') {

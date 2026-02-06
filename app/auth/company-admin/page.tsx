@@ -342,11 +342,11 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
         try {
             const contractId = await onUpload(selectedFile, templateName.trim(), contractType)
             setIsProcessing(true)
-            setUploadProgress('Processing contract clauses... This may take up to a minute.')
+            setUploadProgress('Processing contract clauses...')
 
-            // Poll get-uploaded-contract until clauses are parsed
-            const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
-            const MAX_POLLS = 60
+            // Poll Supabase directly for actual clause count
+            const supabase = createClient()
+            const MAX_POLLS = 60  // 3 minutes max (60 * 3 seconds)
             const POLL_INTERVAL = 3000
             let pollCount = 0
 
@@ -360,21 +360,44 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
                             return
                         }
                         try {
-                            const res = await fetch(`${API_BASE}/get-uploaded-contract?contract_id=${contractId}`)
-                            if (res.ok) {
-                                const data = await res.json()
-                                setUploadProgress(`Processing clauses... ${data.clauseCount || data.clause_count || 0} found so far`)
-                                if ((data.clauseCount || data.clause_count || 0) > 0 ||
-                                    data.status === 'ready' || data.status === 'complete') {
-                                    clearInterval(interval)
-                                    resolve(true)
-                                    return
-                                }
-                                if (data.status === 'failed' || data.status === 'error') {
-                                    clearInterval(interval)
-                                    resolve(false)
-                                    return
-                                }
+                            // Get contract status
+                            const { data: contractData, error: contractError } = await supabase
+                                .from('uploaded_contracts')
+                                .select('status')
+                                .eq('contract_id', contractId)
+                                .single()
+
+                            if (contractError) {
+                                console.error('Contract polling error:', contractError)
+                                return
+                            }
+
+                            // Count actual clauses inserted (updates incrementally)
+                            const { count: actualClauseCount } = await supabase
+                                .from('uploaded_contract_clauses')
+                                .select('*', { count: 'exact', head: true })
+                                .eq('contract_id', contractId)
+
+                            const clauseCount = actualClauseCount || 0
+
+                            if (clauseCount > 0) {
+                                setUploadProgress(`Processing clauses... ${clauseCount} found`)
+                            } else {
+                                setUploadProgress('Analysing document structure...')
+                            }
+
+                            console.log(`Poll ${pollCount}: status=${contractData.status}, clauses=${clauseCount}`)
+
+                            // Check for completion
+                            if (contractData.status === 'ready' && clauseCount > 0) {
+                                clearInterval(interval)
+                                resolve(true)
+                                return
+                            }
+                            if (contractData.status === 'failed' || contractData.status === 'error') {
+                                clearInterval(interval)
+                                resolve(false)
+                                return
                             }
                         } catch (err) {
                             console.error('Polling error:', err)
