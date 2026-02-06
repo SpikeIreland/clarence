@@ -344,7 +344,8 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                         resolve(event.target?.result as string)
                     } else if (file.type === 'application/pdf') {
                         const pdfjsLib = await import('pdfjs-dist')
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+                        pdfjsLib.GlobalWorkerOptions.workerSrc =
+                            `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
                         const arrayBuffer = event.target?.result as ArrayBuffer
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
                         let fullText = ''
@@ -1112,7 +1113,8 @@ function CompanyAdminContent() {
                         resolve(event.target?.result as string)
                     } else if (file.type === 'application/pdf') {
                         const pdfjsLib = await import('pdfjs-dist')
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
+                        pdfjsLib.GlobalWorkerOptions.workerSrc =
+                            `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
                         const arrayBuffer = event.target?.result as ArrayBuffer
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
                         let fullText = ''
