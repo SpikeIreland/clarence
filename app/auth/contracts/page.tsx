@@ -595,7 +595,7 @@ export default function ContractLibraryPage() {
                 // If status is 'processing', poll until ready
                 if (result.status === 'processing') {
                     console.log('Contract processing, polling for completion...')
-                    setUploadStage('parsing')  // Keep showing "Parsing Contract..." during polling
+                    setUploadStage('parsing')
 
                     const maxAttempts = 60  // 2 minutes max
                     let attempts = 0
@@ -610,6 +610,14 @@ export default function ContractLibraryPage() {
                         if (error) {
                             console.error('Polling error:', error)
                             return false
+                        }
+
+                        // Update clause count display during polling
+                        if (data.clause_count && data.clause_count > 0) {
+                            setUploadResult({
+                                clauseCount: data.clause_count,
+                                templateName: uploadTemplateName.trim()
+                            })
                         }
 
                         console.log(`Poll attempt ${attempts + 1}: status=${data.status}, clauses=${data.clause_count}`)
@@ -1178,6 +1186,18 @@ export default function ContractLibraryPage() {
                                         : 'CLARENCE is analysing the contract and identifying clauses'
                                     }
                                 </p>
+
+                                {/* Clause Count Display */}
+                                {uploadStage === 'parsing' && uploadResult?.clauseCount && uploadResult.clauseCount > 0 && (
+                                    <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-full">
+                                        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span className="text-sm font-medium text-emerald-700">
+                                            {uploadResult.clauseCount} clauses found
+                                        </span>
+                                    </div>
+                                )}
 
                                 {/* Progress Steps */}
                                 <div className="mt-6 flex justify-center gap-2">
