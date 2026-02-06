@@ -2,9 +2,11 @@
 
 // ============================================================================
 // QUICK CONTRACT - CONTRACT OVERVIEW & INTELLIGENCE DASHBOARD
-// Version: 2.1
+// Version: 2.4
 // Date: 6 February 2026
 // Fix: Changed contract_id to source_contract_id for quick_contracts linkage
+// Fix: Improved null/undefined/NaN handling for fairness and position calculations
+// Fix: Parse fairness text labels (balanced, provider_favoring, etc.) to numeric scale
 // Path: /app/auth/quick-contract/[id]/page.tsx
 // Description: Rich contract intelligence summary with CLARENCE certification
 //   stats, position analysis, category breakdown, agreement tracking,
@@ -350,21 +352,49 @@ function ContractOverviewContent() {
                     .order('display_order', { ascending: true })
 
                 if (clauseData) {
-                    const mapped: ClauseData[] = clauseData.map(c => ({
-                        clauseId: c.clause_id,
-                        clauseNumber: c.clause_number,
-                        clauseName: c.clause_name,
-                        category: c.category || 'General',
-                        isHeader: c.is_header || false,
-                        status: c.status || 'pending',
-                        clarenceCertified: c.clarence_certified || false,
-                        clarencePosition: c.clarence_position,
-                        clarenceFairness: c.clarence_fairness,
-                        clarenceSummary: c.clarence_summary,
-                        valueType: c.value_type,
-                        extractedValue: c.extracted_value,
-                        extractedUnit: c.extracted_unit
-                    }))
+                    const mapped: ClauseData[] = clauseData.map(c => {
+                        // Parse position - may be stored as string
+                        const parsePosition = (val: unknown): number | null => {
+                            if (val === null || val === undefined) return null
+                            const num = typeof val === 'string' ? parseFloat(val) : Number(val)
+                            return isNaN(num) ? null : num
+                        }
+
+                        // Parse fairness - stored as text labels, convert to 0-100 scale
+                        // Scale: 100 = perfectly balanced, lower = more biased (either direction)
+                        const parseFairness = (val: unknown): number | null => {
+                            if (val === null || val === undefined) return null
+                            if (typeof val === 'number') return val
+                            const label = String(val).toLowerCase()
+                            const fairnessMap: Record<string, number> = {
+                                'balanced': 100,
+                                'slightly_customer_favoring': 75,
+                                'slightly_provider_favoring': 75,
+                                'customer_favoring': 50,
+                                'provider_favoring': 50,
+                                'heavily_customer_favoring': 25,
+                                'heavily_provider_favoring': 25,
+                            }
+                            // review_recommended returns null - excluded from average
+                            return fairnessMap[label] ?? null
+                        }
+
+                        return {
+                            clauseId: c.clause_id,
+                            clauseNumber: c.clause_number,
+                            clauseName: c.clause_name,
+                            category: c.category || 'General',
+                            isHeader: c.is_header || false,
+                            status: c.status || 'pending',
+                            clarenceCertified: c.clarence_certified || false,
+                            clarencePosition: parsePosition(c.clarence_position),
+                            clarenceFairness: parseFairness(c.clarence_fairness),
+                            clarenceSummary: c.clarence_summary,
+                            valueType: c.value_type,
+                            extractedValue: c.extracted_value,
+                            extractedUnit: c.extracted_unit
+                        }
+                    })
                     setClauses(mapped)
                 }
 
@@ -452,8 +482,8 @@ function ContractOverviewContent() {
 
         const stats: CategoryStats[] = Array.from(catMap.entries()).map(([category, catClauses]) => {
             const certified = catClauses.filter(c => c.clarenceCertified)
-            const positions = certified.filter(c => c.clarencePosition !== null).map(c => c.clarencePosition!)
-            const fairness = certified.filter(c => c.clarenceFairness !== null).map(c => c.clarenceFairness!)
+            const positions = certified.filter(c => c.clarencePosition != null && !isNaN(c.clarencePosition)).map(c => c.clarencePosition!)
+            const fairness = certified.filter(c => c.clarenceFairness != null && !isNaN(c.clarenceFairness)).map(c => c.clarenceFairness!)
             const agreed = catClauses.filter(c => agreedClauseIds.has(c.clauseId))
 
             return {
@@ -543,12 +573,12 @@ function ContractOverviewContent() {
     const isCertificationComplete = leafClauses.length > 0 && certifiedClauses.length === leafClauses.length
     const certPercent = leafClauses.length > 0 ? Math.round((certifiedClauses.length / leafClauses.length) * 100) : 0
 
-    const positionsWithValues = certifiedClauses.filter(c => c.clarencePosition !== null)
+    const positionsWithValues = certifiedClauses.filter(c => c.clarencePosition != null && !isNaN(c.clarencePosition))
     const avgPosition = positionsWithValues.length > 0
         ? positionsWithValues.reduce((sum, c) => sum + c.clarencePosition!, 0) / positionsWithValues.length
         : null
 
-    const fairnessWithValues = certifiedClauses.filter(c => c.clarenceFairness !== null)
+    const fairnessWithValues = certifiedClauses.filter(c => c.clarenceFairness != null && !isNaN(c.clarenceFairness))
     const avgFairness = fairnessWithValues.length > 0
         ? fairnessWithValues.reduce((sum, c) => sum + c.clarenceFairness!, 0) / fairnessWithValues.length
         : null
@@ -767,13 +797,13 @@ function ContractOverviewContent() {
                             </div>
                             <p className="text-xs text-slate-500">
                                 {avgFairness !== null
-                                    ? (avgFairness >= 70 ? 'Well balanced' : avgFairness >= 50 ? 'Moderately fair' : 'Needs review')
+                                    ? (avgFairness >= 90 ? 'Well balanced' : avgFairness >= 70 ? 'Mostly balanced' : avgFairness >= 50 ? 'Moderately biased' : 'Heavily biased')
                                     : 'Awaiting certification'}
                             </p>
                             {avgFairness !== null && (
                                 <div className="mt-2 h-2 bg-slate-100 rounded-full overflow-hidden">
                                     <div
-                                        className={`h-full rounded-full transition-all duration-700 ${avgFairness >= 70 ? 'bg-emerald-500' : avgFairness >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                        className={`h-full rounded-full transition-all duration-700 ${avgFairness >= 90 ? 'bg-emerald-500' : avgFairness >= 70 ? 'bg-emerald-400' : avgFairness >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
                                         style={{ width: `${avgFairness}%` }}
                                     />
                                 </div>
@@ -899,7 +929,7 @@ function ContractOverviewContent() {
                                                 )}
                                                 {cat.avgFairness !== null && (
                                                     <div className="text-center">
-                                                        <div className={`text-sm font-bold ${cat.avgFairness >= 70 ? 'text-emerald-600' : cat.avgFairness >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                                                        <div className={`text-sm font-bold ${cat.avgFairness >= 90 ? 'text-emerald-600' : cat.avgFairness >= 70 ? 'text-emerald-500' : cat.avgFairness >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
                                                             {Math.round(cat.avgFairness)}%
                                                         </div>
                                                         <div className="text-[10px] text-slate-400">Fairness</div>
