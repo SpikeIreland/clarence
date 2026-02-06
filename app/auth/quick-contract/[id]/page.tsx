@@ -2,8 +2,9 @@
 
 // ============================================================================
 // QUICK CONTRACT - CONTRACT OVERVIEW & INTELLIGENCE DASHBOARD
-// Version: 2.0
-// Date: 5 February 2026
+// Version: 2.1
+// Date: 6 February 2026
+// Fix: Changed contract_id to source_contract_id for quick_contracts linkage
 // Path: /app/auth/quick-contract/[id]/page.tsx
 // Description: Rich contract intelligence summary with CLARENCE certification
 //   stats, position analysis, category breakdown, agreement tracking,
@@ -288,7 +289,7 @@ function ContractOverviewContent() {
 
             const meta: QuickContractMeta = {
                 quickContractId: qcData.quick_contract_id,
-                contractId: qcData.contract_id,
+                contractId: qcData.source_contract_id,
                 contractName: qcData.contract_name,
                 contractType: qcData.contract_type,
                 description: qcData.description,
