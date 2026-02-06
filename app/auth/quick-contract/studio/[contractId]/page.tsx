@@ -489,6 +489,7 @@ function QuickContractStudioContent() {
 
         console.log(`Triggering certification for ${pendingClauses.length} pending clauses...`)
         setCertificationTriggered(true)
+        setIsPolling(true)  // <-- ADD THIS LINE to start the polling
 
         // Fire and forget - the polling useEffect handles the rest
         fetch('https://spikeislandstudios.app.n8n.cloud/webhook/certify-next-clause', {
