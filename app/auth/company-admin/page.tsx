@@ -60,7 +60,6 @@ interface Playbook {
     parsingError?: string
 }
 
-// NEW: Company Template interface
 interface CompanyTemplate {
     templateId: string
     templateCode: string
@@ -78,7 +77,6 @@ interface CompanyTemplate {
     sourceFileName?: string
 }
 
-// UPDATED: Added 'templates' to AdminTab
 type AdminTab = 'playbooks' | 'templates' | 'training' | 'users' | 'audit'
 
 // ============================================================================
@@ -119,7 +117,7 @@ function CompanyAdminLoading() {
 }
 
 // ============================================================================
-// SECTION 4: TAB NAVIGATION COMPONENT (UPDATED)
+// SECTION 4: TAB NAVIGATION COMPONENT (REORDERED - Templates first, Playbooks last)
 // ============================================================================
 
 interface TabNavigationProps {
@@ -130,11 +128,11 @@ interface TabNavigationProps {
 
 function TabNavigation({ activeTab, onTabChange, pendingCount }: TabNavigationProps) {
     const tabs: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
-        { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> },
         { id: 'templates', label: 'Templates', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
         { id: 'training', label: 'Training Access', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg>, badge: pendingCount.training > 0 ? pendingCount.training : undefined },
         { id: 'users', label: 'Users', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>, badge: pendingCount.users > 0 ? pendingCount.users : undefined },
-        { id: 'audit', label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> }
+        { id: 'audit', label: 'Audit Log', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg> },
+        { id: 'playbooks', label: 'Playbooks', icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg> }
     ]
 
     return (
@@ -255,13 +253,11 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                         <svg className={`w-5 h-5 ${pb.isActive ? 'text-emerald-700' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
                                     </div>
                                     <div>
-                                        <h4 className="font-medium text-slate-800">{pb.playbookName}</h4>
-                                        <div className="flex items-center gap-3 mt-1">
+                                        <p className="font-medium text-slate-800">{pb.playbookName}</p>
+                                        <div className="flex items-center gap-2 mt-1">
                                             {getStatusBadge(pb.status, pb.isActive)}
                                             {pb.rulesExtracted > 0 && <span className="text-xs text-slate-500">{pb.rulesExtracted} rules</span>}
-                                            <span className="text-xs text-slate-400">{new Date(pb.createdAt).toLocaleDateString()}</span>
                                         </div>
-                                        {pb.parsingError && <p className="text-xs text-red-600 mt-1">{pb.parsingError}</p>}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2" ref={openMenuId === pb.playbookId ? menuRef : null}>
@@ -275,8 +271,16 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                             <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10 py-1">
                                                 {pb.sourceFilePath && <button onClick={() => { onDownload(pb.sourceFilePath!, pb.sourceFileName || 'playbook'); setOpenMenuId(null) }} className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Download Original</button>}
                                                 {showDeleteConfirm === pb.playbookId ? (
-                                                    <div className="px-4 py-2"><p className="text-sm text-red-600 mb-2">Are you sure?</p><div className="flex gap-2"><button onClick={() => { onDelete(pb.playbookId, pb.sourceFilePath); setShowDeleteConfirm(null); setOpenMenuId(null) }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">Yes</button><button onClick={() => setShowDeleteConfirm(null)} className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded">No</button></div></div>
-                                                ) : (<button onClick={() => setShowDeleteConfirm(pb.playbookId)} className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">Delete</button>)}
+                                                    <div className="px-4 py-2">
+                                                        <p className="text-sm text-red-600 mb-2">Delete this playbook?</p>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => { onDelete(pb.playbookId, pb.sourceFilePath); setShowDeleteConfirm(null); setOpenMenuId(null) }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">Yes</button>
+                                                            <button onClick={() => setShowDeleteConfirm(null)} className="px-2 py-1 text-xs bg-slate-200 rounded">No</button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => setShowDeleteConfirm(pb.playbookId)} className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">Delete</button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -291,7 +295,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 }
 
 // ============================================================================
-// SECTION 5B: COMPANY TEMPLATES TAB COMPONENT (NEW)
+// SECTION 5B: COMPANY TEMPLATES TAB COMPONENT
 // ============================================================================
 
 interface TemplatesTabProps {
@@ -334,7 +338,7 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
         setUploadError(null)
     }
 
-    // Helper: Extract text from file (local to TemplatesTab)
+    // Helper: Extract text from file (FIXED - uses CDN for PDF worker)
     const extractTextFromFile = async (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader()
@@ -344,8 +348,8 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                         resolve(event.target?.result as string)
                     } else if (file.type === 'application/pdf') {
                         const pdfjsLib = await import('pdfjs-dist')
-                        pdfjsLib.GlobalWorkerOptions.workerSrc =
-                            `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+                        // FIX: Use CDN for worker instead of local file
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
                         const arrayBuffer = event.target?.result as ArrayBuffer
                         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
                         let fullText = ''
@@ -389,7 +393,6 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
         setUploadProgress('Extracting text from document...')
 
         try {
-            // Stage 1: Extract text (this is the slow part)
             const extractedText = await extractTextFromFile(selectedFile)
 
             if (!extractedText || extractedText.length < 100) {
@@ -399,115 +402,56 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
             console.log(`Extracted ${extractedText.length} characters`)
             setUploadProgress('Sending to CLARENCE for analysis...')
 
-            // Stage 2: Call API (returns quickly with contractId)
-            const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    // User context - REQUIRED
                     user_id: userInfo?.userId,
                     company_id: userInfo?.companyId,
-                    // Document data
                     document_text: extractedText,
                     file_name: selectedFile.name,
                     file_type: selectedFile.type || 'application/octet-stream',
                     file_size: selectedFile.size,
-                    // Template config
                     contract_type: contractType,
-                    template_name: templateName.trim(),
+                    template_name: templateName,
                     create_as_template: true,
                     is_company_template: true
                 })
             })
 
             if (!response.ok) {
-                throw new Error('Failed to process contract')
+                const errorText = await response.text()
+                throw new Error(`Upload failed: ${errorText}`)
             }
 
             const result = await response.json()
-            if (!result.success) {
-                throw new Error(result.error || 'Processing failed')
-            }
+            const contractId = result.contract_id || result.contractId
 
-            const contractId = result.contractId || result.contract_id
             if (!contractId) {
                 throw new Error('No contract ID returned')
             }
 
-            console.log('Contract created:', contractId, 'Status:', result.status)
-
-            // Stage 3: Start polling immediately
-            setIsUploading(false)
             setIsProcessing(true)
-            setUploadProgress('Analysing document structure...')
+            setUploadProgress('Processing clauses...')
 
             const supabase = createClient()
-            const MAX_POLLS = 60
-            const POLL_INTERVAL = 2000
-            let pollCount = 0
+            let attempts = 0
+            const maxAttempts = 30
 
-            const pollForCompletion = (): Promise<boolean> => {
-                return new Promise((resolve) => {
-                    const interval = setInterval(async () => {
-                        pollCount++
-                        if (pollCount > MAX_POLLS) {
-                            clearInterval(interval)
-                            resolve(false)
-                            return
-                        }
-                        try {
-                            // Get contract status
-                            const { data: contractData, error: contractError } = await supabase
-                                .from('uploaded_contracts')
-                                .select('status')
-                                .eq('contract_id', contractId)
-                                .single()
+            while (attempts < maxAttempts) {
+                await new Promise(r => setTimeout(r, 2000))
+                const { data } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('clause_id')
+                    .eq('contract_id', contractId)
 
-                            if (contractError) {
-                                console.error('Contract polling error:', contractError)
-                                return
-                            }
+                const clauseCount = data?.length || 0
+                setUploadProgress(`Processing clauses... ${clauseCount} found`)
 
-                            // Count actual clauses inserted (updates incrementally)
-                            const { count: actualClauseCount } = await supabase
-                                .from('uploaded_contract_clauses')
-                                .select('*', { count: 'exact', head: true })
-                                .eq('contract_id', contractId)
-
-                            const clauseCount = actualClauseCount || 0
-
-                            if (clauseCount > 0) {
-                                setUploadProgress(`Processing clauses... ${clauseCount} found`)
-                            }
-
-                            console.log(`Poll ${pollCount}: status=${contractData.status}, clauses=${clauseCount}`)
-
-                            // Check for completion
-                            if (contractData.status === 'ready' && clauseCount > 0) {
-                                clearInterval(interval)
-                                resolve(true)
-                                return
-                            }
-                            if (contractData.status === 'failed' || contractData.status === 'error') {
-                                clearInterval(interval)
-                                resolve(false)
-                                return
-                            }
-                        } catch (err) {
-                            console.error('Polling error:', err)
-                        }
-                    }, POLL_INTERVAL)
-                })
+                if (clauseCount >= 3) break
+                attempts++
             }
 
-            const parseComplete = await pollForCompletion()
-
-            if (!parseComplete) {
-                throw new Error('Document parsing timed out or failed. Please try again.')
-            }
-
-            // Parse complete - redirect to Studio for certification
             setUploadProgress('Redirecting to certification studio...')
             router.push(`/auth/quick-contract/studio/${contractId}?mode=template&company=true`)
 
@@ -575,30 +519,28 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                             </div>
                             <div>
                                 <p className="font-medium text-slate-800">{selectedFile?.name}</p>
-                                <p className="text-sm text-slate-500">{(selectedFile?.size || 0 / 1024).toFixed(1)} KB</p>
+                                <p className="text-sm text-slate-500">{((selectedFile?.size || 0) / 1024).toFixed(1)} KB</p>
                             </div>
                         </div>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Template Name</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Template Name</label>
                                 <input
                                     type="text"
                                     value={templateName}
                                     onChange={(e) => setTemplateName(e.target.value)}
-                                    placeholder="e.g., Standard BPO Agreement"
-                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                    disabled={isUploading || isProcessing}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="e.g., Standard MSA v2"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Contract Type</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Contract Type</label>
                                 <select
                                     value={contractType}
                                     onChange={(e) => setContractType(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                    disabled={isUploading || isProcessing}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                 >
                                     {CONTRACT_TYPE_OPTIONS.map(opt => (
                                         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -607,10 +549,12 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                             </div>
                         </div>
 
-                        {(isUploading || isProcessing) && (
-                            <div className="mt-6 text-center">
-                                <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                                <p className="text-indigo-600 font-medium">{uploadProgress}</p>
+                        {uploadProgress && (
+                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <span className="text-sm text-blue-700">{uploadProgress}</span>
+                                </div>
                             </div>
                         )}
 
@@ -620,20 +564,26 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                             </div>
                         )}
 
-                        <div className="mt-6 flex gap-3">
-                            <button
-                                onClick={() => { setShowUploadForm(false); setSelectedFile(null); setUploadError(null) }}
-                                disabled={isUploading || isProcessing}
-                                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg disabled:opacity-50"
-                            >
-                                Cancel
-                            </button>
+                        <div className="flex gap-3 mt-6">
                             <button
                                 onClick={handleUploadSubmit}
-                                disabled={isUploading || isProcessing || !templateName.trim()}
-                                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50"
+                                disabled={isUploading || !templateName.trim()}
+                                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isUploading ? 'Uploading...' : isProcessing ? 'Processing...' : 'Upload Template'}
+                                {isUploading ? 'Processing...' : 'Upload & Certify'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowUploadForm(false)
+                                    setSelectedFile(null)
+                                    setTemplateName('')
+                                    setUploadError(null)
+                                    setUploadProgress('')
+                                }}
+                                disabled={isUploading}
+                                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50"
+                            >
+                                Cancel
                             </button>
                         </div>
                     </div>
@@ -644,26 +594,18 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-slate-800">Company Templates ({templates.length})</h3>
                 <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     Refresh
                 </button>
             </div>
 
             {isLoading ? (
-                <div className="text-center py-12">
-                    <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                </div>
+                <div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
             ) : templates.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                    </div>
-                    <p className="font-medium text-slate-600 mb-1">No company templates yet</p>
-                    <p className="text-sm">Upload your first template above</p>
+                    <svg className="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <p className="font-medium">No company templates yet</p>
+                    <p className="text-sm mt-1">Upload your first template above</p>
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -671,57 +613,32 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                         <div key={template.templateId} className={`p-4 rounded-xl border ${template.isActive ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${template.isActive ? 'bg-indigo-100' : 'bg-slate-200'}`}>
-                                        <span className="text-xl">{CONTRACT_TYPE_ICONS[template.contractType] || '📄'}</span>
+                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${template.isActive ? 'bg-indigo-100' : 'bg-slate-100'}`}>
+                                        {CONTRACT_TYPE_ICONS[template.contractType] || '📄'}
                                     </div>
                                     <div>
-                                        <h4 className="font-medium text-slate-800">{template.templateName}</h4>
-                                        <div className="flex items-center gap-3 mt-1">
+                                        <p className="font-medium text-slate-800">{template.templateName}</p>
+                                        <div className="flex items-center gap-2 mt-1">
                                             {getStatusBadge(template)}
-                                            {template.clauseCount > 0 && <span className="text-xs text-slate-500">{template.clauseCount} clauses</span>}
-                                            <span className="text-xs text-slate-400">{new Date(template.createdAt).toLocaleDateString()}</span>
+                                            <span className="text-xs text-slate-500">{template.clauseCount} clauses</span>
+                                            {template.timesUsed > 0 && <span className="text-xs text-slate-500">Used {template.timesUsed}x</span>}
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {template.isActive ? (
-                                        <button
-                                            onClick={() => onToggleActive(template.templateId, false)}
-                                            className="px-3 py-1.5 text-sm font-medium bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
-                                        >
-                                            Deactivate
-                                        </button>
+                                        <button onClick={() => onToggleActive(template.templateId, false)} className="px-3 py-1.5 text-sm font-medium bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Deactivate</button>
                                     ) : (
-                                        <button
-                                            onClick={() => onToggleActive(template.templateId, true)}
-                                            className="px-3 py-1.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
-                                        >
-                                            Activate
-                                        </button>
+                                        <button onClick={() => onToggleActive(template.templateId, true)} className="px-3 py-1.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Activate</button>
                                     )}
                                     {showDeleteConfirm === template.templateId ? (
                                         <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => { onDelete(template.templateId); setShowDeleteConfirm(null) }}
-                                                className="px-2 py-1 text-xs font-medium bg-red-600 text-white rounded"
-                                            >
-                                                Confirm
-                                            </button>
-                                            <button
-                                                onClick={() => setShowDeleteConfirm(null)}
-                                                className="px-2 py-1 text-xs font-medium bg-slate-200 text-slate-700 rounded"
-                                            >
-                                                Cancel
-                                            </button>
+                                            <button onClick={() => { onDelete(template.templateId); setShowDeleteConfirm(null) }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">Delete</button>
+                                            <button onClick={() => setShowDeleteConfirm(null)} className="px-2 py-1 text-xs bg-slate-200 rounded">Cancel</button>
                                         </div>
                                     ) : (
-                                        <button
-                                            onClick={() => setShowDeleteConfirm(template.templateId)}
-                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
+                                        <button onClick={() => setShowDeleteConfirm(template.templateId)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                         </button>
                                     )}
                                 </div>
@@ -751,27 +668,40 @@ function TrainingAccessTab({ users, isLoading, onAddUser, onRemoveUser, onSendIn
     const [showAddForm, setShowAddForm] = useState(false)
     const [newEmail, setNewEmail] = useState('')
     const [newFullName, setNewFullName] = useState('')
-    const [newApprovalType, setNewApprovalType] = useState<string>('training_partner')
-    const [isAdding, setIsAdding] = useState(false)
-    const [addError, setAddError] = useState<string | null>(null)
+    const [newApprovalType, setNewApprovalType] = useState('training_partner')
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
-    const handleAdd = async () => {
-        if (!newEmail.trim() || !newFullName.trim()) { setAddError('Please fill in all fields'); return }
-        setIsAdding(true); setAddError(null)
-        try { await onAddUser(newEmail.trim(), newFullName.trim(), newApprovalType); setShowAddForm(false); setNewEmail(''); setNewFullName(''); setNewApprovalType('training_partner') } catch (e) { setAddError(e instanceof Error ? e.message : 'Failed to add user') } finally { setIsAdding(false) }
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault(); setError(null); setIsSubmitting(true)
+        try { await onAddUser(newEmail, newFullName, newApprovalType); setShowAddForm(false); setNewEmail(''); setNewFullName('') } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setIsSubmitting(false) }
     }
 
     return (
         <div className="p-6">
             <div className="flex items-center justify-between mb-6">
-                <div><h3 className="text-lg font-semibold text-slate-800">Training Access ({users.length})</h3><p className="text-sm text-slate-500 mt-1">Manage who can access training features</p></div>
-                <div className="flex items-center gap-3">
+                <div><h3 className="text-lg font-semibold text-slate-800">Training Access</h3><p className="text-sm text-slate-500 mt-1">Manage who can access the Training Studio</p></div>
+                <div className="flex items-center gap-2">
                     <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Refresh</button>
-                    <button onClick={() => setShowAddForm(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Add User</button>
+                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{showAddForm ? 'Cancel' : '+ Add User'}</button>
                 </div>
             </div>
-            {showAddForm && (<div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200"><h4 className="font-medium text-slate-800 mb-4">Add Training User</h4><div className="grid grid-cols-2 gap-4 mb-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="user@company.com" /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="John Smith" /></div></div><div className="mb-4"><label className="block text-sm font-medium text-slate-700 mb-1">Access Type</label><select value={newApprovalType} onChange={(e) => setNewApprovalType(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="training_partner">Training Partner</option><option value="training_admin">Training Admin</option><option value="ai_enabled">AI Enabled</option></select></div>{addError && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{addError}</div>}<div className="flex gap-3"><button onClick={() => { setShowAddForm(false); setAddError(null) }} className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">Cancel</button><button onClick={handleAdd} disabled={isAdding} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">{isAdding ? 'Adding...' : 'Add & Send Invite'}</button></div></div>)}
-            {isLoading ? (<div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>) : users.length === 0 ? (<div className="text-center py-12 text-slate-500"><p>No training users configured</p></div>) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">User</th><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Type</th><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Status</th><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Added</th><th className="text-right py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div className="flex items-center gap-3"><div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center"><span className="text-amber-700 font-medium text-sm">{user.fullName?.[0] || user.email[0].toUpperCase()}</span></div><div><p className="font-medium text-slate-800 text-sm">{user.fullName || 'Unnamed'}</p><p className="text-xs text-slate-500">{user.email}</p></div></div></td><td className="py-3 px-4"><span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">{user.approvalType?.replace('_', ' ')}</span></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2"><button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend Invite</button><button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
+
+            {showAddForm && (
+                <form onSubmit={handleSubmit} className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="grid grid-cols-3 gap-4">
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="John Smith" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Access Type</label><select value={newApprovalType} onChange={(e) => setNewApprovalType(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="training_partner">Training Partner</option><option value="training_admin">Training Admin</option><option value="ai_enabled">AI Enabled</option></select></div>
+                    </div>
+                    {error && <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
+                    <div className="mt-4 flex justify-end"><button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">{isSubmitting ? 'Adding...' : 'Add & Send Invite'}</button></div>
+                </form>
+            )}
+
+            {isLoading ? (<div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
+            ) : users.length === 0 ? (<div className="text-center py-12 text-slate-500"><p>No training users yet</p></div>
+            ) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">User</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Access Type</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Status</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Added</th><th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div><p className="font-medium text-slate-800">{user.fullName}</p><p className="text-sm text-slate-500">{user.email}</p></div></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.approvalType === 'training_admin' ? 'bg-purple-100 text-purple-700' : user.approvalType === 'ai_enabled' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{user.approvalType.replace('_', ' ')}</span></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2">{!user.invitationSent && <button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Send Invite</button>}<button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
         </div>
     )
 }
@@ -793,27 +723,40 @@ function UsersTab({ users, isLoading, onAddUser, onRemoveUser, onSendInvite, onR
     const [showAddForm, setShowAddForm] = useState(false)
     const [newEmail, setNewEmail] = useState('')
     const [newFullName, setNewFullName] = useState('')
-    const [newRole, setNewRole] = useState<string>('user')
-    const [isAdding, setIsAdding] = useState(false)
-    const [addError, setAddError] = useState<string | null>(null)
+    const [newRole, setNewRole] = useState('user')
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
-    const handleAdd = async () => {
-        if (!newEmail.trim() || !newFullName.trim()) { setAddError('Please fill in all fields'); return }
-        setIsAdding(true); setAddError(null)
-        try { await onAddUser(newEmail.trim(), newFullName.trim(), newRole); setShowAddForm(false); setNewEmail(''); setNewFullName(''); setNewRole('user') } catch (e) { setAddError(e instanceof Error ? e.message : 'Failed to add user') } finally { setIsAdding(false) }
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault(); setError(null); setIsSubmitting(true)
+        try { await onAddUser(newEmail, newFullName, newRole); setShowAddForm(false); setNewEmail(''); setNewFullName('') } catch (e) { setError(e instanceof Error ? e.message : 'Failed') } finally { setIsSubmitting(false) }
     }
 
     return (
         <div className="p-6">
             <div className="flex items-center justify-between mb-6">
-                <div><h3 className="text-lg font-semibold text-slate-800">Company Users ({users.length})</h3><p className="text-sm text-slate-500 mt-1">Manage who can access the platform</p></div>
-                <div className="flex items-center gap-3">
+                <div><h3 className="text-lg font-semibold text-slate-800">Company Users</h3><p className="text-sm text-slate-500 mt-1">Manage users in your organization</p></div>
+                <div className="flex items-center gap-2">
                     <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>Refresh</button>
-                    <button onClick={() => setShowAddForm(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Add User</button>
+                    <button onClick={() => setShowAddForm(!showAddForm)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">{showAddForm ? 'Cancel' : '+ Add User'}</button>
                 </div>
             </div>
-            {showAddForm && (<div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200"><h4 className="font-medium text-slate-800 mb-4">Add Company User</h4><div className="grid grid-cols-2 gap-4 mb-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="user@company.com" /></div><div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="John Smith" /></div></div><div className="mb-4"><label className="block text-sm font-medium text-slate-700 mb-1">Role</label><select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="user">User</option><option value="manager">Manager</option><option value="admin">Admin</option><option value="viewer">Viewer</option></select></div>{addError && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{addError}</div>}<div className="flex gap-3"><button onClick={() => { setShowAddForm(false); setAddError(null) }} className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">Cancel</button><button onClick={handleAdd} disabled={isAdding} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50">{isAdding ? 'Adding...' : 'Add & Send Invite'}</button></div></div>)}
-            {isLoading ? (<div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>) : users.length === 0 ? (<div className="text-center py-12 text-slate-500"><p>No users configured</p></div>) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">User</th><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Role</th><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Status</th><th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Added</th><th className="text-right py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div className="flex items-center gap-3"><div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center"><span className="text-indigo-700 font-medium text-sm">{user.fullName?.[0] || user.email[0].toUpperCase()}</span></div><div><p className="font-medium text-slate-800 text-sm">{user.fullName || 'Unnamed'}</p><p className="text-xs text-slate-500">{user.email}</p></div></div></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{user.role}</span></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2">{user.status === 'invited' && <button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend Invite</button>}<button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
+
+            {showAddForm && (
+                <form onSubmit={handleSubmit} className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="grid grid-cols-3 gap-4">
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Email</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="user@company.com" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label><input type="text" value={newFullName} onChange={(e) => setNewFullName(e.target.value)} required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="John Smith" /></div>
+                        <div><label className="block text-sm font-medium text-slate-700 mb-1">Role</label><select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><option value="admin">Admin</option><option value="manager">Manager</option><option value="user">User</option><option value="viewer">Viewer</option></select></div>
+                    </div>
+                    {error && <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>}
+                    <div className="mt-4 flex justify-end"><button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">{isSubmitting ? 'Adding...' : 'Add & Send Invite'}</button></div>
+                </form>
+            )}
+
+            {isLoading ? (<div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
+            ) : users.length === 0 ? (<div className="text-center py-12 text-slate-500"><p>No users yet</p></div>
+            ) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">User</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Role</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Status</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Added</th><th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div><p className="font-medium text-slate-800">{user.fullName}</p><p className="text-sm text-slate-500">{user.email}</p></div></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{user.role}</span></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2">{user.status === 'invited' && <button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend Invite</button>}<button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
         </div>
     )
 }
@@ -844,7 +787,8 @@ function CompanyAdminContent() {
     const [loading, setLoading] = useState(true)
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [companyName, setCompanyName] = useState('')
-    const [activeTab, setActiveTab] = useState<AdminTab>('playbooks')
+    // CHANGED: Default tab is now 'templates' instead of 'playbooks'
+    const [activeTab, setActiveTab] = useState<AdminTab>('templates')
     const [isAdmin, setIsAdmin] = useState(false)
     const [playbooks, setPlaybooks] = useState<Playbook[]>([])
     const [playbooksLoading, setPlaybooksLoading] = useState(false)
@@ -886,7 +830,6 @@ function CompanyAdminContent() {
         } catch (e) { console.error('Load playbooks error:', e); setPlaybooks([]) } finally { setPlaybooksLoading(false) }
     }, [])
 
-    // NEW: Load company templates
     const loadCompanyTemplates = useCallback(async (companyId: string) => {
         console.log('=== loadCompanyTemplates ===', companyId)
         setTemplatesLoading(true)
@@ -918,31 +861,19 @@ function CompanyAdminContent() {
                 isActive: t.is_active,
                 status: t.clause_count > 0 ? 'ready' : 'processing',
                 createdAt: t.created_at,
-                createdBy: t.created_by_user_id,
                 sourceFileName: t.source_file_name
             })))
-        } catch (e) {
-            console.error('Load templates error:', e)
-            setCompanyTemplates([])
-        } finally {
-            setTemplatesLoading(false)
-        }
+        } catch (e) { console.error('Load templates error:', e); setCompanyTemplates([]) } finally { setTemplatesLoading(false) }
     }, [])
 
     const loadTrainingUsers = useCallback(async (companyId: string) => {
         setTrainingLoading(true)
         try {
             const supabase = createClient()
-            const { data: viewData, error: viewError } = await supabase.from('training_users_with_email').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
-            if (!viewError && viewData) {
-                const mapped: TrainingUser[] = viewData.map(u => ({ id: u.id, userId: u.user_id, email: u.user_email || '', fullName: u.user_full_name || '', approvalType: u.approval_type || 'training_partner', status: u.status || 'active', invitedAt: u.approved_at || u.created_at, approvedAt: u.approved_at, sessionsCompleted: 0, invitationSent: true }))
-                setTrainingUsers(mapped); return
-            }
             const { data, error } = await supabase.from('approved_training_users').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
             if (error) { if (error.code === '42P01') { setTrainingUsers([]); return }; throw error }
-            const mapped: TrainingUser[] = (data || []).map(u => ({ id: u.id, userId: u.user_id, email: u.user_id ? `User ${u.user_id.slice(0, 8)}...` : 'Unknown', fullName: u.notes || '', approvalType: u.approval_type || 'training_partner', status: u.status || 'active', invitedAt: u.approved_at || u.created_at, approvedAt: u.approved_at, sessionsCompleted: 0, invitationSent: true }))
-            setTrainingUsers(mapped)
-        } catch (error) { console.error('Error loading training users:', error); setTrainingUsers([]) } finally { setTrainingLoading(false) }
+            setTrainingUsers((data || []).map(u => ({ id: u.id, userId: u.user_id, email: u.user_email, fullName: u.user_full_name, approvalType: u.approval_type, status: u.status, invitedAt: u.created_at, approvedAt: u.approved_at, sessionsCompleted: u.sessions_completed || 0, invitationSent: u.invitation_sent || false })))
+        } catch (e) { console.error('Load training users error:', e); setTrainingUsers([]) } finally { setTrainingLoading(false) }
     }, [])
 
     const loadCompanyUsers = useCallback(async (companyId: string) => {
@@ -951,13 +882,14 @@ function CompanyAdminContent() {
             const supabase = createClient()
             const { data, error } = await supabase.from('company_users').select('*').eq('company_id', companyId).neq('status', 'removed').order('created_at', { ascending: false })
             if (error) { if (error.code === '42P01') { setCompanyUsers([]); return }; throw error }
-            setCompanyUsers((data || []).map(u => ({ id: u.company_user_id, userId: u.user_id, email: u.email || '', fullName: u.full_name || '', role: u.role || 'user', status: u.status || 'invited', invitedAt: u.invited_at || u.created_at, lastActiveAt: u.last_active_at })))
+            setCompanyUsers((data || []).map(u => ({ id: u.company_user_id, userId: u.user_id, email: u.email, fullName: u.full_name, role: u.role, status: u.status, invitedAt: u.invited_at || u.created_at, lastActiveAt: u.last_active_at })))
         } catch (e) { console.error('Load company users error:', e); setCompanyUsers([]) } finally { setUsersLoading(false) }
     }, [])
 
-    // Playbook handlers
     const handlePlaybookUpload = async (file: File) => {
-        let companyId = userInfo?.companyId; const supabase = createClient()
+        if (!userInfo?.companyId) return
+        const supabase = createClient()
+        let companyId = userInfo.companyId
         if (!companyId) { const { data } = await supabase.from('companies').select('company_id').limit(1).single(); companyId = data?.company_id }
         if (!companyId) { const { data, error } = await supabase.from('companies').insert({ company_name: userInfo?.company || 'My Company' }).select('company_id').single(); if (error) throw new Error(error.message); companyId = data?.company_id }
         const fileName = `${companyId}/${Date.now()}.${file.name.split('.').pop()}`
@@ -1009,17 +941,50 @@ function CompanyAdminContent() {
         const url = URL.createObjectURL(data); const a = document.createElement('a'); a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
     }
 
-    // NEW: Template handlers
     const handleTemplateUpload = async (file: File, templateName: string, contractType: string): Promise<string> => {
         if (!userInfo?.companyId || !userInfo?.userId) throw new Error('Not authenticated')
 
-        // Extract text from file (client-side)
+        const extractTextFromFile = async (file: File): Promise<string> => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = async (event) => {
+                    try {
+                        if (file.type === 'text/plain') {
+                            resolve(event.target?.result as string)
+                        } else if (file.type === 'application/pdf') {
+                            const pdfjsLib = await import('pdfjs-dist')
+                            // FIX: Use CDN for worker
+                            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+                            const arrayBuffer = event.target?.result as ArrayBuffer
+                            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+                            let fullText = ''
+                            for (let i = 1; i <= pdf.numPages; i++) {
+                                const page = await pdf.getPage(i)
+                                const textContent = await page.getTextContent()
+                                const pageText = textContent.items.map((item: any) => item.str).join(' ')
+                                fullText += pageText + '\n'
+                            }
+                            resolve(fullText)
+                        } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                            const mammoth = await import('mammoth')
+                            const arrayBuffer = event.target?.result as ArrayBuffer
+                            const result = await mammoth.extractRawText({ arrayBuffer })
+                            resolve(result.value)
+                        } else {
+                            reject(new Error('Unsupported file type'))
+                        }
+                    } catch (error) { reject(error) }
+                }
+                reader.onerror = () => reject(new Error('Failed to read file'))
+                if (file.type === 'text/plain') { reader.readAsText(file) } else { reader.readAsArrayBuffer(file) }
+            })
+        }
+
         const extractedText = await extractTextFromFile(file)
         if (!extractedText || extractedText.length < 100) {
             throw new Error('Could not extract sufficient text from the document')
         }
 
-        // Call the parse-contract-document API with company template flag
         const response = await fetch(`${API_BASE}/parse-contract-document`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1038,16 +1003,12 @@ function CompanyAdminContent() {
         })
 
         if (!response.ok) {
-            throw new Error('Failed to process contract')
+            const errorText = await response.text()
+            throw new Error(`Upload failed: ${errorText}`)
         }
 
         const result = await response.json()
-        if (!result.success) {
-            throw new Error(result.error || 'Processing failed')
-        }
-
-        // Return the contractId so TemplatesTab can redirect to Studio
-        const returnedContractId = result.contractId || result.contract_id
+        const returnedContractId = result.contract_id || result.contractId
         if (!returnedContractId) {
             throw new Error('No contract ID returned from parse workflow')
         }
@@ -1059,7 +1020,6 @@ function CompanyAdminContent() {
         const supabase = createClient()
 
         try {
-            // Step 1: Delete template clauses (child records)
             const { error: clausesError } = await supabase
                 .from('template_clauses')
                 .delete()
@@ -1067,16 +1027,14 @@ function CompanyAdminContent() {
 
             if (clausesError) {
                 console.error('Error deleting template clauses:', clausesError)
-                // Continue anyway - clauses might not exist
             }
 
-            // Step 2: Delete the template
             const { error: templateError } = await supabase
                 .from('contract_templates')
                 .delete()
                 .eq('template_id', templateId)
-                .eq('company_id', userInfo.companyId)  // Safety: only delete company's templates
-                .eq('is_system', false)  // Safety: never delete system templates
+                .eq('company_id', userInfo.companyId)
+                .eq('is_system', false)
 
             if (templateError) throw new Error(templateError.message)
 
@@ -1103,44 +1061,6 @@ function CompanyAdminContent() {
         await loadCompanyTemplates(userInfo.companyId)
     }
 
-    // Helper: Extract text from file
-    const extractTextFromFile = async (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = async (event) => {
-                try {
-                    if (file.type === 'text/plain') {
-                        resolve(event.target?.result as string)
-                    } else if (file.type === 'application/pdf') {
-                        const pdfjsLib = await import('pdfjs-dist')
-                        pdfjsLib.GlobalWorkerOptions.workerSrc =
-                            `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
-                        const arrayBuffer = event.target?.result as ArrayBuffer
-                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
-                        let fullText = ''
-                        for (let i = 1; i <= pdf.numPages; i++) {
-                            const page = await pdf.getPage(i)
-                            const textContent = await page.getTextContent()
-                            const pageText = textContent.items.map((item: any) => item.str).join(' ')
-                            fullText += pageText + '\n'
-                        }
-                        resolve(fullText)
-                    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                        const mammoth = await import('mammoth')
-                        const arrayBuffer = event.target?.result as ArrayBuffer
-                        const result = await mammoth.extractRawText({ arrayBuffer })
-                        resolve(result.value)
-                    } else {
-                        reject(new Error('Unsupported file type'))
-                    }
-                } catch (error) { reject(error) }
-            }
-            reader.onerror = () => reject(new Error('Failed to read file'))
-            if (file.type === 'text/plain') { reader.readAsText(file) } else { reader.readAsArrayBuffer(file) }
-        })
-    }
-
-    // Training handlers
     const handleAddTrainingUser = async (email: string, fullName: string, approvalType: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
         const { error } = await supabase.from('approved_training_users').insert({ company_id: userInfo.companyId, user_email: email, user_full_name: fullName, approval_type: approvalType, status: 'active', approved_by_email: userInfo.email, approved_at: new Date().toISOString() })
@@ -1155,7 +1075,6 @@ function CompanyAdminContent() {
         if (id && userInfo?.companyId) { const supabase = createClient(); await supabase.from('approved_training_users').update({ invitation_sent: true, invitation_sent_at: new Date().toISOString() }).eq('id', id); await loadTrainingUsers(userInfo.companyId) }
     }
 
-    // Company user handlers
     const handleAddCompanyUser = async (email: string, fullName: string, role: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
         const { error } = await supabase.from('company_users').insert({ company_id: userInfo.companyId, email, full_name: fullName, role, status: 'invited', invited_by: userInfo.userId, invited_at: new Date().toISOString() })
@@ -1180,7 +1099,7 @@ function CompanyAdminContent() {
             if (user.companyId) {
                 await Promise.all([
                     loadPlaybooks(user.companyId),
-                    loadCompanyTemplates(user.companyId),  // NEW
+                    loadCompanyTemplates(user.companyId),
                     loadTrainingUsers(user.companyId),
                     loadCompanyUsers(user.companyId)
                 ])
