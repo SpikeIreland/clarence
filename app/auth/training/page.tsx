@@ -401,46 +401,101 @@ export default function TrainingStudioPage() {
     // ==========================================================================
 
     const handleCharacterClick = (character: TrainingCharacter) => {
-        setSelectedCharacter(character); setSelectedScenario(null); setCreateError(null); setShowScenarioModal(true)
-        eventLogger.started('training', 'character_selected', { characterId: character.characterId, characterName: character.characterName, difficultyLevel: character.difficultyLevel })
+        setSelectedCharacter(character)
+        setSelectedScenario(null)
+        setCreateError(null)
+        setShowScenarioModal(true)
+        eventLogger.started('training', 'character_selected', {
+            characterId: character.characterId,
+            characterName: character.characterName,
+            difficultyLevel: character.difficultyLevel
+        })
     }
 
-    const handleScenarioSelect = (scenario: CharacterScenario) => { setSelectedScenario(scenario); setCreateError(null) }
+    const handleScenarioSelect = (scenario: CharacterScenario) => {
+        setSelectedScenario(scenario)
+        setCreateError(null)
+    }
 
     const handleStartSession = async () => {
         if (!selectedCharacter || !selectedScenario || !userInfo) return
-        setIsCreatingSession(true); setCreateError(null)
+        setIsCreatingSession(true)
+        setCreateError(null)
+
         try {
-            const response = await fetch(`${API_BASE}/session-create`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+            // ================================================================
+            // FIXED: Call training-start-scenario instead of session-create
+            // ================================================================
+            const response = await fetch(`${API_BASE}/training-start-scenario`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    userEmail: userInfo.email, companyName: userInfo.company,
-                    userName: `${userInfo.firstName} ${userInfo.lastName}`, isTraining: true,
-                    mediation_type: 'standard', contract_type: selectedScenario.contractType,
-                    contract_name: `Training: ${selectedScenario.scenarioName}`,
-                    deal_value: selectedScenario.dealValueMax, deal_currency: selectedScenario.dealCurrency,
-                    deal_duration: selectedScenario.dealDurationMonths, assessment_completed: true,
-                    deal_context: {
-                        training_mode: 'scenario', character_id: selectedCharacter.characterId,
-                        character_name: selectedCharacter.characterName, scenario_id: selectedScenario.scenarioId,
-                        scenario_name: selectedScenario.scenarioName, customer_company: selectedScenario.customerCompanyName,
-                        customer_industry: selectedScenario.customerIndustry, customer_situation: selectedScenario.customerSituation,
-                        ai_company_name: selectedCharacter.companyName, ai_personality: selectedCharacter.personalityType,
-                        difficulty_level: selectedCharacter.difficultyLevel
-                    }
+                    // User context
+                    userId: userInfo.userId,
+                    userEmail: userInfo.email,
+                    userName: `${userInfo.firstName} ${userInfo.lastName}`,
+                    companyName: userInfo.company,
+                    companyId: userInfo.companyId,
+
+                    // Character & Scenario IDs
+                    characterId: selectedCharacter.characterId,
+                    scenarioId: selectedScenario.scenarioId,
+
+                    // Contract details from scenario
+                    contractType: selectedScenario.contractType,
+                    contractName: `Training: ${selectedScenario.scenarioName}`,
+                    dealValue: selectedScenario.dealValueMax,
+                    dealCurrency: selectedScenario.dealCurrency,
+                    dealDuration: selectedScenario.dealDurationMonths,
+
+                    // Character details for provider setup
+                    characterName: selectedCharacter.characterName,
+                    aiCompanyName: selectedCharacter.companyName,
+                    aiPersonality: selectedCharacter.personalityType,
+                    difficultyLevel: selectedCharacter.difficultyLevel,
+                    baseLeverageCustomer: selectedCharacter.baseLeverageCustomer,
+                    baseLeverageProvider: selectedCharacter.baseLeverageProvider,
+
+                    // Scenario context
+                    customerCompanyName: selectedScenario.customerCompanyName,
+                    customerIndustry: selectedScenario.customerIndustry,
+                    customerSituation: selectedScenario.customerSituation,
+                    scenarioName: selectedScenario.scenarioName,
+                    scenarioBrief: selectedScenario.scenarioBrief
                 })
             })
+
             const data = await response.json()
-            if (!response.ok || !data.sessionId) throw new Error(data.error || 'Failed to create training session')
-            eventLogger.completed('training', 'session_created', { sessionId: data.sessionId, characterName: selectedCharacter.characterName, scenarioName: selectedScenario.scenarioName })
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Failed to create training session')
+            }
+
+            if (!data.sessionId) {
+                throw new Error('No session ID returned from training workflow')
+            }
+
+            eventLogger.completed('training', 'session_created', {
+                sessionId: data.sessionId,
+                bidId: data.bidId,
+                characterName: selectedCharacter.characterName,
+                scenarioName: selectedScenario.scenarioName
+            })
+
+            // Navigate to Contract Studio with the new session
             router.push(`/auth/contract-studio?session_id=${data.sessionId}`)
+
         } catch (error) {
             console.error('Error creating training session:', error)
             setCreateError(error instanceof Error ? error.message : 'An error occurred. Please try again.')
-        } finally { setIsCreatingSession(false) }
+        } finally {
+            setIsCreatingSession(false)
+        }
     }
 
-    const handleContinueSession = (sessionId: string) => { router.push(`/auth/contract-studio?session_id=${sessionId}`) }
+    const handleContinueSession = (sessionId: string) => {
+        router.push(`/auth/contract-studio?session_id=${sessionId}`)
+    }
 
     // ==========================================================================
     // SECTION 9B: EVENT HANDLERS (Choose Your Contract)
