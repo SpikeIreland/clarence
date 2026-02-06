@@ -56,7 +56,7 @@ interface AuthenticatedHeaderProps {
 const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.ReactNode }[] = [
     {
         key: 'negotiations',
-        label: 'Negotiations',
+        label: 'Dashboard',
         href: '/auth/contracts-dashboard',
         icon: (
             <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -66,7 +66,7 @@ const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.Rea
     },
     {
         key: 'contracts',
-        label: 'Contracts',
+        label: 'Templates',
         href: '/auth/contracts',
         icon: (
             <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
