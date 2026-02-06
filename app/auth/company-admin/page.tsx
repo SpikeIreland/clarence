@@ -333,21 +333,108 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
         setUploadError(null)
     }
 
+    // Helper: Extract text from file (local to TemplatesTab)
+    const extractTextFromFile = async (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = async (event) => {
+                try {
+                    if (file.type === 'text/plain') {
+                        resolve(event.target?.result as string)
+                    } else if (file.type === 'application/pdf') {
+                        const pdfjsLib = await import('pdfjs-dist')
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+                        const arrayBuffer = event.target?.result as ArrayBuffer
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+                        let fullText = ''
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i)
+                            const textContent = await page.getTextContent()
+                            const pageText = textContent.items.map((item: any) => item.str).join(' ')
+                            fullText += pageText + '\n'
+                        }
+                        resolve(fullText)
+                    } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                        const mammoth = await import('mammoth')
+                        const arrayBuffer = event.target?.result as ArrayBuffer
+                        const result = await mammoth.extractRawText({ arrayBuffer })
+                        resolve(result.value)
+                    } else {
+                        reject(new Error('Unsupported file type'))
+                    }
+                } catch (err) {
+                    reject(err)
+                }
+            }
+            reader.onerror = () => reject(new Error('Failed to read file'))
+            if (file.type === 'text/plain') {
+                reader.readAsText(file)
+            } else {
+                reader.readAsArrayBuffer(file)
+            }
+        })
+    }
+
     const handleUploadSubmit = async () => {
         if (!selectedFile || !templateName.trim()) return
+
         setIsUploading(true)
         setUploadError(null)
-        setUploadProgress('Uploading and parsing document...')
+        setUploadProgress('Extracting text from document...')
 
         try {
-            const contractId = await onUpload(selectedFile, templateName.trim(), contractType)
-            setIsProcessing(true)
-            setUploadProgress('Processing contract clauses...')
+            // Stage 1: Extract text (this is the slow part)
+            const extractedText = await extractTextFromFile(selectedFile)
 
-            // Poll Supabase directly for actual clause count
+            if (!extractedText || extractedText.length < 100) {
+                throw new Error('Could not extract sufficient text from the document')
+            }
+
+            console.log(`Extracted ${extractedText.length} characters`)
+            setUploadProgress('Sending to CLARENCE for analysis...')
+
+            // Stage 2: Call API (returns quickly with contractId)
+            const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
+            const response = await fetch(`${API_BASE}/parse-contract-document`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    document_text: extractedText,
+                    file_name: selectedFile.name,
+                    file_type: selectedFile.type || 'application/octet-stream',
+                    file_size: selectedFile.size,
+                    contract_type: contractType,
+                    template_name: templateName.trim(),
+                    create_as_template: true,
+                    is_company_template: true
+                    // Note: user_id and company_id will be added by the workflow from auth context
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Failed to process contract')
+            }
+
+            const result = await response.json()
+            if (!result.success) {
+                throw new Error(result.error || 'Processing failed')
+            }
+
+            const contractId = result.contractId || result.contract_id
+            if (!contractId) {
+                throw new Error('No contract ID returned')
+            }
+
+            console.log('Contract created:', contractId, 'Status:', result.status)
+
+            // Stage 3: Start polling immediately
+            setIsUploading(false)
+            setIsProcessing(true)
+            setUploadProgress('Analysing document structure...')
+
             const supabase = createClient()
-            const MAX_POLLS = 60  // 3 minutes max (60 * 3 seconds)
-            const POLL_INTERVAL = 3000
+            const MAX_POLLS = 60
+            const POLL_INTERVAL = 2000
             let pollCount = 0
 
             const pollForCompletion = (): Promise<boolean> => {
@@ -382,8 +469,6 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
 
                             if (clauseCount > 0) {
                                 setUploadProgress(`Processing clauses... ${clauseCount} found`)
-                            } else {
-                                setUploadProgress('Analysing document structure...')
                             }
 
                             console.log(`Poll ${pollCount}: status=${contractData.status}, clauses=${clauseCount}`)
@@ -417,6 +502,7 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
             router.push(`/auth/quick-contract/studio/${contractId}?mode=template&company=true`)
 
         } catch (e) {
+            console.error('Upload error:', e)
             setUploadError(e instanceof Error ? e.message : 'Failed to upload')
             setIsUploading(false)
             setIsProcessing(false)
