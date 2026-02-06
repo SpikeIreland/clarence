@@ -297,13 +297,14 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 interface TemplatesTabProps {
     templates: CompanyTemplate[]
     isLoading: boolean
+    userInfo: UserInfo | null
     onUpload: (file: File, templateName: string, contractType: string) => Promise<string>
     onDelete: (templateId: string) => Promise<void>
     onToggleActive: (templateId: string, isActive: boolean) => Promise<void>
     onRefresh: () => void
 }
 
-function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive, onRefresh }: TemplatesTabProps) {
+function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onToggleActive, onRefresh }: TemplatesTabProps) {
     const router = useRouter()
     const [isDragging, setIsDragging] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
@@ -377,6 +378,10 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
 
     const handleUploadSubmit = async () => {
         if (!selectedFile || !templateName.trim()) return
+        if (!userInfo?.userId || !userInfo?.companyId) {
+            setUploadError('User not authenticated')
+            return
+        }
 
         setIsUploading(true)
         setUploadError(null)
@@ -399,15 +404,19 @@ function TemplatesTab({ templates, isLoading, onUpload, onDelete, onToggleActive
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    // User context - REQUIRED
+                    user_id: userInfo?.userId,
+                    company_id: userInfo?.companyId,
+                    // Document data
                     document_text: extractedText,
                     file_name: selectedFile.name,
                     file_type: selectedFile.type || 'application/octet-stream',
                     file_size: selectedFile.size,
+                    // Template config
                     contract_type: contractType,
                     template_name: templateName.trim(),
                     create_as_template: true,
                     is_company_template: true
-                    // Note: user_id and company_id will be added by the workflow from auth context
                 })
             })
 
@@ -1204,7 +1213,7 @@ function CompanyAdminContent() {
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200">
                     {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
-                    {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
+                    {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
                     {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
                     {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
                     {activeTab === 'audit' && <AuditLogTab />}
