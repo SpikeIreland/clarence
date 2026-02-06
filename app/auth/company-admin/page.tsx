@@ -962,15 +962,35 @@ function CompanyAdminContent() {
         if (!userInfo?.companyId) return
         const supabase = createClient()
 
-        // Soft delete - just mark as inactive
-        const { error } = await supabase
-            .from('contract_templates')
-            .update({ is_active: false })
-            .eq('template_id', templateId)
-            .eq('company_id', userInfo.companyId)
+        try {
+            // Step 1: Delete template clauses (child records)
+            const { error: clausesError } = await supabase
+                .from('template_clauses')
+                .delete()
+                .eq('template_id', templateId)
 
-        if (error) throw new Error(error.message)
-        await loadCompanyTemplates(userInfo.companyId)
+            if (clausesError) {
+                console.error('Error deleting template clauses:', clausesError)
+                // Continue anyway - clauses might not exist
+            }
+
+            // Step 2: Delete the template
+            const { error: templateError } = await supabase
+                .from('contract_templates')
+                .delete()
+                .eq('template_id', templateId)
+                .eq('company_id', userInfo.companyId)  // Safety: only delete company's templates
+                .eq('is_system', false)  // Safety: never delete system templates
+
+            if (templateError) throw new Error(templateError.message)
+
+            console.log('Template permanently deleted:', templateId)
+            await loadCompanyTemplates(userInfo.companyId)
+
+        } catch (error) {
+            console.error('Delete template error:', error)
+            throw error
+        }
     }
 
     const handleTemplateToggleActive = async (templateId: string, isActive: boolean) => {
