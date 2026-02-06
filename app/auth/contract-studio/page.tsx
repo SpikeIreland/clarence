@@ -7759,16 +7759,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 ) : (
                                     <span className="text-xs text-slate-400">No clauses configured</span>
                                 )}
-                                <button
-                                    onClick={() => router.push(`/auth/contract-prep?session_id=${session?.sessionId}`)}
-                                    className="flex items-center gap-1 px-2 py-1 text-xs text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition"
-                                    title="Edit clause selection"
-                                >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                    Contract Preparation
-                                </button>
                             </div>
                         </div>
 
