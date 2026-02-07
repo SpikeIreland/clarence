@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import FeedbackButton from '@/app/components/FeedbackButton'
+import QCPartyChatPanel from '@/app/auth/quick-contract/components/qc-party-chat-panel'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -227,11 +229,8 @@ function QuickContractStudioContent() {
     const [chatInput, setChatInput] = useState('')
     const [chatLoading, setChatLoading] = useState(false)
 
-    // Party Chat state (human-to-human - slide-out panel)
+    // Party Chat state (simplified - component handles its own state)
     const [partyChatOpen, setPartyChatOpen] = useState(false)
-    const [partyChatMessages, setPartyChatMessages] = useState<PartyMessage[]>([])
-    const [partyChatInput, setPartyChatInput] = useState('')
-    const [partyChatSending, setPartyChatSending] = useState(false)
     const [partyChatUnread, setPartyChatUnread] = useState(0)
     const [respondentInfo, setRespondentInfo] = useState<{
         name: string
@@ -250,8 +249,6 @@ function QuickContractStudioContent() {
     // Refs
     const clauseListRef = useRef<HTMLDivElement>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
-    const partyChatEndRef = useRef<HTMLDivElement>(null)
-    const partyChatInputRef = useRef<HTMLInputElement>(null)
 
     // ========================================================================
     // SECTION 4B: AUTHENTICATION & DATA LOADING
@@ -898,10 +895,8 @@ function QuickContractStudioContent() {
             }
             setChatMessages(prev => [...prev, msg])
 
-            // Push query into Party Chat for the other party to see
-            if (clause) {
-                pushQueryToPartyChat(clause, queryMessage)
-            }
+            // Query is saved to qc_party_messages via the insert above
+            // The QCPartyChatPanel component will receive it via Supabase Realtime
         }
     }
 
@@ -1090,225 +1085,7 @@ function QuickContractStudioContent() {
         }
     }, [contractId])
 
-    // Fetch party chat messages from database
-    const fetchPartyChatMessages = useCallback(async () => {
-        if (!contractId) return
-        try {
-            const { data, error } = await supabase
-                .from('qc_party_messages')
-                .select('*')
-                .eq('contract_id', contractId)
-                .order('created_at', { ascending: true })
 
-            if (error) {
-                console.error('Failed to fetch party chat messages:', error)
-                return
-            }
-
-            if (data) {
-                const mapped: PartyMessage[] = data.map(m => ({
-                    messageId: m.message_id,
-                    contractId: m.contract_id,
-                    senderUserId: m.sender_user_id,
-                    senderName: m.sender_name,
-                    senderRole: m.sender_role,
-                    messageText: m.message_text,
-                    relatedClauseId: m.related_clause_id,
-                    relatedClauseNumber: m.related_clause_number,
-                    relatedClauseName: m.related_clause_name,
-                    isSystemMessage: m.is_system_message || false,
-                    isRead: m.is_read || false,
-                    createdAt: m.created_at
-                }))
-                setPartyChatMessages(mapped)
-
-                // Count unread messages from the other party
-                if (userInfo) {
-                    const unread = mapped.filter(
-                        m => m.senderUserId !== userInfo.userId && !m.isRead
-                    ).length
-                    setPartyChatUnread(unread)
-                }
-            }
-        } catch (err) {
-            console.error('Party chat fetch error:', err)
-        }
-    }, [contractId, userInfo])
-
-    // Send a party chat message
-    const sendPartyChatMessage = async (
-        text: string,
-        relatedClause?: { clauseId: string, clauseNumber: string, clauseName: string }
-    ) => {
-        if (!text.trim() || !userInfo || !contractId) return
-
-        setPartyChatSending(true)
-        try {
-            const { data, error } = await supabase
-                .from('qc_party_messages')
-                .insert({
-                    contract_id: contractId,
-                    sender_user_id: userInfo.userId,
-                    sender_name: userInfo.fullName,
-                    sender_role: getPartyRole(),
-                    message_text: text.trim(),
-                    related_clause_id: relatedClause?.clauseId || null,
-                    related_clause_number: relatedClause?.clauseNumber || null,
-                    related_clause_name: relatedClause?.clauseName || null,
-                    is_system_message: false
-                })
-                .select()
-                .single()
-
-            if (error) throw error
-
-            if (data) {
-                const newMsg: PartyMessage = {
-                    messageId: data.message_id,
-                    contractId: data.contract_id,
-                    senderUserId: data.sender_user_id,
-                    senderName: data.sender_name,
-                    senderRole: data.sender_role,
-                    messageText: data.message_text,
-                    relatedClauseId: data.related_clause_id,
-                    relatedClauseNumber: data.related_clause_number,
-                    relatedClauseName: data.related_clause_name,
-                    isSystemMessage: false,
-                    isRead: false,
-                    createdAt: data.created_at
-                }
-                setPartyChatMessages(prev => [...prev, newMsg])
-            }
-            setPartyChatInput('')
-        } catch (err) {
-            console.error('Failed to send party chat message:', err)
-        } finally {
-            setPartyChatSending(false)
-        }
-    }
-
-    // Mark messages as read when opening chat
-    const markPartyChatRead = async () => {
-        if (!contractId || !userInfo) return
-        try {
-            await supabase
-                .from('qc_party_messages')
-                .update({ is_read: true })
-                .eq('contract_id', contractId)
-                .neq('sender_user_id', userInfo.userId)
-                .eq('is_read', false)
-
-            setPartyChatUnread(0)
-        } catch (err) {
-            console.error('Failed to mark messages as read:', err)
-        }
-    }
-
-    // Push query into party chat automatically
-    const pushQueryToPartyChat = async (
-        clause: ContractClause,
-        queryMessage: string
-    ) => {
-        if (!userInfo || !contractId) return
-        const systemText = `ÃƒÂ¢Ã‚ÂÃ¢â‚¬Å“ Query on "${clause.clauseName}" (${clause.clauseNumber}):\n\n"${queryMessage}"`
-        try {
-            await supabase
-                .from('qc_party_messages')
-                .insert({
-                    contract_id: contractId,
-                    sender_user_id: userInfo.userId,
-                    sender_name: userInfo.fullName,
-                    sender_role: getPartyRole(),
-                    message_text: systemText,
-                    related_clause_id: clause.clauseId,
-                    related_clause_number: clause.clauseNumber,
-                    related_clause_name: clause.clauseName,
-                    is_system_message: true
-                })
-            // Refresh messages
-            fetchPartyChatMessages()
-        } catch (err) {
-            console.error('Failed to push query to party chat:', err)
-        }
-    }
-
-    // Party Chat Effects: Load respondent info + messages + polling + realtime
-    useEffect(() => {
-        if (contractId && userInfo && !isTemplateMode) {
-            loadRespondentInfo()
-            fetchPartyChatMessages()
-        }
-    }, [contractId, userInfo, isTemplateMode, loadRespondentInfo, fetchPartyChatMessages])
-
-    // Polling for new messages (every 10s when open, 30s when closed)
-    useEffect(() => {
-        if (isTemplateMode || !contractId || !userInfo) return
-        const interval = setInterval(
-            fetchPartyChatMessages,
-            partyChatOpen ? 10000 : 30000
-        )
-        return () => clearInterval(interval)
-    }, [partyChatOpen, isTemplateMode, contractId, userInfo, fetchPartyChatMessages])
-
-    // Supabase Realtime subscription for instant messages
-    useEffect(() => {
-        if (isTemplateMode || !contractId) return
-        const channel = supabase
-            .channel(`qc-party-chat-${contractId}`)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'qc_party_messages',
-                filter: `contract_id=eq.${contractId}`
-            }, (payload) => {
-                const m = payload.new as Record<string, unknown>
-                // Only process messages from the OTHER user
-                if (m.sender_user_id !== userInfo?.userId) {
-                    const newMsg: PartyMessage = {
-                        messageId: m.message_id as string,
-                        contractId: m.contract_id as string,
-                        senderUserId: m.sender_user_id as string,
-                        senderName: m.sender_name as string,
-                        senderRole: m.sender_role as 'initiator' | 'respondent',
-                        messageText: m.message_text as string,
-                        relatedClauseId: m.related_clause_id as string | null,
-                        relatedClauseNumber: m.related_clause_number as string | null,
-                        relatedClauseName: m.related_clause_name as string | null,
-                        isSystemMessage: (m.is_system_message as boolean) || false,
-                        isRead: false,
-                        createdAt: m.created_at as string
-                    }
-                    setPartyChatMessages(prev => {
-                        // Avoid duplicates
-                        if (prev.some(p => p.messageId === newMsg.messageId)) return prev
-                        return [...prev, newMsg]
-                    })
-                    if (!partyChatOpen) {
-                        setPartyChatUnread(prev => prev + 1)
-                    }
-                }
-            })
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [contractId, userInfo?.userId, isTemplateMode, partyChatOpen])
-
-    // Auto-scroll party chat when new messages arrive
-    useEffect(() => {
-        if (partyChatOpen) {
-            partyChatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }
-    }, [partyChatMessages, partyChatOpen])
-
-    // Mark as read + focus input when opening
-    useEffect(() => {
-        if (partyChatOpen) {
-            markPartyChatRead()
-            setTimeout(() => partyChatInputRef.current?.focus(), 300)
-        }
-    }, [partyChatOpen])
 
     // ========================================================================
     // SECTION 4D-2: DRAFT EDITING HANDLERS
@@ -1774,10 +1551,16 @@ INSTRUCTIONS:
                     {/* Right: Actions */}
                     <div className="flex items-center gap-3">
 
+                        {/* Beta Feedback Button */}
+                        <FeedbackButton position="header" />
+
+                        {/* Beta Feedback Button */}
+                        <FeedbackButton position="header" />
+
                         {/* Party Chat Toggle (non-template mode only) */}
                         {!isTemplateMode && (
                             <button
-                                onClick={() => setPartyChatOpen(true)}
+                                onClick={() => setPartyChatOpen(!partyChatOpen)}
                                 className="relative p-2 hover:bg-slate-100 rounded-lg transition group"
                                 title={`Chat with ${getOtherPartyName()}`}
                             >
@@ -3091,159 +2874,20 @@ INSTRUCTIONS:
             )}
 
             {/* ============================================================ */}
-            {/* SECTION 7F: PARTY CHAT SLIDE-OUT PANEL */}
+            {/* SECTION 7F: PARTY CHAT PANEL (DETACHABLE COMPONENT) */}
             {/* ============================================================ */}
-            {!isTemplateMode && (
-                <>
-                    {/* Backdrop */}
-                    {partyChatOpen && (
-                        <div
-                            className="fixed inset-0 bg-black/30 z-40 transition-opacity"
-                            onClick={() => setPartyChatOpen(false)}
-                        />
-                    )}
-
-                    {/* Slide-out Panel */}
-                    <div
-                        className={`fixed top-0 right-0 h-full w-[400px] max-w-[90vw] bg-slate-900 shadow-2xl z-50 flex flex-col transition-transform duration-300 ease-in-out ${partyChatOpen ? 'translate-x-0' : 'translate-x-full'
-                            }`}
-                    >
-                        {/* Panel Header */}
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center">
-                                    <span className="text-white font-bold text-sm">
-                                        {(getOtherPartyName()).charAt(0).toUpperCase()}
-                                    </span>
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-semibold text-sm">
-                                        {getOtherPartyName()}
-                                    </h3>
-                                    <p className="text-xs text-slate-400">
-                                        {respondentInfo?.company || 'Party Chat'}
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setPartyChatOpen(false)}
-                                className="p-2 hover:bg-slate-700 rounded-lg transition text-slate-400 hover:text-white"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        {/* Messages Area */}
-                        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
-                            {partyChatMessages.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full text-center px-6">
-                                    <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
-                                        <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                        </svg>
-                                    </div>
-                                    <p className="text-slate-400 text-sm font-medium mb-1">No messages yet</p>
-                                    <p className="text-slate-500 text-xs">
-                                        Send a message to start discussing this contract.
-                                        Queries on clauses will also appear here.
-                                    </p>
-                                </div>
-                            ) : (
-                                <>
-                                    {/* Date Divider */}
-                                    <div className="flex items-center gap-3 mb-3 pt-2">
-                                        <div className="flex-1 h-px bg-slate-700" />
-                                        <span className="text-xs text-slate-500">
-                                            {new Date(partyChatMessages[0]?.createdAt).toLocaleDateString('en-GB', {
-                                                day: 'numeric', month: 'short', year: 'numeric'
-                                            })}
-                                        </span>
-                                        <div className="flex-1 h-px bg-slate-700" />
-                                    </div>
-
-                                    {partyChatMessages.map(msg => {
-                                        const isOwn = msg.senderUserId === userInfo?.userId
-                                        const time = new Date(msg.createdAt).toLocaleTimeString('en-GB', {
-                                            hour: '2-digit', minute: '2-digit'
-                                        })
-
-                                        return (
-                                            <div key={msg.messageId} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} mb-3`}>
-                                                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${msg.isSystemMessage
-                                                    ? 'bg-amber-900/40 border border-amber-700/50'
-                                                    : isOwn
-                                                        ? 'bg-emerald-600 text-white'
-                                                        : 'bg-slate-700 text-white'
-                                                    }`}>
-                                                    {/* Clause reference badge */}
-                                                    {msg.relatedClauseNumber && (
-                                                        <div className={`text-xs font-medium mb-1 ${msg.isSystemMessage ? 'text-amber-400' : isOwn ? 'text-emerald-200' : 'text-slate-400'
-                                                            }`}>
-                                                            Re: {msg.relatedClauseNumber} - {msg.relatedClauseName}
-                                                        </div>
-                                                    )}
-                                                    <p className={`text-sm whitespace-pre-wrap ${msg.isSystemMessage ? 'text-amber-200' : 'text-white'
-                                                        }`}>
-                                                        {msg.messageText}
-                                                    </p>
-                                                    <div className={`flex items-center gap-2 mt-1 ${isOwn ? 'justify-end' : 'justify-start'
-                                                        }`}>
-                                                        {!isOwn && (
-                                                            <span className="text-xs text-slate-400">{msg.senderName}</span>
-                                                        )}
-                                                        <span className={`text-xs ${msg.isSystemMessage ? 'text-amber-500' : isOwn ? 'text-emerald-300' : 'text-slate-500'
-                                                            }`}>
-                                                            {time}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                    <div ref={partyChatEndRef} />
-                                </>
-                            )}
-                        </div>
-
-                        {/* Input Area */}
-                        <div className="border-t border-slate-700 p-4 bg-slate-900">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    ref={partyChatInputRef}
-                                    type="text"
-                                    value={partyChatInput}
-                                    onChange={(e) => setPartyChatInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault()
-                                            sendPartyChatMessage(partyChatInput)
-                                        }
-                                    }}
-                                    placeholder={`Message ${getOtherPartyName()}...`}
-                                    className="flex-1 bg-slate-700 text-white placeholder-slate-400 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                                <button
-                                    onClick={() => sendPartyChatMessage(partyChatInput)}
-                                    disabled={!partyChatInput.trim() || partyChatSending}
-                                    className={`p-2.5 rounded-lg transition-all ${partyChatInput.trim() && !partyChatSending
-                                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                                        : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                        }`}
-                                >
-                                    {partyChatSending ? (
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    ) : (
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                        </svg>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </>
+            {!isTemplateMode && userInfo && (
+                <QCPartyChatPanel
+                    contractId={contractId}
+                    otherPartyName={getOtherPartyName()}
+                    otherPartyCompany={respondentInfo?.company}
+                    currentUserId={userInfo.userId}
+                    currentUserName={userInfo.fullName}
+                    partyRole={getPartyRole()}
+                    isOpen={partyChatOpen}
+                    onClose={() => setPartyChatOpen(false)}
+                    onUnreadCountChange={setPartyChatUnread}
+                />
             )}
 
         </div>
