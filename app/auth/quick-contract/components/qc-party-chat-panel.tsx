@@ -675,14 +675,8 @@ export function QCPartyChatPanel({
                     }
                 }}
             />
-
-            {/* Backdrop (docked mode only) */}
-            {!isDetached && isOpen && (
-                <div
-                    className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm transition-opacity"
-                    onClick={onClose}
-                />
-            )}
+            
+            {/* Backdrop removed - users can work while chatting */}
 
             {/* Chat Panel - Docked or Detached */}
             <div

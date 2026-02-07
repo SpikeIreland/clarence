@@ -1547,12 +1547,13 @@ INSTRUCTIONS:
                             )
                         })()}
                     </div>
-
                     {/* Right: Actions */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
 
                         {/* Beta Feedback Button */}
-                        <FeedbackButton position="header" />
+                        <div className="pl-4 border-l border-slate-200">
+                            <FeedbackButton position="header" />
+                        </div>
 
                         {/* Party Chat Toggle (non-template mode only) */}
                         {!isTemplateMode && (
