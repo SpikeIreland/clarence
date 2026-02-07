@@ -1554,9 +1554,6 @@ INSTRUCTIONS:
                         {/* Beta Feedback Button */}
                         <FeedbackButton position="header" />
 
-                        {/* Beta Feedback Button */}
-                        <FeedbackButton position="header" />
-
                         {/* Party Chat Toggle (non-template mode only) */}
                         {!isTemplateMode && (
                             <button
