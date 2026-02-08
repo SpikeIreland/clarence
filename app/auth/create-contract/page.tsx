@@ -147,7 +147,7 @@ const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstu
 const MEDIATION_OPTIONS: AssessmentOption[] = [
     {
         id: 'straight',
-        label: 'Quick to Contract',
+        label: 'Quick Contract',
         description: 'Standard template with minimal or no negotiation. Perfect for routine agreements like NDAs or standard service terms.',
         value: 'straight_to_contract',
         icon: '*'
