@@ -324,11 +324,11 @@ Review and confirm the redactions in the Entities panel.`,
 
     clause_rejected: (name: string) => `✕ Rejected: **${name}**`,
 
-    clause_deleted: (name: string) => `ðŸ—‘ï¸ Deleted: **${name}**`,
+    clause_deleted: (name: string) => `🗑️ Deleted: **${name}**`,
 
-    clauses_deleted: (count: number) => `ðŸ—‘ï¸ Deleted **${count} clauses**`,
+    clauses_deleted: (count: number) => `🗑️ Deleted **${count} clauses**`,
 
-    clauses_reordered: `→ï¸ Clauses reordered successfully`,
+    clauses_reordered: `→ Clauses reordered successfully`,
 
     all_verified: `Excellent! All clauses have been verified. You can now commit them to use in negotiations.`,
 
@@ -1260,7 +1260,7 @@ function ContractPrepContent() {
             )
             buildCategoryGroups(updatedClauses)
 
-            addChatMessage('system', `âŒ Rejected ${clausesToReject.length} clauses`)
+            addChatMessage('system', `❌ Rejected ${clausesToReject.length} clauses`)
             clearSelection()
 
         } catch (err) {
@@ -2293,7 +2293,7 @@ function ContractPrepContent() {
                             disabled={isDeleting || isBulkAIProcessing}
                             className="px-4 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
-                            <span>ðŸ—‘ï¸</span> Delete
+                            <span>🗑️</span> Delete
                         </button>
                     </div>
 
@@ -2384,7 +2384,7 @@ function ContractPrepContent() {
 
                                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                                     <p className="text-sm text-amber-800">
-                                        <strong>⚠ï¸ Note:</strong> You'll be able to review and adjust each suggestion before finalizing.
+                                        <strong>⚠️ Note:</strong> You'll be able to review and adjust each suggestion before finalizing.
                                     </p>
                                 </div>
 
@@ -2503,7 +2503,7 @@ function ContractPrepContent() {
                                 : 'text-slate-600 hover:text-slate-800'
                                 }`}
                         >
-                            ðŸ“ By Category
+                            📁 By Category
                         </button>
                     </div>
                 </div>
@@ -3131,7 +3131,7 @@ function ContractPrepContent() {
                                 className="px-4 py-2 rounded-lg bg-red-100 text-red-700 font-medium hover:bg-red-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                                 title="Delete clause"
                             >
-                                ðŸ—‘ï¸
+                                🗑️
                             </button>
                         </div>
                     </div>
@@ -3265,7 +3265,7 @@ function ContractPrepContent() {
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-amber-700 mb-2">
-                                                ⚠ï¸ Would Accept (Walkaway)
+                                                ⚠️ Would Accept (Walkaway)
                                             </label>
                                             <div className="flex gap-2">
                                                 <button
@@ -3306,7 +3306,7 @@ function ContractPrepContent() {
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-amber-700 mb-2">
-                                                ⚠ï¸ Would Accept (Walkaway)
+                                                ⚠️ Would Accept (Walkaway)
                                             </label>
                                             <input
                                                 type="text"
@@ -3382,7 +3382,7 @@ function ContractPrepContent() {
                                             </div>
                                             <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                                                 <label className="block text-sm font-semibold text-amber-700 mb-2">
-                                                    ⚠ï¸ Our Walkaway
+                                                    ⚠️ Our Walkaway
                                                 </label>
                                                 <p className="text-xs text-amber-600 mb-2">Bottom line we'd accept</p>
                                                 <div className="relative">
@@ -3453,7 +3453,7 @@ function ContractPrepContent() {
                                             </span>
                                         ) : isRangeComplete ? (
                                             <span className="text-blue-600 flex items-center gap-1">
-                                                <span>â—</span> Range complete - ready to configure
+                                                <span>●</span> Range complete - ready to configure
                                             </span>
                                         ) : (
                                             <span className="text-amber-600 flex items-center gap-1">
@@ -3580,7 +3580,7 @@ function ContractPrepContent() {
                         {detectedEntities.length === 0 ? (
                             <div className="text-center py-8">
                                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                    <span className="text-2xl">ðŸ”</span>
+                                    <span className="text-2xl">📁</span>
                                 </div>
                                 <p className="text-slate-500 text-sm">No entities detected</p>
                                 <p className="text-slate-400 text-xs mt-1">
@@ -3800,7 +3800,7 @@ function ContractPrepContent() {
                 <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
                     <div className="p-6">
                         <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-2xl">ðŸ—‘ï¸</span>
+                            <span className="text-2xl">🗑️</span>
                         </div>
                         <h3 className="text-lg font-semibold text-slate-800 text-center mb-2">
                             Delete {isBulk ? `${deleteCount} Clauses` : 'Clause'}?
@@ -3889,7 +3889,7 @@ function ContractPrepContent() {
                                 placeholder="Search clauses by name, category, or description..."
                                 className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                             />
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">ðŸ”</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">📁</span>
                         </div>
                     </div>
 
