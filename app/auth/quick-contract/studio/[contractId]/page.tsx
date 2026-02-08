@@ -2,10 +2,19 @@
 
 // ============================================================================
 // QUICK CONTRACT STUDIO - Clause Review & Agreement
-// Version: 3.0 - Dual-Party Agreement Tracking
+// Version: 3.1 - Dual-Party Agreement + Position Scale Fix
 // Date: 8 February 2026
 // Path: /app/auth/quick-contract/studio/[id]/page.tsx
 // 
+// CHANGES in v3.1:
+// - CRITICAL FIX: Position scale now matches Contract Studio (legally verified)
+//   * Position 1 = Provider-Favoring (maximum provider flexibility)
+//   * Position 10 = Customer-Favoring (maximum customer protection)
+// - Fixed DEFAULT_POSITION_OPTIONS labels
+// - Fixed position bar scale labels (Provider left, Customer right)
+// - Fixed position badge colors (high=emerald/customer, low=blue/provider)
+// - Fixed balanced draft generation prompts and logic
+//
 // CHANGES in v3.0:
 // - Implemented dual-party agreement tracking (initiator + respondent must both agree)
 // - New agreement states: none, you_only, other_only, both
@@ -154,17 +163,18 @@ function getCategoryColor(category: string): string {
 }
 
 // Default position options when none specified
+// SCALE: 1 = Maximum Provider Flexibility, 10 = Maximum Customer Protection
 const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
-    { value: 1, label: 'Maximum Protection', description: 'Strongest customer-favoring terms' },
-    { value: 2, label: 'Strong Protection', description: 'Significant customer advantages' },
-    { value: 3, label: 'Moderate Protection', description: 'Customer-leaning but reasonable' },
-    { value: 4, label: 'Slight Customer Favor', description: 'Marginally customer-favoring' },
+    { value: 1, label: 'Maximum Flexibility', description: 'Strongest provider-favoring terms' },
+    { value: 2, label: 'Strong Provider Terms', description: 'Significant provider advantages' },
+    { value: 3, label: 'Provider Advantage', description: 'Provider-leaning but reasonable' },
+    { value: 4, label: 'Slight Provider Favor', description: 'Marginally provider-favoring' },
     { value: 5, label: 'Balanced', description: 'Neutral, industry standard' },
-    { value: 6, label: 'Slight Provider Favor', description: 'Marginally provider-favoring' },
-    { value: 7, label: 'Moderate Flexibility', description: 'Provider-leaning but reasonable' },
-    { value: 8, label: 'Provider Advantage', description: 'Significant provider advantages' },
-    { value: 9, label: 'Strong Provider Terms', description: 'Provider-favoring terms' },
-    { value: 10, label: 'Maximum Flexibility', description: 'Strongest provider-favoring terms' }
+    { value: 6, label: 'Slight Customer Favor', description: 'Marginally customer-favoring' },
+    { value: 7, label: 'Moderate Protection', description: 'Customer-leaning but reasonable' },
+    { value: 8, label: 'Strong Protection', description: 'Significant customer advantages' },
+    { value: 9, label: 'High Protection', description: 'Customer-favoring terms' },
+    { value: 10, label: 'Maximum Protection', description: 'Strongest customer-favoring terms' }
 ]
 
 // ============================================================================
@@ -1379,13 +1389,14 @@ function QuickContractStudioContent() {
         setChatMessages(prev => [...prev, requestMessage])
 
         // Build the direction hint based on current position
+        // SCALE: 1 = Provider-Favoring, 10 = Customer-Favoring
         const currentPosition = selectedClause.clarencePosition
         let directionHint = ''
         if (currentPosition !== null) {
             if (currentPosition < 4) {
-                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (customer-favoring). To create a more balanced version, moderate the customer protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
-            } else if (currentPosition > 6) {
                 directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (provider-favoring). To create a more balanced version, strengthen customer protections and introduce more equitable terms. Add reasonable safeguards for the customer without being overly aggressive.`
+            } else if (currentPosition > 6) {
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (customer-favoring). To create a more balanced version, moderate the customer protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
             } else {
                 directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (near balanced). Fine-tune the language to ensure both parties have equitable obligations and protections. Aim for clearer, more neutral phrasing.`
             }
@@ -1401,7 +1412,7 @@ function QuickContractStudioContent() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: `TASK: Rewrite the following clause to be more balanced (targeting position 5.0 on a 1-10 scale where 1 is maximum customer protection and 10 is maximum provider flexibility).
+                    message: `TASK: Rewrite the following clause to be more balanced (targeting position 5.0 on a 1-10 scale where 1 is maximum provider flexibility and 10 is maximum customer protection).
 
 CLAUSE: "${selectedClause.clauseName}" (${selectedClause.clauseNumber})
 CATEGORY: ${selectedClause.category}
@@ -1446,9 +1457,9 @@ INSTRUCTIONS:
                         role: 'assistant',
                         content: `I've generated a more balanced version of "${selectedClause.clauseName}".\n\n` +
                             (currentPosition !== null && currentPosition < 4
-                                ? `The original was at position ${currentPosition.toFixed(1)} (customer-favoring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
+                                ? `The original was at position ${currentPosition.toFixed(1)} (provider-favoring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
                                 : currentPosition !== null && currentPosition > 6
-                                    ? `The original was at position ${currentPosition.toFixed(1)} (provider-favoring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
+                                    ? `The original was at position ${currentPosition.toFixed(1)} (customer-favoring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
                                     : `I've refined the language for clearer, more neutral phrasing.\n\n`) +
                             `The draft is now in the editor for your review. You can:\n` +
                             `\u2022 **Save Draft** to keep the balanced version\n` +
@@ -1508,12 +1519,13 @@ INSTRUCTIONS:
     // SECTION 4F: HELPER FUNCTIONS
     // ========================================================================
 
+    // Position color: 1=provider (blue) to 10=customer (emerald)
     const getPositionColor = (position: number | null): string => {
         if (position === null) return 'bg-slate-200'
-        if (position <= 3) return 'bg-emerald-500'
-        if (position <= 5) return 'bg-teal-500'
-        if (position <= 7) return 'bg-blue-500'
-        return 'bg-indigo-500'
+        if (position >= 8) return 'bg-emerald-500'  // Strong customer
+        if (position >= 6) return 'bg-teal-500'     // Slight customer
+        if (position >= 4) return 'bg-amber-500'    // Balanced
+        return 'bg-blue-500'                        // Provider-favoring
     }
 
     // ========================================================================
@@ -1957,9 +1969,9 @@ INSTRUCTIONS:
                                                             </div>
                                                         </div>
                                                         {child.clarenceCertified && child.clarencePosition && (
-                                                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
-                                                                child.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
-                                                                    'bg-red-100 text-red-700'
+                                                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                                child.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                                    'bg-blue-100 text-blue-700'
                                                                 }`}>
                                                                 {child.clarencePosition.toFixed(1)}
                                                             </span>
@@ -2034,9 +2046,9 @@ INSTRUCTIONS:
                                                 </span>
                                             </div>
                                             {parent.clarenceCertified && parent.clarencePosition && (
-                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
-                                                    parent.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
-                                                        'bg-red-100 text-red-700'
+                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                    parent.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                        'bg-blue-100 text-blue-700'
                                                     }`}>
                                                     {parent.clarencePosition.toFixed(1)}
                                                 </span>
@@ -2286,6 +2298,7 @@ INSTRUCTIONS:
                                                     ))}
 
                                                     {/* CLARENCE Badge - Only marker shown */}
+                                                    {/* POSITION BAR: Left = Provider-Favoring (1), Right = Customer-Favoring (10) */}
                                                     {selectedClause.clarencePosition !== null && (
                                                         <div
                                                             className="absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all cursor-grab active:cursor-grabbing hover:scale-110"
@@ -2331,11 +2344,11 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
-                                                {/* Scale Labels */}
+                                                {/* Scale Labels - Provider on LEFT (1), Customer on RIGHT (10) */}
                                                 <div className="flex justify-between mt-4 text-xs text-slate-500">
-                                                    <span>Customer-Favoring</span>
-                                                    <span>Balanced</span>
                                                     <span>Provider-Favoring</span>
+                                                    <span>Balanced</span>
+                                                    <span>Customer-Favoring</span>
                                                 </div>
                                             </div>
 
