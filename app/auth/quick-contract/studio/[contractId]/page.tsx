@@ -1,29 +1,4 @@
 'use client'
-
-// ============================================================================
-// QUICK CONTRACT STUDIO - Clause Review & Agreement
-// Version: 3.1 - Dual-Party Agreement + Position Scale Fix
-// Date: 8 February 2026
-// Path: /app/auth/quick-contract/studio/[id]/page.tsx
-// 
-// CHANGES in v3.1:
-// - CRITICAL FIX: Position scale now matches Contract Studio (legally verified)
-//   * Position 1 = Provider-Favoring (maximum provider flexibility)
-//   * Position 10 = Customer-Favoring (maximum customer protection)
-// - Fixed DEFAULT_POSITION_OPTIONS labels
-// - Fixed position bar scale labels (Provider left, Customer right)
-// - Fixed position badge colors (high=emerald/customer, low=blue/provider)
-// - Fixed balanced draft generation prompts and logic
-//
-// CHANGES in v3.0:
-// - Implemented dual-party agreement tracking (initiator + respondent must both agree)
-// - New agreement states: none, you_only, other_only, both
-// - Updated all UI indicators to show partial vs full agreement
-// - Commit button now shows waiting state when one party has committed
-// - Progress bar shows amber for partial, green for full agreement
-// - Modal states include 'waiting_other_party' for async commit flow
-// ============================================================================
-
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
@@ -115,7 +90,7 @@ interface ClauseEvent {
     createdAt: string
 }
 
-type CommitModalState = 'closed' | 'confirm' | 'processing' | 'success' | 'waiting_other_party'
+type CommitModalState = 'closed' | 'confirm' | 'processing' | 'success'
 
 // Party Chat message interface
 interface PartyMessage {
@@ -163,18 +138,17 @@ function getCategoryColor(category: string): string {
 }
 
 // Default position options when none specified
-// SCALE: 1 = Maximum Provider Flexibility, 10 = Maximum Customer Protection
 const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
-    { value: 1, label: 'Maximum Flexibility', description: 'Strongest provider-favoring terms' },
-    { value: 2, label: 'Strong Provider Terms', description: 'Significant provider advantages' },
-    { value: 3, label: 'Provider Advantage', description: 'Provider-leaning but reasonable' },
-    { value: 4, label: 'Slight Provider Favor', description: 'Marginally provider-favoring' },
+    { value: 1, label: 'Maximum Protection', description: 'Strongest customer-favoring terms' },
+    { value: 2, label: 'Strong Protection', description: 'Significant customer advantages' },
+    { value: 3, label: 'Moderate Protection', description: 'Customer-leaning but reasonable' },
+    { value: 4, label: 'Slight Customer Favor', description: 'Marginally customer-favoring' },
     { value: 5, label: 'Balanced', description: 'Neutral, industry standard' },
-    { value: 6, label: 'Slight Customer Favor', description: 'Marginally customer-favoring' },
-    { value: 7, label: 'Moderate Protection', description: 'Customer-leaning but reasonable' },
-    { value: 8, label: 'Strong Protection', description: 'Significant customer advantages' },
-    { value: 9, label: 'High Protection', description: 'Customer-favoring terms' },
-    { value: 10, label: 'Maximum Protection', description: 'Strongest customer-favoring terms' }
+    { value: 6, label: 'Slight Provider Favor', description: 'Marginally provider-favoring' },
+    { value: 7, label: 'Moderate Flexibility', description: 'Provider-leaning but reasonable' },
+    { value: 8, label: 'Provider Advantage', description: 'Significant provider advantages' },
+    { value: 9, label: 'Strong Provider Terms', description: 'Provider-favoring terms' },
+    { value: 10, label: 'Maximum Flexibility', description: 'Strongest provider-favoring terms' }
 ]
 
 // ============================================================================
@@ -229,9 +203,7 @@ function QuickContractStudioContent() {
 
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])
-    // Dual-party agreement tracking - both must agree for clause to be fully agreed
-    const [initiatorAgreedIds, setInitiatorAgreedIds] = useState<Set<string>>(new Set())
-    const [respondentAgreedIds, setRespondentAgreedIds] = useState<Set<string>>(new Set())
+    const [agreedClauseIds, setAgreedClauseIds] = useState<Set<string>>(new Set())
     const [queriedClauseIds, setQueriedClauseIds] = useState<Set<string>>(new Set())
 
     // Commit modal
@@ -270,6 +242,15 @@ function QuickContractStudioContent() {
     const [isPolling, setIsPolling] = useState(false)
     const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+
+    // Delete clause state
+    const [deleteClauseTarget, setDeleteClauseTarget] = useState<ContractClause | null>(null)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [deletingClause, setDeletingClause] = useState(false)
+
+    // Clause options menu state (for 3-dot menu)
+    const [clauseMenuOpen, setClauseMenuOpen] = useState<string | null>(null)
+    const clauseMenuRef = useRef<HTMLDivElement>(null)
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
@@ -425,27 +406,15 @@ function QuickContractStudioContent() {
                     }))
                     setClauseEvents(mappedEvents)
 
-                    // Build agreed/queried sets from events - track by party role
-                    const initiatorAgreed = new Set<string>()
-                    const respondentAgreed = new Set<string>()
+                    // Build agreed/queried sets from events
+                    const agreed = new Set<string>()
                     const queried = new Set<string>()
-
                     mappedEvents.forEach(evt => {
                         if (evt.eventType === 'agreed' && evt.clauseId) {
-                            // Track who agreed based on party_role
-                            if (evt.partyRole === 'initiator') {
-                                initiatorAgreed.add(evt.clauseId)
-                            } else if (evt.partyRole === 'respondent') {
-                                respondentAgreed.add(evt.clauseId)
-                            }
+                            agreed.add(evt.clauseId)
                         }
                         if (evt.eventType === 'agreement_withdrawn' && evt.clauseId) {
-                            // Remove from the correct party's set
-                            if (evt.partyRole === 'initiator') {
-                                initiatorAgreed.delete(evt.clauseId)
-                            } else if (evt.partyRole === 'respondent') {
-                                respondentAgreed.delete(evt.clauseId)
-                            }
+                            agreed.delete(evt.clauseId)
                         }
                         if (evt.eventType === 'queried' && evt.clauseId) {
                             queried.add(evt.clauseId)
@@ -454,8 +423,7 @@ function QuickContractStudioContent() {
                             queried.delete(evt.clauseId)
                         }
                     })
-                    setInitiatorAgreedIds(initiatorAgreed)
-                    setRespondentAgreedIds(respondentAgreed)
+                    setAgreedClauseIds(agreed)
                     setQueriedClauseIds(queried)
                 }
 
@@ -823,66 +791,6 @@ function QuickContractStudioContent() {
         return 'respondent'
     }
 
-    // ========================================================================
-    // AGREEMENT STATUS HELPERS - Dual-party tracking
-    // ========================================================================
-
-    // Check if CURRENT user has agreed to a clause
-    const hasCurrentUserAgreed = (clauseId: string): boolean => {
-        const role = getPartyRole()
-        return role === 'initiator'
-            ? initiatorAgreedIds.has(clauseId)
-            : respondentAgreedIds.has(clauseId)
-    }
-
-    // Check if OTHER party has agreed to a clause
-    const hasOtherPartyAgreed = (clauseId: string): boolean => {
-        const role = getPartyRole()
-        return role === 'initiator'
-            ? respondentAgreedIds.has(clauseId)
-            : initiatorAgreedIds.has(clauseId)
-    }
-
-    // Check if BOTH parties have agreed (clause is fully agreed)
-    const isBothPartiesAgreed = (clauseId: string): boolean => {
-        return initiatorAgreedIds.has(clauseId) && respondentAgreedIds.has(clauseId)
-    }
-
-    // Check if at least one party has agreed
-    const isAnyPartyAgreed = (clauseId: string): boolean => {
-        return initiatorAgreedIds.has(clauseId) || respondentAgreedIds.has(clauseId)
-    }
-
-    // Get agreement status for display
-    type AgreementStatus = 'none' | 'you_only' | 'other_only' | 'both'
-    const getAgreementStatus = (clauseId: string): AgreementStatus => {
-        const youAgreed = hasCurrentUserAgreed(clauseId)
-        const theyAgreed = hasOtherPartyAgreed(clauseId)
-
-        if (youAgreed && theyAgreed) return 'both'
-        if (youAgreed) return 'you_only'
-        if (theyAgreed) return 'other_only'
-        return 'none'
-    }
-
-    // Get other party's display name
-    const getOtherPartyName = (): string => {
-        if (respondentInfo?.name) {
-            return getPartyRole() === 'initiator' ? respondentInfo.name : (userInfo?.fullName || 'Initiator')
-        }
-        return getPartyRole() === 'initiator' ? 'Respondent' : 'Initiator'
-    }
-
-    // Count fully agreed clauses (both parties)
-    const getFullyAgreedCount = (): number => {
-        return clauses.filter(c => !c.isHeader && c.clarenceCertified && isBothPartiesAgreed(c.clauseId)).length
-    }
-
-    // Count partially agreed clauses (one party only)
-    const getPartiallyAgreedCount = (): number => {
-        return clauses.filter(c => !c.isHeader && c.clarenceCertified && isAnyPartyAgreed(c.clauseId) && !isBothPartiesAgreed(c.clauseId)).length
-    }
-
     // Helper: record a clause event
     const recordClauseEvent = async (
         eventType: ClauseEvent['eventType'],
@@ -932,11 +840,9 @@ function QuickContractStudioContent() {
 
     // AGREE: Mark a clause as agreed by current user
     const handleAgreeClause = async (clauseId: string) => {
-        // Check if current user already agreed (not if anyone agreed)
-        if (hasCurrentUserAgreed(clauseId)) return
+        if (agreedClauseIds.has(clauseId)) return // Already agreed
 
         const clause = clauses.find(c => c.clauseId === clauseId)
-        const partyRole = getPartyRole()
         const event = await recordClauseEvent('agreed', clauseId, undefined, {
             clause_name: clause?.clauseName,
             clause_number: clause?.clauseNumber,
@@ -944,23 +850,13 @@ function QuickContractStudioContent() {
         })
 
         if (event) {
-            // Update the correct party's agreement set
-            if (partyRole === 'initiator') {
-                setInitiatorAgreedIds(prev => new Set([...prev, clauseId]))
-            } else {
-                setRespondentAgreedIds(prev => new Set([...prev, clauseId]))
-            }
+            setAgreedClauseIds(prev => new Set([...prev, clauseId]))
 
-            // Chat confirmation - indicate if this completes agreement
-            const otherAgreed = hasOtherPartyAgreed(clauseId)
-            const statusMsg = otherAgreed
-                ? `Both parties have now agreed to this clause.`
-                : `Awaiting ${getOtherPartyName()} to also agree.`
-
+            // Chat confirmation
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `\u2705 You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
+                content: `\u2705 You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). This has been recorded.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -969,38 +865,19 @@ function QuickContractStudioContent() {
 
     // WITHDRAW AGREEMENT: Un-agree a clause
     const handleWithdrawAgreement = async (clauseId: string) => {
-        // Check if current user has agreed (not if anyone agreed)
-        if (!hasCurrentUserAgreed(clauseId)) return
+        if (!agreedClauseIds.has(clauseId)) return
 
         const clause = clauses.find(c => c.clauseId === clauseId)
-        const partyRole = getPartyRole()
         const event = await recordClauseEvent('agreement_withdrawn', clauseId, undefined, {
             clause_name: clause?.clauseName
         })
 
         if (event) {
-            // Remove from the correct party's agreement set
-            if (partyRole === 'initiator') {
-                setInitiatorAgreedIds(prev => {
-                    const next = new Set(prev)
-                    next.delete(clauseId)
-                    return next
-                })
-            } else {
-                setRespondentAgreedIds(prev => {
-                    const next = new Set(prev)
-                    next.delete(clauseId)
-                    return next
-                })
-            }
-
-            const msg: ChatMessage = {
-                id: `withdraw-${Date.now()}`,
-                role: 'assistant',
-                content: `Agreement withdrawn for "${clause?.clauseName}" (${clause?.clauseNumber}).`,
-                timestamp: new Date()
-            }
-            setChatMessages(prev => [...prev, msg])
+            setAgreedClauseIds(prev => {
+                const next = new Set(prev)
+                next.delete(clauseId)
+                return next
+            })
         }
     }
 
@@ -1032,93 +909,64 @@ function QuickContractStudioContent() {
         }
     }
 
-    // COMMIT: Current user agrees to all remaining clauses and commits
+    // COMMIT: Agree to all clauses and commit the contract
     const handleCommitContract = async () => {
         if (!contract || !userInfo) return
 
         setCommitModalState('processing')
-        const partyRole = getPartyRole()
 
         try {
             const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+            const unagreedClauses = leafClauses.filter(c => !agreedClauseIds.has(c.clauseId))
 
-            // Find clauses this user hasn't agreed to yet
-            const unagreedByMe = leafClauses.filter(c => !hasCurrentUserAgreed(c.clauseId))
-
-            // Auto-agree any clauses the current user hasn't agreed to
-            for (const clause of unagreedByMe) {
+            // Auto-agree any outstanding clauses
+            for (const clause of unagreedClauses) {
                 await recordClauseEvent('agreed', clause.clauseId, undefined, {
                     clause_name: clause.clauseName,
                     auto_agreed_via_commit: true
                 })
-
-                // Update the correct party's set
-                if (partyRole === 'initiator') {
-                    setInitiatorAgreedIds(prev => new Set([...prev, clause.clauseId]))
-                } else {
-                    setRespondentAgreedIds(prev => new Set([...prev, clause.clauseId]))
-                }
+                setAgreedClauseIds(prev => new Set([...prev, clause.clauseId]))
             }
-
-            // Check if other party has also committed (all their clauses agreed)
-            const otherPartyFullyAgreed = leafClauses.every(c => hasOtherPartyAgreed(c.clauseId))
 
             // Record the commit event with audit data
             await recordClauseEvent('committed', null, undefined, {
-                party_role: partyRole,
-                clauses_individually_agreed: leafClauses.length - unagreedByMe.length,
-                clauses_auto_agreed: unagreedByMe.length,
+                clauses_individually_agreed: leafClauses.length - unagreedClauses.length,
+                clauses_auto_agreed: unagreedClauses.length,
                 total_clauses: leafClauses.length,
-                other_party_committed: otherPartyFullyAgreed,
                 ip_address: 'captured_server_side',
                 user_agent: navigator.userAgent,
                 committed_at: new Date().toISOString()
             })
 
-            // Only update contract status to 'committed' if BOTH parties have now committed
-            if (otherPartyFullyAgreed) {
-                await supabase
-                    .from('uploaded_contracts')
-                    .update({
-                        status: 'committed',
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('contract_id', contract.contractId)
-
-                // Log system event for full commit
-                await supabase.from('system_events').insert({
-                    event_type: 'quick_contract_committed',
-                    source_system: 'quick_contract_studio',
-                    context: {
-                        contract_id: contract.contractId,
-                        user_id: userInfo.userId,
-                        party_role: partyRole,
-                        clause_count: leafClauses.length,
-                        both_parties_committed: true
-                    }
+            // Update contract status
+            await supabase
+                .from('uploaded_contracts')
+                .update({
+                    status: 'committed',
+                    updated_at: new Date().toISOString()
                 })
+                .eq('contract_id', contract.contractId)
 
-                setCommitModalState('success')
+            // Log system event
+            await supabase.from('system_events').insert({
+                event_type: 'quick_contract_committed',
+                source_system: 'quick_contract_studio',
+                context: {
+                    contract_id: contract.contractId,
+                    user_id: userInfo.userId,
+                    party_role: getPartyRole(),
+                    clause_count: leafClauses.length,
+                    individually_agreed: leafClauses.length - unagreedClauses.length,
+                    auto_agreed: unagreedClauses.length
+                }
+            })
 
-                // Redirect after showing success
-                setTimeout(() => {
-                    router.push('/auth/document-centre?contract_id=' + contract.contractId + '&committed=true')
-                }, 2000)
-            } else {
-                // Only current user committed - waiting for other party
-                await supabase.from('system_events').insert({
-                    event_type: 'quick_contract_party_committed',
-                    source_system: 'quick_contract_studio',
-                    context: {
-                        contract_id: contract.contractId,
-                        user_id: userInfo.userId,
-                        party_role: partyRole,
-                        awaiting_other_party: true
-                    }
-                })
+            setCommitModalState('success')
 
-                setCommitModalState('waiting_other_party')
-            }
+            // Redirect after showing success
+            setTimeout(() => {
+                router.push('/auth/document-centre?contract_id=' + contract.contractId + '&committed=true')
+            }, 2000)
 
         } catch (err) {
             console.error('Commit error:', err)
@@ -1205,7 +1053,14 @@ function QuickContractStudioContent() {
     // ========================================================================
 
     // Note: getPartyRole() is defined in SECTION 4D above
-    // Note: getOtherPartyName() is defined in SECTION 4D above with the agreement helpers
+
+    // Get other party's display name
+    const getOtherPartyName = (): string => {
+        if (respondentInfo?.name) {
+            return getPartyRole() === 'initiator' ? respondentInfo.name : (userInfo?.fullName || 'Initiator')
+        }
+        return 'Other Party'
+    }
 
     // Load respondent info from qc_recipients
     const loadRespondentInfo = useCallback(async () => {
@@ -1389,14 +1244,13 @@ function QuickContractStudioContent() {
         setChatMessages(prev => [...prev, requestMessage])
 
         // Build the direction hint based on current position
-        // SCALE: 1 = Provider-Favoring, 10 = Customer-Favoring
         const currentPosition = selectedClause.clarencePosition
         let directionHint = ''
         if (currentPosition !== null) {
             if (currentPosition < 4) {
-                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (provider-favoring). To create a more balanced version, strengthen customer protections and introduce more equitable terms. Add reasonable safeguards for the customer without being overly aggressive.`
-            } else if (currentPosition > 6) {
                 directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (customer-favoring). To create a more balanced version, moderate the customer protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
+            } else if (currentPosition > 6) {
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (provider-favoring). To create a more balanced version, strengthen customer protections and introduce more equitable terms. Add reasonable safeguards for the customer without being overly aggressive.`
             } else {
                 directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (near balanced). Fine-tune the language to ensure both parties have equitable obligations and protections. Aim for clearer, more neutral phrasing.`
             }
@@ -1412,7 +1266,7 @@ function QuickContractStudioContent() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: `TASK: Rewrite the following clause to be more balanced (targeting position 5.0 on a 1-10 scale where 1 is maximum provider flexibility and 10 is maximum customer protection).
+                    message: `TASK: Rewrite the following clause to be more balanced (targeting position 5.0 on a 1-10 scale where 1 is maximum customer protection and 10 is maximum provider flexibility).
 
 CLAUSE: "${selectedClause.clauseName}" (${selectedClause.clauseNumber})
 CATEGORY: ${selectedClause.category}
@@ -1457,9 +1311,9 @@ INSTRUCTIONS:
                         role: 'assistant',
                         content: `I've generated a more balanced version of "${selectedClause.clauseName}".\n\n` +
                             (currentPosition !== null && currentPosition < 4
-                                ? `The original was at position ${currentPosition.toFixed(1)} (provider-favoring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
+                                ? `The original was at position ${currentPosition.toFixed(1)} (customer-favoring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
                                 : currentPosition !== null && currentPosition > 6
-                                    ? `The original was at position ${currentPosition.toFixed(1)} (customer-favoring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
+                                    ? `The original was at position ${currentPosition.toFixed(1)} (provider-favoring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
                                     : `I've refined the language for clearer, more neutral phrasing.\n\n`) +
                             `The draft is now in the editor for your review. You can:\n` +
                             `\u2022 **Save Draft** to keep the balanced version\n` +
@@ -1502,6 +1356,132 @@ INSTRUCTIONS:
     }
 
     // ========================================================================
+    // SECTION 4D-3: DELETE CLAUSE HANDLER
+    // Works in both Template Mode and Contract Mode
+    // ========================================================================
+
+    // Close clause menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (clauseMenuRef.current && !clauseMenuRef.current.contains(event.target as Node)) {
+                setClauseMenuOpen(null)
+            }
+        }
+        if (clauseMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside)
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [clauseMenuOpen])
+
+    // Open delete confirmation
+    const handleDeleteClauseClick = (clause: ContractClause) => {
+        setDeleteClauseTarget(clause)
+        setShowDeleteConfirm(true)
+        setClauseMenuOpen(null)
+    }
+
+    // Confirm and execute delete
+    const handleConfirmDeleteClause = async () => {
+        if (!deleteClauseTarget || !userInfo) return
+
+        setDeletingClause(true)
+        try {
+            // Delete the clause from uploaded_contract_clauses
+            const { error: deleteError } = await supabase
+                .from('uploaded_contract_clauses')
+                .delete()
+                .eq('clause_id', deleteClauseTarget.clauseId)
+
+            if (deleteError) throw deleteError
+
+            // If deleting a parent clause, also delete children
+            if (deleteClauseTarget.clauseLevel === 0 || deleteClauseTarget.clauseLevel === 1) {
+                const childClauses = clauses.filter(c => c.parentClauseId === deleteClauseTarget.clauseId)
+                if (childClauses.length > 0) {
+                    await supabase
+                        .from('uploaded_contract_clauses')
+                        .delete()
+                        .in('clause_id', childClauses.map(c => c.clauseId))
+                }
+            }
+
+            // Update contract clause count
+            const newClauseCount = clauses.filter(c =>
+                c.clauseId !== deleteClauseTarget.clauseId &&
+                c.parentClauseId !== deleteClauseTarget.clauseId
+            ).length
+
+            await supabase
+                .from('uploaded_contracts')
+                .update({
+                    clause_count: newClauseCount,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('contract_id', contractId)
+
+            // Update local state
+            setClauses(prev => prev.filter(c =>
+                c.clauseId !== deleteClauseTarget.clauseId &&
+                c.parentClauseId !== deleteClauseTarget.clauseId
+            ))
+
+            // Clear selection if deleted clause was selected
+            if (selectedClause?.clauseId === deleteClauseTarget.clauseId) {
+                setSelectedClauseIndex(null)
+            }
+
+            // Remove from agreed/queried sets if present
+            setAgreedClauseIds(prev => {
+                const next = new Set(prev)
+                next.delete(deleteClauseTarget.clauseId)
+                return next
+            })
+            setQueriedClauseIds(prev => {
+                const next = new Set(prev)
+                next.delete(deleteClauseTarget.clauseId)
+                return next
+            })
+
+            // Add confirmation message to chat
+            const confirmMessage: ChatMessage = {
+                id: `clause-deleted-${Date.now()}`,
+                role: 'assistant',
+                content: `🗑️ Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, confirmMessage])
+
+            // Log system event
+            await supabase.from('system_events').insert({
+                event_type: 'clause_deleted',
+                source_system: 'quick_contract_studio',
+                context: {
+                    contract_id: contractId,
+                    clause_id: deleteClauseTarget.clauseId,
+                    clause_name: deleteClauseTarget.clauseName,
+                    clause_number: deleteClauseTarget.clauseNumber,
+                    user_id: userInfo.userId,
+                    is_template_mode: isTemplateMode
+                }
+            })
+
+        } catch (err) {
+            console.error('Delete clause error:', err)
+            setError('Failed to delete clause. Please try again.')
+        } finally {
+            setDeletingClause(false)
+            setShowDeleteConfirm(false)
+            setDeleteClauseTarget(null)
+        }
+    }
+
+    // Cancel delete
+    const handleCancelDelete = () => {
+        setShowDeleteConfirm(false)
+        setDeleteClauseTarget(null)
+    }
+
+    // ========================================================================
     // SECTION 4E: FILTERED CLAUSES
     // ========================================================================
 
@@ -1519,13 +1499,12 @@ INSTRUCTIONS:
     // SECTION 4F: HELPER FUNCTIONS
     // ========================================================================
 
-    // Position color: 1=provider (blue) to 10=customer (emerald)
     const getPositionColor = (position: number | null): string => {
         if (position === null) return 'bg-slate-200'
-        if (position >= 8) return 'bg-emerald-500'  // Strong customer
-        if (position >= 6) return 'bg-teal-500'     // Slight customer
-        if (position >= 4) return 'bg-amber-500'    // Balanced
-        return 'bg-blue-500'                        // Provider-favoring
+        if (position <= 3) return 'bg-emerald-500'
+        if (position <= 5) return 'bg-teal-500'
+        if (position <= 7) return 'bg-blue-500'
+        return 'bg-indigo-500'
     }
 
     // ========================================================================
@@ -1672,38 +1651,29 @@ INSTRUCTIONS:
                                 {contract?.contractName}
                             </h2>
                             <p className="text-xs text-slate-500">
-                                {contract?.contractType} &middot; {clauses.filter(c => !c.isHeader).length} clauses &middot; {getFullyAgreedCount()} fully agreed
+                                {contract?.contractType} &middot; {clauses.filter(c => !c.isHeader).length} clauses &middot; {agreedClauseIds.size} agreed
                             </p>
                         </div>
 
                         {/* Agreement Progress Indicator (non-template mode) */}
                         {!isTemplateMode && clauses.length > 0 && (() => {
                             const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-                            const fullyAgreedCount = leafClauses.filter(c => isBothPartiesAgreed(c.clauseId)).length
-                            const partiallyAgreedCount = leafClauses.filter(c => isAnyPartyAgreed(c.clauseId) && !isBothPartiesAgreed(c.clauseId)).length
+                            const agreedCount = leafClauses.filter(c => agreedClauseIds.has(c.clauseId)).length
                             const totalCount = leafClauses.length
-                            const allFullyAgreed = fullyAgreedCount === totalCount && totalCount > 0
-                            const progressPercent = totalCount > 0 ? (fullyAgreedCount / totalCount) * 100 : 0
-                            const partialPercent = totalCount > 0 ? ((fullyAgreedCount + partiallyAgreedCount) / totalCount) * 100 : 0
+                            const allAgreed = agreedCount === totalCount && totalCount > 0
+                            const progressPercent = totalCount > 0 ? (agreedCount / totalCount) * 100 : 0
 
                             return (
                                 <div className="flex items-center gap-3 flex-shrink-0">
-                                    <div className="w-40">
+                                    <div className="w-32">
                                         <div className="flex items-center justify-between text-xs mb-1">
-                                            <span className={allFullyAgreed ? 'text-emerald-600 font-medium' : 'text-slate-500'}>
-                                                {fullyAgreedCount}/{totalCount} agreed
-                                                {partiallyAgreedCount > 0 && <span className="text-amber-500 ml-1">({partiallyAgreedCount} pending)</span>}
+                                            <span className={allAgreed ? 'text-emerald-600 font-medium' : 'text-slate-500'}>
+                                                {agreedCount}/{totalCount} agreed
                                             </span>
                                         </div>
-                                        <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden relative">
-                                            {/* Partial agreement (amber background) */}
+                                        <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                             <div
-                                                className="absolute h-full rounded-full bg-amber-300 transition-all duration-500"
-                                                style={{ width: `${partialPercent}%` }}
-                                            />
-                                            {/* Full agreement (green foreground) */}
-                                            <div
-                                                className={`absolute h-full rounded-full transition-all duration-500 ${allFullyAgreed ? 'bg-emerald-500' : 'bg-emerald-400'}`}
+                                                className={`h-full rounded-full transition-all duration-500 ${allAgreed ? 'bg-emerald-500' : 'bg-amber-400'}`}
                                                 style={{ width: `${progressPercent}%` }}
                                             />
                                         </div>
@@ -1778,41 +1748,21 @@ INSTRUCTIONS:
                             /* ---- NORMAL MODE: Commit Contract ---- */
                             (() => {
                                 const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-                                const allFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
-                                const currentUserFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasCurrentUserAgreed(c.clauseId))
-                                const otherPartyFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasOtherPartyAgreed(c.clauseId))
-
-                                // Button state based on agreement status
-                                let buttonClass = 'bg-amber-600 hover:bg-amber-700' // Default: not all agreed
-                                let buttonText = 'Commit Contract'
-                                let buttonIcon = (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                    </svg>
-                                )
-
-                                if (allFullyAgreed) {
-                                    buttonClass = 'bg-emerald-600 hover:bg-emerald-700'
-                                    buttonText = 'Both Agreed - Commit'
-                                } else if (currentUserFullyAgreed) {
-                                    buttonClass = 'bg-sky-600 hover:bg-sky-700'
-                                    buttonText = `Awaiting ${getOtherPartyName()}`
-                                    buttonIcon = (
-                                        <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    )
-                                }
+                                const allAgreed = leafClauses.length > 0 && leafClauses.every(c => agreedClauseIds.has(c.clauseId))
 
                                 return (
                                     <button
                                         onClick={() => setCommitModalState('confirm')}
-                                        disabled={leafClauses.length === 0 || currentUserFullyAgreed}
-                                        className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${buttonClass} disabled:bg-slate-300 disabled:cursor-not-allowed`}
-                                        title={currentUserFullyAgreed && !allFullyAgreed ? `You've committed. Waiting for ${getOtherPartyName()} to commit.` : ''}
+                                        disabled={leafClauses.length === 0}
+                                        className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${allAgreed
+                                            ? 'bg-emerald-600 hover:bg-emerald-700'
+                                            : 'bg-amber-600 hover:bg-amber-700'
+                                            } disabled:bg-slate-300`}
                                     >
-                                        {buttonIcon}
-                                        {buttonText}
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        Commit Contract
                                     </button>
                                 )
                             })()
@@ -1942,78 +1892,93 @@ INSTRUCTIONS:
                                             {isExpanded && children.map(child => {
                                                 const isClickable = child.processingStatus === 'certified' || child.processingStatus === 'failed'
                                                 const isSelected = selectedClause?.clauseId === child.clauseId
+                                                const isMenuOpen = clauseMenuOpen === child.clauseId
 
                                                 return (
-                                                    <button
-                                                        key={child.clauseId}
-                                                        onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
-                                                        disabled={!isClickable}
-                                                        className={`w-full flex items-center gap-2 pl-8 pr-3 py-2 text-left transition-colors ${isSelected
-                                                            ? 'bg-teal-50 border-l-2 border-teal-500'
-                                                            : isClickable
-                                                                ? 'hover:bg-slate-50 border-l-2 border-transparent'
-                                                                : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
-                                                            }`}
-                                                    >
-                                                        <StatusIcon status={child.processingStatus} />
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-1">
-                                                                <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'
-                                                                    }`}>
-                                                                    {child.clauseNumber}
-                                                                </span>
-                                                                <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'
-                                                                    }`}>
-                                                                    {child.clauseName}
-                                                                </span>
+                                                    <div key={child.clauseId} className="relative group">
+                                                        <button
+                                                            onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
+                                                            disabled={!isClickable}
+                                                            className={`w-full flex items-center gap-2 pl-8 pr-8 py-2 text-left transition-colors ${isSelected
+                                                                ? 'bg-teal-50 border-l-2 border-teal-500'
+                                                                : isClickable
+                                                                    ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                                                    : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
+                                                                }`}
+                                                        >
+                                                            <StatusIcon status={child.processingStatus} />
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'
+                                                                        }`}>
+                                                                        {child.clauseNumber}
+                                                                    </span>
+                                                                    <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'
+                                                                        }`}>
+                                                                        {child.clauseName}
+                                                                    </span>
+                                                                </div>
                                                             </div>
+                                                            {child.clarenceCertified && child.clarencePosition && (
+                                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
+                                                                    child.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
+                                                                        'bg-red-100 text-red-700'
+                                                                    }`}>
+                                                                    {child.clarencePosition.toFixed(1)}
+                                                                </span>
+                                                            )}
+                                                            {/* Agreement/Query status indicator */}
+                                                            {agreedClauseIds.has(child.clauseId) && (
+                                                                <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Agreed">
+                                                                    <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </span>
+                                                            )}
+                                                            {queriedClauseIds.has(child.clauseId) && (
+                                                                <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
+                                                                    <span className="text-white text-[9px] font-bold">?</span>
+                                                                </span>
+                                                            )}
+                                                        </button>
+
+                                                        {/* 3-dot kebab menu */}
+                                                        <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    setClauseMenuOpen(isMenuOpen ? null : child.clauseId)
+                                                                }}
+                                                                className={`p-1 rounded hover:bg-slate-200 transition-colors ${isMenuOpen ? 'bg-slate-200' : 'opacity-0 group-hover:opacity-100'}`}
+                                                                title="Clause options"
+                                                            >
+                                                                <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
+                                                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                                                </svg>
+                                                            </button>
+
+                                                            {/* Dropdown menu */}
+                                                            {isMenuOpen && (
+                                                                <div
+                                                                    ref={clauseMenuRef}
+                                                                    className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                                                >
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            handleDeleteClauseClick(child)
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                        </svg>
+                                                                        Delete Clause
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                        {child.clarenceCertified && child.clarencePosition && (
-                                                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                                child.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
-                                                                    'bg-blue-100 text-blue-700'
-                                                                }`}>
-                                                                {child.clarencePosition.toFixed(1)}
-                                                            </span>
-                                                        )}
-                                                        {/* Agreement/Query status indicator - Dual party tracking */}
-                                                        {(() => {
-                                                            const status = getAgreementStatus(child.clauseId)
-                                                            if (status === 'both') {
-                                                                return (
-                                                                    <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Both parties agreed">
-                                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                                        </svg>
-                                                                    </span>
-                                                                )
-                                                            }
-                                                            if (status === 'you_only') {
-                                                                return (
-                                                                    <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0" title={`You agreed - awaiting ${getOtherPartyName()}`}>
-                                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                        </svg>
-                                                                    </span>
-                                                                )
-                                                            }
-                                                            if (status === 'other_only') {
-                                                                return (
-                                                                    <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title={`${getOtherPartyName()} agreed - awaiting you`}>
-                                                                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
-                                                                        </svg>
-                                                                    </span>
-                                                                )
-                                                            }
-                                                            return null
-                                                        })()}
-                                                        {queriedClauseIds.has(child.clauseId) && (
-                                                            <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
-                                                                <span className="text-white text-[9px] font-bold">?</span>
-                                                            </span>
-                                                        )}
-                                                    </button>
+                                                    </div>
                                                 )
                                             })}
                                         </div>
@@ -2022,75 +1987,90 @@ INSTRUCTIONS:
                                     // ---- STANDALONE CLAUSE (no children) ----
                                     const isClickable = parent.processingStatus === 'certified' || parent.processingStatus === 'failed'
                                     const isSelected = selectedClause?.clauseId === parent.clauseId
+                                    const isMenuOpen = clauseMenuOpen === parent.clauseId
 
                                     return (
-                                        <button
-                                            key={parent.clauseId}
-                                            onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
-                                            disabled={!isClickable}
-                                            className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${isSelected
-                                                ? 'bg-teal-50 border-l-2 border-teal-500'
-                                                : isClickable
-                                                    ? 'hover:bg-slate-50 border-l-2 border-transparent'
-                                                    : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
-                                                }`}
-                                        >
-                                            <StatusIcon status={parent.processingStatus} />
-                                            <div className="flex-1 min-w-0">
-                                                <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
-                                                    {parent.clauseNumber}.
-                                                </span>
-                                                {' '}
-                                                <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
-                                                    {parent.clauseName}
-                                                </span>
+                                        <div key={parent.clauseId} className="relative group">
+                                            <button
+                                                onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
+                                                disabled={!isClickable}
+                                                className={`w-full flex items-center gap-2 px-3 pr-8 py-2 text-left transition-colors ${isSelected
+                                                    ? 'bg-teal-50 border-l-2 border-teal-500'
+                                                    : isClickable
+                                                        ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                                        : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
+                                                    }`}
+                                            >
+                                                <StatusIcon status={parent.processingStatus} />
+                                                <div className="flex-1 min-w-0">
+                                                    <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
+                                                        {parent.clauseNumber}.
+                                                    </span>
+                                                    {' '}
+                                                    <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
+                                                        {parent.clauseName}
+                                                    </span>
+                                                </div>
+                                                {parent.clarenceCertified && parent.clarencePosition && (
+                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition <= 3 ? 'bg-emerald-100 text-emerald-700' :
+                                                        parent.clarencePosition <= 7 ? 'bg-amber-100 text-amber-700' :
+                                                            'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        {parent.clarencePosition.toFixed(1)}
+                                                    </span>
+                                                )}
+                                                {/* Agreement/Query status indicator */}
+                                                {agreedClauseIds.has(parent.clauseId) && (
+                                                    <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Agreed">
+                                                        <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    </span>
+                                                )}
+                                                {queriedClauseIds.has(parent.clauseId) && (
+                                                    <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
+                                                        <span className="text-white text-[9px] font-bold">?</span>
+                                                    </span>
+                                                )}
+                                            </button>
+
+                                            {/* 3-dot kebab menu */}
+                                            <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setClauseMenuOpen(isMenuOpen ? null : parent.clauseId)
+                                                    }}
+                                                    className={`p-1 rounded hover:bg-slate-200 transition-colors ${isMenuOpen ? 'bg-slate-200' : 'opacity-0 group-hover:opacity-100'}`}
+                                                    title="Clause options"
+                                                >
+                                                    <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                                    </svg>
+                                                </button>
+
+                                                {/* Dropdown menu */}
+                                                {isMenuOpen && (
+                                                    <div
+                                                        ref={clauseMenuRef}
+                                                        className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                                    >
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleDeleteClauseClick(parent)
+                                                            }}
+                                                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                            Delete Clause
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
-                                            {parent.clarenceCertified && parent.clarencePosition && (
-                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                    parent.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
-                                                        'bg-blue-100 text-blue-700'
-                                                    }`}>
-                                                    {parent.clarencePosition.toFixed(1)}
-                                                </span>
-                                            )}
-                                            {/* Agreement/Query status indicator - Dual party tracking */}
-                                            {(() => {
-                                                const status = getAgreementStatus(parent.clauseId)
-                                                if (status === 'both') {
-                                                    return (
-                                                        <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Both parties agreed">
-                                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </span>
-                                                    )
-                                                }
-                                                if (status === 'you_only') {
-                                                    return (
-                                                        <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0" title={`You agreed - awaiting ${getOtherPartyName()}`}>
-                                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </span>
-                                                    )
-                                                }
-                                                if (status === 'other_only') {
-                                                    return (
-                                                        <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title={`${getOtherPartyName()} agreed - awaiting you`}>
-                                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
-                                                            </svg>
-                                                        </span>
-                                                    )
-                                                }
-                                                return null
-                                            })()}
-                                            {queriedClauseIds.has(parent.clauseId) && (
-                                                <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
-                                                    <span className="text-white text-[9px] font-bold">?</span>
-                                                </span>
-                                            )}
-                                        </button>
+                                        </div>
                                     )
                                 }
                             })
@@ -2149,90 +2129,35 @@ INSTRUCTIONS:
                             {!isTemplateMode && selectedClause.clarenceCertified && (
                                 <div className="flex-shrink-0 px-6 py-3 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
                                     <div className="flex items-center justify-between">
-                                        {/* Left: Agreement status - Dual party tracking */}
+                                        {/* Left: Agreement status */}
                                         <div className="flex items-center gap-3">
-                                            {(() => {
-                                                const status = getAgreementStatus(selectedClause.clauseId)
-                                                const otherPartyName = getOtherPartyName()
-
-                                                // BOTH AGREED - Fully locked
-                                                if (status === 'both') {
-                                                    return (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium border border-emerald-200">
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                                                </svg>
-                                                                Both Parties Agreed
-                                                            </span>
-                                                            <span className="text-xs text-slate-500">Clause locked</span>
-                                                        </div>
-                                                    )
-                                                }
-
-                                                // YOU AGREED, AWAITING THEM
-                                                if (status === 'you_only') {
-                                                    return (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-100 text-sky-700 rounded-full text-sm font-medium border border-sky-200">
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                </svg>
-                                                                You Agreed
-                                                            </span>
-                                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-medium border border-slate-200">
-                                                                <svg className="w-3 h-3 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                </svg>
-                                                                Awaiting {otherPartyName}
-                                                            </span>
-                                                            <button
-                                                                onClick={() => handleWithdrawAgreement(selectedClause.clauseId)}
-                                                                className="text-xs text-slate-400 hover:text-red-500 transition-colors"
-                                                                title="Withdraw agreement"
-                                                            >
-                                                                Withdraw
-                                                            </button>
-                                                        </div>
-                                                    )
-                                                }
-
-                                                // THEY AGREED, AWAITING YOU
-                                                if (status === 'other_only') {
-                                                    return (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full text-sm font-medium border border-amber-200">
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                </svg>
-                                                                {otherPartyName} Agreed
-                                                            </span>
-                                                            <button
-                                                                onClick={() => handleAgreeClause(selectedClause.clauseId)}
-                                                                className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                </svg>
-                                                                Agree
-                                                            </button>
-                                                        </div>
-                                                    )
-                                                }
-
-                                                // NEITHER AGREED
-                                                return (
-                                                    <button
-                                                        onClick={() => handleAgreeClause(selectedClause.clauseId)}
-                                                        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
-                                                    >
+                                            {agreedClauseIds.has(selectedClause.clauseId) ? (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium border border-emerald-200">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                         </svg>
-                                                        Agree
+                                                        Agreed
+                                                    </span>
+                                                    <button
+                                                        onClick={() => handleWithdrawAgreement(selectedClause.clauseId)}
+                                                        className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+                                                        title="Withdraw agreement"
+                                                    >
+                                                        Withdraw
                                                     </button>
-                                                )
-                                            })()}
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleAgreeClause(selectedClause.clauseId)}
+                                                    className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                    Agree
+                                                </button>
+                                            )}
 
                                             {queriedClauseIds.has(selectedClause.clauseId) && (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium border border-amber-200">
@@ -2298,7 +2223,6 @@ INSTRUCTIONS:
                                                     ))}
 
                                                     {/* CLARENCE Badge - Only marker shown */}
-                                                    {/* POSITION BAR: Left = Provider-Favoring (1), Right = Customer-Favoring (10) */}
                                                     {selectedClause.clarencePosition !== null && (
                                                         <div
                                                             className="absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all cursor-grab active:cursor-grabbing hover:scale-110"
@@ -2344,11 +2268,11 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
-                                                {/* Scale Labels - Provider on LEFT (1), Customer on RIGHT (10) */}
+                                                {/* Scale Labels */}
                                                 <div className="flex justify-between mt-4 text-xs text-slate-500">
-                                                    <span>Provider-Favoring</span>
-                                                    <span>Balanced</span>
                                                     <span>Customer-Favoring</span>
+                                                    <span>Balanced</span>
+                                                    <span>Provider-Favoring</span>
                                                 </div>
                                             </div>
 
@@ -2637,14 +2561,10 @@ INSTRUCTIONS:
                                         {/* Full Contract Event Summary */}
                                         <div className="bg-white rounded-xl border border-slate-200 p-5">
                                             <h3 className="text-sm font-semibold text-slate-700 mb-3">Contract Summary</h3>
-                                            <div className="grid grid-cols-4 gap-3 text-center">
+                                            <div className="grid grid-cols-3 gap-3 text-center">
                                                 <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-                                                    <div className="text-2xl font-bold text-emerald-700">{getFullyAgreedCount()}</div>
-                                                    <div className="text-xs text-emerald-600">Both Agreed</div>
-                                                </div>
-                                                <div className="p-3 bg-sky-50 rounded-lg border border-sky-200">
-                                                    <div className="text-2xl font-bold text-sky-700">{getPartiallyAgreedCount()}</div>
-                                                    <div className="text-xs text-sky-600">Partial</div>
+                                                    <div className="text-2xl font-bold text-emerald-700">{agreedClauseIds.size}</div>
+                                                    <div className="text-xs text-emerald-600">Agreed</div>
                                                 </div>
                                                 <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
                                                     <div className="text-2xl font-bold text-amber-700">{queriedClauseIds.size}</div>
@@ -2652,7 +2572,7 @@ INSTRUCTIONS:
                                                 </div>
                                                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                                                     <div className="text-2xl font-bold text-slate-700">
-                                                        {clauses.filter(c => !c.isHeader && c.clarenceCertified).length - getFullyAgreedCount() - getPartiallyAgreedCount()}
+                                                        {clauses.filter(c => !c.isHeader && c.clarenceCertified).length - agreedClauseIds.size}
                                                     </div>
                                                     <div className="text-xs text-slate-500">Outstanding</div>
                                                 </div>
@@ -3000,35 +2920,15 @@ INSTRUCTIONS:
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
 
                         {commitModalState === 'success' ? (
-                            /* ---- Success State - Both parties committed ---- */
+                            /* ---- Success State ---- */
                             <div className="p-8 text-center">
                                 <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                     </svg>
                                 </div>
-                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Contract Fully Committed</h3>
-                                <p className="text-sm text-slate-500">Both parties have agreed. Redirecting to Document Centre...</p>
-                            </div>
-
-                        ) : commitModalState === 'waiting_other_party' ? (
-                            /* ---- Waiting for Other Party State ---- */
-                            <div className="p-8 text-center">
-                                <div className="w-16 h-16 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <svg className="w-8 h-8 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Your Commitment Recorded</h3>
-                                <p className="text-sm text-slate-500 mb-4">
-                                    Awaiting {getOtherPartyName()} to commit. You'll be notified when they do.
-                                </p>
-                                <button
-                                    onClick={() => setCommitModalState('closed')}
-                                    className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium transition-colors text-sm"
-                                >
-                                    Continue Reviewing
-                                </button>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Contract Committed</h3>
+                                <p className="text-sm text-slate-500">Your commitment has been recorded. Redirecting to Document Centre...</p>
                             </div>
 
                         ) : commitModalState === 'processing' ? (
@@ -3045,18 +2945,16 @@ INSTRUCTIONS:
                             /* ---- Confirmation State ---- */
                             (() => {
                                 const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-                                const myAgreedCount = leafClauses.filter(c => hasCurrentUserAgreed(c.clauseId)).length
-                                const myUnagreedCount = leafClauses.length - myAgreedCount
-                                const allMyAgreed = myUnagreedCount === 0
-                                const otherFullyAgreed = leafClauses.every(c => hasOtherPartyAgreed(c.clauseId))
-                                const bothWillBeFullyAgreed = otherFullyAgreed // After commit, we'll be fully agreed, so check if other party is too
+                                const agreedCount = leafClauses.filter(c => agreedClauseIds.has(c.clauseId)).length
+                                const unagreedCount = leafClauses.length - agreedCount
+                                const allAgreed = unagreedCount === 0
 
                                 return (
                                     <>
                                         <div className="p-6 border-b border-slate-200">
                                             <div className="flex items-center gap-3 mb-3">
-                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${allMyAgreed ? 'bg-emerald-100' : 'bg-amber-100'}`}>
-                                                    <svg className={`w-5 h-5 ${allMyAgreed ? 'text-emerald-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${allAgreed ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                                                    <svg className={`w-5 h-5 ${allAgreed ? 'text-emerald-600' : 'text-amber-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                                     </svg>
                                                 </div>
@@ -3068,41 +2966,18 @@ INSTRUCTIONS:
                                         </div>
 
                                         <div className="p-6">
-                                            {/* Your agreement status */}
-                                            {allMyAgreed ? (
+                                            {allAgreed ? (
                                                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
-                                                    <p className="text-sm text-emerald-800 font-medium">
-                                                        You've agreed to all {leafClauses.length} clauses.
-                                                    </p>
+                                                    <p className="text-sm text-emerald-800 font-medium">All {leafClauses.length} clauses have been individually agreed.</p>
+                                                    <p className="text-sm text-emerald-700 mt-1">Committing will finalise your agreement and move to signing.</p>
                                                 </div>
                                             ) : (
                                                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                                                     <p className="text-sm text-amber-800 font-medium">
-                                                        You haven't individually agreed to {myUnagreedCount} clause{myUnagreedCount !== 1 ? 's' : ''}.
+                                                        {unagreedCount} of {leafClauses.length} clause{unagreedCount !== 1 ? 's have' : ' has'} not been individually agreed.
                                                     </p>
                                                     <p className="text-sm text-amber-700 mt-1">
-                                                        Committing will agree to all outstanding clauses on your behalf.
-                                                    </p>
-                                                </div>
-                                            )}
-
-                                            {/* Other party status */}
-                                            {bothWillBeFullyAgreed ? (
-                                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
-                                                    <p className="text-sm text-emerald-800 font-medium">
-                                                        ✓ {getOtherPartyName()} has already committed.
-                                                    </p>
-                                                    <p className="text-sm text-emerald-700 mt-1">
-                                                        Your commit will finalise the agreement for both parties.
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-4">
-                                                    <p className="text-sm text-sky-800 font-medium">
-                                                        {getOtherPartyName()} hasn't committed yet.
-                                                    </p>
-                                                    <p className="text-sm text-sky-700 mt-1">
-                                                        The contract will be finalised once they also commit.
+                                                        Committing will agree to all outstanding clauses on your behalf. Are you sure you want to proceed?
                                                     </p>
                                                 </div>
                                             )}
@@ -3122,13 +2997,13 @@ INSTRUCTIONS:
                                             </button>
                                             <button
                                                 onClick={handleCommitContract}
-                                                className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm ${allMyAgreed ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+                                                className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm ${allAgreed ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
                                                     }`}
                                             >
                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                                 </svg>
-                                                {allMyAgreed ? 'Commit Contract' : 'Agree All & Commit'}
+                                                {allAgreed ? 'Commit Contract' : 'Agree All & Commit'}
                                             </button>
                                         </div>
                                     </>
@@ -3205,6 +3080,94 @@ INSTRUCTIONS:
                                 </div>
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 7E-2: DELETE CLAUSE CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showDeleteConfirm && deleteClauseTarget && (
+                <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+                        {/* Header */}
+                        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-800">Delete Clause</h3>
+                                    <p className="text-sm text-slate-500">This action cannot be undone</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="px-6 py-4">
+                            <p className="text-slate-600 mb-4">
+                                Are you sure you want to delete this clause from the {isTemplateMode ? 'template' : 'contract'}?
+                            </p>
+
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                                <div className="flex items-start gap-3">
+                                    <span className="text-sm font-mono text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                        {deleteClauseTarget.clauseNumber}
+                                    </span>
+                                    <div>
+                                        <p className="font-medium text-slate-800">{deleteClauseTarget.clauseName}</p>
+                                        <p className="text-sm text-slate-500 mt-1">{deleteClauseTarget.category}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Warning for parent clauses */}
+                            {(deleteClauseTarget.clauseLevel === 0 || deleteClauseTarget.clauseLevel === 1) &&
+                                clauses.some(c => c.parentClauseId === deleteClauseTarget.clauseId) && (
+                                    <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                        <div className="flex items-start gap-2">
+                                            <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                            </svg>
+                                            <p className="text-sm text-amber-800">
+                                                This clause has sub-clauses. Deleting it will also remove all its child clauses.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+                            <button
+                                onClick={handleCancelDelete}
+                                disabled={deletingClause}
+                                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmDeleteClause}
+                                disabled={deletingClause}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {deletingClause ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete Clause
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -40,6 +40,10 @@ import {
 } from '@/lib/pathway-utils'
 import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressHeader';
 
+// ROLE MATRIX: Import role selection component and types
+import YourRoleStep from '@/app/components/create-phase/YourRoleStep'
+import { type PartyRole, getContractType } from '@/lib/role-matrix'
+
 // ============================================================================
 // SECTION 1: TYPE DEFINITIONS
 // ============================================================================
@@ -49,7 +53,7 @@ type ContractType = 'nda' | 'saas' | 'bpo' | 'msa' | 'employment' | 'custom' | n
 type TemplateSource = 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
 
 // WP1 CHANGE: Reordered steps - contract_type now comes before mediation_type
-type AssessmentStep = 'welcome' | 'contract_type' | 'mediation_type' | 'quick_intake' | 'template_source' | 'template_selection' | 'upload_processing' | 'summary' | 'creating'
+type AssessmentStep = 'welcome' | 'contract_type' | 'your_role' | 'mediation_type' | 'quick_intake' | 'template_source' | 'template_selection' | 'upload_processing' | 'summary' | 'creating'
 
 type DealValueRange = 'under_50k' | '50k_250k' | '250k_1m' | 'over_1m' | null
 type ServiceCriticality = 'low' | 'medium' | 'high' | 'critical' | null
@@ -97,6 +101,9 @@ interface AssessmentState {
     uploadedContractStatus: 'processing' | 'ready' | 'failed' | null
     uploadedFileName: string | null
     quickIntake: QuickIntakeData
+    // ROLE MATRIX: Contract type key and initiator role
+    contractTypeKey: string | null
+    initiatorPartyRole: PartyRole | null
 }
 
 interface ChatMessage {
@@ -194,6 +201,16 @@ const EVALUATION_PRIORITY_OPTIONS: { value: EvaluationPriority; label: string; i
     { value: 'relationship', label: 'Partnership Potential', icon: '*' }
 ]
 
+// ROLE MATRIX: Map old ContractType values to new contractTypeKey values
+const CONTRACT_TYPE_KEY_MAP: Record<string, string> = {
+    'nda': 'nda_mutual',
+    'saas': 'saas_agreement',
+    'bpo': 'bpo_agreement',
+    'msa': 'service_agreement',
+    'employment': 'employment_contract',
+    'custom': 'service_agreement'  // Fallback - user selects role which clarifies
+}
+
 const POLLING_INTERVAL = 5000
 const MAX_POLLING_ATTEMPTS = 60
 
@@ -223,27 +240,32 @@ Select the type that best matches your needs. This helps me suggest appropriate 
     // WP1 NEW: Messages for after contract type selection (before mediation)
     contract_type_nda_selected: `**Non-Disclosure Agreement** - great choice for protecting confidential information.
 
-Now let's talk about how much negotiation you expect...`,
+Now let's confirm which party you are in this agreement...`,
 
     contract_type_saas_selected: `**SaaS Agreement** - perfect for software service subscriptions.
 
-Now let's discuss the negotiation approach...`,
+Let's confirm which party you are...`,
 
     contract_type_bpo_selected: `**BPO / Outsourcing Agreement** - ideal for managed service relationships.
 
-Let's determine how flexible the negotiation needs to be...`,
+Let's confirm your role in this agreement...`,
 
     contract_type_msa_selected: `**Master Services Agreement** - a strong foundation for ongoing partnerships.
 
-How much negotiation are you expecting?`,
+Let's confirm which party you are...`,
 
     contract_type_employment_selected: `**Employment Contract** - essential for formalizing the employment relationship.
 
-Let's discuss how the terms will be finalized...`,
+Let's confirm your role in this contract...`,
 
     contract_type_custom_selected: `**Custom Contract** - I'll help you build exactly what you need.
 
-First, let's understand the negotiation requirements...`,
+First, let's confirm your role in this agreement...`,
+
+    // ROLE MATRIX: Your Role step message
+    your_role: `**Which party are you in this agreement?**
+
+This tells CLARENCE which side of the negotiation you're on, so I can show you the right perspective on every clause position.`,
 
     // WP1 CHANGE: Mediation selection now comes after contract type
     mediation_selection: `**How much negotiation do you expect?**
@@ -458,7 +480,10 @@ function ContractCreationContent() {
             qualificationThreshold: 65,
             evaluationPriorities: ['quality', 'cost', 'risk_mitigation'],
             mustHaveCapabilities: ''
-        }
+        },
+        // ROLE MATRIX: Defaults
+        contractTypeKey: null,
+        initiatorPartyRole: null
     })
 
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
@@ -894,18 +919,41 @@ function ContractCreationContent() {
     // ========================================================================
 
     // WP1: Contract type is now selected FIRST
+    // ROLE MATRIX: Now goes to your_role step instead of straight to mediation_type
     const handleContractTypeSelect = (contractType: ContractType) => {
-        setAssessment(prev => ({ ...prev, contractType }))
+        // ROLE MATRIX: Derive the contractTypeKey from the selected contract type
+        const contractTypeKey = CONTRACT_TYPE_KEY_MAP[contractType || ''] || 'service_agreement'
+        setAssessment(prev => ({ ...prev, contractType, contractTypeKey }))
         const label = CONTRACT_TYPE_OPTIONS.find(o => o.value === contractType)?.label || 'Contract'
         addUserMessage(`I'm creating a ${label}`)
 
         // Get the appropriate follow-up message
         const messageKey = `contract_type_${contractType}_selected` as keyof typeof CLARENCE_MESSAGES
-        const followUpMessage = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.mediation_selection
+        const followUpMessage = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.your_role
 
         setTimeout(() => {
             addClarenceMessage(followUpMessage)
-            // WP1: Now proceed to mediation type selection
+            // ROLE MATRIX: Now proceed to Your Role selection
+            setAssessment(prev => ({ ...prev, step: 'your_role' }))
+            setTimeout(() => {
+                addClarenceMessage(CLARENCE_MESSAGES.your_role)
+            }, 500)
+        }, 300)
+    }
+
+    // ROLE MATRIX: Handle role selection, then proceed to mediation type
+    const handleRoleSelect = (role: PartyRole) => {
+        setAssessment(prev => ({ ...prev, initiatorPartyRole: role }))
+
+        // Get role label for chat message
+        const contractTypeDef = getContractType(assessment.contractTypeKey || 'service_agreement')
+        const roleLabel = role === 'protected'
+            ? (contractTypeDef?.protectedPartyLabel || 'Protected Party')
+            : (contractTypeDef?.providingPartyLabel || 'Providing Party')
+        addUserMessage(`I'm the ${roleLabel}`)
+
+        setTimeout(() => {
+            addClarenceMessage(`**${roleLabel}** - understood! I'll show positions from your perspective.\n\nNow let's decide how much negotiation you expect...`)
             setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
             setTimeout(() => {
                 addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
@@ -1044,13 +1092,16 @@ function ContractCreationContent() {
                     isTraining: isTrainingMode,
                     mediation_type: assessment.mediationType,
                     contract_type: assessment.contractType,
-                    contract_name: assessment.contractName,  // ADD THIS LINE
+                    contract_name: assessment.contractName,
                     template_source: assessment.templateSource,
                     source_template_id: assessment.selectedTemplateId,
                     uploaded_contract_id: assessment.uploadedContractId,
                     pathway_id: pathwayId,
                     assessment_completed: true,
-                    deal_context: dealContext  // WP3: Enhanced with tendering
+                    deal_context: dealContext,
+                    // ROLE MATRIX: Pass role data to session
+                    contract_type_key: assessment.contractTypeKey,
+                    initiator_party_role: assessment.initiatorPartyRole
                 })
             })
 
@@ -1133,8 +1184,10 @@ function ContractCreationContent() {
 
     const renderProgressPanel = () => {
         // WP1 CHANGE: Reordered steps - contract_type now comes before mediation_type
+        // ROLE MATRIX: Added your_role step between contract_type and mediation_type
         const baseSteps = [
             { id: 'contract_type', label: 'Contract Type', icon: '*' },
+            { id: 'your_role', label: 'Your Role', icon: '*' },
             { id: 'mediation_type', label: 'Mediation Type', icon: '*' },
         ]
 
@@ -1149,10 +1202,10 @@ function ContractCreationContent() {
 
         const steps = [...baseSteps, ...quickIntakeStep, ...remainingSteps]
 
-        // WP1: Updated step order for comparison
-        const stepOrder = ['welcome', 'contract_type', 'mediation_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
+        // ROLE MATRIX: Updated step order with your_role
+        const stepOrder = ['welcome', 'contract_type', 'your_role', 'mediation_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
         const currentIndex = stepOrder.indexOf(assessment.step)
-
+        
         return (
             <div className={`h-full ${isTrainingMode ? 'bg-amber-50/30' : 'bg-emerald-50/30'} border-r border-slate-200 flex flex-col`}>
                 <div className="p-4 border-b border-slate-200 bg-white">
@@ -1243,6 +1296,15 @@ function ContractCreationContent() {
                 <CreateProgressBar currentStage="create_contract" />
                 <div className="flex-1 overflow-auto p-6">
                     {assessment.step === 'contract_type' && renderContractType()}
+                    {assessment.step === 'your_role' && (
+                        <div className="max-w-2xl mx-auto">
+                            <YourRoleStep
+                                contractTypeKey={assessment.contractTypeKey || 'service_agreement'}
+                                initiatorPartyRole={assessment.initiatorPartyRole}
+                                onRoleSelect={handleRoleSelect}
+                            />
+                        </div>
+                    )}
                     {assessment.step === 'mediation_type' && renderMediationType()}
                     {assessment.step === 'quick_intake' && renderQuickIntake()}
                     {assessment.step === 'template_source' && renderTemplateSource()}
@@ -1695,15 +1757,15 @@ function ContractCreationContent() {
                             key={tab.key}
                             onClick={() => setTemplateFilter(tab.key)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${templateFilter === tab.key
-                                    ? `${colors.btnPrimary} text-white`
-                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? `${colors.btnPrimary} text-white`
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                 }`}
                         >
                             {tab.label}
                             {tab.count > 0 && (
                                 <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${templateFilter === tab.key
-                                        ? 'bg-white/20 text-white'
-                                        : 'bg-slate-200 text-slate-500'
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-slate-200 text-slate-500'
                                     }`}>
                                     {tab.count}
                                 </span>
@@ -1788,6 +1850,28 @@ function ContractCreationContent() {
                             </div>
                         </div>
                     </div>
+
+                    {/* ROLE MATRIX: Show Your Role */}
+                    {assessment.initiatorPartyRole && assessment.contractTypeKey && (
+                        <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">👤</span>
+                                <div>
+                                    <p className="text-sm text-slate-500">Your Role</p>
+                                    <p className="font-medium text-slate-800">
+                                        {(() => {
+                                            const ct = getContractType(assessment.contractTypeKey || '')
+                                            if (!ct) return assessment.initiatorPartyRole === 'protected' ? 'Protected Party' : 'Providing Party'
+                                            return assessment.initiatorPartyRole === 'protected'
+                                                ? ct.protectedPartyLabel
+                                                : ct.providingPartyLabel
+                                        })()}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* WP1: Show Mediation Type second */}
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                         <div className="flex items-center gap-3">
