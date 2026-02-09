@@ -154,7 +154,7 @@ const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstu
 const MEDIATION_OPTIONS: AssessmentOption[] = [
     {
         id: 'straight',
-        label: 'Quick Contract',
+        label: 'Quick to Contract',
         description: 'Standard template with minimal or no negotiation. Perfect for routine agreements like NDAs or standard service terms.',
         value: 'straight_to_contract',
         icon: '*'
@@ -965,7 +965,7 @@ function ContractCreationContent() {
     const handleMediationSelect = (mediationType: MediationType) => {
         // Quick Contract redirect - STC now has its own dedicated product
         if (mediationType === 'straight_to_contract') {
-            const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Quick Contract'
+            const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Quick to Contract'
             addUserMessage(`I'd like ${label}`)
             setTimeout(() => {
                 addClarenceMessage("Great choice! Quick Contract is perfect for standard agreements. Let me take you to the Quick Contract studio...")
@@ -1205,7 +1205,7 @@ function ContractCreationContent() {
         // ROLE MATRIX: Updated step order with your_role
         const stepOrder = ['welcome', 'contract_type', 'your_role', 'mediation_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
         const currentIndex = stepOrder.indexOf(assessment.step)
-        
+
         return (
             <div className={`h-full ${isTrainingMode ? 'bg-amber-50/30' : 'bg-emerald-50/30'} border-r border-slate-200 flex flex-col`}>
                 <div className="p-4 border-b border-slate-200 bg-white">
