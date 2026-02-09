@@ -179,17 +179,19 @@ export default function QuickContractDashboard() {
         try {
             setLoading(true)
 
-            // For MVP, we'll load from Supabase directly
-            // In production, this would go through N8N workflow
+            // FIX: Filter by created_by_user_id (not company_id)
+            // This ensures each user only sees their own Quick Contracts
+            // Previously filtered by company_id which caused:
+            //   - Admin seeing ALL contracts across all users
+            //   - Other users seeing nothing (null/mismatched companyId)
             const { data, error } = await supabase
                 .from('qc_dashboard_summary')
                 .select('*')
-                .eq('company_id', user.companyId)
+                .eq('created_by_user_id', user.userId)
                 .order('created_at', { ascending: false })
 
             if (error) {
                 console.error('Error loading Quick Contracts:', error)
-                // Fallback to empty array - N8N workflow will be implemented
                 setContracts([])
                 return
             }
