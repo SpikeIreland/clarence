@@ -53,6 +53,7 @@ interface Contract {
     extractedText: string | null
 }
 
+
 interface ContractClause {
     clauseId: string
     positionId: string
@@ -60,11 +61,11 @@ interface ContractClause {
     clauseName: string
     category: string
     clauseText: string
-    originalText: string | null  // Full original text from document
+    originalText: string | null
     clauseLevel: number
     displayOrder: number
     parentClauseId: string | null
-    // CLARENCE Certification fields
+    // CLARENCE Certification fields (AI assessment - never overwrite)
     clarenceCertified: boolean
     clarencePosition: number | null
     clarenceFairness: string | null
@@ -72,6 +73,9 @@ interface ContractClause {
     clarenceAssessment: string | null
     clarenceFlags: string[]
     clarenceCertifiedAt: string | null
+    // Party position fields (user adjustments during negotiation)
+    initiatorPosition: number | null
+    respondentPosition: number | null
     // Value extraction fields (from document)
     extractedValue: string | null
     extractedUnit: string | null
@@ -82,7 +86,6 @@ interface ContractClause {
     draftModified: boolean
     // Position options (from clause library)
     positionOptions: PositionOption[]
-    // In the interface definition, add:
     isHeader: boolean
     processingStatus: 'pending' | 'processing' | 'certified' | 'failed'
 }
@@ -262,6 +265,9 @@ function QuickContractStudioContent() {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
     const [chatLoading, setChatLoading] = useState(false)
+    const chatEndRef = useRef<HTMLDivElement>(null)
+    const clauseMenuRef = useRef<HTMLDivElement>(null)
+    const clauseListRef = useRef<HTMLDivElement>(null)
 
     // Party Chat state (simplified - component handles its own state)
     const [partyChatOpen, setPartyChatOpen] = useState(false)
@@ -285,13 +291,13 @@ function QuickContractStudioContent() {
     // Clause options menu state (for 3-dot menu)
     const [clauseMenuOpen, setClauseMenuOpen] = useState<string | null>(null)
 
+    // NEW: Auto-save state for position persistence
+    const [dirtyPositions, setDirtyPositions] = useState<Map<string, number>>(new Map())
+    const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+    const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
-
-    // Refs
-    const clauseListRef = useRef<HTMLDivElement>(null)
-    const chatEndRef = useRef<HTMLDivElement>(null)
-    const clauseMenuRef = useRef<HTMLDivElement>(null)
 
     // ========================================================================
     // SECTION 4B: AUTHENTICATION & DATA LOADING
@@ -398,6 +404,11 @@ function QuickContractStudioContent() {
                     clarenceAssessment: c.clarence_assessment,
                     clarenceFlags: c.clarence_flags || [],
                     clarenceCertifiedAt: c.clarence_certified_at,
+                    // PERSISTENCE: Load party positions from database
+                    // These are null until a party adjusts the slider
+                    // clarence_position stays as the untouched AI baseline
+                    initiatorPosition: c.initiator_position ?? null,
+                    respondentPosition: c.respondent_position ?? null,
                     // Value extraction fields
                     extractedValue: c.extracted_value,
                     extractedUnit: c.extracted_unit,
@@ -413,9 +424,28 @@ function QuickContractStudioContent() {
 
                 setClauses(mappedClauses)
 
-                // Auto-select first clause
-                if (mappedClauses.length > 0) {
+                // PERSISTENCE: Restore selected clause from LocalStorage, or default to first
+                const savedClauseIndex = localStorage.getItem(`qc_studio_${contractId}_selectedClause`)
+                if (savedClauseIndex !== null && parseInt(savedClauseIndex) < mappedClauses.length) {
+                    setSelectedClauseIndex(parseInt(savedClauseIndex))
+                } else if (mappedClauses.length > 0) {
                     setSelectedClauseIndex(0)
+                }
+
+                // PERSISTENCE: Restore active tab from LocalStorage
+                const savedTab = localStorage.getItem(`qc_studio_${contractId}_activeTab`)
+                if (savedTab && ['overview', 'history', 'tradeoffs', 'draft'].includes(savedTab)) {
+                    setActiveTab(savedTab as 'overview' | 'history' | 'tradeoffs' | 'draft')
+                }
+
+                // PERSISTENCE: Restore expanded sections from LocalStorage
+                const savedSections = localStorage.getItem(`qc_studio_${contractId}_expandedSections`)
+                if (savedSections) {
+                    try {
+                        setExpandedSections(new Set(JSON.parse(savedSections)))
+                    } catch (e) {
+                        // Ignore corrupt LocalStorage data
+                    }
                 }
 
                 // Load clause events for agreement tracking
@@ -1075,6 +1105,13 @@ function QuickContractStudioContent() {
     const handleCommitContract = async () => {
         if (!contract || !userInfo) return
 
+        // PERSISTENCE: Force-save any unsaved position adjustments before committing
+        const saveSuccess = await forceSavePositions()
+        if (!saveSuccess) {
+            setError('Failed to save position changes. Please try again before committing.')
+            return
+        }
+
         setCommitModalState('processing')
         const partyRole = getPartyRole()
 
@@ -1697,6 +1734,177 @@ INSTRUCTIONS:
         if (position >= 4) return 'bg-amber-500'    // Balanced
         return 'bg-blue-500'                        // Provider-favoring
     }
+
+
+    // ========================================================================
+    // SECTION 4G: AUTO-SAVE TIMER & LOCALSTORAGE PERSISTENCE
+    // ========================================================================
+
+    // Helper: Get the current user's position column name
+    const getPositionColumn = useCallback((): 'initiator_position' | 'respondent_position' => {
+        const role = getPartyRole()
+        return role === 'initiator' ? 'initiator_position' : 'respondent_position'
+    }, [contract, userInfo])
+
+    // Helper: Get the display position for the current user
+    // Falls back: user's adjusted position → CLARENCE assessment → null
+    const getUserDisplayPosition = useCallback((clause: ContractClause): number | null => {
+        const role = getPartyRole()
+        const userPosition = role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
+        return userPosition ?? clause.clarencePosition ?? null
+    }, [contract, userInfo])
+
+    // Auto-save dirty positions every 30 seconds
+    useEffect(() => {
+        if (dirtyPositions.size === 0) return
+
+        const timer = setTimeout(async () => {
+            if (dirtyPositions.size === 0 || !userInfo) return
+
+            setAutoSaveStatus('saving')
+            const positionColumn = getPositionColumn()
+            const timestampColumn = positionColumn === 'initiator_position'
+                ? 'initiator_position_updated_at'
+                : 'respondent_position_updated_at'
+
+            try {
+                // Batch update all dirty positions
+                const updates = Array.from(dirtyPositions.entries())
+                let failCount = 0
+
+                for (const [clauseId, position] of updates) {
+                    const { error } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .update({
+                            [positionColumn]: position,
+                            [timestampColumn]: new Date().toISOString()
+                        })
+                        .eq('clause_id', clauseId)
+
+                    if (error) {
+                        console.error(`Auto-save failed for clause ${clauseId}:`, error)
+                        failCount++
+                    }
+                }
+
+                if (failCount === 0) {
+                    // All saved successfully — clear dirty state
+                    setDirtyPositions(new Map())
+                    setAutoSaveStatus('saved')
+                    setLastSavedAt(new Date())
+
+                    // Reset status indicator after 3 seconds
+                    setTimeout(() => setAutoSaveStatus('idle'), 3000)
+                } else {
+                    setAutoSaveStatus('error')
+                    setTimeout(() => setAutoSaveStatus('idle'), 5000)
+                }
+
+            } catch (err) {
+                console.error('Auto-save error:', err)
+                setAutoSaveStatus('error')
+                setTimeout(() => setAutoSaveStatus('idle'), 5000)
+            }
+        }, 30000) // 30-second debounce
+
+        return () => clearTimeout(timer)
+    }, [dirtyPositions, userInfo, getPositionColumn, supabase])
+
+    // Save UI state to LocalStorage when it changes
+    useEffect(() => {
+        if (!contractId) return
+        if (selectedClauseIndex !== null) {
+            localStorage.setItem(`qc_studio_${contractId}_selectedClause`, String(selectedClauseIndex))
+        }
+    }, [selectedClauseIndex, contractId])
+
+    useEffect(() => {
+        if (!contractId) return
+        localStorage.setItem(`qc_studio_${contractId}_activeTab`, activeTab)
+    }, [activeTab, contractId])
+
+    useEffect(() => {
+        if (!contractId) return
+        localStorage.setItem(`qc_studio_${contractId}_expandedSections`, JSON.stringify([...expandedSections]))
+    }, [expandedSections, contractId])
+
+    // Save dirty positions immediately when user navigates away
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (dirtyPositions.size > 0) {
+                e.preventDefault()
+                e.returnValue = 'You have unsaved position changes. Are you sure you want to leave?'
+            }
+        }
+
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [dirtyPositions])
+
+    // Handler for position slider changes (called from render section)
+    const handlePositionChange = useCallback((clauseId: string, newPosition: number) => {
+        const role = getPartyRole()
+
+        // Update local state immediately (responsive UI)
+        setClauses(prev => prev.map(c =>
+            c.clauseId === clauseId
+                ? {
+                    ...c,
+                    ...(role === 'initiator'
+                        ? { initiatorPosition: newPosition }
+                        : { respondentPosition: newPosition }
+                    )
+                }
+                : c
+        ))
+
+        // Mark as dirty for auto-save
+        setDirtyPositions(prev => {
+            const next = new Map(prev)
+            next.set(clauseId, newPosition)
+            return next
+        })
+
+        // Reset save indicator to show unsaved state
+        setAutoSaveStatus('idle')
+    }, [contract, userInfo])
+
+    // Force-save all dirty positions now (for manual "Save" or before commit)
+    const forceSavePositions = useCallback(async () => {
+        if (dirtyPositions.size === 0 || !userInfo) return true
+
+        setAutoSaveStatus('saving')
+        const positionColumn = getPositionColumn()
+        const timestampColumn = positionColumn === 'initiator_position'
+            ? 'initiator_position_updated_at'
+            : 'respondent_position_updated_at'
+
+        try {
+            for (const [clauseId, position] of dirtyPositions.entries()) {
+                const { error } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .update({
+                        [positionColumn]: position,
+                        [timestampColumn]: new Date().toISOString()
+                    })
+                    .eq('clause_id', clauseId)
+
+                if (error) throw error
+            }
+
+            setDirtyPositions(new Map())
+            setAutoSaveStatus('saved')
+            setLastSavedAt(new Date())
+            setTimeout(() => setAutoSaveStatus('idle'), 3000)
+            return true
+        } catch (err) {
+            console.error('Force save error:', err)
+            setAutoSaveStatus('error')
+            return false
+        }
+    }, [dirtyPositions, userInfo, getPositionColumn, supabase])
+
+
 
     // ========================================================================
     // SECTION 5A: PROGRESSIVE LOADING - POLL FOR CLAUSE STATUS UPDATES
@@ -2547,15 +2755,16 @@ INSTRUCTIONS:
 
                                                     {/* CLARENCE Badge - Only marker shown */}
                                                     {/* POSITION BAR: Left = Provider-Favoring (1), Right = Customer-Favoring (10) */}
-                                                    {selectedClause.clarencePosition !== null && (
+                                                    {/* PERSISTENCE: Display user's adjusted position if set, otherwise CLARENCE's */}
+                                                    {getUserDisplayPosition(selectedClause) !== null && (
                                                         <div
                                                             className="absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all cursor-grab active:cursor-grabbing hover:scale-110"
                                                             style={{
-                                                                left: `${((selectedClause.clarencePosition - 1) / 9) * 100}%`,
+                                                                left: `${(((getUserDisplayPosition(selectedClause) || 5) - 1) / 9) * 100}%`,
                                                                 top: '50%',
                                                                 transform: 'translate(-50%, -50%)'
                                                             }}
-                                                            title={`CLARENCE recommends: ${selectedClause.clarencePosition.toFixed(1)} - Drag to adjust`}
+                                                            title={`Position: ${(getUserDisplayPosition(selectedClause) || 5).toFixed(1)} - Drag to adjust`}
                                                             draggable={false}
                                                             onMouseDown={(e) => {
                                                                 e.preventDefault()
@@ -2569,18 +2778,32 @@ INSTRUCTIONS:
                                                                     const newPosition = 1 + (percent * 9)
                                                                     const roundedPosition = Math.round(newPosition * 2) / 2 // Round to nearest 0.5
 
-                                                                    // Update the clause position
+                                                                    // PERSISTENCE: Update party position (not clarencePosition)
+                                                                    const role = getPartyRole()
                                                                     setClauses(prev => prev.map(c =>
                                                                         c.clauseId === selectedClause.clauseId
-                                                                            ? { ...c, clarencePosition: roundedPosition }
+                                                                            ? {
+                                                                                ...c,
+                                                                                ...(role === 'initiator'
+                                                                                    ? { initiatorPosition: roundedPosition }
+                                                                                    : { respondentPosition: roundedPosition }
+                                                                                )
+                                                                            }
                                                                             : c
                                                                     ))
                                                                 }
 
-                                                                const handleMouseUp = () => {
+                                                                const handleMouseUp = (upEvent: MouseEvent) => {
                                                                     document.removeEventListener('mousemove', handleMouseMove)
                                                                     document.removeEventListener('mouseup', handleMouseUp)
-                                                                    // TODO: Save to database here
+
+                                                                    // PERSISTENCE: Calculate final position and mark dirty for auto-save
+                                                                    const rect = bar.getBoundingClientRect()
+                                                                    const x = upEvent.clientX - rect.left
+                                                                    const percent = Math.max(0, Math.min(1, x / rect.width))
+                                                                    const finalPosition = Math.round((1 + (percent * 9)) * 2) / 2
+
+                                                                    handlePositionChange(selectedClause.clauseId, finalPosition)
                                                                 }
 
                                                                 document.addEventListener('mousemove', handleMouseMove)
