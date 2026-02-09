@@ -1546,7 +1546,7 @@ function ContractCreationContent() {
                             {/* Qualification Threshold Slider */}
                             <div className="mb-6">
                                 <div className="flex justify-between items-center mb-2">
-                                    <label className="text-sm font-medium text-slate-700">Minimum Qualification Threshold</label>
+                                    <label className="text-sm font-medium text-slate-700">Minimum Alignment Threshold</label>
                                     <span className={`text-lg font-bold ${colors.textPrimary}`}>{quickIntake.qualificationThreshold}%</span>
                                 </div>
                                 <input
