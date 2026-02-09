@@ -2,10 +2,21 @@
 
 // ============================================================================
 // QUICK CONTRACT STUDIO - Clause Review & Agreement
-// Version: 3.2 - Delete Feature + Query Resolution Fix
+// Version: 3.3 - Activity Notifications & QC Event Tracking
 // Date: 9 February 2026
 // Path: /app/auth/quick-contract/studio/[id]/page.tsx
 // 
+// CHANGES in v3.3:
+// - NEW: Separated QC event tracking from Mediation Studio (qc_clause_events table)
+// - NEW: Activity notification layer with unread tracking per party
+// - NEW: Auto-generated activity summaries for all clause events
+// - NEW: Realtime subscription for live notification push between parties
+// - NEW: History tab rebuilt as contract-wide Activity Feed with unread badges
+// - NEW: Click-to-navigate from activity items to specific clauses
+// - NEW: Mark-as-read when History tab is viewed
+// - NEW: Unread badge on History tab button
+// - Added 'draft_created', 'draft_modified', 'clause_deleted' event types
+//
 // CHANGES in v3.2:
 // - Added Delete Clause feature with 3-dot kebab menu on each clause
 // - Delete confirmation modal with parent/child warning
@@ -115,12 +126,16 @@ interface ClauseEvent {
     eventId: string
     contractId: string
     clauseId: string | null
-    eventType: 'agreed' | 'queried' | 'query_resolved' | 'position_changed' | 'redrafted' | 'committed' | 'agreement_withdrawn'
+    eventType: 'agreed' | 'queried' | 'query_resolved' | 'position_changed' | 'redrafted' | 'committed' | 'agreement_withdrawn' | 'draft_created' | 'draft_modified' | 'clause_deleted'
     userId: string
     partyRole: 'initiator' | 'respondent'
     userName: string
     message: string | null
     eventData: Record<string, unknown>
+    // Notification layer fields
+    activitySummary: string | null
+    readByInitiator: boolean
+    readByRespondent: boolean
     createdAt: string
 }
 
@@ -242,6 +257,10 @@ function QuickContractStudioContent() {
     const [initiatorAgreedIds, setInitiatorAgreedIds] = useState<Set<string>>(new Set())
     const [respondentAgreedIds, setRespondentAgreedIds] = useState<Set<string>>(new Set())
     const [queriedClauseIds, setQueriedClauseIds] = useState<Set<string>>(new Set())
+
+    // Activity notification state
+    const [unreadActivityCount, setUnreadActivityCount] = useState(0)
+    const [activityViewMode, setActivityViewMode] = useState<'all' | 'clause'>('all')
 
     // Commit modal
     const [commitModalState, setCommitModalState] = useState<CommitModalState>('closed')
@@ -450,7 +469,7 @@ function QuickContractStudioContent() {
 
                 // Load clause events for agreement tracking
                 const { data: eventsData } = await supabase
-                    .from('clause_events')
+                    .from('qc_clause_events')
                     .select('*')
                     .eq('contract_id', contractId)
                     .order('created_at', { ascending: true })
@@ -466,6 +485,9 @@ function QuickContractStudioContent() {
                         userName: e.user_name || 'Unknown',
                         message: e.message,
                         eventData: e.event_data || {},
+                        activitySummary: e.activity_summary || null,
+                        readByInitiator: e.read_by_initiator ?? false,
+                        readByRespondent: e.read_by_respondent ?? false,
                         createdAt: e.created_at
                     }))
                     setClauseEvents(mappedEvents)
@@ -502,6 +524,14 @@ function QuickContractStudioContent() {
                     setInitiatorAgreedIds(initiatorAgreed)
                     setRespondentAgreedIds(respondentAgreed)
                     setQueriedClauseIds(queried)
+
+                    // Calculate initial unread count for current user
+                    const currentRole = contractData.uploaded_by_user_id === user.userId ? 'initiator' : 'respondent'
+                    const unreadCount = mappedEvents.filter(e => {
+                        if (currentRole === 'initiator') return !e.readByInitiator
+                        return !e.readByRespondent
+                    }).length
+                    setUnreadActivityCount(unreadCount)
                 }
 
                 // Initialize chat with welcome message
@@ -557,7 +587,7 @@ function QuickContractStudioContent() {
                 c.clarencePosition !== null && c.clarencePosition !== undefined
             )
             if (preCertifiedClauses.length > 0) {
-                console.log(`âœ… ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
+                console.log(`Ã¢Å“â€¦ ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
                 // Update local state to reflect certified status
                 setClauses(prev => prev.map(c => {
                     if (!c.isHeader && c.clarencePosition !== null && c.clarencePosition !== undefined &&
@@ -928,7 +958,7 @@ function QuickContractStudioContent() {
         return clauses.filter(c => !c.isHeader && c.clarenceCertified && isAnyPartyAgreed(c.clauseId) && !isBothPartiesAgreed(c.clauseId)).length
     }
 
-    // Helper: record a clause event
+    // Helper: record a clause event to qc_clause_events (unified audit + notification)
     const recordClauseEvent = async (
         eventType: ClauseEvent['eventType'],
         clauseId: string | null,
@@ -938,8 +968,29 @@ function QuickContractStudioContent() {
         if (!userInfo || !contractId) return null
 
         const partyRole = getPartyRole()
+
+        // Auto-generate human-readable activity summary
+        const clauseName = eventData?.clause_name as string || eventData?.clause_number as string || 'a clause'
+        const summaryMap: Record<string, string> = {
+            'agreed': `${userInfo.fullName} agreed to ${clauseName}`,
+            'agreement_withdrawn': `${userInfo.fullName} withdrew agreement on ${clauseName}`,
+            'queried': `${userInfo.fullName} raised a query on ${clauseName}`,
+            'query_resolved': `Query resolved on ${clauseName} — both parties agreed`,
+            'position_changed': `${userInfo.fullName} adjusted position on ${clauseName}`,
+            'redrafted': `${userInfo.fullName} redrafted ${clauseName}`,
+            'draft_created': `${userInfo.fullName} created a draft for ${clauseName}`,
+            'draft_modified': `${userInfo.fullName} modified the draft for ${clauseName}`,
+            'committed': `${userInfo.fullName} committed the contract`,
+            'clause_deleted': `${userInfo.fullName} deleted ${clauseName}`,
+        }
+        const activitySummary = summaryMap[eventType] || `${userInfo.fullName} performed ${eventType}`
+
+        // Set read flags: actor has already "seen" their own action
+        const readByInitiator = partyRole === 'initiator'
+        const readByRespondent = partyRole === 'respondent'
+
         const { data, error: insertError } = await supabase
-            .from('clause_events')
+            .from('qc_clause_events')
             .insert({
                 contract_id: contractId,
                 clause_id: clauseId,
@@ -948,7 +999,10 @@ function QuickContractStudioContent() {
                 party_role: partyRole,
                 user_name: userInfo.fullName,
                 message: message || null,
-                event_data: eventData || {}
+                event_data: eventData || {},
+                activity_summary: activitySummary,
+                read_by_initiator: readByInitiator,
+                read_by_respondent: readByRespondent
             })
             .select()
             .single()
@@ -968,6 +1022,9 @@ function QuickContractStudioContent() {
             userName: data.user_name || userInfo.fullName,
             message: data.message,
             eventData: data.event_data || {},
+            activitySummary: data.activity_summary,
+            readByInitiator: data.read_by_initiator,
+            readByRespondent: data.read_by_respondent,
             createdAt: data.created_at
         }
 
@@ -1020,7 +1077,7 @@ function QuickContractStudioContent() {
                 const resolveMsg: ChatMessage = {
                     id: `query-resolved-${Date.now()}`,
                     role: 'assistant',
-                    content: `✅ Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
+                    content: `âœ… Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
                     timestamp: new Date()
                 }
                 setChatMessages(prev => [...prev, resolveMsg])
@@ -1029,7 +1086,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `✅ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
+                content: `âœ… You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -1264,7 +1321,7 @@ function QuickContractStudioContent() {
                     .insert(templateClauses)
             }
 
-            console.log(`âœ… Template saved with ${certifiedClauses.length} pre-certified clauses`)
+            console.log(`Ã¢Å“â€¦ Template saved with ${certifiedClauses.length} pre-certified clauses`)
             setTemplateSaved(true)
             setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
 
@@ -1673,7 +1730,7 @@ INSTRUCTIONS:
             const confirmMessage: ChatMessage = {
                 id: `clause-deleted-${Date.now()}`,
                 role: 'assistant',
-                content: `🗑️ Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
+                content: `ðŸ—‘ï¸ Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1737,6 +1794,129 @@ INSTRUCTIONS:
 
 
     // ========================================================================
+    // SECTION 4F-2: REALTIME SUBSCRIPTION FOR ACTIVITY NOTIFICATIONS
+    // ========================================================================
+
+    // Subscribe to qc_clause_events for live notification push
+    useEffect(() => {
+        if (!contractId || !userInfo) return
+
+        const channel = supabase
+            .channel(`qc-events-${contractId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'qc_clause_events',
+                    filter: `contract_id=eq.${contractId}`
+                },
+                (payload) => {
+                    const e = payload.new as Record<string, unknown>
+
+                    // Don't process events from current user (already in local state)
+                    if (e.user_id === userInfo.userId) return
+
+                    const newEvent: ClauseEvent = {
+                        eventId: e.event_id as string,
+                        contractId: e.contract_id as string,
+                        clauseId: (e.clause_id as string) || null,
+                        eventType: e.event_type as ClauseEvent['eventType'],
+                        userId: e.user_id as string,
+                        partyRole: e.party_role as 'initiator' | 'respondent',
+                        userName: (e.user_name as string) || 'Unknown',
+                        message: (e.message as string) || null,
+                        eventData: (e.event_data as Record<string, unknown>) || {},
+                        activitySummary: (e.activity_summary as string) || null,
+                        readByInitiator: (e.read_by_initiator as boolean) ?? false,
+                        readByRespondent: (e.read_by_respondent as boolean) ?? false,
+                        createdAt: e.created_at as string
+                    }
+
+                    setClauseEvents(prev => [...prev, newEvent])
+
+                    // Increment unread count (this is from the other party)
+                    setUnreadActivityCount(prev => prev + 1)
+
+                    // Update agreement/query sets based on event type
+                    if (newEvent.clauseId) {
+                        if (newEvent.eventType === 'agreed') {
+                            if (newEvent.partyRole === 'initiator') {
+                                setInitiatorAgreedIds(prev => new Set([...prev, newEvent.clauseId!]))
+                            } else {
+                                setRespondentAgreedIds(prev => new Set([...prev, newEvent.clauseId!]))
+                            }
+                        }
+                        if (newEvent.eventType === 'agreement_withdrawn') {
+                            if (newEvent.partyRole === 'initiator') {
+                                setInitiatorAgreedIds(prev => {
+                                    const next = new Set(prev)
+                                    next.delete(newEvent.clauseId!)
+                                    return next
+                                })
+                            } else {
+                                setRespondentAgreedIds(prev => {
+                                    const next = new Set(prev)
+                                    next.delete(newEvent.clauseId!)
+                                    return next
+                                })
+                            }
+                        }
+                        if (newEvent.eventType === 'queried') {
+                            setQueriedClauseIds(prev => new Set([...prev, newEvent.clauseId!]))
+                        }
+                        if (newEvent.eventType === 'query_resolved') {
+                            setQueriedClauseIds(prev => {
+                                const next = new Set(prev)
+                                next.delete(newEvent.clauseId!)
+                                return next
+                            })
+                        }
+                    }
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+        }
+    }, [contractId, userInfo, supabase])
+
+    // Mark all unread events as read for current user
+    const markActivityAsRead = useCallback(async () => {
+        if (!contractId || !userInfo || unreadActivityCount === 0) return
+
+        const partyRole = getPartyRole()
+        const readColumn = partyRole === 'initiator' ? 'read_by_initiator' : 'read_by_respondent'
+
+        // Update database
+        const { error } = await supabase
+            .from('qc_clause_events')
+            .update({ [readColumn]: true })
+            .eq('contract_id', contractId)
+            .eq(readColumn, false)
+
+        if (error) {
+            console.error('Failed to mark events as read:', error)
+            return
+        }
+
+        // Update local state
+        setClauseEvents(prev => prev.map(e => ({
+            ...e,
+            ...(partyRole === 'initiator' ? { readByInitiator: true } : { readByRespondent: true })
+        })))
+        setUnreadActivityCount(0)
+    }, [contractId, userInfo, unreadActivityCount, supabase])
+
+    // Auto-mark as read when History tab is active
+    useEffect(() => {
+        if (activeTab === 'history' && unreadActivityCount > 0) {
+            markActivityAsRead()
+        }
+    }, [activeTab, unreadActivityCount, markActivityAsRead])
+
+    // ========================================================================
     // SECTION 4G: AUTO-SAVE TIMER & LOCALSTORAGE PERSISTENCE
     // ========================================================================
 
@@ -1747,7 +1927,7 @@ INSTRUCTIONS:
     }, [contract, userInfo])
 
     // Helper: Get the display position for the current user
-    // Falls back: user's adjusted position → CLARENCE assessment → null
+    // Falls back: user's adjusted position â†’ CLARENCE assessment â†’ null
     const getUserDisplayPosition = useCallback((clause: ContractClause): number | null => {
         const role = getPartyRole()
         const userPosition = role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
@@ -1788,7 +1968,7 @@ INSTRUCTIONS:
                 }
 
                 if (failCount === 0) {
-                    // All saved successfully — clear dirty state
+                    // All saved successfully â€” clear dirty state
                     setDirtyPositions(new Map())
                     setAutoSaveStatus('saved')
                     setLastSavedAt(new Date())
@@ -2589,12 +2769,17 @@ INSTRUCTIONS:
                                             <button
                                                 key={tab}
                                                 onClick={() => setActiveTab(tab)}
-                                                className={`px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
+                                                className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
                                                     ? 'bg-white text-slate-800 shadow-sm'
                                                     : 'text-slate-500 hover:text-slate-700'
                                                     }`}
                                             >
-                                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                                {tab === 'history' ? 'Activity' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                                {tab === 'history' && unreadActivityCount > 0 && activeTab !== 'history' && (
+                                                    <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1 shadow-sm animate-pulse">
+                                                        {unreadActivityCount > 99 ? '99+' : unreadActivityCount}
+                                                    </span>
+                                                )}
                                             </button>
                                         ))}
                                     </div>
@@ -3035,18 +3220,45 @@ INSTRUCTIONS:
                                 {/* ==================== HISTORY TAB ==================== */}
                                 {activeTab === 'history' && (
                                     <div className="space-y-4">
-                                        {/* Event Timeline */}
+                                        {/* Activity Feed Header with View Toggle */}
                                         <div className="bg-white rounded-xl border border-slate-200 p-5">
-                                            <h3 className="text-sm font-semibold text-slate-700 mb-4">Clause History</h3>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h3 className="text-sm font-semibold text-slate-700">Activity Feed</h3>
+                                                <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
+                                                    <button
+                                                        onClick={() => setActivityViewMode('all')}
+                                                        className={`px-3 py-1 text-xs rounded-md transition ${activityViewMode === 'all'
+                                                            ? 'bg-white text-slate-800 shadow-sm font-medium'
+                                                            : 'text-slate-500 hover:text-slate-700'
+                                                            }`}
+                                                    >
+                                                        All Activity
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setActivityViewMode('clause')}
+                                                        className={`px-3 py-1 text-xs rounded-md transition ${activityViewMode === 'clause'
+                                                            ? 'bg-white text-slate-800 shadow-sm font-medium'
+                                                            : 'text-slate-500 hover:text-slate-700'
+                                                            }`}
+                                                    >
+                                                        This Clause
+                                                    </button>
+                                                </div>
+                                            </div>
 
                                             {(() => {
-                                                // Filter events for the selected clause + contract-level events
-                                                const clauseSpecificEvents = clauseEvents.filter(e =>
-                                                    e.clauseId === selectedClause.clauseId ||
-                                                    (e.eventType === 'committed' && !e.clauseId)
-                                                )
+                                                // Filter events based on view mode
+                                                const filteredEvents = activityViewMode === 'clause'
+                                                    ? clauseEvents.filter(e =>
+                                                        e.clauseId === selectedClause.clauseId ||
+                                                        (e.eventType === 'committed' && !e.clauseId)
+                                                    )
+                                                    : [...clauseEvents]
 
-                                                if (clauseSpecificEvents.length === 0) {
+                                                // Show newest first
+                                                const sortedEvents = [...filteredEvents].reverse()
+
+                                                if (sortedEvents.length === 0) {
                                                     return (
                                                         <div className="text-center py-8">
                                                             <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -3054,15 +3266,37 @@ INSTRUCTIONS:
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                                 </svg>
                                                             </div>
-                                                            <p className="text-slate-500 text-sm">No events yet for this clause.</p>
-                                                            <p className="text-slate-400 text-xs mt-1">Use the Agree or Query buttons above to get started.</p>
+                                                            <p className="text-slate-500 text-sm">
+                                                                {activityViewMode === 'clause'
+                                                                    ? 'No events yet for this clause.'
+                                                                    : 'No activity yet on this contract.'
+                                                                }
+                                                            </p>
+                                                            <p className="text-slate-400 text-xs mt-1">Use the Agree or Query buttons to get started.</p>
                                                         </div>
                                                     )
                                                 }
 
+                                                // Helper: check if an event is unread by current user
+                                                const isUnread = (event: ClauseEvent): boolean => {
+                                                    const role = getPartyRole()
+                                                    if (role === 'initiator') return !event.readByInitiator
+                                                    return !event.readByRespondent
+                                                }
+
+                                                // Helper: navigate to a clause when clicking an activity item
+                                                const navigateToClause = (clauseId: string | null) => {
+                                                    if (!clauseId) return
+                                                    const clauseIndex = clauses.findIndex(c => c.clauseId === clauseId)
+                                                    if (clauseIndex >= 0) {
+                                                        setSelectedClauseIndex(clauseIndex)
+                                                        setActivityViewMode('clause')
+                                                    }
+                                                }
+
                                                 return (
-                                                    <div className="space-y-3">
-                                                        {clauseSpecificEvents.map((event) => {
+                                                    <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                                                        {sortedEvents.map((event) => {
                                                             const eventConfig: Record<string, { icon: string; color: string; label: string }> = {
                                                                 'agreed': { icon: '\u2714', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', label: 'Agreed' },
                                                                 'agreement_withdrawn': { icon: '\u21A9', color: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Agreement Withdrawn' },
@@ -3070,14 +3304,28 @@ INSTRUCTIONS:
                                                                 'query_resolved': { icon: '\u2714', color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Query Resolved' },
                                                                 'position_changed': { icon: '\u2195', color: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Position Changed' },
                                                                 'redrafted': { icon: '\u270E', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Clause Redrafted' },
+                                                                'draft_created': { icon: '\u{1F4DD}', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Draft Created' },
+                                                                'draft_modified': { icon: '\u270F\uFE0F', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', label: 'Draft Modified' },
                                                                 'committed': { icon: '\u{1F91D}', color: 'bg-emerald-100 text-emerald-800 border-emerald-300', label: 'Contract Committed' },
+                                                                'clause_deleted': { icon: '\u{1F5D1}', color: 'bg-red-100 text-red-700 border-red-200', label: 'Clause Deleted' },
                                                             }
 
                                                             const config = eventConfig[event.eventType] || { icon: '\u2022', color: 'bg-slate-100 text-slate-600 border-slate-200', label: event.eventType }
                                                             const eventDate = new Date(event.createdAt)
+                                                            const unread = isUnread(event)
+                                                            const isClickable = activityViewMode === 'all' && event.clauseId
 
                                                             return (
-                                                                <div key={event.eventId} className={`flex items-start gap-3 p-3 rounded-lg border ${config.color}`}>
+                                                                <div
+                                                                    key={event.eventId}
+                                                                    onClick={() => isClickable && navigateToClause(event.clauseId)}
+                                                                    className={`flex items-start gap-3 p-3 rounded-lg border transition ${config.color} ${isClickable ? 'cursor-pointer hover:shadow-md hover:scale-[1.01]' : ''} ${unread ? 'ring-2 ring-blue-300 ring-offset-1' : ''}`}
+                                                                >
+                                                                    {/* Unread dot */}
+                                                                    {unread && (
+                                                                        <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-blue-500 rounded-full shadow-sm" />
+                                                                    )}
+
                                                                     <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0 text-sm font-bold shadow-sm border">
                                                                         {config.icon}
                                                                     </div>
@@ -3088,9 +3336,30 @@ INSTRUCTIONS:
                                                                                 {eventDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} {eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                             </span>
                                                                         </div>
-                                                                        <p className="text-xs mt-0.5 opacity-80">
-                                                                            by {event.userName} ({event.partyRole})
-                                                                        </p>
+
+                                                                        {/* Activity summary (human-readable) */}
+                                                                        {event.activitySummary ? (
+                                                                            <p className="text-xs mt-0.5 opacity-80">
+                                                                                {event.activitySummary}
+                                                                            </p>
+                                                                        ) : (
+                                                                            <p className="text-xs mt-0.5 opacity-80">
+                                                                                by {event.userName} ({event.partyRole})
+                                                                            </p>
+                                                                        )}
+
+                                                                        {/* Clause reference badge (in All Activity view) */}
+                                                                        {activityViewMode === 'all' && event.clauseId && (
+                                                                            <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-white/60 rounded text-[11px] text-slate-500 border border-current/10">
+                                                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                                                </svg>
+                                                                                {event.eventData?.clause_number ? `${String(event.eventData.clause_number)} — ` : null}
+                                                                                {String(event.eventData?.clause_name || 'Clause')}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* Query message */}
                                                                         {event.message && (
                                                                             <p className="text-sm mt-2 p-2 bg-white/60 rounded border border-current/10 italic">
                                                                                 &ldquo;{event.message}&rdquo;
@@ -3105,7 +3374,7 @@ INSTRUCTIONS:
                                             })()}
                                         </div>
 
-                                        {/* Full Contract Event Summary */}
+                                        {/* Contract Summary Stats */}
                                         <div className="bg-white rounded-xl border border-slate-200 p-5">
                                             <h3 className="text-sm font-semibold text-slate-700 mb-3">Contract Summary</h3>
                                             <div className="grid grid-cols-4 gap-3 text-center">
@@ -3561,7 +3830,7 @@ INSTRUCTIONS:
                                             {bothWillBeFullyAgreed ? (
                                                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
                                                     <p className="text-sm text-emerald-800 font-medium">
-                                                        ✓ {getOtherPartyName()} has already committed.
+                                                        âœ“ {getOtherPartyName()} has already committed.
                                                     </p>
                                                     <p className="text-sm text-emerald-700 mt-1">
                                                         Your commit will finalise the agreement for both parties.
