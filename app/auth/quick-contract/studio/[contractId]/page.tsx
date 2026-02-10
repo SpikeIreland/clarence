@@ -638,7 +638,6 @@ function QuickContractStudioContent() {
         setChatLoading(true)
 
         try {
-            // Call CLARENCE AI endpoint
             const response = await fetch('/api/n8n/clarence-chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -648,7 +647,11 @@ function QuickContractStudioContent() {
                     clauseId: selectedClause?.clauseId,
                     clauseName: selectedClause?.clauseName,
                     clauseCategory: selectedClause?.category,
-                    context: 'quick_contract_studio'
+                    context: 'quick_contract_studio',
+                    // NEW: Context builder fields
+                    viewerRole: getPartyRole(),
+                    viewerUserId: userInfo?.userId,
+                    viewerCompanyId: userInfo?.companyId,
                 })
             })
 
