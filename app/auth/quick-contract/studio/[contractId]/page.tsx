@@ -324,6 +324,8 @@ function QuickContractStudioContent() {
     const [showDraftOfferPrompt, setShowDraftOfferPrompt] = useState(false)
     const [pendingDraftPosition, setPendingDraftPosition] = useState<number | null>(null)
     const [generatingPositionDraft, setGeneratingPositionDraft] = useState(false)
+    // Track the target position for a generated draft (so we can update clarence_position on save)
+    const [draftTargetPosition, setDraftTargetPosition] = useState<number | null>(null)
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
@@ -1403,6 +1405,7 @@ function QuickContractStudioContent() {
     const handleCancelEditing = () => {
         setIsDraftEditing(false)
         setEditingDraftText('')
+        setDraftTargetPosition(null)  // Clear target position if cancelling
     }
 
     // Save draft to database
@@ -1411,13 +1414,21 @@ function QuickContractStudioContent() {
 
         setSavingDraft(true)
         try {
+            // Build update object - include clarence_position if this was a position-targeted draft
+            const updateData: Record<string, unknown> = {
+                draft_text: editingDraftText,
+                draft_modified_at: new Date().toISOString(),
+                draft_modified_by: userInfo.userId
+            }
+
+            // If this draft was generated for a specific position, update clarence_position too
+            if (draftTargetPosition !== null) {
+                updateData.clarence_position = draftTargetPosition
+            }
+
             const { error: updateError } = await supabase
                 .from('uploaded_contract_clauses')
-                .update({
-                    draft_text: editingDraftText,
-                    draft_modified_at: new Date().toISOString(),
-                    draft_modified_by: userInfo.userId
-                })
+                .update(updateData)
                 .eq('clause_id', selectedClause.clauseId)
 
             if (updateError) throw updateError
@@ -1425,33 +1436,41 @@ function QuickContractStudioContent() {
             // Update local state
             setClauses(prev => prev.map(c =>
                 c.clauseId === selectedClause.clauseId
-                    ? { ...c, draftText: editingDraftText, draftModified: true }
+                    ? {
+                        ...c,
+                        draftText: editingDraftText,
+                        draftModified: true,
+                        // Update clarencePosition if we had a target position
+                        ...(draftTargetPosition !== null ? { clarencePosition: draftTargetPosition } : {})
+                    }
                     : c
             ))
 
             setIsDraftEditing(false)
             setEditingDraftText('')
+            setDraftTargetPosition(null)  // Clear the target position
 
-            // ================================================================
             // Log activity event and notify other party
-            // ================================================================
             await recordClauseEvent(
                 'draft_modified',
                 selectedClause.clauseId,
-                `Draft updated for ${selectedClause.clauseName}`,
+                `Draft updated for ${selectedClause.clauseName}${draftTargetPosition !== null ? ` (repositioned to ${draftTargetPosition.toFixed(1)})` : ''}`,
                 {
                     clause_name: selectedClause.clauseName,
                     clause_number: selectedClause.clauseNumber,
                     previous_position: selectedClause.clarencePosition,
+                    new_position: draftTargetPosition,
                     draft_length: editingDraftText.length
                 }
             )
 
-            // Add confirmation message to chat
+            // Add confirmation message to chat (using safe characters)
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: `âœ… Draft saved for "${selectedClause.clauseName}".\n\nThis modified text will be used when generating the final contract document.\n\nðŸ“¬ The other party has been notified of this update in their Activity Feed.`,
+                content: draftTargetPosition !== null
+                    ? `Draft saved for "${selectedClause.clauseName}" at position ${draftTargetPosition.toFixed(1)}.\n\nThe clause has been repositioned and the other party has been notified.`
+                    : `Draft saved for "${selectedClause.clauseName}".\n\nThis modified text will be used when generating the final contract document.\n\nThe other party has been notified of this update in their Activity Feed.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1461,7 +1480,7 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `draft-error-${Date.now()}`,
                 role: 'assistant',
-                content: `âŒ Failed to save draft. Please try again.`,
+                content: `Failed to save draft. Please try again.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
@@ -1548,6 +1567,8 @@ INSTRUCTIONS:
                     // Put the new draft into the editor for review
                     setEditingDraftText(newDraftText)
                     setIsDraftEditing(true)
+                    // Track the target position so we can update clarence_position when saved
+                    setDraftTargetPosition(targetPosition)
 
                     // Chat confirmation with guidance
                     const confirmMessage: ChatMessage = {
@@ -1560,9 +1581,9 @@ INSTRUCTIONS:
                                     ? `This version strengthens customer protections with more provider accountability.\n\n`
                                     : `This version balances both parties' interests.\n\n`) +
                             `The draft is now in the editor. You can:\n` +
-                            `â€¢ **Save Draft** to keep this version\n` +
-                            `â€¢ **Edit** the text further before saving\n` +
-                            `â€¢ **Cancel** to discard`,
+                            `• **Save Draft** to keep this version\n` +
+                            `• **Edit** the text further before saving\n` +
+                            `• **Cancel** to discard`,
                         timestamp: new Date()
                     }
                     setChatMessages(prev => [...prev, confirmMessage])
