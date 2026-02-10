@@ -1569,6 +1569,8 @@ INSTRUCTIONS:
                     setIsDraftEditing(true)
                     // Track the target position so we can update clarence_position when saved
                     setDraftTargetPosition(targetPosition)
+                    // Switch to Draft tab so user sees the new draft and can save it
+                    setActiveTab('draft')
 
                     // Chat confirmation with guidance
                     const confirmMessage: ChatMessage = {
