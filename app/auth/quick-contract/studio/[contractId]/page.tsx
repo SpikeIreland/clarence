@@ -315,6 +315,11 @@ function QuickContractStudioContent() {
     const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
 
+    // Draft-Position Sync: Prompt to regenerate draft after position change
+    const [showDraftOfferPrompt, setShowDraftOfferPrompt] = useState(false)
+    const [pendingDraftPosition, setPendingDraftPosition] = useState<number | null>(null)
+    const [generatingPositionDraft, setGeneratingPositionDraft] = useState(false)
+
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
 
@@ -1419,11 +1424,26 @@ function QuickContractStudioContent() {
             setIsDraftEditing(false)
             setEditingDraftText('')
 
+            // ================================================================
+            // Log activity event and notify other party
+            // ================================================================
+            await recordClauseEvent(
+                'draft_modified',
+                selectedClause.clauseId,
+                `Draft updated for ${selectedClause.clauseName}`,
+                {
+                    clause_name: selectedClause.clauseName,
+                    clause_number: selectedClause.clauseNumber,
+                    previous_position: selectedClause.clarencePosition,
+                    draft_length: editingDraftText.length
+                }
+            )
+
             // Add confirmation message to chat
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: `\u2705 Draft saved for "${selectedClause.clauseName}". This modified text will be used when generating the final contract document.`,
+                content: `✅ Draft saved for "${selectedClause.clauseName}".\n\nThis modified text will be used when generating the final contract document.\n\n📬 The other party has been notified of this update in their Activity Feed.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1433,12 +1453,141 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `draft-error-${Date.now()}`,
                 role: 'assistant',
-                content: `\u274C Failed to save draft. Please try again.`,
+                content: `❌ Failed to save draft. Please try again.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
         } finally {
             setSavingDraft(false)
+        }
+    }
+
+    // ========================================================================
+    // SECTION 4C-2B: GENERATE DRAFT FOR SPECIFIC POSITION
+    // Called when user changes position and accepts offer to regenerate draft
+    // ========================================================================
+    const handleGenerateDraftForPosition = async (targetPosition: number) => {
+        if (!selectedClause || !userInfo || generatingPositionDraft) return
+
+        const currentText = selectedClause.draftText || selectedClause.originalText || selectedClause.clauseText || ''
+        if (!currentText.trim()) return
+
+        setGeneratingPositionDraft(true)
+        setShowDraftOfferPrompt(false)
+
+        // Add a chat message showing the request
+        const requestMessage: ChatMessage = {
+            id: `position-draft-request-${Date.now()}`,
+            role: 'user',
+            content: `Redraft "${selectedClause.clauseName}" to reflect position ${targetPosition.toFixed(1)}`,
+            timestamp: new Date()
+        }
+        setChatMessages(prev => [...prev, requestMessage])
+
+        // Build direction hint based on target position
+        let directionHint = ''
+        if (targetPosition <= 3) {
+            directionHint = `Target position is ${targetPosition.toFixed(1)} (provider-favoring). Draft language that gives the provider more flexibility, shorter timelines, lower liability caps, and fewer obligations.`
+        } else if (targetPosition >= 7) {
+            directionHint = `Target position is ${targetPosition.toFixed(1)} (customer-favoring). Draft language that protects the customer with stronger warranties, longer timelines, higher liability, and more provider obligations.`
+        } else {
+            directionHint = `Target position is ${targetPosition.toFixed(1)} (balanced). Draft language that balances both parties' interests with industry-standard terms and mutual obligations.`
+        }
+
+        // Truncate very long clause text for the prompt
+        const textForPrompt = currentText.length > 3000
+            ? currentText.substring(0, 3000) + '\n... [truncated]'
+            : currentText
+
+        try {
+            const response = await fetch('/api/n8n/clarence-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: `TASK: Rewrite the following clause to reflect position ${targetPosition.toFixed(1)} on a 1-10 scale where 1 is maximum provider flexibility and 10 is maximum customer protection.
+
+CLAUSE: "${selectedClause.clauseName}" (${selectedClause.clauseNumber})
+CATEGORY: ${selectedClause.category}
+TARGET POSITION: ${targetPosition.toFixed(1)}
+CURRENT CLARENCE ASSESSMENT: ${selectedClause.clarencePosition?.toFixed(1) || 'Unknown'}
+
+${directionHint}
+
+CURRENT CLAUSE TEXT:
+${textForPrompt}
+
+INSTRUCTIONS:
+- Return ONLY the rewritten clause text, no preamble or explanation
+- Maintain the same legal structure and clause numbering
+- Keep the same subject matter and intent
+- Adjust the balance of rights and obligations to match position ${targetPosition.toFixed(1)}
+- Use clear, professional legal language
+- Do not add new topics or remove existing coverage areas
+- Preserve any specific values, dates, or defined terms from the original`,
+                    contractId: contractId,
+                    clauseId: selectedClause.clauseId,
+                    clauseName: selectedClause.clauseName,
+                    clauseCategory: selectedClause.category,
+                    context: 'position_draft_generation'
+                })
+            })
+
+            if (response.ok) {
+                const data = await response.json()
+                const newDraftText = (data.response || data.message || '').trim()
+
+                if (newDraftText && newDraftText.length > 20) {
+                    // Put the new draft into the editor for review
+                    setEditingDraftText(newDraftText)
+                    setIsDraftEditing(true)
+
+                    // Chat confirmation with guidance
+                    const confirmMessage: ChatMessage = {
+                        id: `position-draft-result-${Date.now()}`,
+                        role: 'assistant',
+                        content: `I've redrafted "${selectedClause.clauseName}" to reflect your position of ${targetPosition.toFixed(1)}.\n\n` +
+                            (targetPosition <= 3
+                                ? `This version gives the provider more flexibility with reduced obligations.\n\n`
+                                : targetPosition >= 7
+                                    ? `This version strengthens customer protections with more provider accountability.\n\n`
+                                    : `This version balances both parties' interests.\n\n`) +
+                            `The draft is now in the editor. You can:\n` +
+                            `• **Save Draft** to keep this version\n` +
+                            `• **Edit** the text further before saving\n` +
+                            `• **Cancel** to discard`,
+                        timestamp: new Date()
+                    }
+                    setChatMessages(prev => [...prev, confirmMessage])
+                } else {
+                    const errorMessage: ChatMessage = {
+                        id: `position-draft-error-${Date.now()}`,
+                        role: 'assistant',
+                        content: `I wasn't able to generate a draft for position ${targetPosition.toFixed(1)}. You can edit the draft manually or try again.`,
+                        timestamp: new Date()
+                    }
+                    setChatMessages(prev => [...prev, errorMessage])
+                }
+            } else {
+                const errorMessage: ChatMessage = {
+                    id: `position-draft-error-${Date.now()}`,
+                    role: 'assistant',
+                    content: `I wasn't able to connect to generate the draft. Please try again in a moment.`,
+                    timestamp: new Date()
+                }
+                setChatMessages(prev => [...prev, errorMessage])
+            }
+        } catch (err) {
+            console.error('Position draft generation error:', err)
+            const errorMessage: ChatMessage = {
+                id: `position-draft-error-${Date.now()}`,
+                role: 'assistant',
+                content: `An error occurred while generating the draft. Please try again.`,
+                timestamp: new Date()
+            }
+            setChatMessages(prev => [...prev, errorMessage])
+        } finally {
+            setGeneratingPositionDraft(false)
+            setPendingDraftPosition(null)
         }
     }
 
@@ -2024,6 +2173,7 @@ INSTRUCTIONS:
     // Handler for position slider changes (called from render section)
     const handlePositionChange = useCallback((clauseId: string, newPosition: number) => {
         const role = getPartyRole()
+        const clause = clauses.find(c => c.clauseId === clauseId)
 
         // Update local state immediately (responsive UI)
         setClauses(prev => prev.map(c =>
@@ -2047,7 +2197,22 @@ INSTRUCTIONS:
 
         // Reset save indicator to show unsaved state
         setAutoSaveStatus('idle')
-    }, [contract, userInfo])
+
+        // ================================================================
+        // Check if position differs significantly from CLARENCE's
+        // assessment and offer to regenerate draft
+        // ================================================================
+        if (clause && clause.clarencePosition !== null) {
+            const positionDelta = Math.abs(newPosition - clause.clarencePosition)
+
+            // If user moved position by more than 1 point from CLARENCE's assessment,
+            // offer to regenerate the draft to match their new position
+            if (positionDelta >= 1.0) {
+                setPendingDraftPosition(newPosition)
+                setShowDraftOfferPrompt(true)
+            }
+        }
+    }, [clauses, getPartyRole])
 
     // Force-save all dirty positions now (for manual "Save" or before commit)
     const forceSavePositions = useCallback(async () => {
@@ -4052,6 +4217,93 @@ INSTRUCTIONS:
                     onClose={() => setPartyChatOpen(false)}
                     onUnreadCountChange={setPartyChatUnread}
                 />
+            )}
+
+            {/* ================================================================
+                DRAFT-POSITION SYNC PROMPT OVERLAY
+                Shows when user changes position significantly from CLARENCE's assessment
+                ================================================================ */}
+            {showDraftOfferPrompt && pendingDraftPosition !== null && selectedClause && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                                    <span className="text-white text-lg">📝</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-semibold">Position Changed</h3>
+                                    <p className="text-purple-100 text-sm">Draft may need updating</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6">
+                            <p className="text-slate-700 mb-4">
+                                You've moved <strong>{selectedClause.clauseName}</strong> to position{' '}
+                                <strong className="text-purple-600">{pendingDraftPosition.toFixed(1)}</strong>
+                                {selectedClause.clarencePosition !== null && (
+                                    <>, which differs from my assessment of{' '}
+                                        <strong className="text-purple-600">{selectedClause.clarencePosition.toFixed(1)}</strong>.</>
+                                )}
+                            </p>
+
+                            <p className="text-slate-600 text-sm mb-6">
+                                The current draft language may not reflect your new position.
+                                Would you like me to redraft this clause to match?
+                            </p>
+
+                            {/* Position comparison */}
+                            <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3 mb-6">
+                                <div className="text-center">
+                                    <div className="text-xs text-slate-500 mb-1">CLARENCE Assessment</div>
+                                    <div className="text-lg font-bold text-purple-600">
+                                        {selectedClause.clarencePosition?.toFixed(1) ?? '—'}
+                                    </div>
+                                </div>
+                                <div className="text-slate-300">→</div>
+                                <div className="text-center">
+                                    <div className="text-xs text-slate-500 mb-1">Your Position</div>
+                                    <div className="text-lg font-bold text-emerald-600">
+                                        {pendingDraftPosition.toFixed(1)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="px-6 pb-6 flex gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowDraftOfferPrompt(false)
+                                    setPendingDraftPosition(null)
+                                }}
+                                className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition font-medium"
+                            >
+                                Keep Current Draft
+                            </button>
+                            <button
+                                onClick={() => handleGenerateDraftForPosition(pendingDraftPosition)}
+                                disabled={generatingPositionDraft}
+                                className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {generatingPositionDraft ? (
+                                    <>
+                                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                        Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>✨</span>
+                                        Redraft for Position {pendingDraftPosition.toFixed(1)}
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
         </div>
