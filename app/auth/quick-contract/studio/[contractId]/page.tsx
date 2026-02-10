@@ -2,10 +2,15 @@
 
 // ============================================================================
 // QUICK CONTRACT STUDIO - Clause Review & Agreement
-// Version: 3.3 - Activity Notifications & QC Event Tracking
-// Date: 9 February 2026
+// Version: 3.4 - Commit Button "Agree" Flow Fix
+// Date: 10 February 2026
 // Path: /app/auth/quick-contract/studio/[id]/page.tsx
 // 
+// CHANGES in v3.4:
+// - FIX: After committing, button now shows "Agree" instead of greyed-out
+// - "Agree" button navigates user to Document Centre (no longer trapped)
+// - Button states: "Commit Contract" → "Agree" (after commit) → "Both Agreed - Commit"
+//
 // CHANGES in v3.3:
 // - NEW: Separated QC event tracking from Mediation Studio (qc_clause_events table)
 // - NEW: Activity notification layer with unread tracking per party
@@ -592,7 +597,7 @@ function QuickContractStudioContent() {
                 c.clarencePosition !== null && c.clarencePosition !== undefined
             )
             if (preCertifiedClauses.length > 0) {
-                console.log(`Ã¢Å“â€¦ ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
+                console.log(`ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
                 // Update local state to reflect certified status
                 setClauses(prev => prev.map(c => {
                     if (!c.isHeader && c.clarencePosition !== null && c.clarencePosition !== undefined &&
@@ -983,7 +988,7 @@ function QuickContractStudioContent() {
             'agreed': `${userInfo.fullName} agreed to ${clauseName}`,
             'agreement_withdrawn': `${userInfo.fullName} withdrew agreement on ${clauseName}`,
             'queried': `${userInfo.fullName} raised a query on ${clauseName}`,
-            'query_resolved': `Query resolved on ${clauseName} — both parties agreed`,
+            'query_resolved': `Query resolved on ${clauseName} â€” both parties agreed`,
             'position_changed': `${userInfo.fullName} adjusted position on ${clauseName}`,
             'redrafted': `${userInfo.fullName} redrafted ${clauseName}`,
             'draft_created': `${userInfo.fullName} created a draft for ${clauseName}`,
@@ -1085,7 +1090,7 @@ function QuickContractStudioContent() {
                 const resolveMsg: ChatMessage = {
                     id: `query-resolved-${Date.now()}`,
                     role: 'assistant',
-                    content: `âœ… Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
+                    content: `Ã¢Å“â€¦ Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
                     timestamp: new Date()
                 }
                 setChatMessages(prev => [...prev, resolveMsg])
@@ -1094,7 +1099,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `âœ… You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
+                content: `Ã¢Å“â€¦ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -1329,7 +1334,7 @@ function QuickContractStudioContent() {
                     .insert(templateClauses)
             }
 
-            console.log(`Ã¢Å“â€¦ Template saved with ${certifiedClauses.length} pre-certified clauses`)
+            console.log(`ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Template saved with ${certifiedClauses.length} pre-certified clauses`)
             setTemplateSaved(true)
             setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
 
@@ -1446,7 +1451,7 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: `✅ Draft saved for "${selectedClause.clauseName}".\n\nThis modified text will be used when generating the final contract document.\n\n📬 The other party has been notified of this update in their Activity Feed.`,
+                content: `âœ… Draft saved for "${selectedClause.clauseName}".\n\nThis modified text will be used when generating the final contract document.\n\nðŸ“¬ The other party has been notified of this update in their Activity Feed.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -1456,7 +1461,7 @@ function QuickContractStudioContent() {
             const errorMessage: ChatMessage = {
                 id: `draft-error-${Date.now()}`,
                 role: 'assistant',
-                content: `❌ Failed to save draft. Please try again.`,
+                content: `âŒ Failed to save draft. Please try again.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, errorMessage])
@@ -1555,9 +1560,9 @@ INSTRUCTIONS:
                                     ? `This version strengthens customer protections with more provider accountability.\n\n`
                                     : `This version balances both parties' interests.\n\n`) +
                             `The draft is now in the editor. You can:\n` +
-                            `• **Save Draft** to keep this version\n` +
-                            `• **Edit** the text further before saving\n` +
-                            `• **Cancel** to discard`,
+                            `â€¢ **Save Draft** to keep this version\n` +
+                            `â€¢ **Edit** the text further before saving\n` +
+                            `â€¢ **Cancel** to discard`,
                         timestamp: new Date()
                     }
                     setChatMessages(prev => [...prev, confirmMessage])
@@ -1882,7 +1887,7 @@ INSTRUCTIONS:
             const confirmMessage: ChatMessage = {
                 id: `clause-deleted-${Date.now()}`,
                 role: 'assistant',
-                content: `ðŸ—‘ï¸ Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
+                content: `Ã°Å¸â€”â€˜Ã¯Â¸Â Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -2079,7 +2084,7 @@ INSTRUCTIONS:
     }, [contract, userInfo])
 
     // Helper: Get the display position for the current user
-    // Falls back: user's adjusted position â†’ CLARENCE assessment â†’ null
+    // Falls back: user's adjusted position Ã¢â€ â€™ CLARENCE assessment Ã¢â€ â€™ null
     const getUserDisplayPosition = useCallback((clause: ContractClause): number | null => {
         const role = getPartyRole()
         const userPosition = role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
@@ -2120,7 +2125,7 @@ INSTRUCTIONS:
                 }
 
                 if (failCount === 0) {
-                    // All saved successfully â€” clear dirty state
+                    // All saved successfully Ã¢â‚¬â€ clear dirty state
                     setDirtyPositions(new Map())
                     setAutoSaveStatus('saved')
                     setLastSavedAt(new Date())
@@ -2516,26 +2521,31 @@ INSTRUCTIONS:
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                     </svg>
                                 )
+                                let buttonAction = () => setCommitModalState('confirm')
 
                                 if (allFullyAgreed) {
+                                    // Both parties have agreed - show commit button
                                     buttonClass = 'bg-emerald-600 hover:bg-emerald-700'
                                     buttonText = 'Both Agreed - Commit'
                                 } else if (currentUserFullyAgreed) {
-                                    buttonClass = 'bg-sky-600 hover:bg-sky-700'
-                                    buttonText = `Awaiting ${getOtherPartyName()}`
+                                    // Current user has committed, waiting for other party
+                                    // Show "Agree" button that takes them to Document Centre
+                                    buttonClass = 'bg-teal-600 hover:bg-teal-700'
+                                    buttonText = 'Agree'
                                     buttonIcon = (
-                                        <svg className="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                         </svg>
                                     )
+                                    buttonAction = () => router.push('/auth/document-centre?contract_id=' + contract?.contractId)
                                 }
 
                                 return (
                                     <button
-                                        onClick={() => setCommitModalState('confirm')}
-                                        disabled={leafClauses.length === 0 || currentUserFullyAgreed}
+                                        onClick={buttonAction}
+                                        disabled={leafClauses.length === 0}
                                         className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${buttonClass} disabled:bg-slate-300 disabled:cursor-not-allowed`}
-                                        title={currentUserFullyAgreed && !allFullyAgreed ? `You've committed. Waiting for ${getOtherPartyName()} to commit.` : ''}
+                                        title={currentUserFullyAgreed && !allFullyAgreed ? `You've committed. Click to proceed to Document Centre.` : ''}
                                     >
                                         {buttonIcon}
                                         {buttonText}
@@ -3522,7 +3532,7 @@ INSTRUCTIONS:
                                                                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                                                 </svg>
-                                                                                {event.eventData?.clause_number ? `${String(event.eventData.clause_number)} — ` : null}
+                                                                                {event.eventData?.clause_number ? `${String(event.eventData.clause_number)} â€” ` : null}
                                                                                 {String(event.eventData?.clause_name || 'Clause')}
                                                                             </div>
                                                                         )}
@@ -3998,7 +4008,7 @@ INSTRUCTIONS:
                                             {bothWillBeFullyAgreed ? (
                                                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
                                                     <p className="text-sm text-emerald-800 font-medium">
-                                                        âœ“ {getOtherPartyName()} has already committed.
+                                                        Ã¢Å“â€œ {getOtherPartyName()} has already committed.
                                                     </p>
                                                     <p className="text-sm text-emerald-700 mt-1">
                                                         Your commit will finalise the agreement for both parties.
@@ -4233,7 +4243,7 @@ INSTRUCTIONS:
                         <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                                    <span className="text-white text-lg">📝</span>
+                                    <span className="text-white text-lg">ðŸ“</span>
                                 </div>
                                 <div>
                                     <h3 className="text-white font-semibold">Position Changed</h3>
@@ -4263,10 +4273,10 @@ INSTRUCTIONS:
                                 <div className="text-center">
                                     <div className="text-xs text-slate-500 mb-1">CLARENCE Assessment</div>
                                     <div className="text-lg font-bold text-purple-600">
-                                        {selectedClause.clarencePosition?.toFixed(1) ?? '—'}
+                                        {selectedClause.clarencePosition?.toFixed(1) ?? 'â€”'}
                                     </div>
                                 </div>
-                                <div className="text-slate-300">→</div>
+                                <div className="text-slate-300">â†’</div>
                                 <div className="text-center">
                                     <div className="text-xs text-slate-500 mb-1">Your Position</div>
                                     <div className="text-lg font-bold text-emerald-600">
@@ -4299,7 +4309,7 @@ INSTRUCTIONS:
                                     </>
                                 ) : (
                                     <>
-                                        <span>✨</span>
+                                        <span>âœ¨</span>
                                         Redraft for Position {pendingDraftPosition.toFixed(1)}
                                     </>
                                 )}
