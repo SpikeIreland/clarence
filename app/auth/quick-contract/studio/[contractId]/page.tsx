@@ -52,6 +52,10 @@ import { createClient } from '@/lib/supabase'
 import FeedbackButton from '@/app/components/FeedbackButton'
 import QCPartyChatPanel from '@/app/auth/quick-contract/components/qc-party-chat-panel'
 
+// ROLE MATRIX Phase 2: Dynamic position labels
+import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
+import PositionScaleIndicator from '@/app/components/PositionScaleIndicator'
+
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
 // ============================================================================
@@ -192,18 +196,19 @@ function getCategoryColor(category: string): string {
 }
 
 // Default position options when none specified
-// SCALE: 1 = Maximum Provider Flexibility, 10 = Maximum Customer Protection
+// SCALE: 1 = Maximum Flexibility (providing party), 10 = Maximum Protection (protected party)
+// Labels stay neutral; the PositionScaleIndicator shows which end favours whom
 const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
-    { value: 1, label: 'Maximum Flexibility', description: 'Strongest provider-favoring terms' },
-    { value: 2, label: 'Strong Provider Terms', description: 'Significant provider advantages' },
-    { value: 3, label: 'Provider Advantage', description: 'Provider-leaning but reasonable' },
-    { value: 4, label: 'Slight Provider Favor', description: 'Marginally provider-favoring' },
+    { value: 1, label: 'Maximum Flexibility', description: 'Most flexible terms possible' },
+    { value: 2, label: 'Strong Flexibility', description: 'Significantly flexible terms' },
+    { value: 3, label: 'Flexible Terms', description: 'Flexibility-leaning but reasonable' },
+    { value: 4, label: 'Slightly Flexible', description: 'Marginally flexibility-favoring' },
     { value: 5, label: 'Balanced', description: 'Neutral, industry standard' },
-    { value: 6, label: 'Slight Customer Favor', description: 'Marginally customer-favoring' },
-    { value: 7, label: 'Moderate Protection', description: 'Customer-leaning but reasonable' },
-    { value: 8, label: 'Strong Protection', description: 'Significant customer advantages' },
-    { value: 9, label: 'High Protection', description: 'Customer-favoring terms' },
-    { value: 10, label: 'Maximum Protection', description: 'Strongest customer-favoring terms' }
+    { value: 6, label: 'Slight Protection', description: 'Marginally protective' },
+    { value: 7, label: 'Moderate Protection', description: 'Protection-leaning but reasonable' },
+    { value: 8, label: 'Strong Protection', description: 'Significantly protective terms' },
+    { value: 9, label: 'High Protection', description: 'Highly protective terms' },
+    { value: 10, label: 'Maximum Protection', description: 'Most protective terms possible' }
 ]
 
 // ============================================================================
@@ -237,6 +242,11 @@ function QuickContractStudioContent() {
     const params = useParams()
     const searchParams = useSearchParams()
     const contractId = params?.contractId as string
+
+    // ROLE MATRIX Phase 2: Dynamic position scale labels
+    // Note: userId is populated after auth check, hook handles null gracefully
+    const [roleUserId, setRoleUserId] = useState<string | null>(null)
+    const { roleContext } = useRoleContext({ contractId, userId: roleUserId })
 
     // ========================================================================
     // SECTION 4A: STATE
@@ -366,6 +376,7 @@ function QuickContractStudioContent() {
                     companyId: user.companyId || null,
                     companyName: user.company || null
                 })
+                setRoleUserId(user.userId || null)
 
                 // Load contract
                 const { data: contractData, error: contractError } = await supabase
@@ -1963,13 +1974,25 @@ INSTRUCTIONS:
     // SECTION 4F: HELPER FUNCTIONS
     // ========================================================================
 
-    // Position color: 1=provider (blue) to 10=customer (emerald)
+    // ROLE MATRIX: Position color based on who it favours
+    // If user is protected party (position 10 favours them): high = green (good for you)
+    // If user is providing party (position 1 favours them): low = green (good for you)
     const getPositionColor = (position: number | null): string => {
         if (position === null) return 'bg-slate-200'
-        if (position >= 8) return 'bg-emerald-500'  // Strong customer
-        if (position >= 6) return 'bg-teal-500'     // Slight customer
-        if (position >= 4) return 'bg-amber-500'    // Balanced
-        return 'bg-blue-500'                        // Provider-favoring
+        if (position >= 4 && position <= 6) return 'bg-amber-500'  // Balanced
+
+        const youFavorEnd = roleContext?.positionFavorEnd ?? 10
+        if (youFavorEnd === 10) {
+            // Protected party: high positions favour you
+            if (position >= 8) return 'bg-emerald-500'
+            if (position >= 6) return 'bg-teal-500'
+            return 'bg-blue-500'
+        } else {
+            // Providing party: low positions favour you
+            if (position <= 2) return 'bg-emerald-500'
+            if (position <= 4) return 'bg-teal-500'
+            return 'bg-blue-500'
+        }
     }
 
 
@@ -3201,11 +3224,12 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
-                                                {/* Scale Labels - Provider on LEFT (1), Customer on RIGHT (10) */}
-                                                <div className="flex justify-between mt-4 text-xs text-slate-500">
-                                                    <span>Provider-Favoring</span>
-                                                    <span>Balanced</span>
-                                                    <span>Customer-Favoring</span>
+                                                {/* Scale Labels - Dynamic from Role Matrix */}
+                                                <div className="mt-4">
+                                                    <PositionScaleIndicator roleContext={roleContext} variant="full" />
+                                                    <div className="text-center mt-1">
+                                                        <span className="text-xs text-slate-400">Balanced</span>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -3324,8 +3348,14 @@ INSTRUCTIONS:
                                                                     </svg>
                                                                 </div>
                                                                 <div>
-                                                                    <div className="text-sm font-medium text-amber-800">Provider-Favoring</div>
-                                                                    <div className="text-xs text-amber-600">Terms are more favorable to the provider than typical</div>
+                                                                    <div className="text-sm font-medium text-amber-800">
+                                                                        {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Provider-Favoring'}
+                                                                    </div>
+                                                                    <div className="text-xs text-amber-600">
+                                                                        {roleContext?.positionFavorEnd === 1
+                                                                            ? 'Terms lean in your favour compared to industry standard'
+                                                                            : 'Terms lean towards the other party compared to industry standard'}
+                                                                    </div>
                                                                 </div>
                                                             </>
                                                         ) : (
@@ -3336,8 +3366,14 @@ INSTRUCTIONS:
                                                                     </svg>
                                                                 </div>
                                                                 <div>
-                                                                    <div className="text-sm font-medium text-blue-800">Customer-Protective</div>
-                                                                    <div className="text-xs text-blue-600">Terms are more favorable to you than typical</div>
+                                                                    <div className="text-sm font-medium text-blue-800">
+                                                                        {roleContext ? `Favours ${roleContext.protectedPartyLabel}` : 'Customer-Protective'}
+                                                                    </div>
+                                                                    <div className="text-xs text-blue-600">
+                                                                        {roleContext?.positionFavorEnd === 10
+                                                                            ? 'Terms lean in your favour compared to industry standard'
+                                                                            : 'Terms lean towards the other party compared to industry standard'}
+                                                                    </div>
                                                                 </div>
                                                             </>
                                                         )}

@@ -5,6 +5,9 @@ import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
 import { PartyChatPanel } from './components/party-chat-component'
 import FeedbackButton from '@/app/components/FeedbackButton'
+// ROLE MATRIX Phase 2: Dynamic position labels
+import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
+import PositionScaleIndicator from '@/app/components/PositionScaleIndicator'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -2082,6 +2085,10 @@ function ContractStudioContent() {
     const [negotiationHistory, setNegotiationHistory] = useState<NegotiationHistoryEntry[]>([])
     const [isLoadingHistory, setIsLoadingHistory] = useState(false)
     const [historyFilter, setHistoryFilter] = useState<'all' | 'positions' | 'locks' | 'agreements'>('all')
+    // ROLE MATRIX Phase 2: Dynamic position scale labels
+    const [roleSessionId, setRoleSessionId] = useState<string | null>(null)
+    const [roleUserId, setRoleUserId] = useState<string | null>(null)
+    const { roleContext } = useRoleContext({ sessionId: roleSessionId, userId: roleUserId })
 
     // Deal Context Editing state
     const [isEditingDealContext, setIsEditingDealContext] = useState(false)
@@ -3339,6 +3346,7 @@ function ContractStudioContent() {
 
                 console.log('Final determined role:', user.role)
                 setUserInfo(user)
+                setRoleUserId(user.userId || null)
 
                 // Update localStorage with correct role for this session
                 try {
@@ -3472,6 +3480,7 @@ function ContractStudioContent() {
                 console.log('Clauses from API:', clauseData.length)
 
                 setSession(sessionData)
+                setRoleSessionId(sessionData.sessionId)
                 setIsTrainingMode(sessionData.isTraining || false)
 
                 // Extract avatar info for training mode (for Party Chat AI integration)
@@ -5557,7 +5566,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     borderColor: isCustomer ? '#1d4ed8' : '#047857',
                                                     color: 'white'
                                                 }}
-                                                title={`${isCustomer ? 'Provider' : 'Customer'}: ${otherDbPosition?.toFixed(1)}`}
+                                                title={`${roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}: ${otherDbPosition?.toFixed(1)}`}
                                             >
                                                 {isCustomer ? 'P' : 'C'}
                                                 {isOtherAtClarence && (
@@ -5714,7 +5723,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                                            <span>{isCustomer ? 'Provider' : 'Customer'}</span>
+                                            <span>{roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}</span>
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <div className="w-3 h-3 rounded-full bg-purple-500"></div>
@@ -5796,7 +5805,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     borderColor: isCustomer ? '#1d4ed8' : '#047857',
                                                     color: 'white'
                                                 }}
-                                                title={`${isCustomer ? 'Provider' : 'Customer'}: ${otherDbPosition?.toFixed(1)}`}
+                                                title={`${roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}: ${otherDbPosition?.toFixed(1)}`}
                                             >
                                                 {isCustomer ? 'P' : 'C'}
                                             </div>
@@ -5889,7 +5898,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 </span>
                                                 <div className="font-medium text-slate-800">
                                                     {(proposedPosition ?? myDbPosition)?.toFixed(1)} / 10
-                                                    {hasProviderInvited && isAligned && <span className="ml-2 text-emerald-600">✓ Aligned with {isCustomer ? 'Provider' : 'Customer'}</span>}
+                                                    {hasProviderInvited && isAligned && <span className="ml-2 text-emerald-600">✓ Aligned with {roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}</span>}
                                                 </div>
                                             </div>
                                             {isProposing && (
@@ -5909,7 +5918,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         {hasProviderInvited && (
                                             <div className="flex items-center gap-1">
                                                 <div className={`w-3 h-3 rounded-full ${isCustomer ? 'bg-blue-500' : 'bg-emerald-500'}`}></div>
-                                                <span>{isCustomer ? 'Provider' : 'Customer'}</span>
+                                                <span>{roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}</span>
                                             </div>
                                         )}
                                         <div className="flex items-center gap-1">
@@ -6285,10 +6294,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         />
                     </div>
 
-                    {/* Labels under bar */}
+                    {/* Labels under bar - ROLE MATRIX dynamic */}
                     <div className="flex justify-between mt-1 text-xs text-slate-400">
-                        <span>Customer Favored</span>
-                        <span>Provider Favored</span>
+                        <span>{roleContext ? `${roleContext.protectedPartyLabel} Favored` : 'Customer Favored'}</span>
+                        <span>{roleContext ? `${roleContext.providingPartyLabel} Favored` : 'Provider Favored'}</span>
                     </div>
                 </div>
 
@@ -7503,8 +7512,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </span>
                             </div>
                             <div className="flex justify-between text-xs text-slate-400 mt-1">
-                                <span>Provider-Favourable</span>
-                                <span>Customer-Favourable</span>
+                                <span>{roleContext ? `${roleContext.providingPartyLabel}-Favourable` : 'Provider-Favourable'}</span>
+                                <span>{roleContext ? `${roleContext.protectedPartyLabel}-Favourable` : 'Customer-Favourable'}</span>
                             </div>
                         </div>
 
