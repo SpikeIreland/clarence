@@ -424,7 +424,7 @@ const CLAUSE_POSITION_OPTIONS: Record<string, PositionOption[]> = {
         { value: 4, label: 'Strict obligation', description: 'Binding obligation with penalties and long stop termination right' }
     ],
     'Relief Events': [
-        { value: 1, label: 'Broad relief', description: 'Comprehensive relief provisions favoring supplier - maximum provider protection' },
+        { value: 1, label: 'Broad relief', description: 'Comprehensive relief provisions favouring supplier - maximum provider protection' },
         { value: 2, label: 'Standard relief', description: 'Standard force majeure and customer-caused delays' },
         { value: 3, label: 'Limited relief', description: 'Relief for major force majeure events only' },
         { value: 4, label: 'No relief provision', description: 'Contract silent on relief; prevention principle applies - provider must perform' }
@@ -6296,8 +6296,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                     {/* Labels under bar - ROLE MATRIX dynamic */}
                     <div className="flex justify-between mt-1 text-xs text-slate-400">
-                        <span>{roleContext ? `${roleContext.protectedPartyLabel} Favored` : 'Customer Favored'}</span>
-                        <span>{roleContext ? `${roleContext.providingPartyLabel} Favored` : 'Provider Favored'}</span>
+                        <span>{roleContext ? `${roleContext.protectedPartyLabel} Favoured` : 'Customer Favoured'}</span>
+                        <span>{roleContext ? `${roleContext.providingPartyLabel} Favoured` : 'Provider Favoured'}</span>
                     </div>
                 </div>
 

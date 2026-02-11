@@ -30,8 +30,8 @@
 //
 // CHANGES in v3.1:
 // - CRITICAL FIX: Position scale now matches Contract Studio (legally verified)
-//   * Position 1 = Provider-Favoring (maximum provider flexibility)
-//   * Position 10 = Customer-Favoring (maximum customer protection)
+//   * Position 1 = Provider-Favouring (maximum provider flexibility)
+//   * Position 10 = Customer-Favouring (maximum customer protection)
 // - Fixed DEFAULT_POSITION_OPTIONS labels
 // - Fixed position bar scale labels (Provider left, Customer right)
 // - Fixed position badge colors (high=emerald/customer, low=blue/provider)
@@ -865,12 +865,14 @@ function QuickContractStudioContent() {
                 rationaleContent += `\n**CLARENCE Recommends:** Position ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
 
                 // Add comparison insight
+                // docPosition > clarencePosition = document is HIGHER on scale = MORE customer-protective
+                // docPosition < clarencePosition = document is LOWER on scale = MORE provider-favouring
                 if (difference < 0.5) {
                     rationaleContent += `\u2705 **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
                 } else if (clause.documentPosition > clause.clarencePosition) {
-                    rationaleContent += `\u26A0\uFE0F **Assessment:** This clause is more provider-favoring than typical. Consider whether the terms are justified for your situation.\n\n`
+                    rationaleContent += `\u{1F4A1} **Assessment:** This clause is more customer-protective than typical, which works in your favour.\n\n`
                 } else {
-                    rationaleContent += `\u{1F4A1} **Assessment:** This clause is more customer-protective than typical, which works in your favor.\n\n`
+                    rationaleContent += `\u26A0\uFE0F **Assessment:** This clause is more provider-favouring than typical. Consider whether the terms are justified for your situation.\n\n`
                 }
             } else if (clause.clarencePosition !== null) {
                 rationaleContent += `**CLARENCE Position:** ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
@@ -1525,9 +1527,9 @@ function QuickContractStudioContent() {
         // Build direction hint based on target position
         let directionHint = ''
         if (targetPosition <= 3) {
-            directionHint = `Target position is ${targetPosition.toFixed(1)} (provider-favoring). Draft language that gives the provider more flexibility, shorter timelines, lower liability caps, and fewer obligations.`
+            directionHint = `Target position is ${targetPosition.toFixed(1)} (provider-favouring). Draft language that gives the provider more flexibility, shorter timelines, lower liability caps, and fewer obligations.`
         } else if (targetPosition >= 7) {
-            directionHint = `Target position is ${targetPosition.toFixed(1)} (customer-favoring). Draft language that protects the customer with stronger warranties, longer timelines, higher liability, and more provider obligations.`
+            directionHint = `Target position is ${targetPosition.toFixed(1)} (customer-favouring). Draft language that protects the customer with stronger warranties, longer timelines, higher liability, and more provider obligations.`
         } else {
             directionHint = `Target position is ${targetPosition.toFixed(1)} (balanced). Draft language that balances both parties' interests with industry-standard terms and mutual obligations.`
         }
@@ -1713,14 +1715,14 @@ INSTRUCTIONS:
         setChatMessages(prev => [...prev, requestMessage])
 
         // Build the direction hint based on current position
-        // SCALE: 1 = Provider-Favoring, 10 = Customer-Favoring
+        // SCALE: 1 = Provider-Favouring, 10 = Customer-Favouring
         const currentPosition = selectedClause.clarencePosition
         let directionHint = ''
         if (currentPosition !== null) {
             if (currentPosition < 4) {
-                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (provider-favoring). To create a more balanced version, strengthen customer protections and introduce more equitable terms. Add reasonable safeguards for the customer without being overly aggressive.`
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (provider-favouring). To create a more balanced version, strengthen customer protections and introduce more equitable terms. Add reasonable safeguards for the customer without being overly aggressive.`
             } else if (currentPosition > 6) {
-                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (customer-favoring). To create a more balanced version, moderate the customer protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (customer-favouring). To create a more balanced version, moderate the customer protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
             } else {
                 directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (near balanced). Fine-tune the language to ensure both parties have equitable obligations and protections. Aim for clearer, more neutral phrasing.`
             }
@@ -1781,9 +1783,9 @@ INSTRUCTIONS:
                         role: 'assistant',
                         content: `I've generated a more balanced version of "${selectedClause.clauseName}".\n\n` +
                             (currentPosition !== null && currentPosition < 4
-                                ? `The original was at position ${currentPosition.toFixed(1)} (provider-favoring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
+                                ? `The original was at position ${currentPosition.toFixed(1)} (provider-favouring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
                                 : currentPosition !== null && currentPosition > 6
-                                    ? `The original was at position ${currentPosition.toFixed(1)} (customer-favoring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
+                                    ? `The original was at position ${currentPosition.toFixed(1)} (customer-favouring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
                                     : `I've refined the language for clearer, more neutral phrasing.\n\n`) +
                             `The draft is now in the editor for your review. You can:\n` +
                             `\u2022 **Save Draft** to keep the balanced version\n` +
@@ -3146,13 +3148,14 @@ INSTRUCTIONS:
                                     <div className="space-y-6">
 
                                         {/* CLARENCE Position Bar - THE STAR OF THE SHOW */}
+                                        {/* CLARENCE Position Bar - THE STAR OF THE SHOW */}
                                         <div className="bg-white rounded-xl border border-slate-200 p-5">
                                             <h3 className="text-sm font-semibold text-slate-700 mb-4">CLARENCE Recommended Position</h3>
 
                                             {/* Position Scale */}
                                             <div className="relative mb-6 pt-6 pb-2">
-                                                {/* Scale Background - with extra padding for badge */}
-                                                <div className="relative h-4 bg-gradient-to-r from-emerald-200 via-teal-200 via-50% to-blue-200 rounded-full">
+                                                {/* Scale Background - BLUE (provider/flexibility) left → EMERALD (customer/protection) right */}
+                                                <div className="relative h-4 bg-gradient-to-r from-blue-200 via-teal-200 via-50% to-emerald-200 rounded-full">
                                                     {/* Scale markers */}
                                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                                         <div
@@ -3163,7 +3166,7 @@ INSTRUCTIONS:
                                                     ))}
 
                                                     {/* CLARENCE Badge - Only marker shown */}
-                                                    {/* POSITION BAR: Left = Provider-Favoring (1), Right = Customer-Favoring (10) */}
+                                                    {/* POSITION BAR: Left = Provider-Favouring (1), Right = Customer-Favouring (10) */}
                                                     {/* PERSISTENCE: Display user's adjusted position if set, otherwise CLARENCE's */}
                                                     {getUserDisplayPosition(selectedClause) !== null && (
                                                         <div
@@ -3224,8 +3227,17 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
+                                                {/* Scale Numbers */}
+                                                <div className="flex justify-between mt-1 px-0">
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                                        <span key={n} className="text-[10px] text-slate-400 font-medium" style={{ width: '11.11%', textAlign: n === 1 ? 'left' : n === 10 ? 'right' : 'center' }}>
+                                                            {n}
+                                                        </span>
+                                                    ))}
+                                                </div>
+
                                                 {/* Scale Labels - Dynamic from Role Matrix */}
-                                                <div className="mt-4">
+                                                <div className="mt-1">
                                                     <PositionScaleIndicator roleContext={roleContext} variant="full" />
                                                     <div className="text-center mt-1">
                                                         <span className="text-xs text-slate-400">Balanced</span>
@@ -3296,10 +3308,10 @@ INSTRUCTIONS:
                                                         )}
                                                         {selectedClause.documentPosition && (
                                                             <div className="mt-2 flex items-center gap-2">
-                                                                <div className={`w-3 h-3 rounded-full ${selectedClause.documentPosition <= 3 ? 'bg-emerald-500' :
+                                                                <div className={`w-3 h-3 rounded-full ${selectedClause.documentPosition <= 3 ? 'bg-blue-500' :
                                                                     selectedClause.documentPosition <= 5 ? 'bg-teal-500' :
-                                                                        selectedClause.documentPosition <= 7 ? 'bg-blue-500' :
-                                                                            'bg-indigo-500'
+                                                                        selectedClause.documentPosition <= 7 ? 'bg-emerald-400' :
+                                                                            'bg-emerald-500'
                                                                     }`}></div>
                                                                 <span className="text-xs text-slate-500">
                                                                     {getPositionLabel(selectedClause.documentPosition)}
@@ -3321,12 +3333,14 @@ INSTRUCTIONS:
                                                 </div>
 
                                                 {/* Comparison Indicator */}
+                                                {/* docPosition > clarencePosition = document is HIGHER on scale = MORE protective (favours protected party) */}
+                                                {/* docPosition < clarencePosition = document is LOWER on scale = MORE flexible (favours providing party) */}
                                                 {selectedClause.documentPosition !== null && selectedClause.clarencePosition !== null && (
                                                     <div className={`mt-4 p-3 rounded-lg flex items-center gap-3 ${Math.abs(selectedClause.documentPosition - selectedClause.clarencePosition) < 0.5
                                                         ? 'bg-emerald-50 border border-emerald-200'
                                                         : selectedClause.documentPosition > selectedClause.clarencePosition
-                                                            ? 'bg-amber-50 border border-amber-200'
-                                                            : 'bg-blue-50 border border-blue-200'
+                                                            ? 'bg-blue-50 border border-blue-200'
+                                                            : 'bg-amber-50 border border-amber-200'
                                                         }`}>
                                                         {Math.abs(selectedClause.documentPosition - selectedClause.clarencePosition) < 0.5 ? (
                                                             <>
@@ -3342,24 +3356,6 @@ INSTRUCTIONS:
                                                             </>
                                                         ) : selectedClause.documentPosition > selectedClause.clarencePosition ? (
                                                             <>
-                                                                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
-                                                                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                                    </svg>
-                                                                </div>
-                                                                <div>
-                                                                    <div className="text-sm font-medium text-amber-800">
-                                                                        {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Provider-Favoring'}
-                                                                    </div>
-                                                                    <div className="text-xs text-amber-600">
-                                                                        {roleContext?.positionFavorEnd === 1
-                                                                            ? 'Terms lean in your favour compared to industry standard'
-                                                                            : 'Terms lean towards the other party compared to industry standard'}
-                                                                    </div>
-                                                                </div>
-                                                            </>
-                                                        ) : (
-                                                            <>
                                                                 <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                                                                     <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -3371,6 +3367,24 @@ INSTRUCTIONS:
                                                                     </div>
                                                                     <div className="text-xs text-blue-600">
                                                                         {roleContext?.positionFavorEnd === 10
+                                                                            ? 'Terms lean in your favour compared to industry standard'
+                                                                            : 'Terms lean towards the other party compared to industry standard'}
+                                                                    </div>
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center">
+                                                                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-amber-800">
+                                                                        {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Provider-Favouring'}
+                                                                    </div>
+                                                                    <div className="text-xs text-amber-600">
+                                                                        {roleContext?.positionFavorEnd === 1
                                                                             ? 'Terms lean in your favour compared to industry standard'
                                                                             : 'Terms lean towards the other party compared to industry standard'}
                                                                     </div>
