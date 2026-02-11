@@ -121,7 +121,7 @@ export default function DashboardHeader({
                                     : 'text-slate-400 hover:text-white'
                                     }`}
                             >
-                                Quick Contracts
+                                Quick to Contracts
                             </Link>
 
                             {/* Contracts Library */}
