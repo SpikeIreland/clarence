@@ -6059,6 +6059,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
     // ============================================================================
     // SECTION 11: LEVERAGE INDICATOR COMPONENT (COMPACT VERSION)
+    // REVERSED ORIENTATION: Provider (Blue) on LEFT, Customer (Emerald) on RIGHT
     // With No-Provider State
     // ============================================================================
 
@@ -6134,6 +6135,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
         // ========================================================================
         // NORMAL STATE - Full leverage display
+        // REVERSED: Provider (Blue) on LEFT, Customer (Emerald) on RIGHT
         // ========================================================================
 
         // Get leverage values - ALWAYS Customer vs Provider (not "you" vs "them")
@@ -6214,54 +6216,56 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 </div>
 
                 {/* Compact Inline Layout: Baseline + Tracker + Bar */}
+                {/* REVERSED: Provider (Blue) shown first (left), Customer (Emerald) shown second (right) */}
                 <div className="flex items-center gap-3 mb-2">
-                    {/* Baseline */}
+                    {/* Baseline - REVERSED: Provider first, Customer second */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
                         <span className="text-xs text-slate-500">◆ Baseline:</span>
                         <span className="text-sm font-bold">
-                            <span className="text-emerald-600">{customerBaseline}</span>
-                            <span className="text-slate-400">:</span>
                             <span className="text-blue-600">{providerBaseline}</span>
+                            <span className="text-slate-400">:</span>
+                            <span className="text-emerald-600">{customerBaseline}</span>
                         </span>
                     </div>
 
-                    {/* Tracker */}
+                    {/* Tracker - REVERSED: Provider first, Customer second */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
                         <span className="text-xs text-slate-500">⬡ Tracker:</span>
                         <span className="text-sm font-bold">
-                            <span className="text-emerald-600">{customerTracker}</span>
-                            <span className="text-slate-400">:</span>
                             <span className="text-blue-600">{providerTracker}</span>
+                            <span className="text-slate-400">:</span>
+                            <span className="text-emerald-600">{customerTracker}</span>
                         </span>
                         {(Math.abs(customerShift) > 0 || Math.abs(providerShift) > 0) && (
                             <span className="text-xs text-slate-400">
-                                ({customerShift > 0 ? '+' : ''}{customerShift.toFixed(0)})
+                                ({providerShift > 0 ? '+' : ''}{providerShift.toFixed(0)})
                             </span>
                         )}
                     </div>
 
-                    {/* Company Labels */}
+                    {/* Company Labels - REVERSED: Provider first, Customer second */}
                     <div className="text-xs text-slate-400 ml-auto">
-                        <span className="text-emerald-600">{customerCompanyName}</span>
-                        {' vs '}
                         <span className="text-blue-600">{providerCompanyName}</span>
+                        {' vs '}
+                        <span className="text-emerald-600">{customerCompanyName}</span>
                     </div>
                 </div>
 
                 {/* Visual Leverage Bar - Compact */}
+                {/* REVERSED: Provider (Blue) fills from LEFT, Customer (Emerald) fills from RIGHT */}
                 <div className="relative">
                     {/* Split Bar */}
                     <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
-                        {/* Customer portion - Emerald from left */}
+                        {/* Provider portion - Blue from left (REVERSED) */}
                         <div
-                            className="absolute left-0 top-0 bottom-0 bg-emerald-500 transition-all duration-500"
-                            style={{ width: `${customerTracker}%` }}
+                            className="absolute left-0 top-0 bottom-0 bg-blue-500 transition-all duration-500"
+                            style={{ width: `${providerTracker}%` }}
                         />
 
-                        {/* Provider portion - Blue from right */}
+                        {/* Customer portion - Emerald from right (REVERSED) */}
                         <div
-                            className="absolute right-0 top-0 bottom-0 bg-blue-500 transition-all duration-500"
-                            style={{ width: `${providerTracker}%` }}
+                            className="absolute right-0 top-0 bottom-0 bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${customerTracker}%` }}
                         />
 
                         {/* Center line (50% mark) */}
@@ -6271,33 +6275,33 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             title="50-50 neutral point"
                         ></div>
 
-                        {/* Customer Baseline marker */}
-                        <div
-                            className="absolute top-0 bottom-0 w-1.5 bg-emerald-950 z-20 rounded-sm"
-                            style={{
-                                left: `${customerBaseline}%`,
-                                transform: 'translateX(-50%)',
-                                boxShadow: '0 0 3px rgba(0,0,0,0.5)'
-                            }}
-                            title={`Customer Baseline: ${customerBaseline}%`}
-                        />
-
-                        {/* Provider Baseline marker */}
+                        {/* Provider Baseline marker (REVERSED: now on left side) */}
                         <div
                             className="absolute top-0 bottom-0 w-1.5 bg-blue-950 z-20 rounded-sm"
                             style={{
-                                left: `${100 - providerBaseline}%`,
+                                left: `${providerBaseline}%`,
                                 transform: 'translateX(-50%)',
                                 boxShadow: '0 0 3px rgba(0,0,0,0.5)'
                             }}
                             title={`Provider Baseline: ${providerBaseline}%`}
                         />
+
+                        {/* Customer Baseline marker (REVERSED: now on right side) */}
+                        <div
+                            className="absolute top-0 bottom-0 w-1.5 bg-emerald-950 z-20 rounded-sm"
+                            style={{
+                                left: `${100 - customerBaseline}%`,
+                                transform: 'translateX(-50%)',
+                                boxShadow: '0 0 3px rgba(0,0,0,0.5)'
+                            }}
+                            title={`Customer Baseline: ${customerBaseline}%`}
+                        />
                     </div>
 
-                    {/* Labels under bar - ROLE MATRIX dynamic */}
+                    {/* Labels under bar - REVERSED - ROLE MATRIX dynamic */}
                     <div className="flex justify-between mt-1 text-xs text-slate-400">
-                        <span>{roleContext ? `${roleContext.protectedPartyLabel} Favoured` : 'Customer Favoured'}</span>
                         <span>{roleContext ? `${roleContext.providingPartyLabel} Favoured` : 'Provider Favoured'}</span>
+                        <span>{roleContext ? `${roleContext.protectedPartyLabel} Favoured` : 'Customer Favoured'}</span>
                     </div>
                 </div>
 
