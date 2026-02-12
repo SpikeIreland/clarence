@@ -1735,8 +1735,11 @@ INSTRUCTIONS:
                     setEditingDraftText(newDraftText)
                     setIsDraftEditing(true)
                     // Track the target position so we can update clarence_position when saved
+                    console.log('=== SETTING DRAFT TARGET POSITION ===')
+                    console.log('targetPosition being set:', targetPosition)
                     setDraftTargetPosition(targetPosition)
                     draftTargetPositionRef.current = targetPosition  // Also store in ref for reliable access
+                    console.log('draftTargetPositionRef.current after setting:', draftTargetPositionRef.current)
                     // Switch to Draft tab so user sees the new draft and can save it
                     setActiveTab('draft')
 
