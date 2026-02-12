@@ -133,7 +133,7 @@ function ProviderFooter() {
                         <span className="text-slate-500 text-sm">Provider Portal</span>
                     </div>
                     <div className="text-sm">
-                        Â© {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                        &copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.
                     </div>
                 </div>
             </div>
@@ -270,8 +270,32 @@ function ProviderAuthContent() {
                     }));
                 }
 
-                // If already registered, suggest login
-                if (data.alreadyRegistered) {
+                // If already registered, store session data and suggest login
+                if (data.alreadyRegistered && data.providerId) {
+                    // Store the session data from token validation
+                    // This ensures login has the correct providerId
+                    const tokenSessionData = {
+                        providerId: data.providerId,
+                        sessionId: data.sessionId,
+                        sessionNumber: data.sessionNumber || '',
+                        companyName: data.providerCompany || '',
+                        customerCompany: data.customerCompany || '',
+                        serviceRequired: data.serviceRequired || data.contractType || '',
+                        dealValue: data.dealValue || '',
+                        intakeComplete: data.intakeComplete || false,
+                        questionnaireComplete: data.questionnaireComplete || false,
+                        fromTokenValidation: true  // Flag to indicate this came from token validation
+                    };
+                    localStorage.setItem('clarence_provider_session', JSON.stringify(tokenSessionData));
+
+                    setSuccessMessage('You already have an account. Please log in to continue.');
+                    setActiveTab('login');
+                    setLoginForm(prev => ({
+                        ...prev,
+                        email: data.invitedEmail || ''
+                    }));
+                } else if (data.alreadyRegistered) {
+                    // alreadyRegistered but no providerId - shouldn't happen but handle gracefully
                     setSuccessMessage('You already have an account. Please log in to continue.');
                     setActiveTab('login');
                     setLoginForm(prev => ({
@@ -585,7 +609,51 @@ function ProviderAuthContent() {
             localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
 
             // ================================================================
-            // STEP 3: Find active sessions for this provider
+            // STEP 3: Check for session data from token validation first
+            // ================================================================
+            const storedSession = localStorage.getItem('clarence_provider_session');
+            let tokenSession: ProviderSession | null = null;
+
+            if (storedSession) {
+                try {
+                    const parsed = JSON.parse(storedSession);
+                    // Check if this came from token validation (has the flag and providerId)
+                    if (parsed.fromTokenValidation && parsed.providerId && parsed.sessionId) {
+                        tokenSession = {
+                            sessionId: parsed.sessionId,
+                            sessionNumber: parsed.sessionNumber || '',
+                            providerId: parsed.providerId,
+                            customerCompany: parsed.customerCompany || '',
+                            serviceRequired: parsed.serviceRequired || '',
+                            dealValue: parsed.dealValue || '',
+                            status: 'registered',
+                            intakeComplete: parsed.intakeComplete || false,
+                            questionnaireComplete: parsed.questionnaireComplete || false
+                        };
+                    }
+                } catch (e) {
+                    console.error('Error parsing stored session:', e);
+                }
+            }
+
+            // If we have valid session from token validation, use it directly
+            if (tokenSession) {
+                // Remove the fromTokenValidation flag and save clean session
+                localStorage.setItem('clarence_provider_session', JSON.stringify(tokenSession));
+
+                // Determine where to redirect based on completion status
+                if (!tokenSession.intakeComplete) {
+                    router.push(`/provider/intake?session_id=${tokenSession.sessionId}&provider_id=${tokenSession.providerId}`);
+                } else if (!tokenSession.questionnaireComplete) {
+                    router.push(`/provider/questionnaire?session_id=${tokenSession.sessionId}&provider_id=${tokenSession.providerId}`);
+                } else {
+                    router.push(`/auth/contract-studio?session_id=${tokenSession.sessionId}&provider_id=${tokenSession.providerId}`);
+                }
+                return;
+            }
+
+            // ================================================================
+            // STEP 4: No token session - fetch active sessions for this provider
             // ================================================================
             const sessionsResponse = await fetch(
                 `${API_BASE}/provider-sessions-api?email=${encodeURIComponent(loginForm.email)}`
@@ -599,7 +667,7 @@ function ProviderAuthContent() {
             }
 
             // ================================================================
-            // STEP 4: Route based on sessions
+            // STEP 5: Route based on sessions
             // ================================================================
             if (sessions.length === 0) {
                 // No active sessions
@@ -922,7 +990,7 @@ function ProviderAuthContent() {
                                                 {tokenValidation.dealValue && (
                                                     <div>
                                                         <span className="text-slate-500">Value:</span>
-                                                        <p className="font-medium text-blue-600">Â£{parseInt(tokenValidation.dealValue).toLocaleString()}</p>
+                                                        <p className="font-medium text-blue-600">£{parseInt(tokenValidation.dealValue).toLocaleString()}</p>
                                                     </div>
                                                 )}
                                                 <div>
