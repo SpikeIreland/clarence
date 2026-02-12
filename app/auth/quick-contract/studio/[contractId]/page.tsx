@@ -1934,6 +1934,10 @@ INSTRUCTIONS:
                     // Put the balanced text into the editor for review
                     setEditingDraftText(balancedText)
                     setIsDraftEditing(true)
+                    // Track target position of 5.0 (balanced) so we can update clarence_position when saved
+                    setDraftTargetPosition(5.0)
+                    draftTargetPositionRef.current = 5.0
+                    console.log('=== SET BALANCED DRAFT TARGET POSITION === 5.0')
 
                     // Chat confirmation with guidance
                     const confirmMessage: ChatMessage = {
