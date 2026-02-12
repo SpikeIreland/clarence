@@ -2,14 +2,20 @@
 
 // ============================================================================
 // QUICK CONTRACT STUDIO - Clause Review & Agreement
-// Version: 3.4 - Commit Button "Agree" Flow Fix
-// Date: 10 February 2026
+// Version: 3.5 - Clause Arrival Polling Fix
+// Date: 12 February 2026
 // Path: /app/auth/quick-contract/studio/[id]/page.tsx
 // 
+// CHANGES in v3.5:
+// - FIX: Added clause arrival polling when page loads before workflow completes
+// - NEW: "Processing Document" UI state when clauses haven't arrived yet
+// - NEW: "No Clauses Found" UI state when processing finished without clauses
+// - Polling every 3 seconds for clauses to appear, auto-loads when ready
+//
 // CHANGES in v3.4:
 // - FIX: After committing, button now shows "Agree" instead of greyed-out
 // - "Agree" button navigates user to Document Centre (no longer trapped)
-// - Button states: "Commit Contract" → "Agree" (after commit) → "Both Agreed - Commit"
+// - Button states: "Commit Contract" â†’ "Agree" (after commit) â†’ "Both Agreed - Commit"
 //
 // CHANGES in v3.3:
 // - NEW: Separated QC event tracking from Mediation Studio (qc_clause_events table)
@@ -658,7 +664,7 @@ function QuickContractStudioContent() {
                 c.clarencePosition !== null && c.clarencePosition !== undefined
             )
             if (preCertifiedClauses.length > 0) {
-                console.log(`ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
+                console.log(`ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
                 // Update local state to reflect certified status
                 setClauses(prev => prev.map(c => {
                     if (!c.isHeader && c.clarencePosition !== null && c.clarencePosition !== undefined &&
@@ -1107,7 +1113,7 @@ function QuickContractStudioContent() {
             'agreed': `${userInfo.fullName} agreed to ${clauseName}`,
             'agreement_withdrawn': `${userInfo.fullName} withdrew agreement on ${clauseName}`,
             'queried': `${userInfo.fullName} raised a query on ${clauseName}`,
-            'query_resolved': `Query resolved on ${clauseName} â€” both parties agreed`,
+            'query_resolved': `Query resolved on ${clauseName} Ã¢â‚¬â€ both parties agreed`,
             'position_changed': `${userInfo.fullName} adjusted position on ${clauseName}`,
             'redrafted': `${userInfo.fullName} redrafted ${clauseName}`,
             'draft_created': `${userInfo.fullName} created a draft for ${clauseName}`,
@@ -1209,7 +1215,7 @@ function QuickContractStudioContent() {
                 const resolveMsg: ChatMessage = {
                     id: `query-resolved-${Date.now()}`,
                     role: 'assistant',
-                    content: `Ã¢Å“â€¦ Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
+                    content: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
                     timestamp: new Date()
                 }
                 setChatMessages(prev => [...prev, resolveMsg])
@@ -1218,7 +1224,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `Ã¢Å“â€¦ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
+                content: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -1453,7 +1459,7 @@ function QuickContractStudioContent() {
                     .insert(templateClauses)
             }
 
-            console.log(`ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Template saved with ${certifiedClauses.length} pre-certified clauses`)
+            console.log(`ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Template saved with ${certifiedClauses.length} pre-certified clauses`)
             setTemplateSaved(true)
             setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
 
@@ -1700,9 +1706,9 @@ INSTRUCTIONS:
                                     ? `This version strengthens customer protections with more provider accountability.\n\n`
                                     : `This version balances both parties' interests.\n\n`) +
                             `The draft is now in the editor. You can:\n` +
-                            `• **Save Draft** to keep this version\n` +
-                            `• **Edit** the text further before saving\n` +
-                            `• **Cancel** to discard`,
+                            `â€¢ **Save Draft** to keep this version\n` +
+                            `â€¢ **Edit** the text further before saving\n` +
+                            `â€¢ **Cancel** to discard`,
                         timestamp: new Date()
                     }
                     setChatMessages(prev => [...prev, confirmMessage])
@@ -2027,7 +2033,7 @@ INSTRUCTIONS:
             const confirmMessage: ChatMessage = {
                 id: `clause-deleted-${Date.now()}`,
                 role: 'assistant',
-                content: `Ã°Å¸â€”â€˜Ã¯Â¸Â Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
+                content: `ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã¢â‚¬ËœÃƒÂ¯Ã‚Â¸Ã‚Â Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -2236,7 +2242,7 @@ INSTRUCTIONS:
     }, [contract, userInfo])
 
     // Helper: Get the display position for the current user
-    // Falls back: user's adjusted position Ã¢â€ â€™ CLARENCE assessment Ã¢â€ â€™ null
+    // Falls back: user's adjusted position ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ CLARENCE assessment ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ null
     const getUserDisplayPosition = useCallback((clause: ContractClause): number | null => {
         const role = getPartyRole()
         const userPosition = role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
@@ -2277,7 +2283,7 @@ INSTRUCTIONS:
                 }
 
                 if (failCount === 0) {
-                    // All saved successfully Ã¢â‚¬â€ clear dirty state
+                    // All saved successfully ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â clear dirty state
                     setDirtyPositions(new Map())
                     setAutoSaveStatus('saved')
                     setLastSavedAt(new Date())
@@ -2416,6 +2422,116 @@ INSTRUCTIONS:
     // (Placed before early returns to comply with React hooks rules)
     // ========================================================================
 
+    // POLL FOR CLAUSES TO ARRIVE (when contract is processing but no clauses yet)
+    useEffect(() => {
+        // Only poll if we have a contract but no clauses yet
+        if (!contractId || !contract || clauses.length > 0) return
+
+        // Only poll if contract is in a processing state
+        const processingStates = ['processing', 'certifying', 'uploading', 'pending']
+        if (!processingStates.includes(contract.status)) return
+
+        console.log('[QC Studio] No clauses yet, polling for clause arrival...')
+
+        const pollForClauses = setInterval(async () => {
+            try {
+                // Check for clauses
+                const { data: clausesData, error: clausesError } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('*')
+                    .eq('contract_id', contractId)
+                    .order('display_order', { ascending: true })
+
+                if (clausesError) {
+                    console.error('Clause poll error:', clausesError)
+                    return
+                }
+
+                if (clausesData && clausesData.length > 0) {
+                    console.log(`[QC Studio] Clauses arrived! Found ${clausesData.length} clauses`)
+
+                    // Map the clauses (matching the original mapping logic)
+                    const mappedClauses: ContractClause[] = clausesData.map(c => ({
+                        clauseId: c.clause_id,
+                        positionId: c.clause_id,
+                        clauseNumber: c.clause_number,
+                        clauseName: c.clause_name,
+                        category: c.category || 'Other',
+                        clauseText: c.content || '',
+                        originalText: c.original_text || c.content || null,
+                        clauseLevel: c.clause_level || 1,
+                        displayOrder: c.display_order,
+                        parentClauseId: c.parent_clause_id,
+                        clarenceCertified: c.clarence_certified || false,
+                        clarencePosition: c.clarence_position,
+                        clarenceFairness: c.clarence_fairness,
+                        clarenceSummary: c.clarence_summary,
+                        clarenceAssessment: c.clarence_assessment,
+                        clarenceFlags: c.clarence_flags || [],
+                        clarenceCertifiedAt: c.clarence_certified_at,
+                        initiatorPosition: c.initiator_position ?? null,
+                        respondentPosition: c.respondent_position ?? null,
+                        extractedValue: c.extracted_value,
+                        extractedUnit: c.extracted_unit,
+                        valueType: c.value_type,
+                        documentPosition: c.document_position,
+                        draftText: c.draft_text || null,
+                        draftModified: !!c.draft_text,
+                        isHeader: c.is_header || false,
+                        processingStatus: c.status || 'pending',
+                        positionOptions: DEFAULT_POSITION_OPTIONS
+                    }))
+
+                    setClauses(mappedClauses)
+
+                    // Update contract clause count
+                    setContract(prev => prev ? { ...prev, clauseCount: clausesData.length } : prev)
+
+                    // Auto-select first non-header clause
+                    const firstLeaf = mappedClauses.findIndex(c => !c.isHeader)
+                    if (firstLeaf >= 0) {
+                        setSelectedClauseIndex(firstLeaf)
+                    }
+
+                    // Auto-expand sections
+                    const parentIds = new Set<string>()
+                    mappedClauses.forEach(c => {
+                        if (c.parentClauseId) parentIds.add(c.parentClauseId)
+                    })
+                    const headerIds = mappedClauses
+                        .filter(c => parentIds.has(c.clauseId))
+                        .map(c => c.clauseId)
+                    if (headerIds.length > 0) {
+                        setExpandedSections(new Set(headerIds))
+                    }
+
+                    clearInterval(pollForClauses)
+                }
+
+                // Also refresh contract status
+                const { data: contractData } = await supabase
+                    .from('uploaded_contracts')
+                    .select('status, clause_count')
+                    .eq('contract_id', contractId)
+                    .single()
+
+                if (contractData) {
+                    setContract(prev => prev ? {
+                        ...prev,
+                        status: contractData.status,
+                        clauseCount: contractData.clause_count || 0
+                    } : prev)
+                }
+
+            } catch (err) {
+                console.error('Clause arrival poll error:', err)
+            }
+        }, 3000) // Poll every 3 seconds
+
+        return () => clearInterval(pollForClauses)
+    }, [contractId, contract?.status, clauses.length])
+
+    // POLL FOR CERTIFICATION STATUS (when clauses exist but still being certified)
     useEffect(() => {
         if (!contractId || !clauses.length) return
 
@@ -2751,7 +2867,46 @@ INSTRUCTIONS:
 
                     {/* ==================== CLAUSE TREE ==================== */}
                     <div ref={clauseListRef} className="flex-1 overflow-y-auto">
-                        {(() => {
+                        {/* Waiting for clauses to arrive */}
+                        {clauses.length === 0 && contract && ['processing', 'certifying', 'uploading', 'pending'].includes(contract.status) && (
+                            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                                <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center mb-4">
+                                    <div className="w-6 h-6 border-3 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                                </div>
+                                <h3 className="text-sm font-medium text-slate-700 mb-2">Processing Document</h3>
+                                <p className="text-xs text-slate-500 mb-4">
+                                    CLARENCE is extracting and analyzing clauses from your document. This may take a few minutes for larger contracts.
+                                </p>
+                                <div className="flex items-center gap-2 text-xs text-slate-400">
+                                    <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse" />
+                                    Scanning for clause structure...
+                                </div>
+                            </div>
+                        )}
+
+                        {/* No clauses found after processing */}
+                        {clauses.length === 0 && contract && !['processing', 'certifying', 'uploading', 'pending'].includes(contract.status) && (
+                            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                                <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+                                    <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-sm font-medium text-slate-700 mb-2">No Clauses Found</h3>
+                                <p className="text-xs text-slate-500 mb-4">
+                                    Unable to extract clauses from this document. The document may be in an unsupported format or contain no recognizable clause structure.
+                                </p>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+                                >
+                                    Refresh Page
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Normal clause tree rendering */}
+                        {clauses.length > 0 && (() => {
                             // Build parent-child tree
                             const parentMap = new Map<string, ContractClause[]>()
                             const topLevel: ContractClause[] = []
@@ -3258,7 +3413,7 @@ INSTRUCTIONS:
 
                                             {/* Position Scale */}
                                             <div className="relative mb-6 pt-6 pb-2">
-                                                {/* Scale Background - BLUE (provider/flexibility) left → EMERALD (customer/protection) right */}
+                                                {/* Scale Background - BLUE (provider/flexibility) left â†’ EMERALD (customer/protection) right */}
                                                 <div className="relative h-4 bg-gradient-to-r from-blue-200 via-teal-200 via-50% to-emerald-200 rounded-full">
                                                     {/* Scale markers */}
                                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
@@ -3331,7 +3486,7 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
-                                                {/* Scale Labels — Real-world values if range mapping exists, otherwise numeric */}
+                                                {/* Scale Labels â€” Real-world values if range mapping exists, otherwise numeric */}
                                                 {rangeMappings.has(selectedClause.clauseId) && rangeMappings.get(selectedClause.clauseId)?.isDisplayable ? (
                                                     <>
                                                         <div className="flex justify-between mt-1 px-0">
@@ -3346,7 +3501,7 @@ INSTRUCTIONS:
                                                                 )
                                                             })}
                                                         </div>
-                                                        {/* Current position — show real-world value */}
+                                                        {/* Current position â€” show real-world value */}
                                                         {getUserDisplayPosition(selectedClause) !== null && (
                                                             <div className="text-center mt-2">
                                                                 <span className="text-sm font-semibold text-purple-700">
@@ -3361,7 +3516,7 @@ INSTRUCTIONS:
                                                         {rangeMappings.get(selectedClause.clauseId)?.industryStandardMin && (
                                                             <div className="text-center mt-1">
                                                                 <span className="text-[10px] text-purple-400">
-                                                                    Industry standard: {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMin)?.label || ''} — {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMax)?.label || ''}
+                                                                    Industry standard: {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMin)?.label || ''} â€” {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMax)?.label || ''}
                                                                 </span>
                                                             </div>
                                                         )}
@@ -3754,7 +3909,7 @@ INSTRUCTIONS:
                                                                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                                                 </svg>
-                                                                                {event.eventData?.clause_number ? `${String(event.eventData.clause_number)} â€” ` : null}
+                                                                                {event.eventData?.clause_number ? `${String(event.eventData.clause_number)} Ã¢â‚¬â€ ` : null}
                                                                                 {String(event.eventData?.clause_name || 'Clause')}
                                                                             </div>
                                                                         )}
@@ -4230,7 +4385,7 @@ INSTRUCTIONS:
                                             {bothWillBeFullyAgreed ? (
                                                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
                                                     <p className="text-sm text-emerald-800 font-medium">
-                                                        Ã¢Å“â€œ {getOtherPartyName()} has already committed.
+                                                        ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ {getOtherPartyName()} has already committed.
                                                     </p>
                                                     <p className="text-sm text-emerald-700 mt-1">
                                                         Your commit will finalise the agreement for both parties.
@@ -4465,7 +4620,7 @@ INSTRUCTIONS:
                         <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                                    <span className="text-white text-lg">ðŸ“</span>
+                                    <span className="text-white text-lg">Ã°Å¸â€œÂ</span>
                                 </div>
                                 <div>
                                     <h3 className="text-white font-semibold">Position Changed</h3>
@@ -4495,10 +4650,10 @@ INSTRUCTIONS:
                                 <div className="text-center">
                                     <div className="text-xs text-slate-500 mb-1">CLARENCE Assessment</div>
                                     <div className="text-lg font-bold text-purple-600">
-                                        {selectedClause.clarencePosition?.toFixed(1) ?? 'â€”'}
+                                        {selectedClause.clarencePosition?.toFixed(1) ?? 'Ã¢â‚¬â€'}
                                     </div>
                                 </div>
-                                <div className="text-slate-300">â†’</div>
+                                <div className="text-slate-300">Ã¢â€ â€™</div>
                                 <div className="text-center">
                                     <div className="text-xs text-slate-500 mb-1">Your Position</div>
                                     <div className="text-lg font-bold text-emerald-600">
@@ -4531,7 +4686,7 @@ INSTRUCTIONS:
                                     </>
                                 ) : (
                                     <>
-                                        <span>âœ¨</span>
+                                        <span>Ã¢Å“Â¨</span>
                                         Redraft for Position {pendingDraftPosition.toFixed(1)}
                                     </>
                                 )}

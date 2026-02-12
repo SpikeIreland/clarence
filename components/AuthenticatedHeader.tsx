@@ -76,7 +76,7 @@ const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.Rea
     },
     {
         key: 'quick-contracts',
-        label: 'Quick Contracts',
+        label: 'Quick to Contracts',
         href: '/auth/quick-contract',
         icon: (
             <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
