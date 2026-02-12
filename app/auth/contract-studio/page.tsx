@@ -91,6 +91,29 @@ interface PositionOption {
     description: string
 }
 
+interface RangeMappingData {
+    scale_points: {
+        position: number
+        value: number
+        label: string
+        description: string
+    }[]
+    interpolation: 'linear' | 'logarithmic' | 'stepped'
+    format_pattern: string
+    display_precision: number
+}
+
+interface RangeMapping {
+    clauseId: string
+    contractId: string
+    isDisplayable: boolean
+    valueType: string | null
+    rangeUnit: string | null
+    industryStandardMin: number | null
+    industryStandardMax: number | null
+    rangeData: RangeMappingData
+}
+
 // ============================================================================
 // SECTION 1C: CONTRACT CLAUSE INTERFACE
 // ============================================================================
@@ -2075,6 +2098,7 @@ function ContractStudioContent() {
     const [session, setSession] = useState<Session | null>(null)
     const [clauses, setClauses] = useState<ContractClause[]>([])
     const [clauseTree, setClauseTree] = useState<ContractClause[]>([])
+    const [rangeMappings, setRangeMappings] = useState<Map<string, RangeMapping>>(new Map())
     const [leverage, setLeverage] = useState<LeverageData | null>(null)
     const [selectedClause, setSelectedClause] = useState<ContractClause | null>(null)
     const [chatMessages, setChatMessages] = useState<ClauseChatMessage[]>([])
@@ -3500,6 +3524,34 @@ function ContractStudioContent() {
                 console.log('Clause tree length:', tree.length)
                 setClauseTree(tree)
                 setLeverage(leverageData)
+
+                // Load range mappings for this session's clauses
+                const clauseIds = clauseData.map(c => c.clauseId)
+                if (clauseIds.length > 0) {
+                    const supabaseClient = createClient()
+                    const { data: rangeMappingData } = await supabaseClient
+                        .from('clause_range_mappings')
+                        .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
+                        .in('clause_id', clauseIds)
+                        .eq('is_displayable', true)
+
+                    if (rangeMappingData && rangeMappingData.length > 0) {
+                        const mappingMap = new Map<string, RangeMapping>()
+                        for (const rm of rangeMappingData) {
+                            mappingMap.set(rm.clause_id, {
+                                clauseId: rm.clause_id,
+                                contractId: rm.contract_id,
+                                isDisplayable: rm.is_displayable,
+                                valueType: rm.value_type,
+                                rangeUnit: rm.range_unit,
+                                industryStandardMin: rm.industry_standard_min,
+                                industryStandardMax: rm.industry_standard_max,
+                                rangeData: rm.range_data as RangeMappingData
+                            })
+                        }
+                        setRangeMappings(mappingMap)
+                    }
+                }
 
                 const messages = await loadClauseChat(sessionId, null)
                 setChatMessages(messages)
@@ -5406,6 +5458,56 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             return option?.label || `Position ${optVal}`
         }
 
+        // RANGE MAPPING: Translate a 1-10 position to a real-world value
+        const translatePosition = (position: number | null): { value: number; label: string; description: string } | null => {
+            if (position === null || !selectedClause) return null
+            const mapping = rangeMappings.get(selectedClause.clauseId)
+            if (!mapping || !mapping.isDisplayable || !mapping.rangeData?.scale_points?.length) return null
+
+            const points = mapping.rangeData.scale_points
+
+            // Exact match
+            const exact = points.find(p => Math.abs(p.position - position) < 0.1)
+            if (exact) return exact
+
+            // Interpolation
+            const lower = [...points].filter(p => p.position <= position).pop()
+            const upper = points.find(p => p.position > position)
+
+            if (!lower || !upper) {
+                return position <= points[0].position ? points[0] : points[points.length - 1]
+            }
+
+            const fraction = (position - lower.position) / (upper.position - lower.position)
+            let interpolatedValue: number
+
+            if (mapping.rangeData.interpolation === 'logarithmic') {
+                const logLower = Math.log(lower.value || 1)
+                const logUpper = Math.log(upper.value || 1)
+                interpolatedValue = Math.exp(logLower + fraction * (logUpper - logLower))
+            } else if (mapping.rangeData.interpolation === 'stepped') {
+                return lower
+            } else {
+                interpolatedValue = lower.value + fraction * (upper.value - lower.value)
+            }
+
+            const precision = mapping.rangeData.display_precision ?? 0
+            const rounded = Number(interpolatedValue.toFixed(precision))
+
+            const label = mapping.rangeData.format_pattern
+                .replace('{value}', rounded.toLocaleString())
+                .replace('{unit}', mapping.rangeUnit || '')
+                .trim()
+
+            return {
+                value: rounded,
+                label: label,
+                description: `Between ${lower.label} and ${upper.label}`
+            }
+        }
+
+        const hasRangeMapping = selectedClause ? rangeMappings.has(selectedClause.clauseId) : false
+
         return (
             <div className="mb-3">
                 {/* Header - CONDENSED */}
@@ -5687,7 +5789,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         })}
                                     </div>
 
-                                    {/* Current Zone Description */}
+                                    {/* Current Zone Description — Enhanced with Range Mapping */}
                                     {currentZone && (
                                         <div className={`p-3 rounded-lg border-2 ${isAdjusting
                                             ? 'bg-amber-50 border-amber-300'
@@ -5699,10 +5801,29 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                         {isAdjusting ? 'Proposed Position' : 'Your Position'}
                                                     </span>
                                                     <div className="font-medium text-slate-800">
-                                                        {currentZone.label}
-                                                        <span className="ml-2 text-xs text-slate-400 font-mono">
-                                                            ({(proposedPosition ?? myDbPosition)?.toFixed(1)})
-                                                        </span>
+                                                        {hasRangeMapping && translatePosition(proposedPosition ?? myDbPosition)
+                                                            ? (
+                                                                <>
+                                                                    <span className="text-purple-700 font-bold">
+                                                                        {translatePosition(proposedPosition ?? myDbPosition)?.label}
+                                                                    </span>
+                                                                    <span className="ml-2 text-xs text-slate-400">
+                                                                        {currentZone.label}
+                                                                    </span>
+                                                                    <span className="ml-1 text-xs text-slate-400 font-mono">
+                                                                        ({(proposedPosition ?? myDbPosition)?.toFixed(1)})
+                                                                    </span>
+                                                                </>
+                                                            )
+                                                            : (
+                                                                <>
+                                                                    {currentZone.label}
+                                                                    <span className="ml-2 text-xs text-slate-400 font-mono">
+                                                                        ({(proposedPosition ?? myDbPosition)?.toFixed(1)})
+                                                                    </span>
+                                                                </>
+                                                            )
+                                                        }
                                                     </div>
                                                 </div>
                                                 {isAdjusting && (
@@ -5711,9 +5832,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-xs text-slate-500 mt-1">{currentZone.description}</p>
+                                            {hasRangeMapping && translatePosition(proposedPosition ?? myDbPosition) ? (
+                                                <p className="text-xs text-slate-500 mt-1">
+                                                    {translatePosition(proposedPosition ?? myDbPosition)?.description}
+                                                </p>
+                                            ) : (
+                                                <p className="text-xs text-slate-500 mt-1">{currentZone.description}</p>
+                                            )}
                                         </div>
                                     )}
+
 
                                     {/* Compact Legend */}
                                     <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500 pt-2 border-t border-slate-200">
