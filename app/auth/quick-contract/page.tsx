@@ -226,7 +226,7 @@ export default function QuickContractDashboard() {
             })
 
         } catch (error) {
-            console.error('Error loading Quick Contracts:', error)
+            console.error('Error loading Quick to Contract:', error)
             setContracts([])
         } finally {
             setLoading(false)
@@ -480,7 +480,7 @@ export default function QuickContractDashboard() {
             <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="text-center">
                     <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <p className="mt-4 text-slate-600">Loading Quick Contracts...</p>
+                    <p className="mt-4 text-slate-600">Loading Quick to Contract...</p>
                 </div>
             </div>
         )
@@ -511,7 +511,7 @@ export default function QuickContractDashboard() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-800 mb-1">
-                            Quick Contracts
+                            Quick to Contract
                         </h1>
                         <p className="text-slate-500 text-sm">
                             Send contracts for simple accept/decline workflows
