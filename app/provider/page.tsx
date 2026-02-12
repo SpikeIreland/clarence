@@ -270,15 +270,6 @@ function ProviderAuthContent() {
                     }));
                 }
 
-                // Pre-fill company name from invitation (what customer entered)
-                // Provider can still edit this if needed
-                if (data.providerCompany) {
-                    setSignupForm(prev => ({
-                        ...prev,
-                        companyName: data.providerCompany
-                    }));
-                }
-
                 // If already registered, suggest login
                 if (data.alreadyRegistered) {
                     setSuccessMessage('You already have an account. Please log in to continue.');
@@ -364,14 +355,40 @@ function ProviderAuthContent() {
             });
 
             if (authError) {
-                if (authError.message.includes('already registered')) {
-                    throw new Error('An account with this email already exists. Please log in instead.');
+                // Check for various "already registered" error messages
+                const errorMsg = authError.message.toLowerCase();
+                if (errorMsg.includes('already registered') ||
+                    errorMsg.includes('already exists') ||
+                    errorMsg.includes('user already')) {
+                    // Auto-switch to login tab with helpful message
+                    setSuccessMessage('You already have an account. Please log in to continue.');
+                    setActiveTab('login');
+                    setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                    setIsLoading(false);
+                    return;
                 }
                 throw new Error(authError.message);
             }
 
             if (!authData.user) {
                 throw new Error('Failed to create account.');
+            }
+
+            // IMPORTANT: Supabase returns a user even for existing emails when email confirmation is disabled
+            // Check if this is actually a new user by looking at identities array
+            // If identities is empty or user was created long ago, they already exist
+            const identities = authData.user.identities || [];
+            const createdAt = new Date(authData.user.created_at || 0);
+            const now = new Date();
+            const secondsSinceCreation = (now.getTime() - createdAt.getTime()) / 1000;
+
+            if (identities.length === 0 || secondsSinceCreation > 60) {
+                // User already exists - switch to login
+                setSuccessMessage('You already have an account. Please log in to continue.');
+                setActiveTab('login');
+                setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                setIsLoading(false);
+                return;
             }
 
             const userId = authData.user.id;
@@ -401,10 +418,32 @@ function ProviderAuthContent() {
             });
 
             if (!registerResponse.ok) {
+                // Check if this might be a duplicate registration attempt
+                const errorText = await registerResponse.text().catch(() => '');
+                if (errorText.toLowerCase().includes('already') || errorText.toLowerCase().includes('exists')) {
+                    setSuccessMessage('You already have an account. Please log in to continue.');
+                    setActiveTab('login');
+                    setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                    setIsLoading(false);
+                    return;
+                }
                 throw new Error('Provider registration failed. Please try again.');
             }
 
-            const registerResult = await registerResponse.json();
+            // Safely parse JSON response - handle empty responses
+            let registerResult;
+            const responseText = await registerResponse.text();
+
+            if (!responseText || responseText.trim() === '') {
+                throw new Error('Registration service returned empty response. Please try again.');
+            }
+
+            try {
+                registerResult = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('Failed to parse registration response:', responseText);
+                throw new Error('Registration service error. Please try again.');
+            }
 
             if (!registerResult.success) {
                 throw new Error(registerResult.message || 'Registration failed.');
@@ -458,10 +497,21 @@ function ProviderAuthContent() {
 
         } catch (error) {
             console.error('Signup error:', error);
-            setErrorMessage(error instanceof Error ? error.message : 'Signup failed. Please try again.');
+            const errorMsg = error instanceof Error ? error.message : 'Signup failed. Please try again.';
+
+            // Check if this is an "already exists" type error - redirect to login
+            const lowerMsg = errorMsg.toLowerCase();
+            if (lowerMsg.includes('already') || lowerMsg.includes('exists') || lowerMsg.includes('log in')) {
+                setSuccessMessage('You already have an account. Please log in to continue.');
+                setActiveTab('login');
+                setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                setErrorMessage('');
+            } else {
+                setErrorMessage(errorMsg);
+            }
 
             eventLogger.failed('provider_onboarding', 'signup_submitted',
-                error instanceof Error ? error.message : 'Signup failed', 'SIGNUP_ERROR');
+                errorMsg, 'SIGNUP_ERROR');
         } finally {
             setIsLoading(false);
         }
@@ -793,12 +843,12 @@ function ProviderAuthContent() {
 
                             {/* Success Message */}
                             {successMessage && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-                                    <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    <span className="text-blue-700 text-sm flex-1">{successMessage}</span>
-                                    <button onClick={() => setSuccessMessage('')} className="text-blue-400 hover:text-blue-600">
+                                    <span className="text-emerald-700 text-sm flex-1">{successMessage}</span>
+                                    <button onClick={() => setSuccessMessage('')} className="text-emerald-400 hover:text-emerald-600">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                         </svg>
@@ -826,7 +876,7 @@ function ProviderAuthContent() {
                                                 placeholder="e.g., INV-XXXXXXXX-XXXXXX"
                                                 className={`w-full px-4 py-3 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm font-mono
                                                     ${tokenValidated
-                                                        ? 'border-blue-300 bg-blue-50'
+                                                        ? 'border-emerald-300 bg-emerald-50'
                                                         : signupForm.token && !isValidatingToken
                                                             ? 'border-red-300 bg-red-50'
                                                             : 'border-slate-300'
@@ -836,7 +886,7 @@ function ProviderAuthContent() {
                                                 {isValidatingToken ? (
                                                     <div className="w-5 h-5 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
                                                 ) : tokenValidated ? (
-                                                    <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                     </svg>
                                                 ) : signupForm.token ? (
@@ -960,14 +1010,6 @@ function ProviderAuthContent() {
                                             disabled={!tokenValidated}
                                             className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
                                         />
-                                        {tokenValidated && tokenValidation?.providerCompany && signupForm.companyName === tokenValidation.providerCompany && (
-                                            <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                Pre-filled from invitation. Edit if this isn&apos;t correct.
-                                            </p>
-                                        )}
                                     </div>
 
                                     {/* Contact Name */}
@@ -1035,8 +1077,8 @@ function ProviderAuthContent() {
                                     {/* Activation Email Sent Success */}
                                     {activationEmailSent ? (
                                         <div className="text-center py-6">
-                                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                                 </svg>
                                             </div>
