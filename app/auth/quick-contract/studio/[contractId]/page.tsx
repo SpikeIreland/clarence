@@ -116,6 +116,29 @@ interface PositionOption {
     description: string
 }
 
+interface RangeMappingData {
+    scale_points: {
+        position: number
+        value: number
+        label: string
+        description: string
+    }[]
+    interpolation: 'linear' | 'logarithmic' | 'stepped'
+    format_pattern: string
+    display_precision: number
+}
+
+interface RangeMapping {
+    clauseId: string
+    contractId: string
+    isDisplayable: boolean
+    valueType: string | null
+    rangeUnit: string | null
+    industryStandardMin: number | null
+    industryStandardMax: number | null
+    rangeData: RangeMappingData
+}
+
 interface UserInfo {
     userId: string
     email: string
@@ -257,6 +280,7 @@ function QuickContractStudioContent() {
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [contract, setContract] = useState<Contract | null>(null)
     const [clauses, setClauses] = useState<ContractClause[]>([])
+    const [rangeMappings, setRangeMappings] = useState<Map<string, RangeMapping>>(new Map())
 
     // Template mode
     const isTemplateMode = searchParams.get('mode') === 'template'
@@ -465,6 +489,30 @@ function QuickContractStudioContent() {
                 }))
 
                 setClauses(mappedClauses)
+
+                // Load range mappings for this contract
+                const { data: rangeMappingData } = await supabase
+                    .from('clause_range_mappings')
+                    .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
+                    .eq('contract_id', contractId)
+                    .eq('is_displayable', true)
+
+                if (rangeMappingData && rangeMappingData.length > 0) {
+                    const mappingMap = new Map<string, RangeMapping>()
+                    for (const rm of rangeMappingData) {
+                        mappingMap.set(rm.clause_id, {
+                            clauseId: rm.clause_id,
+                            contractId: rm.contract_id,
+                            isDisplayable: rm.is_displayable,
+                            valueType: rm.value_type,
+                            rangeUnit: rm.range_unit,
+                            industryStandardMin: rm.industry_standard_min,
+                            industryStandardMax: rm.industry_standard_max,
+                            rangeData: rm.range_data as RangeMappingData
+                        })
+                    }
+                    setRangeMappings(mappingMap)
+                }
 
                 // PERSISTENCE: Restore selected clause from LocalStorage, or default to first
                 const savedClauseIndex = localStorage.getItem(`qc_studio_${contractId}_selectedClause`)
@@ -793,6 +841,62 @@ function QuickContractStudioContent() {
         if (valueType === 'currency') return 'Market rate'
 
         return 'Industry standard'
+    }
+
+    // RANGE MAPPING: Translate a 1-10 position to a real-world value using range data
+    const translatePosition = (position: number | null, clauseId: string): { value: number; label: string; description: string } | null => {
+        if (position === null) return null
+        const mapping = rangeMappings.get(clauseId)
+        if (!mapping || !mapping.isDisplayable || !mapping.rangeData?.scale_points?.length) return null
+
+        const points = mapping.rangeData.scale_points
+
+        // Exact match
+        const exact = points.find(p => Math.abs(p.position - position) < 0.1)
+        if (exact) return exact
+
+        // Interpolation
+        const lower = [...points].filter(p => p.position <= position).pop()
+        const upper = points.find(p => p.position > position)
+
+        if (!lower || !upper) {
+            return position <= points[0].position ? points[0] : points[points.length - 1]
+        }
+
+        const fraction = (position - lower.position) / (upper.position - lower.position)
+        let interpolatedValue: number
+
+        if (mapping.rangeData.interpolation === 'logarithmic') {
+            const logLower = Math.log(lower.value || 1)
+            const logUpper = Math.log(upper.value || 1)
+            interpolatedValue = Math.exp(logLower + fraction * (logUpper - logLower))
+        } else if (mapping.rangeData.interpolation === 'stepped') {
+            return lower
+        } else {
+            interpolatedValue = lower.value + fraction * (upper.value - lower.value)
+        }
+
+        const precision = mapping.rangeData.display_precision ?? 0
+        const rounded = Number(interpolatedValue.toFixed(precision))
+
+        const label = mapping.rangeData.format_pattern
+            .replace('{value}', rounded.toLocaleString())
+            .replace('{unit}', mapping.rangeUnit || '')
+            .trim()
+
+        return {
+            value: rounded,
+            label: label,
+            description: `Between ${lower.label} and ${upper.label}`
+        }
+    }
+
+    // Enhanced position label: use range data if available, fallback to DEFAULT_POSITION_OPTIONS
+    const getRangeAwareLabel = (position: number | null, clauseId: string): string => {
+        if (position === null) return 'Not set'
+        const translated = translatePosition(position, clauseId)
+        if (translated) return translated.label
+        return getPositionLabel(position)
     }
 
     // ========================================================================
@@ -3227,22 +3331,62 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
-                                                {/* Scale Numbers */}
-                                                <div className="flex justify-between mt-1 px-0">
-                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                                        <span key={n} className="text-[10px] text-slate-400 font-medium" style={{ width: '11.11%', textAlign: n === 1 ? 'left' : n === 10 ? 'right' : 'center' }}>
-                                                            {n}
-                                                        </span>
-                                                    ))}
-                                                </div>
-
-                                                {/* Scale Labels - Dynamic from Role Matrix */}
-                                                <div className="mt-1">
-                                                    <PositionScaleIndicator roleContext={roleContext} variant="full" />
-                                                    <div className="text-center mt-1">
-                                                        <span className="text-xs text-slate-400">Balanced</span>
-                                                    </div>
-                                                </div>
+                                                {/* Scale Labels — Real-world values if range mapping exists, otherwise numeric */}
+                                                {rangeMappings.has(selectedClause.clauseId) && rangeMappings.get(selectedClause.clauseId)?.isDisplayable ? (
+                                                    <>
+                                                        <div className="flex justify-between mt-1 px-0">
+                                                            {[1, 3, 5, 7, 10].map(pos => {
+                                                                const point = rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === pos)
+                                                                return point ? (
+                                                                    <span key={pos} className="text-[10px] text-slate-500 font-medium">
+                                                                        {point.label}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span key={pos} className="text-[10px] text-slate-400 font-medium">{pos}</span>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                        {/* Current position — show real-world value */}
+                                                        {getUserDisplayPosition(selectedClause) !== null && (
+                                                            <div className="text-center mt-2">
+                                                                <span className="text-sm font-semibold text-purple-700">
+                                                                    {translatePosition(getUserDisplayPosition(selectedClause), selectedClause.clauseId)?.label}
+                                                                </span>
+                                                                <span className="text-xs text-slate-400 ml-2">
+                                                                    (Position {getUserDisplayPosition(selectedClause)?.toFixed(1)})
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {/* Industry standard band indicator */}
+                                                        {rangeMappings.get(selectedClause.clauseId)?.industryStandardMin && (
+                                                            <div className="text-center mt-1">
+                                                                <span className="text-[10px] text-purple-400">
+                                                                    Industry standard: {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMin)?.label || ''} — {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMax)?.label || ''}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                        {/* Provider/Customer labels */}
+                                                        <div className="mt-1">
+                                                            <PositionScaleIndicator roleContext={roleContext} variant="full" />
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="flex justify-between mt-1 px-0">
+                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                                                <span key={n} className="text-[10px] text-slate-400 font-medium" style={{ width: '11.11%', textAlign: n === 1 ? 'left' : n === 10 ? 'right' : 'center' }}>
+                                                                    {n}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        <div className="mt-1">
+                                                            <PositionScaleIndicator roleContext={roleContext} variant="full" />
+                                                            <div className="text-center mt-1">
+                                                                <span className="text-xs text-slate-400">Balanced</span>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
 
                                             {/* Position Details */}
@@ -3254,10 +3398,15 @@ INSTRUCTIONS:
                                                         </div>
                                                         <div>
                                                             <div className="text-3xl font-bold text-purple-700">
-                                                                {selectedClause.clarencePosition?.toFixed(1) ?? '\u2014'}
+                                                                {(translatePosition(selectedClause.clarencePosition, selectedClause.clauseId)?.label
+                                                                    || selectedClause.clarencePosition?.toFixed(1))
+                                                                    ?? '\u2014'}
                                                             </div>
                                                             <div className="text-sm text-purple-600">
-                                                                {getPositionLabel(selectedClause.clarencePosition)}
+                                                                {translatePosition(selectedClause.clarencePosition, selectedClause.clauseId)
+                                                                    ? `Position ${selectedClause.clarencePosition?.toFixed(1)} \u2014 ${getPositionLabel(selectedClause.clarencePosition)}`
+                                                                    : getPositionLabel(selectedClause.clarencePosition)
+                                                                }
                                                             </div>
                                                         </div>
                                                     </div>
