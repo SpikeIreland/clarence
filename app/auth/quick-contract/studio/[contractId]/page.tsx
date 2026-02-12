@@ -1553,8 +1553,19 @@ function QuickContractStudioContent() {
     }
 
     // Save draft to database
+    // Save draft to database
     const handleSaveDraft = async () => {
         if (!selectedClause || !userInfo) return
+
+        // Capture draftTargetPosition at start to avoid stale closure issues
+        const targetPosition = draftTargetPosition
+
+        // DEBUG: Log what we're saving
+        console.log('=== SAVE DRAFT DEBUG ===')
+        console.log('Clause:', selectedClause.clauseName)
+        console.log('draftTargetPosition:', draftTargetPosition)
+        console.log('targetPosition (captured):', targetPosition)
+        console.log('Draft text length:', editingDraftText?.length)
 
         setSavingDraft(true)
         try {
@@ -1566,16 +1577,26 @@ function QuickContractStudioContent() {
             }
 
             // If this draft was generated for a specific position, update clarence_position too
-            if (draftTargetPosition !== null) {
-                updateData.clarence_position = draftTargetPosition
+            if (targetPosition !== null) {
+                updateData.clarence_position = targetPosition
+                console.log('Adding clarence_position to update:', targetPosition)
+            } else {
+                console.log('targetPosition is null, NOT updating clarence_position')
             }
+
+            console.log('Update data:', JSON.stringify(updateData))
 
             const { error: updateError } = await supabase
                 .from('uploaded_contract_clauses')
                 .update(updateData)
                 .eq('clause_id', selectedClause.clauseId)
 
-            if (updateError) throw updateError
+            if (updateError) {
+                console.error('Database update error:', updateError)
+                throw updateError
+            }
+
+            console.log('Database update successful')
 
             // Update local state
             setClauses(prev => prev.map(c =>
@@ -1585,7 +1606,7 @@ function QuickContractStudioContent() {
                         draftText: editingDraftText,
                         draftModified: true,
                         // Update clarencePosition if we had a target position
-                        ...(draftTargetPosition !== null ? { clarencePosition: draftTargetPosition } : {})
+                        ...(targetPosition !== null ? { clarencePosition: targetPosition } : {})
                     }
                     : c
             ))
@@ -1598,12 +1619,12 @@ function QuickContractStudioContent() {
             await recordClauseEvent(
                 'draft_modified',
                 selectedClause.clauseId,
-                `Draft updated for ${selectedClause.clauseName}${draftTargetPosition !== null ? ` (repositioned to ${draftTargetPosition.toFixed(1)})` : ''}`,
+                `Draft updated for ${selectedClause.clauseName}${targetPosition !== null ? ` (repositioned to ${targetPosition.toFixed(1)})` : ''}`,
                 {
                     clause_name: selectedClause.clauseName,
                     clause_number: selectedClause.clauseNumber,
                     previous_position: selectedClause.clarencePosition,
-                    new_position: draftTargetPosition,
+                    new_position: targetPosition,
                     draft_length: editingDraftText.length
                 }
             )
@@ -1612,8 +1633,8 @@ function QuickContractStudioContent() {
             const confirmMessage: ChatMessage = {
                 id: `draft-saved-${Date.now()}`,
                 role: 'assistant',
-                content: draftTargetPosition !== null
-                    ? `Draft saved for "${selectedClause.clauseName}" at position ${draftTargetPosition.toFixed(1)}.\n\nThe clause has been repositioned and the other party has been notified.`
+                content: targetPosition !== null
+                    ? `Draft saved for "${selectedClause.clauseName}" at position ${targetPosition.toFixed(1)}.\n\nThe clause has been repositioned and the other party has been notified.`
                     : `Draft saved for "${selectedClause.clauseName}".\n\nThis modified text will be used when generating the final contract document.\n\nThe other party has been notified of this update in their Activity Feed.`,
                 timestamp: new Date()
             }
