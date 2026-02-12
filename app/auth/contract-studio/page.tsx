@@ -6153,7 +6153,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const providerCompanyName = session?.providerCompany?.split(' ')[0] || 'Provider'
 
         // Calculate dynamic alignment percentage
-        const dynamicAlignmentPercentage = calculateAlignmentPercentage(clauses)
+        // Use server-calculated alignment (matches Clarence AI) when available,
+        // fall back to local calculation only when no leverage data exists
+        const dynamicAlignmentPercentage = (leverage && displayLeverage.alignmentPercentage > 0)
+            ? Math.round(displayLeverage.alignmentPercentage)
+            : calculateAlignmentPercentage(clauses)
 
         // Get actual leverage factor scores from the data
         const marketDynamicsScore = displayLeverage.marketDynamicsScore ?? 50
