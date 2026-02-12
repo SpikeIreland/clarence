@@ -2,10 +2,15 @@
 
 // ============================================================================
 // QUICK CONTRACT STUDIO - Clause Review & Agreement
-// Version: 3.5 - Clause Arrival Polling Fix
+// Version: 3.6 - Certification Polling Race Condition Fix
 // Date: 12 February 2026
 // Path: /app/auth/quick-contract/studio/[id]/page.tsx
 // 
+// CHANGES in v3.6:
+// - FIX: Polling now checks BOTH processingStatus AND clarenceCertified
+// - FIX: "Save as Template" button was disabled even when all clauses certified
+// - Root cause: Polling stopped when status='certified' but before clarence_certified=true
+//
 // CHANGES in v3.5:
 // - FIX: Added clause arrival polling when page loads before workflow completes
 // - NEW: "Processing Document" UI state when clauses haven't arrived yet
@@ -495,6 +500,22 @@ function QuickContractStudioContent() {
                 }))
 
                 setClauses(mappedClauses)
+
+                // DEBUG: Log certification status on initial load
+                console.log('=== QC STUDIO INITIAL LOAD DEBUG ===')
+                console.log('Contract ID:', contractId)
+                console.log('Total clauses loaded:', mappedClauses.length)
+                console.log('Non-header clauses:', mappedClauses.filter(c => !c.isHeader).length)
+                console.log('Uncertified non-headers:', mappedClauses.filter(c => !c.isHeader && !c.clarenceCertified).length)
+                if (mappedClauses.length > 0) {
+                    console.log('First 3 clauses:', mappedClauses.slice(0, 3).map(c => ({
+                        num: c.clauseNumber,
+                        name: c.clauseName,
+                        isHeader: c.isHeader,
+                        clarenceCertified: c.clarenceCertified,
+                        processingStatus: c.processingStatus
+                    })))
+                }
 
                 // Load range mappings for this contract
                 const { data: rangeMappingData } = await supabase
@@ -2536,8 +2557,13 @@ INSTRUCTIONS:
         if (!contractId || !clauses.length) return
 
         // Check if there are any uncertified non-header clauses
+        // Must check BOTH processingStatus AND clarenceCertified
+        // (button requires clarenceCertified, so we must poll until that's true too)
         const uncertified = clauses.filter(c =>
-            !c.isHeader && c.processingStatus !== 'certified' && c.processingStatus !== 'failed'
+            !c.isHeader && (
+                (c.processingStatus !== 'certified' && c.processingStatus !== 'failed') ||
+                !c.clarenceCertified
+            )
         )
 
         if (uncertified.length === 0) {
@@ -2586,9 +2612,13 @@ INSTRUCTIONS:
                 const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
                 setCertificationProgress({ certified, total, failed })
 
-                // Stop polling when done
+                // Stop polling when done - must check BOTH status AND clarence_certified
                 const stillProcessing = updatedClauses.some(c =>
-                    !c.is_header && (c.status === 'pending' || c.status === 'processing')
+                    !c.is_header && (
+                        c.status === 'pending' ||
+                        c.status === 'processing' ||
+                        (c.status === 'certified' && !c.clarence_certified)
+                    )
                 )
                 if (!stillProcessing) {
                     setIsPolling(false)
@@ -2760,19 +2790,25 @@ INSTRUCTIONS:
 
                         {isTemplateMode ? (
                             /* ---- TEMPLATE MODE: Save as Template ---- */
-                            <button
-                                onClick={() => {
-                                    setTemplateName(contract?.contractName || '')
-                                    setShowSaveTemplateModal(true)
-                                }}
-                                disabled={clauses.filter(c => !c.isHeader && !c.clarenceCertified).length > 0}
-                                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                </svg>
-                                Save as Template
-                            </button>
+                            <>
+                                {/* DEBUG: Show what button logic sees */}
+                                <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mr-2">
+                                    DEBUG: {clauses.length} total, {clauses.filter(c => !c.isHeader).length} non-headers, {clauses.filter(c => !c.isHeader && !c.clarenceCertified).length} uncertified
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setTemplateName(contract?.contractName || '')
+                                        setShowSaveTemplateModal(true)
+                                    }}
+                                    disabled={clauses.filter(c => !c.isHeader && !c.clarenceCertified).length > 0}
+                                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                    </svg>
+                                    Save as Template
+                                </button>
+                            </>
                         ) : (
                             /* ---- NORMAL MODE: Commit Contract ---- */
                             (() => {
