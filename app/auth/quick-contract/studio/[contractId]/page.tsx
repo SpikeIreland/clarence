@@ -371,6 +371,7 @@ function QuickContractStudioContent() {
     const [generatingPositionDraft, setGeneratingPositionDraft] = useState(false)
     // Track the target position for a generated draft (so we can update clarence_position on save)
     const [draftTargetPosition, setDraftTargetPosition] = useState<number | null>(null)
+    const draftTargetPositionRef = useRef<number | null>(null)
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
@@ -1550,15 +1551,15 @@ function QuickContractStudioContent() {
         setIsDraftEditing(false)
         setEditingDraftText('')
         setDraftTargetPosition(null)  // Clear target position if cancelling
+        draftTargetPositionRef.current = null  // Also clear the ref
     }
 
-    // Save draft to database
     // Save draft to database
     const handleSaveDraft = async () => {
         if (!selectedClause || !userInfo) return
 
-        // Capture draftTargetPosition at start to avoid stale closure issues
-        const targetPosition = draftTargetPosition
+        // Use ref value as state may be stale due to React closure issues
+        const targetPosition = draftTargetPositionRef.current
 
         // DEBUG: Log what we're saving
         console.log('=== SAVE DRAFT DEBUG ===')
@@ -1614,6 +1615,7 @@ function QuickContractStudioContent() {
             setIsDraftEditing(false)
             setEditingDraftText('')
             setDraftTargetPosition(null)  // Clear the target position
+            draftTargetPositionRef.current = null  // Also clear the ref
 
             // Log activity event and notify other party
             await recordClauseEvent(
@@ -1734,6 +1736,7 @@ INSTRUCTIONS:
                     setIsDraftEditing(true)
                     // Track the target position so we can update clarence_position when saved
                     setDraftTargetPosition(targetPosition)
+                    draftTargetPositionRef.current = targetPosition  // Also store in ref for reliable access
                     // Switch to Draft tab so user sees the new draft and can save it
                     setActiveTab('draft')
 
