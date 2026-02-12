@@ -2791,10 +2791,6 @@ INSTRUCTIONS:
                         {isTemplateMode ? (
                             /* ---- TEMPLATE MODE: Save as Template ---- */
                             <>
-                                {/* DEBUG: Show what button logic sees */}
-                                <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mr-2">
-                                    DEBUG: {clauses.length} total, {clauses.filter(c => !c.isHeader).length} non-headers, {clauses.filter(c => !c.isHeader && !c.clarenceCertified).length} uncertified
-                                </div>
                                 <button
                                     onClick={() => {
                                         setTemplateName(contract?.contractName || '')
