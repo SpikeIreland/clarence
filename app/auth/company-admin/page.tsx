@@ -151,7 +151,7 @@ function TabNavigation({ activeTab, onTabChange, pendingCount }: TabNavigationPr
     )
 }
 
-// ============================================================================
+// ==// ============================================================================
 // SECTION 5: PLAYBOOKS TAB COMPONENT
 // ============================================================================
 
@@ -164,10 +164,11 @@ interface PlaybooksTabProps {
     onParse: (playbookId: string) => Promise<void>
     onDelete: (playbookId: string, sourceFilePath?: string) => Promise<void>
     onDownload: (sourceFilePath: string, fileName: string) => Promise<void>
+    onRename: (playbookId: string, newName: string) => Promise<void>
     onRefresh: () => void
 }
 
-function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate, onParse, onDelete, onDownload, onRefresh }: PlaybooksTabProps) {
+function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate, onParse, onDelete, onDownload, onRename, onRefresh }: PlaybooksTabProps) {
     const [isDragging, setIsDragging] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
@@ -176,7 +177,11 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const [openMenuId, setOpenMenuId] = useState<string | null>(null)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+    const [renamingId, setRenamingId] = useState<string | null>(null)
+    const [renameValue, setRenameValue] = useState('')
+    const [renameError, setRenameError] = useState<string | null>(null)
     const menuRef = useRef<HTMLDivElement>(null)
+    const renameInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -186,18 +191,82 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
+    // Focus rename input when it appears
+    useEffect(() => {
+        if (renamingId && renameInputRef.current) {
+            renameInputRef.current.focus()
+            renameInputRef.current.select()
+        }
+    }, [renamingId])
+
     const handleFileUpload = async (file: File) => {
         const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
         if (!allowedTypes.includes(file.type)) { setUploadError('Please upload a PDF or Word document'); return }
         if (file.size > 10 * 1024 * 1024) { setUploadError('File size must be less than 10MB'); return }
-        setIsUploading(true); setUploadError(null)
-        try { await onUpload(file) } catch (e) { setUploadError(e instanceof Error ? e.message : 'Failed to upload') } finally { setIsUploading(false) }
+        setIsUploading(true)
+        setUploadError(null)
+        try {
+            await onUpload(file)
+        } catch (e) {
+            setUploadError(e instanceof Error ? e.message : 'Failed to upload')
+        } finally {
+            setIsUploading(false)
+        }
     }
 
     const handleParseClick = async (playbookId: string) => {
         console.log('=== PARSE BUTTON CLICKED ===', playbookId)
-        setParsingId(playbookId); setParseError(null)
-        try { await onParse(playbookId) } catch (e) { console.error('Parse error:', e); setParseError(e instanceof Error ? e.message : 'Failed to parse') } finally { setParsingId(null) }
+        setParsingId(playbookId)
+        setParseError(null)
+        try {
+            await onParse(playbookId)
+        } catch (e) {
+            console.error('Parse error:', e)
+            setParseError(e instanceof Error ? e.message : 'Failed to parse')
+        } finally {
+            setParsingId(null)
+        }
+    }
+
+    const handleRenameStart = (playbook: Playbook) => {
+        setRenamingId(playbook.playbookId)
+        setRenameValue(playbook.playbookName)
+        setRenameError(null)
+        setOpenMenuId(null)
+    }
+
+    const handleRenameSubmit = async (playbookId: string) => {
+        const trimmedName = renameValue.trim()
+        if (!trimmedName) {
+            setRenameError('Name cannot be empty')
+            return
+        }
+        if (trimmedName.length > 255) {
+            setRenameError('Name is too long (max 255 characters)')
+            return
+        }
+        try {
+            await onRename(playbookId, trimmedName)
+            setRenamingId(null)
+            setRenameValue('')
+        } catch (e) {
+            setRenameError(e instanceof Error ? e.message : 'Failed to rename')
+        }
+    }
+
+    const handleRenameCancel = () => {
+        setRenamingId(null)
+        setRenameValue('')
+        setRenameError(null)
+    }
+
+    const handleRenameKeyDown = (e: React.KeyboardEvent, playbookId: string) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            handleRenameSubmit(playbookId)
+        } else if (e.key === 'Escape') {
+            handleRenameCancel()
+        }
     }
 
     const getStatusBadge = (status: Playbook['status'], isActive: boolean) => {
@@ -219,12 +288,29 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
             {/* Upload Section */}
             <div className="mb-8">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4">Upload Playbook</h3>
-                <div onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }} onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
+                <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+                    onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
                     onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFileUpload(f) }}
-                    className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'} ${isUploading ? 'pointer-events-none opacity-60' : 'cursor-pointer'}`}>
+                    className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-slate-300 hover:border-slate-400 bg-slate-50'} ${isUploading ? 'pointer-events-none opacity-60' : 'cursor-pointer'}`}
+                >
                     <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f) }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" disabled={isUploading} />
-                    {isUploading ? (<div className="flex flex-col items-center"><div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div><p className="text-slate-600">Uploading...</p></div>
-                    ) : (<><div className="w-16 h-16 mx-auto mb-4 bg-indigo-100 rounded-full flex items-center justify-center"><svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg></div><p className="text-slate-700 font-medium mb-1">Drag and drop your playbook here</p><p className="text-sm text-slate-500">PDF, DOC, DOCX - max 10MB</p></>)}
+                    {isUploading ? (
+                        <div className="flex flex-col items-center">
+                            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <p className="text-slate-600">Uploading...</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="w-16 h-16 mx-auto mb-4 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                            </div>
+                            <p className="text-slate-700 font-medium mb-1">Drag and drop your playbook here</p>
+                            <p className="text-sm text-slate-500">PDF, DOC, DOCX - max 10MB</p>
+                        </>
+                    )}
                 </div>
                 {uploadError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{uploadError}</div>}
                 {parseError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{parseError}</div>}
@@ -233,53 +319,133 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
             {/* Playbooks List */}
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-slate-800">Your Playbooks ({playbooks.length})</h3>
-                <button onClick={onRefresh} className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                <button onClick={onRefresh} className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
                     Refresh
                 </button>
             </div>
 
             {isLoading ? (
-                <div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
+                <div className="text-center py-12">
+                    <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-500">Loading playbooks...</p>
+                </div>
             ) : playbooks.length === 0 ? (
-                <div className="text-center py-12 text-slate-500"><p>No playbooks uploaded yet</p></div>
+                <div className="text-center py-12 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-slate-600 font-medium">No playbooks uploaded yet</p>
+                    <p className="text-sm text-slate-500 mt-1">Upload your negotiation playbook to get started</p>
+                </div>
             ) : (
-                <div className="space-y-3">
-                    {playbooks.map((pb) => (
-                        <div key={pb.playbookId} className={`p-4 rounded-xl border ${pb.isActive ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${pb.isActive ? 'bg-emerald-200' : 'bg-slate-100'}`}>
-                                        <svg className={`w-5 h-5 ${pb.isActive ? 'text-emerald-700' : 'text-slate-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                <div className="space-y-4">
+                    {playbooks.map((p) => (
+                        <div key={p.playbookId} className={`p-4 rounded-xl border ${p.isActive ? 'bg-emerald-50 border-emerald-200' : deletingId === p.playbookId ? 'bg-red-50 border-red-200 opacity-50' : 'bg-white border-slate-200'}`}>
+                            <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        {/* Inline Rename or Display Name */}
+                                        {renamingId === p.playbookId ? (
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    ref={renameInputRef}
+                                                    type="text"
+                                                    value={renameValue}
+                                                    onChange={(e) => setRenameValue(e.target.value)}
+                                                    onKeyDown={(e) => handleRenameKeyDown(e, p.playbookId)}
+                                                    className="px-2 py-1 text-sm font-semibold border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 min-w-[200px]"
+                                                    placeholder="Enter playbook name"
+                                                />
+                                                <button
+                                                    onClick={() => handleRenameSubmit(p.playbookId)}
+                                                    className="p-1 text-emerald-600 hover:bg-emerald-100 rounded"
+                                                    title="Save"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={handleRenameCancel}
+                                                    className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+                                                    title="Cancel"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <h4 className="font-semibold text-slate-800">{p.playbookName}</h4>
+                                        )}
+                                        {getStatusBadge(p.status, p.isActive)}
                                     </div>
-                                    <div>
-                                        <p className="font-medium text-slate-800">{pb.playbookName}</p>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            {getStatusBadge(pb.status, pb.isActive)}
-                                            {pb.rulesExtracted > 0 && <span className="text-xs text-slate-500">{pb.rulesExtracted} rules</span>}
-                                        </div>
+                                    {renameError && renamingId === p.playbookId && (
+                                        <p className="text-sm text-red-600 mb-2">{renameError}</p>
+                                    )}
+                                    {p.playbookSummary && <p className="text-sm text-slate-600 mb-3 line-clamp-2">{p.playbookSummary}</p>}
+                                    {p.parsingError && <p className="text-sm text-red-600 mb-3">Error: {p.parsingError}</p>}
+                                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+                                        {p.sourceFileName && <span>{p.sourceFileName}</span>}
+                                        <span>{p.rulesExtracted} rules</span>
+                                        {p.aiConfidenceScore != null && <span>{Math.round(p.aiConfidenceScore * 100)}% confidence</span>}
+                                        <span>{new Date(p.createdAt).toLocaleDateString()}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2" ref={openMenuId === pb.playbookId ? menuRef : null}>
-                                    {pb.status === 'pending_parse' && <button onClick={() => handleParseClick(pb.playbookId)} disabled={parsingId === pb.playbookId} className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">{parsingId === pb.playbookId ? 'Processing...' : 'Process'}</button>}
-                                    {pb.status === 'parse_failed' && <button onClick={() => handleParseClick(pb.playbookId)} disabled={parsingId === pb.playbookId} className="px-3 py-1.5 text-sm font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50">{parsingId === pb.playbookId ? 'Retrying...' : 'Retry'}</button>}
-                                    {(pb.status === 'parsed' || pb.status === 'inactive') && !pb.isActive && <button onClick={() => onActivate(pb.playbookId)} className="px-3 py-1.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Activate</button>}
-                                    {pb.isActive && <button onClick={() => onDeactivate(pb.playbookId)} className="px-3 py-1.5 text-sm font-medium bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Deactivate</button>}
-                                    <div className="relative">
-                                        <button onClick={() => setOpenMenuId(openMenuId === pb.playbookId ? null : pb.playbookId)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg></button>
-                                        {openMenuId === pb.playbookId && (
-                                            <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-10 py-1">
-                                                {pb.sourceFilePath && <button onClick={() => { onDownload(pb.sourceFilePath!, pb.sourceFileName || 'playbook'); setOpenMenuId(null) }} className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Download Original</button>}
-                                                {showDeleteConfirm === pb.playbookId ? (
+                                <div className="flex items-center gap-2 ml-4">
+                                    {(p.status === 'pending_parse' || p.status === 'parse_failed') && (
+                                        <button onClick={() => handleParseClick(p.playbookId)} disabled={parsingId === p.playbookId} className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+                                            {parsingId === p.playbookId ? 'Processing...' : p.status === 'parse_failed' ? 'Retry Parse' : 'Parse Playbook'}
+                                        </button>
+                                    )}
+                                    {p.status === 'parsing' && <span className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg">Parsing...</span>}
+                                    {p.isActive ? (
+                                        <button onClick={() => onDeactivate(p.playbookId)} className="px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg">Deactivate</button>
+                                    ) : (p.status === 'parsed' || p.status === 'inactive') && (
+                                        <button onClick={() => onActivate(p.playbookId)} className="px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">Activate</button>
+                                    )}
+                                    <div className="relative" ref={openMenuId === p.playbookId ? menuRef : null}>
+                                        <button onClick={() => setOpenMenuId(openMenuId === p.playbookId ? null : p.playbookId)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01" /></svg>
+                                        </button>
+                                        {openMenuId === p.playbookId && (
+                                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10">
+                                                {/* Rename Option */}
+                                                <button
+                                                    onClick={() => handleRenameStart(p)}
+                                                    className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                    Rename
+                                                </button>
+                                                {/* Download Option */}
+                                                {p.sourceFilePath && (
+                                                    <button onClick={() => { onDownload(p.sourceFilePath!, p.sourceFileName || 'playbook'); setOpenMenuId(null) }} className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                        </svg>
+                                                        Download
+                                                    </button>
+                                                )}
+                                                <div className="border-t border-slate-100 my-1"></div>
+                                                {/* Delete Option */}
+                                                {showDeleteConfirm === p.playbookId ? (
                                                     <div className="px-4 py-2">
-                                                        <p className="text-sm text-red-600 mb-2">Delete this playbook?</p>
+                                                        <p className="text-xs text-red-600 mb-2">Delete this playbook?</p>
                                                         <div className="flex gap-2">
-                                                            <button onClick={() => { onDelete(pb.playbookId, pb.sourceFilePath); setShowDeleteConfirm(null); setOpenMenuId(null) }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">Yes</button>
-                                                            <button onClick={() => setShowDeleteConfirm(null)} className="px-2 py-1 text-xs bg-slate-200 rounded">No</button>
+                                                            <button onClick={() => { setDeletingId(p.playbookId); onDelete(p.playbookId, p.sourceFilePath).finally(() => { setDeletingId(null); setShowDeleteConfirm(null); setOpenMenuId(null) }) }} className="px-2 py-1 text-xs text-white bg-red-600 hover:bg-red-700 rounded">Yes</button>
+                                                            <button onClick={() => setShowDeleteConfirm(null)} className="px-2 py-1 text-xs text-slate-600 bg-slate-100 rounded">Cancel</button>
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <button onClick={() => setShowDeleteConfirm(pb.playbookId)} className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">Delete</button>
+                                                    <button onClick={() => setShowDeleteConfirm(p.playbookId)} className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                        Delete
+                                                    </button>
                                                 )}
                                             </div>
                                         )}
@@ -941,6 +1107,18 @@ function CompanyAdminContent() {
         const url = URL.createObjectURL(data); const a = document.createElement('a'); a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
     }
 
+    // ADD THIS NEW HANDLER HERE:
+    const handlePlaybookRename = async (playbookId: string, newName: string) => {
+        if (!userInfo?.companyId) return
+        const supabase = createClient()
+        const { error } = await supabase
+            .from('company_playbooks')
+            .update({ playbook_name: newName, updated_at: new Date().toISOString() })
+            .eq('playbook_id', playbookId)
+        if (error) throw new Error(error.message)
+        await loadPlaybooks(userInfo.companyId)
+    }
+
     const handleTemplateUpload = async (file: File, templateName: string, contractType: string): Promise<string> => {
         if (!userInfo?.companyId || !userInfo?.userId) throw new Error('Not authenticated')
 
@@ -1133,7 +1311,7 @@ function CompanyAdminContent() {
             <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} pendingCount={pendingCount} />
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-                    {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
+                    {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                     {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
                     {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
                     {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
