@@ -1032,7 +1032,7 @@ async function withdrawClauseConfirmation(
 
 function formatCurrency(value: string | number | null, currency: string): string {
     if (!value) return '£0'
-    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : '€'
+    const symbol = currency === 'GBP' ? '£' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : '£'
 
     // Handle category-based deal values from Create Contract page
     const categoryLabels: Record<string, string> = {
@@ -1327,18 +1327,23 @@ function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'di
 
 /**
  * Calculate alignment percentage across all clauses
+ * Uses continuous scoring: each clause contributes based on how close positions are
+ * Gap of 0 = 100% aligned, Gap of 9 = 0% aligned (linear)
+ * This matches the Clarence AI alignment calculation
  */
 function calculateAlignmentPercentage(clauses: ContractClause[]): number {
-    const childClauses = clauses.filter(c => c.clauseLevel === 1 && c.customerPosition !== null && c.providerPosition !== null)
+    const scorableClauses = clauses.filter(c => c.clauseLevel === 1 && c.customerPosition !== null && c.providerPosition !== null)
 
-    if (childClauses.length === 0) return 0
+    if (scorableClauses.length === 0) return 0
 
-    const alignedCount = childClauses.filter(c => {
+    const totalAlignment = scorableClauses.reduce((sum, c) => {
         const gap = Math.abs((c.customerPosition || 0) - (c.providerPosition || 0))
-        return gap <= 1
-    }).length
+        // Each clause scores 0-100% based on gap (max gap is 9)
+        const clauseAlignment = Math.max(0, ((9 - gap) / 9) * 100)
+        return sum + clauseAlignment
+    }, 0)
 
-    return Math.round((alignedCount / childClauses.length) * 100)
+    return Math.round((totalAlignment / scorableClauses.length) * 10) / 10
 }
 
 // ============================================================================
