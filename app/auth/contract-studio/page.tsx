@@ -752,6 +752,7 @@ async function callClarenceAI(
     options: {
         clauseId?: string
         message?: string
+        convergencePercentage?: number
         positionChange?: {
             clauseName: string
             clauseNumber?: string | null
@@ -1326,10 +1327,10 @@ function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'di
 }
 
 /**
- * Calculate alignment percentage across all clauses
+ * Calculate convergence percentage across all clauses
  * Uses continuous scoring: each clause contributes based on how close positions are
- * Gap of 0 = 100% aligned, Gap of 9 = 0% aligned (linear)
- * Counts all clauses with both positions set (matching Clarence AI calculation)
+ * Gap of 0 = 100% converged, Gap of 9 = 0% converged (linear)
+ * This value is passed to Clarence AI so both UI and chat quote the same number
  */
 function calculateAlignmentPercentage(clauses: ContractClause[]): number {
     const scorableClauses = clauses.filter(c =>
@@ -3063,7 +3064,11 @@ function ContractStudioContent() {
         setIsChatLoading(true)
 
         try {
-            const response = await callClarenceAI(sessionId, 'welcome', viewerRole)
+            // Pass convergence percentage so Clarence quotes the same number as the UI
+            const convergence = calculateAlignmentPercentage(clauses)
+            const response = await callClarenceAI(sessionId, 'welcome', viewerRole, {
+                convergencePercentage: convergence
+            })
 
             if (response?.success && response.response) {
                 const welcomeMessage: ClauseChatMessage = {
@@ -3088,7 +3093,7 @@ function ContractStudioContent() {
         } finally {
             setIsChatLoading(false)
         }
-    }, [clarenceWelcomeLoaded, stopWorking])
+    }, [clarenceWelcomeLoaded, clauses, stopWorking])
 
 
     // ============================================================================
@@ -4601,6 +4606,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 try {
                     const aiResponse = await callClarenceAI(session.sessionId, promptType, resolvedParty || 'customer', {
                         clauseId: selectedClause.clauseId,
+                        convergencePercentage: calculateAlignmentPercentage(clauses),
                         positionChange: {
                             clauseName: selectedClause.clauseName,
                             clauseNumber: selectedClause.clauseNumber,
@@ -4848,7 +4854,8 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         try {
             const response = await callClarenceAI(session.sessionId, 'chat', userInfo.role || 'customer', {
                 message: userMessage,
-                clauseId: selectedClause?.clauseId
+                clauseId: selectedClause?.clauseId,
+                convergencePercentage: calculateAlignmentPercentage(clauses)
             })
 
             if (response?.success && response.response) {
@@ -4977,7 +4984,7 @@ Current gaps: ${tradeOff.clauseA.clauseName} has ${tradeOff.clauseA.gapSize.toFi
 
 Explain why this trade makes sense and what each party gains.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, convergencePercentage: calculateAlignmentPercentage(clauses) })
 
             if (response?.success && response.response) {
                 setTradeOffExplanation(response.response)
@@ -5024,7 +5031,7 @@ Clause description: ${clause.description}
 
 As "The Honest Broker", generate clear, legally-appropriate contract language that reflects a fair compromise between the parties' positions. Keep it concise but comprehensive.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, convergencePercentage: calculateAlignmentPercentage(clauses) })
 
             if (response?.success && response.response) {
                 setDraftLanguage(response.response)
@@ -6246,7 +6253,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
                             </div>
                             <div className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-400">
-                                --% Aligned
+                                --% Convergence
                             </div>
                         </div>
 
@@ -6286,12 +6293,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const customerCompanyName = session?.customerCompany?.split(' ')[0] || 'Customer'
         const providerCompanyName = session?.providerCompany?.split(' ')[0] || 'Provider'
 
-        // Calculate dynamic alignment percentage
-        // Use server-calculated alignment (matches Clarence AI) when available,
-        // fall back to local calculation only when no leverage data exists
+        // Calculate dynamic convergence percentage
+        // Use server-calculated value when available, fall back to local calculation
         const dynamicAlignmentPercentage = (leverage && displayLeverage.alignmentPercentage > 0)
             ? Math.round(displayLeverage.alignmentPercentage)
-            : calculateAlignmentPercentage(clauses)
+            : Math.round(calculateAlignmentPercentage(clauses))
 
         // Get actual leverage factor scores from the data
         const marketDynamicsScore = displayLeverage.marketDynamicsScore ?? 50
@@ -6348,7 +6354,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 ? 'bg-amber-100 text-amber-700'
                                 : 'bg-red-100 text-red-700'
                             }`}>
-                            {dynamicAlignmentPercentage}% Aligned
+                            {dynamicAlignmentPercentage}% Convergence
                         </div>
                     </div>
                 </div>
