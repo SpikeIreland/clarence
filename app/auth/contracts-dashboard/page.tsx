@@ -174,6 +174,8 @@ export default function ContractsDashboard() {
   const [showMetrics, setShowMetrics] = useState(false)
   const [isCreatingContract, setIsCreatingContract] = useState(false)
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
 
   // Active tab state for Live/Training
   const [activeTab, setActiveTab] = useState<'live' | 'training'>('live')
@@ -317,6 +319,81 @@ export default function ContractsDashboard() {
       saveContractName(sessionId)
     } else if (e.key === 'Escape') {
       cancelEditingName()
+    }
+  }
+
+  // ==========================================================================
+  // SECTION 9C: DELETE SESSION
+  // ==========================================================================
+
+  const handleDeleteSession = async (sessionId: string) => {
+    setDeletingSessionId(sessionId)
+    try {
+      // Delete related data first (in order of dependencies)
+
+      // 1. Delete clause positions for this session
+      const { error: positionsError } = await supabase
+        .from('clause_positions')
+        .delete()
+        .eq('session_id', sessionId)
+
+      if (positionsError) {
+        console.error('Error deleting clause positions:', positionsError)
+      }
+
+      // 2. Delete provider bids for this session
+      const { error: bidsError } = await supabase
+        .from('provider_bids')
+        .delete()
+        .eq('session_id', sessionId)
+
+      if (bidsError) {
+        console.error('Error deleting provider bids:', bidsError)
+      }
+
+      // 3. Delete leverage calculations for this session
+      const { error: leverageError } = await supabase
+        .from('leverage_calculations')
+        .delete()
+        .eq('session_id', sessionId)
+
+      if (leverageError) {
+        console.error('Error deleting leverage calculations:', leverageError)
+      }
+
+      // 4. Delete chat messages for this session
+      const { error: chatError } = await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('session_id', sessionId)
+
+      if (chatError) {
+        console.error('Error deleting chat messages:', chatError)
+      }
+
+      // 5. Finally delete the session itself
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .delete()
+        .eq('session_id', sessionId)
+
+      if (sessionError) {
+        console.error('Error deleting session:', sessionError)
+        alert('Failed to delete session. Please try again.')
+        return
+      }
+
+      // Update local state to remove the session
+      setSessions(prev => prev.filter(s => s.sessionId !== sessionId))
+
+      console.log('Session deleted successfully:', sessionId)
+
+    } catch (error) {
+      console.error('Error deleting session:', error)
+      alert('Failed to delete session. Please try again.')
+    } finally {
+      setDeletingSessionId(null)
+      setShowDeleteConfirm(null)
     }
   }
 
@@ -1108,8 +1185,8 @@ export default function ContractsDashboard() {
                   return (
                     <div
                       key={session.sessionId}
-                      className={`bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition-all ${isTraining ? 'border-amber-200 hover:border-amber-300' : 'border-slate-200 hover:border-slate-300'
-                        }`}
+                      className={`relative bg-white rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition-all ${isTraining ? 'border-amber-200 hover:border-amber-300' : 'border-slate-200 hover:border-slate-300'
+                        } ${deletingSessionId === session.sessionId ? 'opacity-50' : ''}`}
                     >
                       {/* Session Header */}
                       <div className={`p-5 border-b ${isTraining ? 'border-amber-100' : 'border-slate-100'}`}>
@@ -1150,6 +1227,57 @@ export default function ContractsDashboard() {
                                       className="opacity-0 group-hover/name:opacity-100 p-1 text-slate-400 hover:text-emerald-600 transition-all"
                                       title="Edit contract name"
                                     >
+                                      {/* Delete Button */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setShowDeleteConfirm(session.sessionId)
+                                        }}
+                                        className="opacity-0 group-hover/name:opacity-100 p-1 text-slate-400 hover:text-red-600 transition-all"
+                                        title="Delete session"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+
+                                      {/* Delete Confirmation Popup */}
+                                      {showDeleteConfirm === session.sessionId && (
+                                        <div
+                                          className="absolute top-0 left-0 right-0 bg-white border border-red-200 rounded-lg shadow-lg p-4 z-20"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <p className="text-sm text-slate-700 mb-3">
+                                            Delete <strong>{session.contractName || session.sessionNumber}</strong>?
+                                          </p>
+                                          <p className="text-xs text-slate-500 mb-3">
+                                            This will permanently remove the session and all related data.
+                                          </p>
+                                          <div className="flex gap-2">
+                                            <button
+                                              onClick={() => handleDeleteSession(session.sessionId)}
+                                              disabled={deletingSessionId === session.sessionId}
+                                              className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 flex items-center gap-1"
+                                            >
+                                              {deletingSessionId === session.sessionId ? (
+                                                <>
+                                                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                  </svg>
+                                                  Deleting...
+                                                </>
+                                              ) : 'Yes, Delete'}
+                                            </button>
+                                            <button
+                                              onClick={() => setShowDeleteConfirm(null)}
+                                              className="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
                                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                       </svg>
