@@ -135,6 +135,55 @@ const LANGUAGE_OPTIONS = [
 ]
 
 // ============================================================================
+// SECTION 3.5: HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Format deal value code to display string
+ * Handles both code values (e.g., "over_1m") and numeric values
+ */
+const formatDealValue = (value: string | number | null | undefined): string => {
+    if (!value) return '—'
+
+    // Map of code values to display strings
+    const dealValueMap: Record<string, string> = {
+        'under_100k': 'Under £100K',
+        'under_250k': 'Under £250K',
+        '100k_250k': '£100K - £250K',
+        '100k_500k': '£100K - £500K',
+        '250k_500k': '£250K - £500K',
+        '500k_1m': '£500K - £1M',
+        'over_500k': 'Over £500K',
+        'over_1m': 'Over £1M',
+        '1m_5m': '£1M - £5M',
+        'over_5m': 'Over £5M',
+        'not_disclosed': 'Not Disclosed',
+        'tbc': 'TBC'
+    }
+
+    // Check if it's a known code
+    const strValue = String(value).toLowerCase().trim()
+    if (dealValueMap[strValue]) {
+        return dealValueMap[strValue]
+    }
+
+    // Try to parse as a number (for backwards compatibility)
+    const numValue = typeof value === 'number' ? value : parseFloat(String(value).replace(/[^0-9.]/g, ''))
+    if (!isNaN(numValue) && numValue > 0) {
+        if (numValue >= 1000000) {
+            return `£${(numValue / 1000000).toFixed(1)}M`
+        }
+        if (numValue >= 1000) {
+            return `£${(numValue / 1000).toFixed(0)}K`
+        }
+        return `£${numValue.toLocaleString()}`
+    }
+
+    // Return original value if nothing else matches (capitalize first letter)
+    return String(value).charAt(0).toUpperCase() + String(value).slice(1).replace(/_/g, ' ')
+}
+
+// ============================================================================
 // SECTION 4: SHARED HEADER COMPONENT
 // ============================================================================
 
@@ -679,7 +728,7 @@ function ProviderIntakeContent() {
                             <div>
                                 <span className="text-blue-600 text-xs font-medium">Est. Value</span>
                                 <div className="text-slate-800 font-medium">
-                                    {inviteData?.dealValue ? `\u00A3${Number(inviteData.dealValue).toLocaleString()}` : '\u2014'}
+                                    {formatDealValue(inviteData?.dealValue)}
                                 </div>
                             </div>
                         </div>

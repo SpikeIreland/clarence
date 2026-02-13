@@ -1320,8 +1320,6 @@ function ProviderAuthContent() {
 
             <ProviderFooter />
 
-            {/* Beta Feedback Button */}
-            <FeedbackButton position="bottom-left" />
         </div>
     );
 }
