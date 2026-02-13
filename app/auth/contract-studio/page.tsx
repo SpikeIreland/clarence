@@ -1329,10 +1329,14 @@ function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'di
  * Calculate alignment percentage across all clauses
  * Uses continuous scoring: each clause contributes based on how close positions are
  * Gap of 0 = 100% aligned, Gap of 9 = 0% aligned (linear)
- * This matches the Clarence AI alignment calculation
+ * Counts all clauses with both positions set (matching Clarence AI calculation)
  */
 function calculateAlignmentPercentage(clauses: ContractClause[]): number {
-    const scorableClauses = clauses.filter(c => c.clauseLevel === 1 && c.customerPosition !== null && c.providerPosition !== null)
+    const scorableClauses = clauses.filter(c =>
+        !c.isCategoryHeader &&
+        c.customerPosition !== null &&
+        c.providerPosition !== null
+    )
 
     if (scorableClauses.length === 0) return 0
 
