@@ -1061,7 +1061,14 @@ function CompanyAdminContent() {
         const fileName = `${companyId}/${Date.now()}.${file.name.split('.').pop()}`
         const { error: uploadError } = await supabase.storage.from('playbooks').upload(fileName, file)
         if (uploadError) throw new Error(uploadError.message)
-        const { error: insertError } = await supabase.from('company_playbooks').insert({ company_id: companyId, playbook_name: file.name.replace(/\.[^/.]+$/, ''), source_file_name: file.name, source_file_path: fileName, status: 'pending_parse', created_by: userInfo?.userId })
+        const { error: insertError } = await supabase.from('company_playbooks').insert({
+            company_id: companyId,
+            playbook_name: file.name.replace(/\.[^/.]+$/, ''),
+            source_file_name: file.name,
+            source_file_path: fileName,
+            status: 'pending_parse',
+            created_by_user_id: userInfo?.userId  // ← CHANGED from created_by
+        })
         if (insertError) throw new Error(insertError.message)
         await loadPlaybooks(companyId!)
     }
