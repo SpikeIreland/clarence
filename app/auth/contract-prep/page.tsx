@@ -2274,7 +2274,7 @@ function ContractPrepContent() {
                                         top: '50%',
                                         transform: 'translate(-50%, -50%)'
                                     }}
-                                    title={`Your position: ${userConfig.position} — Drag to adjust`}
+                                    title={`Your position: ${currentPos} — Drag to adjust`}
                                     draggable={false}
                                     onMouseDown={(e) => {
                                         e.preventDefault()
