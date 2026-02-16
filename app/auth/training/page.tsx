@@ -137,6 +137,33 @@ interface TrainingVideo {
 type DifficultyMode = 'cooperative' | 'balanced' | 'aggressive'
 
 // ============================================================================
+// SECTION 2A: PLAYBOOK TRAINING INTERFACES
+// ============================================================================
+
+interface CompanyPlaybook {
+    playbookId: string
+    playbookName: string
+    playbookDescription: string | null
+    contractType: string | null
+    isActive: boolean
+    rulesCount: number
+    status: string
+}
+
+interface PlaybookFocusArea {
+    focusAreaId: string
+    focusCode: string
+    focusName: string
+    description: string | null
+    icon: string | null
+    clauseCategories: string[]
+    displayOrder: number
+    themeColor: string
+}
+
+type PlaybookTrainingMode = 'tutorial' | 'practice' | 'test'
+
+// ============================================================================
 // SECTION 3: CONSTANTS
 // ============================================================================
 
@@ -257,6 +284,101 @@ export default function TrainingStudioPage() {
     const [videos, setVideos] = useState<TrainingVideo[]>([])
     const [loadingVideos, setLoadingVideos] = useState(false)
     const [videoCategory, setVideoCategory] = useState<string>('all')
+
+
+    // ========================================================================
+    // SECTION 4F: STATE - PLAYBOOK TRAINING
+    // ========================================================================
+
+    const [companyPlaybooks, setCompanyPlaybooks] = useState<CompanyPlaybook[]>([])
+    const [focusAreas, setFocusAreas] = useState<PlaybookFocusArea[]>([])
+    const [loadingPlaybooks, setLoadingPlaybooks] = useState(false)
+
+    // Playbook training selection state
+    const [selectedPlaybook, setSelectedPlaybook] = useState<CompanyPlaybook | null>(null)
+    const [selectedFocusArea, setSelectedFocusArea] = useState<PlaybookFocusArea | null>(null)
+    const [selectedTrainingMode, setSelectedTrainingMode] = useState<PlaybookTrainingMode>('practice')
+    const [selectedAiDifficulty, setSelectedAiDifficulty] = useState<'cooperative' | 'balanced' | 'aggressive'>('balanced')
+    const [showPlaybookModal, setShowPlaybookModal] = useState(false)
+    const [isStartingPlaybookSession, setIsStartingPlaybookSession] = useState(false)
+    const [playbookSessionError, setPlaybookSessionError] = useState<string | null>(null)
+
+
+    // ========================================================================
+    // SECTION 6A: DATA LOADING - PLAYBOOKS & FOCUS AREAS
+    // ========================================================================
+
+    const loadCompanyPlaybooks = useCallback(async () => {
+        if (!userInfo?.companyId) return
+
+        setLoadingPlaybooks(true)
+        try {
+            // Load company playbooks
+            const { data: playbooksData, error: playbooksError } = await supabase
+                .from('company_playbooks')
+                .select('*')
+                .eq('company_id', userInfo.companyId)
+                .eq('is_active', true)
+                .order('playbook_name')
+
+            if (playbooksError) {
+                console.error('Error loading playbooks:', playbooksError)
+                return
+            }
+
+            // Get rule counts for each playbook
+            const playbooksWithCounts: CompanyPlaybook[] = await Promise.all(
+                (playbooksData || []).map(async (pb) => {
+                    const { count } = await supabase
+                        .from('playbook_rules')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('playbook_id', pb.playbook_id)
+                        .eq('is_active', true)
+
+                    return {
+                        playbookId: pb.playbook_id,
+                        playbookName: pb.playbook_name,
+                        playbookDescription: pb.playbook_description,
+                        contractType: pb.contract_type,
+                        isActive: pb.is_active,
+                        rulesCount: count || 0,
+                        status: pb.status || 'active',
+                    }
+                })
+            )
+
+            setCompanyPlaybooks(playbooksWithCounts)
+
+            // Load focus areas
+            const { data: focusData, error: focusError } = await supabase
+                .from('playbook_focus_areas')
+                .select('*')
+                .eq('is_active', true)
+                .order('display_order')
+
+            if (focusError) {
+                console.error('Error loading focus areas:', focusError)
+                return
+            }
+
+            const mappedFocusAreas: PlaybookFocusArea[] = (focusData || []).map((fa) => ({
+                focusAreaId: fa.focus_area_id,
+                focusCode: fa.focus_code,
+                focusName: fa.focus_name,
+                description: fa.description,
+                icon: fa.icon,
+                clauseCategories: fa.clause_categories || [],
+                displayOrder: fa.display_order,
+                themeColor: fa.theme_color || 'slate',
+            }))
+
+            setFocusAreas(mappedFocusAreas)
+        } catch (err) {
+            console.error('Error in loadCompanyPlaybooks:', err)
+        } finally {
+            setLoadingPlaybooks(false)
+        }
+    }, [supabase, userInfo?.companyId])
 
     // ==========================================================================
     // SECTION 7: AUTHENTICATION & DATA LOADING
@@ -396,6 +518,13 @@ export default function TrainingStudioPage() {
     useEffect(() => { if (activeTab === 'choose-contract' && templates.length === 0) loadTemplates() }, [activeTab, templates.length, loadTemplates])
     useEffect(() => { if (activeTab === 'videos' && videos.length === 0) loadVideos() }, [activeTab, videos.length, loadVideos])
 
+    // Load playbooks when user info is available
+    useEffect(() => {
+        if (userInfo?.companyId) {
+            loadCompanyPlaybooks()
+        }
+    }, [userInfo?.companyId, loadCompanyPlaybooks])
+
     // ==========================================================================
     // SECTION 9: EVENT HANDLERS (Quick Start / Scenario)
     // ==========================================================================
@@ -495,6 +624,105 @@ export default function TrainingStudioPage() {
 
     const handleContinueSession = (sessionId: string) => {
         router.push(`/auth/contract-studio?session_id=${sessionId}`)
+    }
+
+    // ========================================================================
+    // SECTION 9A: EVENT HANDLERS - PLAYBOOK TRAINING
+    // ========================================================================
+
+    const handleStartPlaybookTraining = async () => {
+        if (!selectedPlaybook || !userInfo) return
+
+        setIsStartingPlaybookSession(true)
+        setPlaybookSessionError(null)
+
+        try {
+            // Map difficulty to character
+            const difficultyCharacterMap: Record<string, TrainingCharacter | undefined> = {
+                cooperative: characters.find(c => c.personalityType === 'cooperative'),
+                balanced: characters.find(c => c.personalityType === 'balanced'),
+                aggressive: characters.find(c => c.personalityType === 'aggressive'),
+            }
+            const selectedCharacter = difficultyCharacterMap[selectedAiDifficulty]
+
+            if (!selectedCharacter) {
+                throw new Error('No AI character available for selected difficulty')
+            }
+
+            // Call the training-start-playbook endpoint (we'll create this workflow)
+            const response = await fetch(`${API_BASE}/training-start-playbook`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    // User context
+                    userId: userInfo.userId,
+                    userEmail: userInfo.email,
+                    userName: `${userInfo.firstName} ${userInfo.lastName}`,
+                    companyName: userInfo.company,
+                    companyId: userInfo.companyId,
+
+                    // Playbook context
+                    playbookId: selectedPlaybook.playbookId,
+                    playbookName: selectedPlaybook.playbookName,
+
+                    // Training configuration
+                    trainingMode: selectedTrainingMode,
+                    focusArea: selectedFocusArea?.focusCode || 'all',
+                    focusCategories: selectedFocusArea?.clauseCategories || [],
+
+                    // AI opponent
+                    characterId: selectedCharacter.characterId,
+                    characterName: selectedCharacter.characterName,
+                    aiCompanyName: selectedCharacter.companyName,
+                    aiPersonality: selectedCharacter.personalityType,
+                    baseLeverageCustomer: selectedCharacter.baseLeverageCustomer,
+                    baseLeverageProvider: selectedCharacter.baseLeverageProvider,
+
+                    // Guidance settings
+                    showGuidance: selectedTrainingMode !== 'test',
+                    showHints: selectedTrainingMode === 'tutorial',
+                    allowDeviations: true,
+                }),
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || 'Failed to start playbook training session')
+            }
+
+            const result = await response.json()
+
+            if (result.sessionId) {
+                // Log event
+                eventLogger.started('training', 'playbook_session_started', {
+                    sessionId: result.sessionId,
+                    playbookId: selectedPlaybook.playbookId,
+                    playbookName: selectedPlaybook.playbookName,
+                    trainingMode: selectedTrainingMode,
+                    focusArea: selectedFocusArea?.focusCode || 'all',
+                    aiDifficulty: selectedAiDifficulty,
+                })
+
+                // Navigate to training session
+                router.push(`/auth/training/${result.sessionId}`)
+            } else {
+                throw new Error('No session ID returned')
+            }
+        } catch (err) {
+            console.error('Error starting playbook training:', err)
+            setPlaybookSessionError(err instanceof Error ? err.message : 'Failed to start training')
+        } finally {
+            setIsStartingPlaybookSession(false)
+        }
+    }
+
+    const handleOpenPlaybookTraining = () => {
+        setSelectedPlaybook(null)
+        setSelectedFocusArea(null)
+        setSelectedTrainingMode('practice')
+        setSelectedAiDifficulty('balanced')
+        setPlaybookSessionError(null)
+        setShowPlaybookModal(true)
     }
 
     // ==========================================================================
@@ -958,6 +1186,62 @@ export default function TrainingStudioPage() {
                 )}
 
                 {/* ============================================================ */}
+                {/* PLAYBOOK TRAINING CARD */}
+                {/* ============================================================ */}
+
+                <div className="bg-white rounded-xl border-2 border-indigo-200 hover:border-indigo-400 hover:shadow-lg transition-all overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">Playbook Training</h3>
+                                <p className="text-indigo-100 text-sm">Learn your company's negotiation rules</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-6">
+                        <p className="text-slate-600 text-sm mb-4">
+                            Practice negotiating while following your company's playbook guidelines.
+                            Get scored on adherence to red lines, position ranges, and escalation rules.
+                        </p>
+
+                        {companyPlaybooks.length === 0 ? (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+                                <p className="text-amber-800 text-sm mb-2">No playbooks available</p>
+                                <p className="text-amber-600 text-xs">
+                                    Ask your admin to upload a company playbook in Company Settings.
+                                </p>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={handleOpenPlaybookTraining}
+                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Start Playbook Training
+                            </button>
+                        )}
+
+                        <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+                            <span>{companyPlaybooks.length} playbook{companyPlaybooks.length !== 1 ? 's' : ''} available</span>
+                            <span className="flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Scored on adherence
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ============================================================ */}
                 {/* SECTION 17B: CHOOSE YOUR CONTRACT TAB */}
                 {/* ============================================================ */}
                 {activeTab === 'choose-contract' && (
@@ -1104,6 +1388,229 @@ export default function TrainingStudioPage() {
                     </div>
                 )}
             </main>
+
+            {/* ============================================================ */}
+            {/* PLAYBOOK TRAINING MODAL */}
+            {/* ============================================================ */}
+
+            {showPlaybookModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-5 flex-shrink-0">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-white">Playbook Training</h2>
+                                        <p className="text-indigo-100 text-sm">Configure your training session</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowPlaybookModal(false)}
+                                    className="p-2 hover:bg-white/20 rounded-lg transition"
+                                >
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {/* Step 1: Select Playbook */}
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                    1. Select Playbook
+                                </label>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {companyPlaybooks.map((playbook) => (
+                                        <div
+                                            key={playbook.playbookId}
+                                            onClick={() => setSelectedPlaybook(playbook)}
+                                            className={`p-4 rounded-lg border-2 cursor-pointer transition ${selectedPlaybook?.playbookId === playbook.playbookId
+                                                ? 'border-indigo-500 bg-indigo-50'
+                                                : 'border-slate-200 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h4 className="font-medium text-slate-800">{playbook.playbookName}</h4>
+                                                    {playbook.playbookDescription && (
+                                                        <p className="text-sm text-slate-500 mt-1">{playbook.playbookDescription}</p>
+                                                    )}
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="text-xs text-slate-500">{playbook.rulesCount} rules</span>
+                                                    {selectedPlaybook?.playbookId === playbook.playbookId && (
+                                                        <div className="mt-1">
+                                                            <svg className="w-5 h-5 text-indigo-600 ml-auto" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Step 2: Select Focus Area */}
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                    2. Focus Area <span className="font-normal text-slate-400">(optional)</span>
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                    {focusAreas.map((area) => (
+                                        <button
+                                            key={area.focusAreaId}
+                                            onClick={() => setSelectedFocusArea(
+                                                selectedFocusArea?.focusAreaId === area.focusAreaId ? null : area
+                                            )}
+                                            className={`px-4 py-2 rounded-lg border-2 text-sm font-medium transition flex items-center gap-2 ${selectedFocusArea?.focusAreaId === area.focusAreaId
+                                                ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                                                : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                                                }`}
+                                        >
+                                            <span>{area.icon}</span>
+                                            {area.focusName}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Step 3: Training Mode */}
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                    3. Training Mode
+                                </label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <button
+                                        onClick={() => setSelectedTrainingMode('tutorial')}
+                                        className={`p-4 rounded-lg border-2 text-center transition ${selectedTrainingMode === 'tutorial'
+                                            ? 'border-emerald-500 bg-emerald-50'
+                                            : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                    >
+                                        <div className="text-2xl mb-2">🎓</div>
+                                        <div className="font-medium text-slate-800">Tutorial</div>
+                                        <div className="text-xs text-slate-500 mt-1">Guidance + hints</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedTrainingMode('practice')}
+                                        className={`p-4 rounded-lg border-2 text-center transition ${selectedTrainingMode === 'practice'
+                                            ? 'border-amber-500 bg-amber-50'
+                                            : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                    >
+                                        <div className="text-2xl mb-2">🏋️</div>
+                                        <div className="font-medium text-slate-800">Practice</div>
+                                        <div className="text-xs text-slate-500 mt-1">Guidance visible</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedTrainingMode('test')}
+                                        className={`p-4 rounded-lg border-2 text-center transition ${selectedTrainingMode === 'test'
+                                            ? 'border-red-500 bg-red-50'
+                                            : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                    >
+                                        <div className="text-2xl mb-2">📝</div>
+                                        <div className="font-medium text-slate-800">Test</div>
+                                        <div className="text-xs text-slate-500 mt-1">No guidance</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Step 4: AI Difficulty */}
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                    4. AI Opponent Difficulty
+                                </label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <button
+                                        onClick={() => setSelectedAiDifficulty('cooperative')}
+                                        className={`p-4 rounded-lg border-2 text-center transition ${selectedAiDifficulty === 'cooperative'
+                                            ? 'border-green-500 bg-green-50'
+                                            : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                    >
+                                        <div className="text-2xl mb-2">😊</div>
+                                        <div className="font-medium text-slate-800">Easy</div>
+                                        <div className="text-xs text-slate-500 mt-1">Cooperative</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedAiDifficulty('balanced')}
+                                        className={`p-4 rounded-lg border-2 text-center transition ${selectedAiDifficulty === 'balanced'
+                                            ? 'border-amber-500 bg-amber-50'
+                                            : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                    >
+                                        <div className="text-2xl mb-2">😐</div>
+                                        <div className="font-medium text-slate-800">Medium</div>
+                                        <div className="text-xs text-slate-500 mt-1">Balanced</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedAiDifficulty('aggressive')}
+                                        className={`p-4 rounded-lg border-2 text-center transition ${selectedAiDifficulty === 'aggressive'
+                                            ? 'border-red-500 bg-red-50'
+                                            : 'border-slate-200 hover:border-slate-300'
+                                            }`}
+                                    >
+                                        <div className="text-2xl mb-2">😤</div>
+                                        <div className="font-medium text-slate-800">Hard</div>
+                                        <div className="text-xs text-slate-500 mt-1">Aggressive</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Error message */}
+                            {playbookSessionError && (
+                                <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                                    {playbookSessionError}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t border-slate-200 flex justify-between items-center flex-shrink-0">
+                            <button
+                                onClick={() => setShowPlaybookModal(false)}
+                                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleStartPlaybookTraining}
+                                disabled={!selectedPlaybook || isStartingPlaybookSession}
+                                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {isStartingPlaybookSession ? (
+                                    <>
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                        Starting...
+                                    </>
+                                ) : (
+                                    <>
+                                        Start Training
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                        </svg>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ================================================================ */}
             {/* SECTION 18: MODALS */}
