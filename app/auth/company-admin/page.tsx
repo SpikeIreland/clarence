@@ -1109,25 +1109,23 @@ function CompanyAdminContent() {
         const supabase = createClient()
 
         // 1. Delete playbook rules first (foreign key dependency)
-        const { error: rulesError, count: rulesCount } = await supabase
+        const { error: rulesError } = await supabase
             .from('playbook_rules')
             .delete()
             .eq('playbook_id', playbookId)
-            .select('*', { count: 'exact', head: true })
 
-        console.log('Delete rules result:', { rulesError, rulesCount })
+        console.log('Delete rules result:', { rulesError })
         if (rulesError) {
             console.error('Failed to delete playbook rules:', rulesError)
         }
 
         // 2. Delete the playbook record
-        const { error: playbookError, data: deletedData } = await supabase
+        const { error: playbookError } = await supabase
             .from('company_playbooks')
             .delete()
             .eq('playbook_id', playbookId)
-            .select()
 
-        console.log('Delete playbook result:', { playbookError, deletedData })
+        console.log('Delete playbook result:', { playbookError })
         if (playbookError) {
             console.error('Failed to delete playbook:', playbookError)
             alert('Failed to delete playbook: ' + playbookError.message)
@@ -1143,7 +1141,6 @@ function CompanyAdminContent() {
             console.log('Delete storage result:', { storageError })
             if (storageError) {
                 console.error('Failed to delete file from storage:', storageError)
-                // Don't return - the DB record is already deleted
             }
         }
 
