@@ -155,6 +155,9 @@ interface CertificationResult {
     clarencePosition: number        // 1-10 — the AI's recommended position
     confidence: number              // 0-1 (numeric from DB)
     rationale: string               // ai_suggestion text
+    fairness: string                // clarence_fairness: 'balanced', 'review_recommended', etc.
+    summary: string                 // clarence_summary: one-sentence description
+    assessment: string              // clarence_assessment: 2-3 sentence analysis
     status: 'pending' | 'certified' | 'failed'
 }
 
@@ -1470,7 +1473,10 @@ function ContractPrepContent() {
                             clauseId: rec.clause_id,
                             clarencePosition: Math.round(position),
                             confidence: rec.ai_confidence ? parseFloat(rec.ai_confidence) : 0,
-                            rationale: rec.ai_suggestion || '',
+                            rationale: rec.ai_suggestion || rec.clarence_assessment || '',
+                            fairness: rec.clarence_fairness || 'balanced',
+                            summary: rec.clarence_summary || '',
+                            assessment: rec.clarence_assessment || '',
                             status: 'certified'
                         }
                         certifiedCount++
@@ -1574,9 +1580,58 @@ function ContractPrepContent() {
         }
     }, [clauses.length, contract?.status, contract?.contractId])
 
-    // ── 5R-6: Position Translation ─────────────────────────────────────────
+    // —— 5R-6: Translate Position to Real-World Value (Rich) ————————————————
 
+    const translatePositionRich = (clauseId: string, position: number): { value: number; label: string; description: string } | null => {
+        const mapping = rangeMappings[clauseId]
+        if (!mapping || !mapping.isDisplayable || !mapping.rangeData?.scale_points?.length) return null
+
+        const points = mapping.rangeData.scale_points
+
+        // Exact match
+        const exact = points.find(p => Math.abs(p.position - position) < 0.1)
+        if (exact) return exact
+
+        // Interpolation
+        const lower = [...points].filter(p => p.position <= position).pop()
+        const upper = points.find(p => p.position > position)
+
+        if (!lower || !upper) {
+            return position <= points[0].position ? points[0] : points[points.length - 1]
+        }
+
+        const fraction = (position - lower.position) / (upper.position - lower.position)
+        let interpolatedValue: number
+
+        if (mapping.rangeData.interpolation === 'logarithmic') {
+            const logLower = Math.log(lower.value || 1)
+            const logUpper = Math.log(upper.value || 1)
+            interpolatedValue = Math.exp(logLower + fraction * (logUpper - logLower))
+        } else if (mapping.rangeData.interpolation === 'stepped') {
+            return lower
+        } else {
+            interpolatedValue = lower.value + fraction * (upper.value - lower.value)
+        }
+
+        const precision = mapping.rangeData.display_precision ?? 0
+        const rounded = Number(interpolatedValue.toFixed(precision))
+
+        const label = mapping.rangeData.format_pattern
+            .replace('{value}', rounded.toLocaleString())
+            .replace('{unit}', mapping.rangeUnit || '')
+            .trim()
+
+        return {
+            value: rounded,
+            label: label,
+            description: `Between ${lower.label} and ${upper.label}`
+        }
+    }
+
+    // String version for backward compatibility
     const translatePosition = (clauseId: string, position: number): string => {
+        const rich = translatePositionRich(clauseId, position)
+        if (rich) return rich.label
         const mapping = rangeMappings[clauseId]
         if (!mapping || !mapping.isDisplayable || !mapping.rangeData?.scale_points?.length) return `Position ${position}`
         const exact = mapping.rangeData.scale_points.find(sp => sp.position === position)
@@ -1585,12 +1640,17 @@ function ContractPrepContent() {
         return sorted[0]?.label || `Position ${position}`
     }
 
-    // ── 5R-7: Get Scale Point Details ──────────────────────────────────────
+    // —— 5R-7: Get Scale Point Details ——————————————————————————————————————
 
     const getScalePointForPosition = (clauseId: string, position: number): ScalePoint | null => {
         const mapping = rangeMappings[clauseId]
         if (!mapping || !mapping.isDisplayable || !mapping.rangeData?.scale_points?.length) return null
-        return mapping.rangeData.scale_points.find(sp => sp.position === position) || null
+        // Exact match first
+        const exact = mapping.rangeData.scale_points.find(sp => Math.abs(sp.position - position) < 0.1)
+        if (exact) return exact
+        // Nearest match
+        const sorted = [...mapping.rangeData.scale_points].sort((a, b) => Math.abs(a.position - position) - Math.abs(b.position - position))
+        return sorted[0] || null
     }
 
     // ── 5R-8: Get Zone For Position ────────────────────────────────────────
@@ -2094,146 +2154,196 @@ function ContractPrepContent() {
 
         // Position bar helpers
         const renderPositionBar = () => {
-            if (!hasMapping || !mapping) {
-                // Generic 1-10 slider (no range data)
-                const currentPos = userConfig?.position || 5
-                return (
-                    <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                        <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-sm font-semibold text-slate-700">Your Position</h4>
-                            <span className="text-sm font-medium text-slate-600">
-                                {currentPos}/10 — {getPositionLabel(currentPos)}
-                            </span>
+            const currentPos = userConfig?.position || recommendation?.clarencePosition || 5
+            const clarencePos = recommendation?.clarencePosition || null
+
+            return (
+                <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-4">Position Configuration</h3>
+
+                    {/* ── THE POSITION BAR ─────────────────────────────────── */}
+                    <div className="relative mb-6 pt-8 pb-2">
+
+                        {/* Gradient background bar — Blue (provider) → Teal → Emerald (customer) */}
+                        <div className="relative h-4 bg-gradient-to-r from-blue-200 via-teal-200 via-50% to-emerald-200 rounded-full">
+
+                            {/* Scale tick marks */}
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                <div
+                                    key={n}
+                                    className="absolute top-0 bottom-0 w-px bg-white/50"
+                                    style={{ left: `${((n - 1) / 9) * 100}%` }}
+                                />
+                            ))}
+
+                            {/* Industry Standard band overlay */}
+                            {hasMapping && mapping && (
+                                <div
+                                    className="absolute top-0 bottom-0 border-2 border-purple-300/60 bg-purple-100/20 rounded"
+                                    style={{
+                                        left: `${(((mapping.industryStandardMin || 4) - 1) / 9) * 100}%`,
+                                        width: `${(((mapping.industryStandardMax || 6) - (mapping.industryStandardMin || 4)) / 9) * 100}%`
+                                    }}
+                                    title={`Industry Standard Range: ${mapping.industryStandardMin} – ${mapping.industryStandardMax}`}
+                                />
+                            )}
+
+                            {/* CLARENCE Marker — Purple "C" badge (read-only indicator) */}
+                            {clarencePos !== null && (
+                                <div
+                                    className="absolute w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-3 border-white flex items-center justify-center text-xs font-bold text-white z-10 shadow-lg"
+                                    style={{
+                                        left: `${((clarencePos - 1) / 9) * 100}%`,
+                                        top: '50%',
+                                        transform: 'translate(-50%, -50%)'
+                                    }}
+                                    title={`Clarence recommends: Position ${clarencePos} — ${translatePosition(selectedClause.clauseId, clarencePos)}`}
+                                >
+                                    C
+                                </div>
+                            )}
+
+                            {/* USER Marker — Emerald draggable badge */}
+                            {userConfig?.position && (
+                                <div
+                                    className="absolute w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 border-3 border-white flex items-center justify-center text-xs font-bold text-white z-20 shadow-xl cursor-grab active:cursor-grabbing hover:scale-110 transition-transform"
+                                    style={{
+                                        left: `${((userConfig.position - 1) / 9) * 100}%`,
+                                        top: '50%',
+                                        transform: 'translate(-50%, -50%)'
+                                    }}
+                                    title={`Your position: ${userConfig.position} — Drag to adjust`}
+                                    draggable={false}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault()
+                                        const bar = e.currentTarget.parentElement
+                                        if (!bar) return
+
+                                        const handleMouseMove = (moveEvent: MouseEvent) => {
+                                            const rect = bar.getBoundingClientRect()
+                                            const x = moveEvent.clientX - rect.left
+                                            const percent = Math.max(0, Math.min(1, x / rect.width))
+                                            const newPosition = Math.round(1 + (percent * 9))
+                                            setUserClausePosition(selectedClause.clauseId, newPosition)
+                                        }
+
+                                        const handleMouseUp = (upEvent: MouseEvent) => {
+                                            document.removeEventListener('mousemove', handleMouseMove)
+                                            document.removeEventListener('mouseup', handleMouseUp)
+                                            const rect = bar.getBoundingClientRect()
+                                            const x = upEvent.clientX - rect.left
+                                            const percent = Math.max(0, Math.min(1, x / rect.width))
+                                            const finalPosition = Math.round(1 + (percent * 9))
+                                            setUserClausePosition(selectedClause.clauseId, finalPosition)
+                                        }
+
+                                        document.addEventListener('mousemove', handleMouseMove)
+                                        document.addEventListener('mouseup', handleMouseUp)
+                                    }}
+                                >
+                                    You
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── Scale Labels — real-world values if available ────── */}
+                        {hasMapping && mapping?.isDisplayable ? (
+                            <>
+                                <div className="flex justify-between mt-2 px-0">
+                                    {[1, 3, 5, 7, 10].map(pos => {
+                                        const point = mapping.rangeData.scale_points.find(p => p.position === pos)
+                                        return point ? (
+                                            <span key={pos} className="text-[10px] text-slate-500 font-medium max-w-[80px] text-center leading-tight">
+                                                {point.label}
+                                            </span>
+                                        ) : (
+                                            <span key={pos} className="text-[10px] text-slate-400 font-medium">{pos}</span>
+                                        )
+                                    })}
+                                </div>
+
+                                {/* Current position — real-world value */}
+                                {userConfig?.position && (
+                                    <div className="text-center mt-2">
+                                        <span className="text-sm font-semibold text-emerald-700">
+                                            {translatePositionRich(selectedClause.clauseId, userConfig.position)?.label || `Position ${userConfig.position}`}
+                                        </span>
+                                        <span className="text-xs text-slate-400 ml-2">
+                                            (Position {userConfig.position})
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* Industry standard band label */}
+                                {mapping.industryStandardMin && (
+                                    <div className="text-center mt-1">
+                                        <span className="text-[10px] text-purple-400">
+                                            Industry standard: {mapping.rangeData.scale_points.find(p => p.position === mapping.industryStandardMin)?.label || ''} — {mapping.rangeData.scale_points.find(p => p.position === mapping.industryStandardMax)?.label || ''}
+                                        </span>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="flex justify-between mt-2 px-0">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                    <span key={n} className="text-[10px] text-slate-400 font-medium" style={{ width: '11.11%', textAlign: n === 1 ? 'left' : n === 10 ? 'right' : 'center' }}>
+                                        {n}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Provider ← → Customer labels */}
+                        <div className="flex justify-between mt-1 text-[10px]">
+                            <span className="text-blue-500 font-medium">← Provider Favourable</span>
+                            <span className="text-slate-400">Balanced</span>
+                            <span className="text-emerald-600 font-medium">Customer Favourable →</span>
+                        </div>
+                    </div>
+
+                    {/* ── Slider for precise positioning ───────────────────── */}
+                    <div className="mb-4">
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-slate-500">Fine-tune your position</span>
+                            <span className="text-xs font-medium text-emerald-700">{currentPos}/10 — {getPositionLabel(currentPos)}</span>
                         </div>
                         <input
                             type="range" min="1" max="10" step="1"
                             value={currentPos}
                             onChange={(e) => setUserClausePosition(selectedClause.clauseId, parseInt(e.target.value))}
-                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                         />
-                        <div className="flex justify-between text-xs text-slate-400 mt-1">
-                            <span>Very Flexible</span>
-                            <span>Non-Negotiable</span>
-                        </div>
-                        {!hasMapping && certificationProgress.status === 'running' && (
-                            <p className="text-xs text-blue-500 mt-3 flex items-center gap-1">
-                                <span className="w-2 h-2 border border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
-                                AI analysis in progress — real-world labels coming soon
-                            </p>
-                        )}
-                    </div>
-                )
-            }
-
-            // Rich position bar with scale points and zones
-            const scalePoints = mapping.rangeData.scale_points || []
-            const currentPos = userConfig?.position || recommendation?.clarencePosition || 5
-            const zone = getZoneForPosition(selectedClause.clauseId, currentPos)
-            const currentScalePoint = getScalePointForPosition(selectedClause.clauseId, currentPos)
-
-            return (
-                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                    {/* Position header */}
-                    <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-slate-700">Your Position</h4>
-                        <div className="text-right">
-                            <span className="text-lg font-bold text-slate-800">
-                                {currentScalePoint?.label || `Position ${currentPos}`}
-                            </span>
-                            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${zone.colors.bg} ${zone.colors.text}`}>
-                                {zone.zone}
-                            </span>
-                        </div>
                     </div>
 
-                    {/* Zone background bar */}
-                    <div className="relative mt-4 mb-2">
-                        <div className="flex h-3 rounded-full overflow-hidden border border-slate-200">
-                            {(() => {
-                                const min = mapping.industryStandardMin ?? 4
-                                const max = mapping.industryStandardMax ?? 7
-                                const providerWidth = ((min - 1) / 9) * 100
-                                const standardWidth = ((max - min) / 9) * 100
-                                const customerWidth = 100 - providerWidth - standardWidth
-                                return (
-                                    <>
-                                        <div className="bg-rose-200" style={{ width: `${providerWidth}%` }} title="Provider Favourable" />
-                                        <div className="bg-amber-200" style={{ width: `${standardWidth}%` }} title="Industry Standard" />
-                                        <div className="bg-emerald-200" style={{ width: `${customerWidth}%` }} title="Customer Favourable" />
-                                    </>
-                                )
-                            })()}
-                        </div>
-
-                        {/* Clarence marker (purple) */}
-                        {hasRec && recommendation && (
-                            <div
-                                className="absolute top-0 w-3 h-3 bg-purple-600 rounded-full border-2 border-white shadow-md transform -translate-x-1/2"
-                                style={{ left: `${((recommendation.clarencePosition - 1) / 9) * 100}%`, top: '0px' }}
-                                title={`Clarence recommends: ${translatePosition(selectedClause.clauseId, recommendation.clarencePosition)}`}
-                            />
-                        )}
-
-                        {/* User marker (emerald) */}
-                        {userConfig?.position && (
-                            <div
-                                className="absolute top-0 w-3 h-3 bg-emerald-600 rounded-full border-2 border-white shadow-md transform -translate-x-1/2"
-                                style={{ left: `${((userConfig.position - 1) / 9) * 100}%`, top: '0px' }}
-                                title={`Your position: ${translatePosition(selectedClause.clauseId, userConfig.position)}`}
-                            />
-                        )}
-                    </div>
-
-                    {/* Zone legend */}
-                    <div className="flex justify-between text-xs mb-4">
-                        <span className="text-rose-600">Provider Favourable</span>
-                        <span className="text-amber-600">Industry Standard</span>
-                        <span className="text-emerald-600">Customer Favourable</span>
-                    </div>
-
-                    {/* Slider */}
-                    <input
-                        type="range" min="1" max="10" step="1"
-                        value={currentPos}
-                        onChange={(e) => setUserClausePosition(selectedClause.clauseId, parseInt(e.target.value))}
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                    />
-
-                    {/* Scale point labels */}
-                    <div className="flex justify-between mt-2">
-                        {scalePoints.length > 0 ? (
-                            <>
-                                <span className="text-xs text-slate-400">{scalePoints[0]?.label}</span>
-                                <span className="text-xs text-slate-400">{scalePoints[scalePoints.length - 1]?.label}</span>
-                            </>
-                        ) : (
-                            <>
-                                <span className="text-xs text-slate-400">1</span>
-                                <span className="text-xs text-slate-400">10</span>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Scale point description */}
-                    {currentScalePoint?.description && (
-                        <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
-                            <p className="text-xs text-slate-600">{currentScalePoint.description}</p>
-                        </div>
-                    )}
-
-                    {/* Marker legend */}
-                    <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
+                    {/* ── Marker Legend ─────────────────────────────────────── */}
+                    <div className="flex items-center gap-6 text-xs text-slate-500 border-t border-slate-100 pt-3">
                         {hasRec && (
-                            <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 bg-purple-600 rounded-full" /> Clarence
+                            <span className="flex items-center gap-1.5">
+                                <span className="w-3 h-3 bg-gradient-to-br from-purple-500 to-purple-700 rounded-full border border-white shadow-sm" />
+                                Clarence Recommendation
                             </span>
                         )}
                         {userConfig?.position && (
-                            <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 bg-emerald-600 rounded-full" /> You
+                            <span className="flex items-center gap-1.5">
+                                <span className="w-3 h-3 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-full border border-white shadow-sm" />
+                                Your Position
+                            </span>
+                        )}
+                        {hasMapping && (
+                            <span className="flex items-center gap-1.5">
+                                <span className="w-4 h-2 border border-purple-300 bg-purple-100/30 rounded-sm" />
+                                Industry Standard
                             </span>
                         )}
                     </div>
+
+                    {/* AI analysis pending indicator */}
+                    {!hasMapping && certificationProgress.status === 'running' && (
+                        <p className="text-xs text-blue-500 mt-3 flex items-center gap-1">
+                            <span className="w-2 h-2 border border-blue-500 border-t-transparent rounded-full animate-spin inline-block" />
+                            AI analysis in progress — real-world labels coming soon
+                        </p>
+                    )}
                 </div>
             )
         }
@@ -2259,8 +2369,8 @@ function ContractPrepContent() {
                                     {selectedClause.category}
                                 </span>
                                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${selectedClause.status === 'verified' ? 'bg-green-100 text-green-700'
-                                        : selectedClause.status === 'rejected' ? 'bg-red-100 text-red-700'
-                                            : 'bg-amber-100 text-amber-700'
+                                    : selectedClause.status === 'rejected' ? 'bg-red-100 text-red-700'
+                                        : 'bg-amber-100 text-amber-700'
                                     }`}>
                                     {selectedClause.status.charAt(0).toUpperCase() + selectedClause.status.slice(1)}
                                 </span>
@@ -2334,51 +2444,86 @@ function ContractPrepContent() {
                     </div>
 
                     {/* Clarence Recommendation Card */}
-                    {hasRec && recommendation && (
-                        <div className="p-6 border-b border-slate-200">
-                            <div className="bg-purple-50 rounded-xl p-5 border border-purple-200">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
-                                            <span className="text-white text-sm font-bold">C</span>
-                                        </div>
-                                        <div>
-                                            <h4 className="text-sm font-semibold text-purple-800">Clarence Recommends</h4>
-                                            <p className="text-xs text-purple-600">
-                                                Position {recommendation.clarencePosition} — {translatePosition(selectedClause.clauseId, recommendation.clarencePosition)}
-                                                {recommendation.confidence > 0 && (
-                                                    <span className="ml-2">({Math.round(recommendation.confidence * 100)}% confidence)</span>
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => acceptClarenceRecommendation(selectedClause.clauseId)}
-                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${userConfig?.acceptedRecommendation
-                                                ? 'bg-purple-200 text-purple-700'
-                                                : 'bg-purple-600 text-white hover:bg-purple-700'
-                                            }`}
-                                    >
-                                        {userConfig?.acceptedRecommendation ? '✓ Accepted' : 'Accept Position'}
-                                    </button>
-                                </div>
-                                {recommendation.rationale && (
-                                    <p className="text-sm text-purple-700 mt-2 leading-relaxed">
-                                        {recommendation.rationale}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Position Bar */}
+                    {/* ── Unified Position Bar (includes Clarence recommendation) ── */}
                     <div className="p-6 border-b border-slate-200">
-                        <h3 className="text-lg font-semibold text-slate-800 mb-2">Position Configuration</h3>
-                        <p className="text-sm text-slate-500 mb-4">
-                            Set your negotiation stance for this clause. Clarence's recommendation is shown in purple.
-                        </p>
                         {renderPositionBar()}
                     </div>
+
+                    {/* ── Clarence Recommendation Detail Card ── */}
+                    {hasRec && recommendation && (
+                        <div className="p-6 border-b border-slate-200">
+                            <div className="flex items-center gap-6">
+                                {/* Clarence Position Card */}
+                                <div className="flex-1 p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-lg">
+                                            <span className="text-white text-xl font-bold">C</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="text-2xl font-bold text-purple-700">
+                                                {translatePositionRich(selectedClause.clauseId, recommendation.clarencePosition)?.label
+                                                    || `Position ${recommendation.clarencePosition}`}
+                                            </div>
+                                            <div className="text-sm text-purple-600">
+                                                Position {recommendation.clarencePosition}/10 — {getPositionLabel(recommendation.clarencePosition)}
+                                                {recommendation.confidence > 0 && (
+                                                    <span className="ml-2 text-purple-400">({Math.round(recommendation.confidence * 100)}% confidence)</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => acceptClarenceRecommendation(selectedClause.clauseId)}
+                                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${userConfig?.acceptedRecommendation
+                                                ? 'bg-purple-200 text-purple-700'
+                                                : 'bg-purple-600 text-white hover:bg-purple-700'
+                                                }`}
+                                        >
+                                            {userConfig?.acceptedRecommendation ? '✓ Accepted' : 'Accept Position'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Fairness Badge */}
+                                {recommendation.fairness && (
+                                    <div className={`px-4 py-3 rounded-lg ${recommendation.fairness === 'balanced'
+                                        ? 'bg-emerald-50 border border-emerald-200'
+                                        : recommendation.fairness.includes('customer')
+                                            ? 'bg-blue-50 border border-blue-200'
+                                            : 'bg-amber-50 border border-amber-200'
+                                        }`}>
+                                        <div className={`text-sm font-medium ${recommendation.fairness === 'balanced'
+                                            ? 'text-emerald-700'
+                                            : recommendation.fairness.includes('customer')
+                                                ? 'text-blue-700'
+                                                : 'text-amber-700'
+                                            }`}>
+                                            {recommendation.fairness === 'balanced' ? '✔ Balanced'
+                                                : recommendation.fairness.includes('customer') ? '⬆ Customer-Leaning'
+                                                    : recommendation.fairness.includes('provider') ? '⬇ Provider-Leaning'
+                                                        : '⚠ Review Recommended'}
+                                        </div>
+                                        <div className="text-xs text-slate-500 mt-0.5">Fairness Assessment</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Assessment / Rationale */}
+                            {(recommendation.assessment || recommendation.rationale) && (
+                                <div className="mt-3 p-3 bg-white rounded-lg border border-purple-100">
+                                    <p className="text-sm text-slate-700 leading-relaxed">
+                                        {recommendation.assessment || recommendation.rationale}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Summary */}
+                            {recommendation.summary && recommendation.summary !== recommendation.assessment && (
+                                <div className="mt-2 text-xs text-purple-500 italic">
+                                    {recommendation.summary}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Importance Level */}
                     <div className="p-6 border-b border-slate-200">
@@ -2391,8 +2536,8 @@ function ContractPrepContent() {
                                     <button key={level}
                                         onClick={() => setUserClauseImportance(selectedClause.clauseId, level)}
                                         className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${isActive
-                                                ? `${config.color} text-white shadow-md`
-                                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                            ? `${config.color} text-white shadow-md`
+                                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                                             }`}>
                                         {config.label}
                                     </button>
@@ -2474,8 +2619,8 @@ function ContractPrepContent() {
                     <button
                         onClick={() => setRightPanelTab('intelligence')}
                         className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${rightPanelTab === 'intelligence'
-                                ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
-                                : 'text-slate-500 hover:text-slate-700'
+                            ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
+                            : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
                         ⚡ Intelligence
@@ -2483,8 +2628,8 @@ function ContractPrepContent() {
                     <button
                         onClick={() => setRightPanelTab('chat')}
                         className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${rightPanelTab === 'chat'
-                                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                                : 'text-slate-500 hover:text-slate-700'
+                            ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                            : 'text-slate-500 hover:text-slate-700'
                             }`}
                     >
                         💬 Clarence
@@ -2535,10 +2680,10 @@ function ContractPrepContent() {
                         {/* Certification Status */}
                         {certificationProgress.status !== 'idle' && (
                             <div className={`rounded-lg p-4 border ${certificationProgress.status === 'complete'
-                                    ? 'bg-green-50 border-green-200'
-                                    : certificationProgress.status === 'error'
-                                        ? 'bg-red-50 border-red-200'
-                                        : 'bg-blue-50 border-blue-200'
+                                ? 'bg-green-50 border-green-200'
+                                : certificationProgress.status === 'error'
+                                    ? 'bg-red-50 border-red-200'
+                                    : 'bg-blue-50 border-blue-200'
                                 }`}>
                                 <div className="flex items-center gap-2 mb-2">
                                     {certificationProgress.status === 'running' && (
@@ -2609,8 +2754,8 @@ function ContractPrepContent() {
                                     <div className="pt-2 border-t border-slate-100">
                                         <span className="text-xs text-slate-400">Intelligence: </span>
                                         <span className={`text-xs font-medium ${getClauseIntelligenceStatus(selectedClause.clauseId) === 'full' ? 'text-green-600'
-                                                : getClauseIntelligenceStatus(selectedClause.clauseId) === 'partial' ? 'text-amber-600'
-                                                    : 'text-slate-400'
+                                            : getClauseIntelligenceStatus(selectedClause.clauseId) === 'partial' ? 'text-amber-600'
+                                                : 'text-slate-400'
                                             }`}>
                                             {getClauseIntelligenceStatus(selectedClause.clauseId) === 'full' ? '✓ Full'
                                                 : getClauseIntelligenceStatus(selectedClause.clauseId) === 'partial' ? '◐ Partial'
@@ -2644,10 +2789,10 @@ function ContractPrepContent() {
                                 <div key={message.id}
                                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                            ? 'bg-blue-600 text-white rounded-br-md'
-                                            : message.role === 'system'
-                                                ? 'bg-slate-100 text-slate-600 rounded-bl-md text-sm'
-                                                : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
+                                        ? 'bg-blue-600 text-white rounded-br-md'
+                                        : message.role === 'system'
+                                            ? 'bg-slate-100 text-slate-600 rounded-bl-md text-sm'
+                                            : 'bg-white border border-slate-200 text-slate-700 rounded-bl-md shadow-sm'
                                         }`}>
                                         <div className="text-sm whitespace-pre-wrap">
                                             {message.content.split('**').map((part, i) =>
@@ -2831,8 +2976,8 @@ function ContractPrepContent() {
                                                             <button onClick={() => !isAlreadyInContract && toggleMasterClauseSelection(clause.clauseId)}
                                                                 disabled={isAlreadyInContract}
                                                                 className={`mt-0.5 w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isAlreadyInContract ? 'bg-slate-200 border-slate-300 cursor-not-allowed'
-                                                                        : isSelected ? 'bg-blue-600 border-blue-600'
-                                                                            : 'border-slate-300 hover:border-blue-400'
+                                                                    : isSelected ? 'bg-blue-600 border-blue-600'
+                                                                        : 'border-slate-300 hover:border-blue-400'
                                                                     }`}>
                                                                 {(isSelected || isAlreadyInContract) && <span className="text-white text-xs">✓</span>}
                                                             </button>
