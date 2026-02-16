@@ -1823,36 +1823,53 @@ function ContractPrepContent() {
         return (
             <div className="h-full flex flex-col bg-slate-50 border-r border-slate-200">
                 {/* Header */}
-                <div className="p-4 border-b border-slate-200 bg-white">
-                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1 mb-2">
+                {/* Header */}
+                <div className="p-4 border-b border-slate-200 bg-gradient-to-b from-slate-800 to-slate-700">
+                    <Link href="/auth/contracts-dashboard" className="text-sm text-slate-400 hover:text-white flex items-center gap-1 mb-2">
                         ← Back to Dashboard
                     </Link>
-                    <h2 className="text-lg font-semibold text-slate-800">Contract Prep</h2>
+                    <h2 className="text-lg font-semibold text-white">Contract Prep</h2>
                     {contract && (
-                        <p className="text-sm text-slate-500 truncate" title={contract.contractName}>{contract.contractName}</p>
+                        <p className="text-sm text-slate-400 truncate" title={contract.contractName}>{contract.contractName}</p>
                     )}
 
-                    {/* Progress Bar */}
+                    {/* Enhanced Progress Section */}
                     {clauses.length > 0 && (
                         <div className="mt-3">
-                            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                                <span>{configuredCount} of {clauses.length} configured</span>
-                                <span>{Math.round((configuredCount / clauses.length) * 100)}%</span>
+                            {/* Readiness bar */}
+                            <div className="flex items-center justify-between text-xs mb-1">
+                                <span className="text-emerald-400 font-medium">{configuredCount} of {clauses.length} configured</span>
+                                <span className="text-white font-bold">{Math.round((configuredCount / clauses.length) * 100)}%</span>
                             </div>
-                            <div className="w-full bg-slate-200 rounded-full h-2">
-                                <div className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                            <div className="w-full bg-slate-600 rounded-full h-2.5">
+                                <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2.5 rounded-full transition-all duration-500"
                                     style={{ width: `${(configuredCount / clauses.length) * 100}%` }} />
                             </div>
+
+                            {/* Intelligence progress */}
+                            <div className="mt-2 flex items-center justify-between">
+                                <div className="flex items-center gap-3 text-xs">
+                                    <span className="text-purple-400 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 bg-purple-400 rounded-full" />
+                                        {Object.keys(clarenceRecommendations).length} analyzed
+                                    </span>
+                                    <span className="text-blue-400 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                                        {Object.keys(rangeMappings).length} mapped
+                                    </span>
+                                </div>
+                            </div>
+
                             {/* Certification Progress */}
                             {certificationProgress.status === 'running' && (
-                                <div className="mt-2 flex items-center gap-2 text-xs text-blue-600">
-                                    <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                                    <span>Analyzing: {certificationProgress.completed}/{certificationProgress.total} clauses</span>
+                                <div className="mt-2 flex items-center gap-2 text-xs text-blue-300">
+                                    <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                    <span>Analyzing: {certificationProgress.completed}/{certificationProgress.total}</span>
                                 </div>
                             )}
                             {certificationProgress.status === 'complete' && (
-                                <div className="mt-2 text-xs text-green-600 flex items-center gap-1">
-                                    <span>✓</span> All clauses analyzed
+                                <div className="mt-2 text-xs text-emerald-400 flex items-center gap-1">
+                                    <span>✔</span> All clauses analyzed
                                 </div>
                             )}
                         </div>
@@ -1882,14 +1899,23 @@ function ContractPrepContent() {
 
                 {/* Selection Controls */}
                 {clauses.length > 0 && (
-                    <div className="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="text-green-600">✓ {getConfiguredCount()}</span>
-                            <span className="text-slate-400">○ {getNotConfiguredCount()}</span>
-                            <span className="text-red-500">✕ {getExcludedCount()}</span>
+                    <div className="px-4 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                        <div className="flex items-center gap-3 text-xs">
+                            <span className="text-emerald-600 font-medium flex items-center gap-1">
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                                {getConfiguredCount()}
+                            </span>
+                            <span className="text-slate-500 flex items-center gap-1">
+                                <span className="w-2 h-2 bg-amber-400 rounded-full" />
+                                {getNotConfiguredCount()}
+                            </span>
+                            <span className="text-red-500 flex items-center gap-1">
+                                <span className="w-2 h-2 bg-red-400 rounded-full" />
+                                {getExcludedCount()}
+                            </span>
                         </div>
                         <div className="flex items-center gap-1">
-                            <button onClick={selectAllClauses} className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50">All</button>
+                            <button onClick={selectAllClauses} className="text-xs text-emerald-600 hover:text-emerald-800 px-2 py-1 rounded hover:bg-emerald-50 font-medium">All</button>
                             <button onClick={selectAllUnconfigured} className="text-xs text-slate-600 hover:text-slate-800 px-2 py-1 rounded hover:bg-slate-100">Unconfigured</button>
                             {selectedClauseIds.size > 0 && (
                                 <button onClick={clearSelection} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded hover:bg-slate-200">Clear</button>
@@ -1919,23 +1945,42 @@ function ContractPrepContent() {
 
                                         return (
                                             <div key={parent.clauseId} className="border-b border-slate-200">
-                                                <div className={`w-full px-2 py-2 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${selectedClause?.clauseId === parent.clauseId ? 'bg-blue-100 border-l-2 border-l-blue-500' : ''}`}>
+                                                <div className={`w-full px-2 py-2.5 text-left text-sm transition-colors flex items-center gap-2 ${selectedClause?.clauseId === parent.clauseId ? 'bg-emerald-50 border-l-3 border-l-emerald-500' : 'hover:bg-slate-50'}`}>
                                                     <button onClick={(e) => toggleClauseSelection(parent.clauseId, e)}
-                                                        className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 hover:border-blue-400'}`}>
+                                                        className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isSelected ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300 hover:border-emerald-400'}`}>
                                                         {isSelected && <span className="text-white text-xs">✓</span>}
                                                     </button>
                                                     {hasChildren ? (
                                                         <button onClick={(e) => { e.stopPropagation(); toggleParentClauseExpansion(parent.clauseNumber) }}
                                                             className={`transform transition-transform text-slate-400 hover:text-slate-600 ${isExpanded ? 'rotate-90' : ''}`}>▶</button>
                                                     ) : <span className="w-3" />}
-                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${parent.status === 'verified' ? 'bg-green-500' : parent.status === 'rejected' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${parent.status === 'verified' ? 'bg-emerald-500' : parent.status === 'rejected' ? 'bg-red-500' : 'bg-amber-400'}`} />
                                                     <button onClick={() => handleClauseSelect(parent)} className="flex-1 min-w-0 text-left">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-slate-500 text-xs font-mono font-medium">{parent.clauseNumber}</span>
                                                             <span className="font-medium text-slate-700 truncate">{parent.clauseName}</span>
                                                         </div>
+                                                        {/* Mini intelligence summary */}
+                                                        {intellStatus !== 'none' && (
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                {clarenceRecommendations[parent.clauseId] && (
+                                                                    <span className="text-[10px] text-purple-500 font-medium">
+                                                                        C:{clarenceRecommendations[parent.clauseId].clarencePosition}
+                                                                    </span>
+                                                                )}
+                                                                {userPositions[parent.clauseId]?.position && (
+                                                                    <span className="text-[10px] text-emerald-600 font-medium">
+                                                                        You:{userPositions[parent.clauseId].position}
+                                                                    </span>
+                                                                )}
+                                                                {rangeMappings[parent.clauseId]?.isDisplayable && (
+                                                                    <span className="text-[10px] text-blue-400">mapped</span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </button>
                                                     {intellStatus === 'full' && <span className="text-purple-500 text-xs" title="AI analyzed">⚡</span>}
+                                                    {intellStatus === 'partial' && <span className="text-amber-400 text-xs" title="Partially analyzed">◐</span>}
                                                     {hasChildren && <span className="text-xs text-slate-400">{children.length}</span>}
                                                 </div>
                                                 {isExpanded && hasChildren && (
@@ -1945,18 +1990,34 @@ function ContractPrepContent() {
                                                             const isChildSelected = selectedClauseIds.has(child.clauseId)
                                                             return (
                                                                 <div key={child.clauseId}
-                                                                    className={`w-full px-2 py-2 ${indentClass} text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 border-t border-slate-100 ${selectedClause?.clauseId === child.clauseId ? 'bg-blue-100 border-l-2 border-l-blue-500' : ''}`}>
+                                                                    className={`w-full px-2 py-2 ${indentClass} text-left text-sm transition-colors flex items-center gap-2 border-t border-slate-100 ${selectedClause?.clauseId === child.clauseId ? 'bg-emerald-50 border-l-2 border-l-emerald-500' : 'hover:bg-slate-50'}`}>
                                                                     <button onClick={(e) => toggleClauseSelection(child.clauseId, e)}
-                                                                        className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isChildSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 hover:border-blue-400'}`}>
+                                                                        className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${isChildSelected ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300 hover:border-emerald-400'}`}>
                                                                         {isChildSelected && <span className="text-white text-xs">✓</span>}
                                                                     </button>
-                                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${child.status === 'verified' ? 'bg-green-500' : child.status === 'rejected' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                                                                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${child.status === 'verified' ? 'bg-emerald-500' : child.status === 'rejected' ? 'bg-red-500' : 'bg-amber-400'}`} />
                                                                     <button onClick={() => handleClauseSelect(child)} className="flex-1 min-w-0 text-left">
                                                                         <div className="flex items-center gap-2">
                                                                             <span className="text-slate-400 text-xs font-mono">{child.clauseNumber}</span>
                                                                             <span className="truncate text-slate-600">{child.clauseName}</span>
                                                                         </div>
+                                                                        {/* Mini intelligence for child clauses */}
+                                                                        {(clarenceRecommendations[child.clauseId] || userPositions[child.clauseId]?.position) && (
+                                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                                {clarenceRecommendations[child.clauseId] && (
+                                                                                    <span className="text-[10px] text-purple-500">
+                                                                                        C:{clarenceRecommendations[child.clauseId].clarencePosition}
+                                                                                    </span>
+                                                                                )}
+                                                                                {userPositions[child.clauseId]?.position && (
+                                                                                    <span className="text-[10px] text-emerald-600">
+                                                                                        You:{userPositions[child.clauseId].position}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
                                                                     </button>
+                                                                    {getClauseIntelligenceStatus(child.clauseId) === 'full' && <span className="text-purple-500 text-[10px]">⚡</span>}
                                                                 </div>
                                                             )
                                                         })}
@@ -2018,7 +2079,7 @@ function ContractPrepContent() {
                 </div>
 
                 {/* Actions */}
-                <div className="p-4 border-t border-slate-200 bg-white space-y-2">
+                <div className="p-4 border-t border-slate-200 bg-gradient-to-b from-white to-slate-50 space-y-2">
                     <button onClick={openClauseLibrary}
                         className="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
                         ➕ Add Clause from Library
@@ -2026,7 +2087,7 @@ function ContractPrepContent() {
 
                     {configuredCount > 0 && (
                         <button onClick={handleCommitClauses} disabled={isCommitting}
-                            className="w-full px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium hover:from-emerald-700 hover:to-teal-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-emerald-200">
                             {isCommitting ? (
                                 <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Committing...</>
                             ) : (
@@ -2035,6 +2096,7 @@ function ContractPrepContent() {
                         </button>
                     )}
                 </div>
+
             </div>
         )
     }
@@ -2204,11 +2266,11 @@ function ContractPrepContent() {
                             )}
 
                             {/* USER Marker — Emerald draggable badge */}
-                            {userConfig?.position && (
+                            {(userConfig?.position || hasRec) && (
                                 <div
                                     className="absolute w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 border-3 border-white flex items-center justify-center text-xs font-bold text-white z-20 shadow-xl cursor-grab active:cursor-grabbing hover:scale-110 transition-transform"
                                     style={{
-                                        left: `${((userConfig.position - 1) / 9) * 100}%`,
+                                        left: `${((currentPos - 1) / 9) * 100}%`,
                                         top: '50%',
                                         transform: 'translate(-50%, -50%)'
                                     }}
@@ -2379,7 +2441,7 @@ function ContractPrepContent() {
                                         ⚡ AI Analyzed
                                     </span>
                                 )}
-                                {userConfig?.position && (
+                                {(userConfig?.position || hasRec) && (
                                     <span className="px-3 py-1 rounded-full text-sm bg-emerald-100 text-emerald-700">
                                         ✓ Position Set
                                     </span>
@@ -2637,39 +2699,39 @@ function ContractPrepContent() {
                 </div>
 
                 {rightPanelTab === 'intelligence' ? (
-                    /* ── Intelligence Tab ──────────────────────────────────────── */
+                    /* —— Intelligence Tab ———————————————————————————————————— */
                     <div className="flex-1 overflow-auto p-4 space-y-4">
-                        {/* Readiness Summary */}
+                        {/* Readiness Summary — Richer Design */}
                         {clauses.length > 0 && (() => {
                             const metrics = getReadinessMetrics()
                             return (
-                                <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="text-sm font-semibold text-slate-700 mb-3">Preparation Readiness</h4>
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                        <div className="bg-green-50 rounded-lg p-3 text-center">
-                                            <span className="text-2xl font-bold text-green-700">{metrics.configured}</span>
-                                            <p className="text-xs text-green-600">Configured</p>
+                                <div className="bg-gradient-to-br from-slate-800 to-slate-700 rounded-xl p-4 text-white">
+                                    <h4 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Preparation Readiness</h4>
+                                    <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                        <div className="bg-white/10 rounded-lg p-3 text-center backdrop-blur-sm">
+                                            <span className="text-2xl font-bold text-emerald-400">{metrics.configured}</span>
+                                            <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-0.5">Configured</p>
                                         </div>
-                                        <div className="bg-slate-50 rounded-lg p-3 text-center">
-                                            <span className="text-2xl font-bold text-slate-600">{metrics.pending}</span>
-                                            <p className="text-xs text-slate-500">Pending</p>
+                                        <div className="bg-white/10 rounded-lg p-3 text-center backdrop-blur-sm">
+                                            <span className="text-2xl font-bold text-slate-300">{metrics.pending}</span>
+                                            <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-0.5">Pending</p>
                                         </div>
-                                        <div className="bg-purple-50 rounded-lg p-3 text-center">
-                                            <span className="text-2xl font-bold text-purple-700">{metrics.withRecommendation}</span>
-                                            <p className="text-xs text-purple-600">AI Analyzed</p>
+                                        <div className="bg-white/10 rounded-lg p-3 text-center backdrop-blur-sm">
+                                            <span className="text-2xl font-bold text-purple-400">{metrics.withRecommendation}</span>
+                                            <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-0.5">AI Analyzed</p>
                                         </div>
-                                        <div className="bg-red-50 rounded-lg p-3 text-center">
-                                            <span className="text-2xl font-bold text-red-600">{metrics.excluded}</span>
-                                            <p className="text-xs text-red-500">Excluded</p>
+                                        <div className="bg-white/10 rounded-lg p-3 text-center backdrop-blur-sm">
+                                            <span className="text-2xl font-bold text-red-400">{metrics.excluded}</span>
+                                            <p className="text-[10px] text-slate-400 uppercase tracking-wide mt-0.5">Excluded</p>
                                         </div>
                                     </div>
-                                    <div className="mt-3">
-                                        <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                    <div>
+                                        <div className="flex justify-between text-xs text-slate-400 mb-1">
                                             <span>Overall readiness</span>
-                                            <span>{metrics.readinessPercent}%</span>
+                                            <span className="text-emerald-400 font-bold">{metrics.readinessPercent}%</span>
                                         </div>
-                                        <div className="w-full bg-slate-200 rounded-full h-2">
-                                            <div className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                                        <div className="w-full bg-slate-600 rounded-full h-2">
+                                            <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-2 rounded-full transition-all duration-500"
                                                 style={{ width: `${metrics.readinessPercent}%` }} />
                                         </div>
                                     </div>
@@ -2679,8 +2741,8 @@ function ContractPrepContent() {
 
                         {/* Certification Status */}
                         {certificationProgress.status !== 'idle' && (
-                            <div className={`rounded-lg p-4 border ${certificationProgress.status === 'complete'
-                                ? 'bg-green-50 border-green-200'
+                            <div className={`rounded-xl p-4 border ${certificationProgress.status === 'complete'
+                                ? 'bg-emerald-50 border-emerald-200'
                                 : certificationProgress.status === 'error'
                                     ? 'bg-red-50 border-red-200'
                                     : 'bg-blue-50 border-blue-200'
@@ -2689,7 +2751,7 @@ function ContractPrepContent() {
                                     {certificationProgress.status === 'running' && (
                                         <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                                     )}
-                                    {certificationProgress.status === 'complete' && <span className="text-green-600">✓</span>}
+                                    {certificationProgress.status === 'complete' && <span className="text-emerald-600 text-lg">✔</span>}
                                     {certificationProgress.status === 'error' && <span className="text-red-600">⚠</span>}
                                     <h4 className="text-sm font-semibold">
                                         {certificationProgress.status === 'running' ? 'Analyzing Clauses...'
@@ -2698,7 +2760,7 @@ function ContractPrepContent() {
                                     </h4>
                                 </div>
                                 <div className="w-full bg-white rounded-full h-2 mb-1">
-                                    <div className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                                    <div className={`h-2 rounded-full transition-all duration-300 ${certificationProgress.status === 'complete' ? 'bg-emerald-500' : 'bg-blue-500'}`}
                                         style={{ width: `${certificationProgress.total > 0 ? (certificationProgress.completed / certificationProgress.total) * 100 : 0}%` }} />
                                 </div>
                                 <p className="text-xs text-slate-600">
@@ -2710,61 +2772,139 @@ function ContractPrepContent() {
                             </div>
                         )}
 
-                        {/* Selected Clause Intelligence */}
+                        {/* Selected Clause Intelligence — Rich Detail */}
                         {selectedClause && (() => {
                             const rec = clarenceRecommendations[selectedClause.clauseId]
                             const map = rangeMappings[selectedClause.clauseId]
                             const config = userPositions[selectedClause.clauseId]
 
                             return (
-                                <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="text-sm font-semibold text-slate-700 mb-3">
+                                <div className="bg-white rounded-xl p-4 border border-slate-200 space-y-3">
+                                    <h4 className="text-sm font-semibold text-slate-800">
+                                        {selectedClause.clauseNumber && (
+                                            <span className="text-slate-400 font-mono mr-1">{selectedClause.clauseNumber}</span>
+                                        )}
                                         {selectedClause.clauseName}
                                     </h4>
 
-                                    {/* Range Mapping Info */}
-                                    {map && map.isDisplayable && (
-                                        <div className="mb-3">
-                                            <span className="text-xs text-slate-500 uppercase tracking-wide">Range Type</span>
-                                            <p className="text-sm text-slate-700">{map.valueType}{map.rangeUnit ? ` (${map.rangeUnit})` : ''}</p>
-                                        </div>
-                                    )}
-
-                                    {/* Clarence Position */}
+                                    {/* Clarence Position + Confidence */}
                                     {rec && rec.status === 'certified' && (
-                                        <div className="mb-3">
-                                            <span className="text-xs text-purple-600 uppercase tracking-wide">Clarence Position</span>
-                                            <p className="text-sm font-medium text-purple-700">
-                                                {rec.clarencePosition}/10 — {translatePosition(selectedClause.clauseId, rec.clarencePosition)}
+                                        <div className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-xs text-purple-600 uppercase tracking-wide font-semibold">Clarence Position</span>
+                                                {rec.confidence > 0 && (
+                                                    <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full font-medium">
+                                                        {Math.round(rec.confidence * 100)}% confidence
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-lg font-bold text-purple-700">
+                                                {translatePositionRich(selectedClause.clauseId, rec.clarencePosition)?.label
+                                                    || `Position ${rec.clarencePosition}`}
                                             </p>
+                                            <p className="text-xs text-purple-500 mt-0.5">
+                                                {rec.clarencePosition}/10 — {getPositionLabel(rec.clarencePosition)}
+                                            </p>
+
+                                            {/* Fairness Badge */}
+                                            {rec.fairness && (
+                                                <div className={`mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${rec.fairness === 'balanced'
+                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                    : rec.fairness.includes('customer')
+                                                        ? 'bg-blue-100 text-blue-700'
+                                                        : rec.fairness.includes('provider')
+                                                            ? 'bg-amber-100 text-amber-700'
+                                                            : 'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                    {rec.fairness === 'balanced' ? '✔ Balanced'
+                                                        : rec.fairness.includes('customer') ? '⬆ Customer-Leaning'
+                                                            : rec.fairness.includes('provider') ? '⬇ Provider-Leaning'
+                                                                : '⚠ Review Recommended'}
+                                                </div>
+                                            )}
+
+                                            {/* Assessment */}
+                                            {rec.assessment && (
+                                                <p className="text-xs text-purple-600 mt-2 leading-relaxed border-t border-purple-100 pt-2">
+                                                    {rec.assessment}
+                                                </p>
+                                            )}
                                         </div>
                                     )}
 
                                     {/* User Position */}
                                     {config?.position && (
-                                        <div className="mb-3">
-                                            <span className="text-xs text-emerald-600 uppercase tracking-wide">Your Position</span>
-                                            <p className="text-sm font-medium text-emerald-700">
-                                                {config.position}/10 — {translatePosition(selectedClause.clauseId, config.position)}
+                                        <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                                            <span className="text-xs text-emerald-600 uppercase tracking-wide font-semibold">Your Position</span>
+                                            <p className="text-lg font-bold text-emerald-700">
+                                                {translatePositionRich(selectedClause.clauseId, config.position)?.label
+                                                    || `Position ${config.position}`}
                                             </p>
+                                            <p className="text-xs text-emerald-500">
+                                                {config.position}/10 — {getPositionLabel(config.position)}
+                                                {config.acceptedRecommendation && (
+                                                    <span className="ml-2 text-purple-500">✓ Accepted Clarence</span>
+                                                )}
+                                            </p>
+                                            {config.importance && config.importance !== 'medium' && (
+                                                <span className={`mt-1 inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${IMPORTANCE_CONFIG[config.importance].bgLight} ${IMPORTANCE_CONFIG[config.importance].textColor}`}>
+                                                    {IMPORTANCE_CONFIG[config.importance].label} Importance
+                                                </span>
+                                            )}
                                         </div>
                                     )}
 
-                                    {/* Status */}
-                                    <div className="pt-2 border-t border-slate-100">
-                                        <span className="text-xs text-slate-400">Intelligence: </span>
-                                        <span className={`text-xs font-medium ${getClauseIntelligenceStatus(selectedClause.clauseId) === 'full' ? 'text-green-600'
-                                            : getClauseIntelligenceStatus(selectedClause.clauseId) === 'partial' ? 'text-amber-600'
-                                                : 'text-slate-400'
-                                            }`}>
-                                            {getClauseIntelligenceStatus(selectedClause.clauseId) === 'full' ? '✓ Full'
-                                                : getClauseIntelligenceStatus(selectedClause.clauseId) === 'partial' ? '◐ Partial'
-                                                    : '○ None'}
-                                        </span>
+                                    {/* Range Mapping Info */}
+                                    {map && map.isDisplayable && (
+                                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                            <span className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Range Intelligence</span>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-sm text-blue-700 font-medium capitalize">{map.valueType}</span>
+                                                {map.rangeUnit && <span className="text-xs text-blue-500">({map.rangeUnit})</span>}
+                                            </div>
+                                            {map.rangeData.scale_points.length > 0 && (
+                                                <div className="mt-2 flex flex-wrap gap-1">
+                                                    {map.rangeData.scale_points.slice(0, 5).map((sp, i) => (
+                                                        <span key={i} className="text-[10px] px-1.5 py-0.5 bg-white rounded border border-blue-200 text-blue-600">
+                                                            {sp.label}
+                                                        </span>
+                                                    ))}
+                                                    {map.rangeData.scale_points.length > 5 && (
+                                                        <span className="text-[10px] text-blue-400">+{map.rangeData.scale_points.length - 5} more</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Intelligence Status Footer */}
+                                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-xs text-slate-400">Intelligence:</span>
+                                            <span className={`text-xs font-medium ${getClauseIntelligenceStatus(selectedClause.clauseId) === 'full' ? 'text-emerald-600'
+                                                : getClauseIntelligenceStatus(selectedClause.clauseId) === 'partial' ? 'text-amber-600'
+                                                    : 'text-slate-400'
+                                                }`}>
+                                                {getClauseIntelligenceStatus(selectedClause.clauseId) === 'full' ? '✔ Full'
+                                                    : getClauseIntelligenceStatus(selectedClause.clauseId) === 'partial' ? '◐ Partial'
+                                                        : '○ None'}
+                                            </span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-300">{selectedClause.category}</span>
                                     </div>
                                 </div>
                             )
                         })()}
+
+                        {/* No clause selected prompt */}
+                        {!selectedClause && (
+                            <div className="text-center py-8">
+                                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <span className="text-xl text-slate-400">📋</span>
+                                </div>
+                                <p className="text-sm text-slate-500">Select a clause to see intelligence details</p>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     /* ── Chat Tab ──────────────────────────────────────────────── */
