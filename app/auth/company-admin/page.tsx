@@ -1100,6 +1100,7 @@ function CompanyAdminContent() {
     }
 
     const handlePlaybookDelete = async (playbookId: string, sourceFilePath?: string) => {
+        console.log('=== DELETE CLICKED ===', playbookId, sourceFilePath)
         if (!userInfo?.companyId) return; const supabase = createClient()
         await supabase.from('playbook_rules').delete().eq('playbook_id', playbookId)
         await supabase.from('company_playbooks').delete().eq('playbook_id', playbookId)
