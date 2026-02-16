@@ -158,7 +158,7 @@ interface ContractClause {
     providerNotes: string | null
 
     // Status
-    status: 'aligned' | 'negotiating' | 'disputed' | 'pending' | 'agreed' | 'customer_confirmed' | 'provider_confirmed'
+    status: 'negotiating' | 'disputed' | 'pending' | 'agreed' | 'customer_confirmed' | 'provider_confirmed'
 
     // UI State
     isExpanded?: boolean
@@ -752,7 +752,7 @@ async function callClarenceAI(
     options: {
         clauseId?: string
         message?: string
-        convergencePercentage?: number
+        alignmentPercentage?: number
         positionChange?: {
             clauseName: string
             clauseNumber?: string | null
@@ -1320,16 +1320,16 @@ function calculateGapSize(customerPosition: number | null, providerPosition: num
 /**
  * Determine clause status based on gap size
  */
-function determineClauseStatus(gapSize: number): 'aligned' | 'negotiating' | 'disputed' | 'pending' {
-    if (gapSize <= 1) return 'aligned'
+function determineClauseStatus(gapSize: number): 'agreed' | 'negotiating' | 'disputed' | 'pending' {
+    if (gapSize <= 1) return 'agreed'
     if (gapSize <= 4) return 'negotiating'
     return 'disputed'
 }
 
 /**
- * Calculate convergence percentage across all clauses
+ * Calculate alignment percentage across all clauses
  * Uses continuous scoring: each clause contributes based on how close positions are
- * Gap of 0 = 100% converged, Gap of 9 = 0% converged (linear)
+ * Gap of 0 = 100% aligned, Gap of 9 = 0% aligned (linear)
  * This value is passed to Clarence AI so both UI and chat quote the same number
  */
 function calculateAlignmentPercentage(clauses: ContractClause[]): number {
@@ -1437,10 +1437,9 @@ function getHistoryEventColor(eventType: string, party: string): string {
 
 function getStatusColor(status: string): string {
     switch (status) {
-        case 'aligned': return 'text-emerald-600'
-        case 'agreed': return 'text-emerald-600'  // Add this
-        case 'customer_confirmed': return 'text-amber-600'  // Add this
-        case 'provider_confirmed': return 'text-amber-600'  // Add this
+        case 'agreed': return 'text-emerald-600'
+        case 'customer_confirmed': return 'text-amber-600'
+        case 'provider_confirmed': return 'text-amber-600'
         case 'negotiating': return 'text-amber-600'
         case 'disputed': return 'text-red-600'
         default: return 'text-slate-400'
@@ -1449,10 +1448,9 @@ function getStatusColor(status: string): string {
 
 function getStatusBgColor(status: string): string {
     switch (status) {
-        case 'aligned': return 'bg-emerald-500'
-        case 'agreed': return 'bg-emerald-500'  // Add this
-        case 'customer_confirmed': return 'bg-amber-500'  // Add this
-        case 'provider_confirmed': return 'bg-amber-500'  // Add this
+        case 'agreed': return 'bg-emerald-500'
+        case 'customer_confirmed': return 'bg-amber-500'
+        case 'provider_confirmed': return 'bg-amber-500'
         case 'negotiating': return 'bg-amber-500'
         case 'disputed': return 'bg-red-500'
         default: return 'bg-slate-300'
@@ -1460,15 +1458,15 @@ function getStatusBgColor(status: string): string {
 }
 
 function calculateClauseStats(clauses: ContractClause[]): {
-    aligned: number
+    agreed: number
     negotiating: number
     disputed: number
     pending: number
 } {
-    const stats = { aligned: 0, negotiating: 0, disputed: 0, pending: 0 }
+    const stats = { agreed: 0, negotiating: 0, disputed: 0, pending: 0 }
 
     function countStatus(clause: ContractClause) {
-        if (clause.status === 'aligned') stats.aligned++
+        if (clause.status === 'agreed') stats.agreed++
         else if (clause.status === 'negotiating') stats.negotiating++
         else if (clause.status === 'disputed') stats.disputed++
         else stats.pending++
@@ -2672,7 +2670,7 @@ function ContractStudioContent() {
                     clauseContent: c.clauseContent,
                     customerNotes: c.customerNotes,
                     providerNotes: c.providerNotes,
-                    status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                    status: c.status as 'agreed' | 'negotiating' | 'disputed' | 'pending',
                     isExpanded: c.isExpanded,
                     positionOptions: c.positionOptions || getPositionOptionsForClause({
                         positionOptions: null,
@@ -3008,7 +3006,7 @@ function ContractStudioContent() {
                     clauseContent: c.clauseContent,
                     customerNotes: c.customerNotes,
                     providerNotes: c.providerNotes,
-                    status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                    status: c.status as 'agreed' | 'negotiating' | 'disputed' | 'pending',
                     isExpanded: c.isExpanded,
                     positionOptions: c.positionOptions || getPositionOptionsForClause({
                         positionOptions: null,
@@ -3064,10 +3062,10 @@ function ContractStudioContent() {
         setIsChatLoading(true)
 
         try {
-            // Pass convergence percentage so Clarence quotes the same number as the UI
-            const convergence = calculateAlignmentPercentage(clauses)
+            // Pass alignment percentage so Clarence quotes the same number as the UI
+            const alignment = calculateAlignmentPercentage(clauses)
             const response = await callClarenceAI(sessionId, 'welcome', viewerRole, {
-                convergencePercentage: convergence
+                alignmentPercentage: alignment
             })
 
             if (response?.success && response.response) {
@@ -3459,7 +3457,7 @@ function ContractStudioContent() {
                         clauseContent: c.clauseContent,
                         customerNotes: c.customerNotes,
                         providerNotes: c.providerNotes,
-                        status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending' | 'agreed' | 'customer_confirmed' | 'provider_confirmed',
+                        status: c.status as 'agreed' | 'negotiating' | 'disputed' | 'pending' | 'customer_confirmed' | 'provider_confirmed',
                         isExpanded: c.isExpanded,
                         positionOptions: c.positionOptions || getPositionOptionsForClause({
                             positionOptions: null,
@@ -3964,7 +3962,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                                 clauseContent: c.clauseContent,
                                 customerNotes: c.customerNotes,
                                 providerNotes: c.providerNotes,
-                                status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                                status: c.status as 'agreed' | 'negotiating' | 'disputed' | 'pending',
                                 isExpanded: false,
                                 positionOptions: c.positionOptions || null,
                                 sourceType: c.sourceType || 'legacy',
@@ -4365,7 +4363,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 // ==========================================================
                 if (result.providerResponse) {
                     const decisionEmoji = result.decision === 'accept' ? '✅'
-                        : result.decision === 'counter' ? '↔️'
+                        : result.decision === 'counter' ? 'â†”ï¸'
                             : '✋'
 
                     const decisionText = result.decision === 'accept'
@@ -4446,7 +4444,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     positionId: positionId,
                     sender: 'clarence',
                     senderUserId: null,
-                    message: `⚠️ The AI opponent is taking a moment to think. Your position has been saved - they will respond shortly.`,
+                    message: `⚠ï¸ The AI opponent is taking a moment to think. Your position has been saved - they will respond shortly.`,
                     messageType: 'notification',
                     relatedPositionChange: false,
                     triggeredBy: 'training_ai_move',
@@ -4606,7 +4604,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 try {
                     const aiResponse = await callClarenceAI(session.sessionId, promptType, resolvedParty || 'customer', {
                         clauseId: selectedClause.clauseId,
-                        convergencePercentage: calculateAlignmentPercentage(clauses),
+                        alignmentPercentage: calculateAlignmentPercentage(clauses),
                         positionChange: {
                             clauseName: selectedClause.clauseName,
                             clauseNumber: selectedClause.clauseNumber,
@@ -4855,7 +4853,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
             const response = await callClarenceAI(session.sessionId, 'chat', userInfo.role || 'customer', {
                 message: userMessage,
                 clauseId: selectedClause?.clauseId,
-                convergencePercentage: calculateAlignmentPercentage(clauses)
+                alignmentPercentage: calculateAlignmentPercentage(clauses)
             })
 
             if (response?.success && response.response) {
@@ -4984,7 +4982,7 @@ Current gaps: ${tradeOff.clauseA.clauseName} has ${tradeOff.clauseA.gapSize.toFi
 
 Explain why this trade makes sense and what each party gains.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, convergencePercentage: calculateAlignmentPercentage(clauses) })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, alignmentPercentage: calculateAlignmentPercentage(clauses) })
 
             if (response?.success && response.response) {
                 setTradeOffExplanation(response.response)
@@ -5031,7 +5029,7 @@ Clause description: ${clause.description}
 
 As "The Honest Broker", generate clear, legally-appropriate contract language that reflects a fair compromise between the parties' positions. Keep it concise but comprehensive.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, convergencePercentage: calculateAlignmentPercentage(clauses) })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, alignmentPercentage: calculateAlignmentPercentage(clauses) })
 
             if (response?.success && response.response) {
                 setDraftLanguage(response.response)
@@ -5161,7 +5159,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 clauseContent: c.clauseContent,
                                 customerNotes: c.customerNotes,
                                 providerNotes: c.providerNotes,
-                                status: c.status as 'aligned' | 'negotiating' | 'disputed' | 'pending',
+                                status: c.status as 'agreed' | 'negotiating' | 'disputed' | 'pending',
                                 isExpanded: false,
                                 positionOptions: c.positionOptions || null,
                                 sourceType: c.sourceType || 'legacy',
@@ -6253,7 +6251,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 <h3 className="text-sm font-semibold text-slate-700">Negotiation Metrics</h3>
                             </div>
                             <div className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-400">
-                                --% Convergence
+                                --% Alignment
                             </div>
                         </div>
 
@@ -6293,7 +6291,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
         const customerCompanyName = session?.customerCompany?.split(' ')[0] || 'Customer'
         const providerCompanyName = session?.providerCompany?.split(' ')[0] || 'Provider'
 
-        // Calculate dynamic convergence percentage
+        // Calculate dynamic alignment percentage
         // Use server-calculated value when available, fall back to local calculation
         const dynamicAlignmentPercentage = (leverage && displayLeverage.alignmentPercentage > 0)
             ? Math.round(displayLeverage.alignmentPercentage)
@@ -6354,7 +6352,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 ? 'bg-amber-100 text-amber-700'
                                 : 'bg-red-100 text-red-700'
                             }`}>
-                            {dynamicAlignmentPercentage}% Convergence
+                            {dynamicAlignmentPercentage}% Alignment
                         </div>
                     </div>
                 </div>
@@ -6505,8 +6503,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         <span className="font-medium text-slate-700">{clauses.length}</span>
                                     </div>
                                     <div className="flex items-center justify-between text-xs">
-                                        <span className="text-slate-500">Aligned</span>
-                                        <span className="font-medium text-emerald-600">{clauseStats.aligned}</span>
+                                        <span className="text-slate-500">Agreed</span>
+                                        <span className="font-medium text-emerald-600">{clauseStats.agreed}</span>
                                     </div>
                                     <div className="flex items-center justify-between text-xs">
                                         <span className="text-slate-500">Negotiating</span>
@@ -7922,8 +7920,8 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         {/* Stats Grid */}
                         <div className="grid grid-cols-4 gap-2 text-center">
                             <div className="bg-emerald-50 rounded p-2">
-                                <div className="text-lg font-bold text-emerald-600">{clauseStats.aligned}</div>
-                                <div className="text-xs text-emerald-600">Aligned</div>
+                                <div className="text-lg font-bold text-emerald-600">{clauseStats.agreed}</div>
+                                <div className="text-xs text-emerald-600">Agreed</div>
                             </div>
                             <div className="bg-amber-50 rounded p-2">
                                 <div className="text-lg font-bold text-amber-600">{clauseStats.negotiating}</div>
@@ -8010,19 +8008,17 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm font-mono text-slate-400">{selectedClause.clauseNumber}</span>
                                         <h2 className="text-lg font-semibold text-slate-800">{selectedClause.clauseName}</h2>
-                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${selectedClause.status === 'aligned' ? 'bg-emerald-100 text-emerald-700' :
-                                            selectedClause.status === 'agreed' ? 'bg-emerald-100 text-emerald-700' :
-                                                selectedClause.status === 'customer_confirmed' ? 'bg-amber-100 text-amber-700' :
-                                                    selectedClause.status === 'provider_confirmed' ? 'bg-amber-100 text-amber-700' :
-                                                        selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
-                                                            selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
-                                                                'bg-slate-100 text-slate-700'
+                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${selectedClause.status === 'agreed' ? 'bg-emerald-100 text-emerald-700' :
+                                            selectedClause.status === 'customer_confirmed' ? 'bg-amber-100 text-amber-700' :
+                                                selectedClause.status === 'provider_confirmed' ? 'bg-amber-100 text-amber-700' :
+                                                    selectedClause.status === 'negotiating' ? 'bg-amber-100 text-amber-700' :
+                                                        selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
+                                                            'bg-slate-100 text-slate-700'
                                             }`}>
-                                            {selectedClause.status === 'agreed' ? 'ðŸ”’ Agreed' :
+                                            {selectedClause.status === 'agreed' ? 'Ã°Å¸”’ Agreed' :
                                                 selectedClause.status === 'customer_confirmed' ? 'â³ Awaiting Provider' :
                                                     selectedClause.status === 'provider_confirmed' ? 'â³ Awaiting Customer' :
-                                                        selectedClause.status === 'aligned' ? '✓ Aligned' :
-                                                            selectedClause.status}
+                                                        selectedClause.status}
                                         </span>
                                     </div>
                                     <p className="text-sm text-slate-500 mt-1">{selectedClause.description}</p>
@@ -8282,7 +8278,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                             {/* Clause names */}
                                                             <div className="text-sm text-slate-700">
                                                                 <span className="font-medium">{tradeOff.clauseA.clauseName}</span>
-                                                                <span className="text-slate-400 mx-1">â†”</span>
+                                                                <span className="text-slate-400 mx-1">Ã¢â€ ”</span>
                                                                 <span className="font-medium">{tradeOff.clauseB.clauseName}</span>
                                                             </div>
 
@@ -8393,10 +8389,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                             ? 'border-blue-400 bg-white text-blue-600'
                                                                             : 'border-slate-400 bg-slate-100 text-slate-600'
                                                                 }`}>
-                                                                {entry.eventType === 'position_change' ? 'â†”' :
+                                                                {entry.eventType === 'position_change' ? 'Ã¢â€ ”' :
                                                                     entry.eventType === 'agreement' ? '✓' :
-                                                                        entry.eventType === 'clause_locked' ? 'ðŸ”’' :
-                                                                            entry.eventType === 'clause_unlocked' ? 'ðŸ”“' :
+                                                                        entry.eventType === 'clause_locked' ? 'Ã°Å¸”’' :
+                                                                            entry.eventType === 'clause_unlocked' ? 'Ã°Å¸”“' :
                                                                                 entry.eventType === 'session_started' ? '💬' : '•'}
                                                             </div>
 
@@ -8437,7 +8433,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                             ? 'bg-slate-200 text-slate-700'
                                                                             : 'bg-emerald-100 text-emerald-700'
                                                                             }`}>
-                                                                            {isLocked ? 'ðŸ”’ Locked' : 'ðŸ”“ Unlocked'}
+                                                                            {isLocked ? 'Ã°Å¸”’ Locked' : 'Ã°Å¸”“ Unlocked'}
                                                                         </span>
                                                                     </div>
                                                                 )}
@@ -8551,7 +8547,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         ) : lastDraftedClauseId === selectedClause.clauseId && draftLanguage ? (
                                             'Regenerate Draft'
                                         ) : (
-                                            '⚠️ Generate Balanced Draft'
+                                            '⚠ï¸ Generate Balanced Draft'
                                         )}
                                     </button>
                                 </div>
@@ -8561,7 +8557,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <div className="border border-slate-200 rounded-lg overflow-hidden">
                                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                             <span className="text-sm font-medium text-slate-700">
-                                                ⚠️ Balanced Draft Language
+                                                ⚠ï¸ Balanced Draft Language
                                             </span>
                                             <div className="flex gap-2">
                                                 <button
