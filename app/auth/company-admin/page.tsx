@@ -155,13 +155,14 @@ function TabNavigation({ activeTab, onTabChange, pendingCount }: TabNavigationPr
 // SECTION 5: PLAYBOOKS TAB COMPONENT
 // ============================================================================
 
+
 interface PlaybooksTabProps {
     playbooks: Playbook[]
     isLoading: boolean
     onUpload: (file: File) => Promise<void>
     onActivate: (playbookId: string) => Promise<void>
     onDeactivate: (playbookId: string) => Promise<void>
-    onParse: (playbookId: string) => Promise<void>
+    onParse: (playbookId: string, sourceFilePath: string, sourceFileName: string) => Promise<void>
     onDelete: (playbookId: string, sourceFilePath?: string) => Promise<void>
     onDownload: (sourceFilePath: string, fileName: string) => Promise<void>
     onRename: (playbookId: string, newName: string) => Promise<void>
@@ -174,6 +175,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const [uploadError, setUploadError] = useState<string | null>(null)
     const [parsingId, setParsingId] = useState<string | null>(null)
     const [parseError, setParseError] = useState<string | null>(null)
+    const [parseProgress, setParseProgress] = useState<string | null>(null)
     const [openMenuId, setOpenMenuId] = useState<string | null>(null)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
@@ -214,17 +216,19 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         }
     }
 
-    const handleParseClick = async (playbookId: string) => {
-        console.log('=== PARSE BUTTON CLICKED ===', playbookId)
+    const handleParseClick = async (playbookId: string, sourceFilePath: string, sourceFileName: string) => {
+        console.log('=== PARSE BUTTON CLICKED ===', playbookId, sourceFilePath)
         setParsingId(playbookId)
         setParseError(null)
+        setParseProgress('Downloading document...')
         try {
-            await onParse(playbookId)
+            await onParse(playbookId, sourceFilePath, sourceFileName)
         } catch (e) {
             console.error('Parse error:', e)
             setParseError(e instanceof Error ? e.message : 'Failed to parse')
         } finally {
             setParsingId(null)
+            setParseProgress(null)
         }
     }
 
@@ -314,6 +318,12 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                 </div>
                 {uploadError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{uploadError}</div>}
                 {parseError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{parseError}</div>}
+                {parseProgress && (
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        {parseProgress}
+                    </div>
+                )}
             </div>
 
             {/* Playbooks List */}
@@ -394,7 +404,11 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                 </div>
                                 <div className="flex items-center gap-2 ml-4">
                                     {(p.status === 'pending_parse' || p.status === 'parse_failed') && (
-                                        <button onClick={() => handleParseClick(p.playbookId)} disabled={parsingId === p.playbookId} className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50">
+                                        <button
+                                            onClick={() => handleParseClick(p.playbookId, p.sourceFilePath || '', p.sourceFileName || 'playbook')}
+                                            disabled={parsingId === p.playbookId || !p.sourceFilePath}
+                                            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+                                        >
                                             {parsingId === p.playbookId ? 'Processing...' : p.status === 'parse_failed' ? 'Retry Parse' : 'Parse Playbook'}
                                         </button>
                                     )}
@@ -1073,17 +1087,128 @@ function CompanyAdminContent() {
         await loadPlaybooks(companyId!)
     }
 
-    const handlePlaybookParse = async (playbookId: string) => {
-        console.log('=== handlePlaybookParse ===', playbookId)
+    const handlePlaybookParse = async (playbookId: string, sourceFilePath: string, sourceFileName: string) => {
+        console.log('=== handlePlaybookParse (CLIENT-SIDE EXTRACTION) ===', playbookId, sourceFilePath)
+
+        if (!sourceFilePath) {
+            throw new Error('No source file path available for this playbook')
+        }
+
         const supabase = createClient()
-        await supabase.from('company_playbooks').update({ status: 'parsing', parsing_started_at: new Date().toISOString() }).eq('playbook_id', playbookId)
+
+        // Step 1: Update status to parsing
+        await supabase.from('company_playbooks').update({
+            status: 'parsing',
+            parsing_started_at: new Date().toISOString()
+        }).eq('playbook_id', playbookId)
+
         try {
-            const response = await fetch(`${API_BASE}/parse-playbook`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playbook_id: playbookId }) })
+            // Step 2: Download the file from Supabase Storage (client-side)
+            console.log('Downloading playbook file:', sourceFilePath)
+            const { data: fileData, error: downloadError } = await supabase.storage
+                .from('playbooks')
+                .download(sourceFilePath)
+
+            if (downloadError || !fileData) {
+                throw new Error(`Failed to download playbook file: ${downloadError?.message || 'No data returned'}`)
+            }
+
+            // Step 3: Determine file type from extension
+            const fileExtension = sourceFileName.split('.').pop()?.toLowerCase() || ''
+            let fileType = 'application/octet-stream'
+            if (fileExtension === 'pdf') fileType = 'application/pdf'
+            else if (fileExtension === 'docx') fileType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            else if (fileExtension === 'doc') fileType = 'application/msword'
+            else if (fileExtension === 'txt') fileType = 'text/plain'
+
+            // Step 4: Extract text client-side (matching template upload pattern)
+            console.log('Extracting text client-side, file type:', fileType)
+            const extractedText = await extractTextFromPlaybook(fileData, fileType)
+
+            if (!extractedText || extractedText.length < 100) {
+                throw new Error(`Could not extract sufficient text from the document (got ${extractedText?.length || 0} chars). The file may be image-based or corrupted.`)
+            }
+
+            console.log(`Text extracted successfully: ${extractedText.length} characters`)
+
+            // Step 5: Send extracted text to N8N webhook
+            const response = await fetch(`${API_BASE}/parse-playbook`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    playbook_id: playbookId,
+                    extracted_text: extractedText
+                })
+            })
+
             console.log('Parse response:', response.status)
-            const text = await response.text(); console.log('Response:', text)
-            if (!response.ok) { await supabase.from('company_playbooks').update({ status: 'parse_failed', parsing_error: `HTTP ${response.status}` }).eq('playbook_id', playbookId); throw new Error(`HTTP ${response.status}`) }
-        } catch (e) { console.error('Parse error:', e); throw e }
+            const text = await response.text()
+            console.log('Response:', text)
+
+            if (!response.ok) {
+                await supabase.from('company_playbooks').update({
+                    status: 'parse_failed',
+                    parsing_error: `HTTP ${response.status}: ${text.substring(0, 200)}`
+                }).eq('playbook_id', playbookId)
+                throw new Error(`HTTP ${response.status}`)
+            }
+        } catch (e) {
+            console.error('Parse error:', e)
+            // Update status to failed if not already done
+            await supabase.from('company_playbooks').update({
+                status: 'parse_failed',
+                parsing_error: e instanceof Error ? e.message.substring(0, 500) : 'Unknown error'
+            }).eq('playbook_id', playbookId)
+            throw e
+        }
+
         setTimeout(() => { if (userInfo?.companyId) loadPlaybooks(userInfo.companyId) }, 2000)
+    }
+
+    // --- Helper: Extract text from playbook file (client-side) ---
+    // This mirrors the extractTextFromFile function used by TemplatesTab
+    const extractTextFromPlaybook = async (fileBlob: Blob, fileType: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = async (event) => {
+                try {
+                    if (fileType === 'text/plain') {
+                        resolve(event.target?.result as string)
+                    } else if (fileType === 'application/pdf') {
+                        const pdfjsLib = await import('pdfjs-dist')
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
+                        const arrayBuffer = event.target?.result as ArrayBuffer
+                        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+                        let fullText = ''
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i)
+                            const textContent = await page.getTextContent()
+                            const pageText = textContent.items.map((item: any) => item.str).join(' ')
+                            fullText += pageText + '\n'
+                        }
+                        resolve(fullText)
+                    } else if (
+                        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                        fileType === 'application/msword'
+                    ) {
+                        const mammoth = await import('mammoth')
+                        const arrayBuffer = event.target?.result as ArrayBuffer
+                        const result = await mammoth.extractRawText({ arrayBuffer })
+                        resolve(result.value)
+                    } else {
+                        reject(new Error(`Unsupported file type: ${fileType}`))
+                    }
+                } catch (error) {
+                    reject(error)
+                }
+            }
+            reader.onerror = () => reject(new Error('Failed to read file'))
+            if (fileType === 'text/plain') {
+                reader.readAsText(fileBlob)
+            } else {
+                reader.readAsArrayBuffer(fileBlob)
+            }
+        })
     }
 
     const handlePlaybookActivate = async (playbookId: string) => {
