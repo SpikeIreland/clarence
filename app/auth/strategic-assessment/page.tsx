@@ -968,22 +968,22 @@ Your data is saved and ready. Click below to continue.`)
     if (contractId) params.set('contract_id', contractId)
     if (pathwayId) params.set('pathway_id', pathwayId)
 
-    const redirectUrl = `/auth/contract-prep?${params.toString()}`
+    const redirectUrl = `/auth/invite-providers?${params.toString()}`
 
     const transition: TransitionConfig = {
-      id: 'transition_to_prep',
+      id: 'transition_to_invite',
       fromStage: 'strategic_assessment',
-      toStage: 'contract_prep',
-      title: assessmentMode === 'fast-track' ? 'Ready to Configure' : 'Strategic Profile Complete',
+      toStage: 'invite_providers',
+      title: assessmentMode === 'fast-track' ? 'Ready to Invite' : 'Strategic Profile Complete',
       message: assessmentMode === 'fast-track'
-        ? "Great! Your strategic defaults are saved. Let's configure your clause positions."
-        : "Excellent work! I now have a clear picture of your negotiating position. Let's move to Contract Preparation where you'll:",
+        ? "Great! Your strategic defaults are saved. Now invite your counter-party to begin the negotiation."
+        : "Excellent work! I now have a clear picture of your negotiating position. The next step is to invite your counter-party.",
       bulletPoints: [
-        'Review and configure each clause',
-        'Set your ideal positions and acceptable ranges',
-        'Weight clauses by strategic importance'
+        'Invite providers to participate in this negotiation',
+        'They will complete their own strategic assessment',
+        'Once both parties are ready, the Contract Studio will activate with full leverage analysis'
       ],
-      buttonText: 'Continue to Contract Prep'
+      buttonText: 'Continue to Invite'
     }
 
     setTransitionState({
