@@ -27,6 +27,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
 import { createClient } from '@/lib/supabase'
+import { eventLogger } from '@/lib/eventLogger'
 
 // Import TransitionModal and pathway utilities
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
@@ -531,11 +532,26 @@ function ContractCreationContent() {
         } catch { router.push('/auth/login'); return null }
     }, [router])
 
+
     // ========================================================================
-    // SECTION 5D: EFFECTS (WP1 UPDATED)
+    // SECTION 5D: EFFECTS (WP1 UPDATED + OBSERVABILITY)
     // ========================================================================
 
     useEffect(() => { const user = loadUserInfo(); if (user) setUserInfo(user) }, [loadUserInfo])
+
+    // --- Observability: Set user context and log page load ---
+    useEffect(() => {
+        if (userInfo) {
+            eventLogger.setUser(userInfo.userId)
+            // Use a trace ID so all contract_upload events in this page session are linked
+            eventLogger.setSession(userInfo.userId + '-' + Date.now())
+            eventLogger.completed('contract_upload', 'upload_page_loaded', {
+                surface: 'create_contract',
+                pathway: assessment.mediationType || 'not_selected',
+                hasPreFill: hasPrefill
+            })
+        }
+    }, [userInfo])
 
     // WP6: Handle pre-fill from Contract Library
     useEffect(() => {
@@ -605,6 +621,7 @@ function ContractCreationContent() {
             setShowTenderingSection(true)
         }
     }, [assessment.quickIntake.bidderCount])
+
 
     // ========================================================================
     // SECTION 5E: HELPER FUNCTIONS
@@ -822,7 +839,7 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 5F: UPLOAD FUNCTIONS
+    // SECTION 5F: UPLOAD FUNCTIONS (with Observability Instrumentation)
     // ========================================================================
 
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -833,6 +850,14 @@ function ContractCreationContent() {
         const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
         if (!validTypes.includes(file.type) && !hasValidExtension) { setError('Please upload a PDF, DOCX, or TXT file'); return }
         if (file.size > 10 * 1024 * 1024) { setError('File size must be less than 10MB'); return }
+
+        // --- Observability: Log file selected ---
+        eventLogger.completed('contract_upload', 'file_selected', {
+            fileName: file.name,
+            fileType: file.type,
+            fileSizeMb: Math.round(file.size / 1024 / 1024 * 100) / 100
+        })
+
         await processUpload(file)
     }
 
@@ -844,9 +869,38 @@ function ContractCreationContent() {
         addClarenceMessage(CLARENCE_MESSAGES.upload_started)
 
         try {
+            // --- Observability: Log text extraction started ---
+            const extractionMethod = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+                ? 'pdfjs'
+                : file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx')
+                    ? 'mammoth'
+                    : 'text'
+            eventLogger.started('contract_upload', 'text_extraction_started', {
+                fileType: file.type,
+                method: extractionMethod
+            })
+
             const extractedText = await extractTextFromFile(file)
-            if (!extractedText || extractedText.length < 100) throw new Error('Could not extract sufficient text')
+
+            if (!extractedText || extractedText.length < 100) {
+                // --- Observability: Log extraction failed ---
+                eventLogger.failed('contract_upload', 'text_extraction_completed',
+                    `Insufficient text: ${extractedText?.length || 0} chars`, 'EXTRACTION_INSUFFICIENT')
+                throw new Error('Could not extract sufficient text')
+            }
+
+            // --- Observability: Log text extraction completed ---
+            eventLogger.completed('contract_upload', 'text_extraction_completed', {
+                charCount: extractedText.length,
+                pageCount: null
+            })
+
             setUploadProgress('Uploading to CLARENCE...')
+
+            // --- Observability: Log parse workflow triggered ---
+            eventLogger.started('contract_upload', 'parse_workflow_triggered', {
+                webhookUrl: `${API_BASE}/parse-contract-document`
+            })
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
@@ -864,15 +918,28 @@ function ContractCreationContent() {
                 })
             })
 
-            if (!response.ok) throw new Error('Upload failed')
+            if (!response.ok) {
+                // --- Observability: Log parse workflow failed ---
+                eventLogger.failed('contract_upload', 'parse_workflow_triggered',
+                    `HTTP ${response.status}`, `HTTP_${response.status}`)
+                throw new Error('Upload failed')
+            }
 
             const result = await response.json()
 
             if (result.success && result.contractId) {
+                // --- Observability: Log parse workflow completed ---
+                eventLogger.completed('contract_upload', 'parse_workflow_triggered', {
+                    contractId: result.contractId
+                })
+
                 setAssessment(prev => ({ ...prev, step: 'upload_processing', uploadedContractId: result.contractId, uploadedContractStatus: 'processing', uploadedFileName: file.name }))
                 addClarenceMessage(CLARENCE_MESSAGES.upload_processing)
                 startPollingForStatus(result.contractId)
             } else {
+                // --- Observability: Log parse workflow failed ---
+                eventLogger.failed('contract_upload', 'parse_workflow_triggered',
+                    result.error || 'Upload failed', 'RESULT_ERROR')
                 throw new Error(result.error || 'Upload failed')
             }
         } catch (err) {
@@ -888,12 +955,20 @@ function ContractCreationContent() {
     const startPollingForStatus = (contractId: string) => {
         pollingCountRef.current = 0
         if (pollingRef.current) clearInterval(pollingRef.current)
+
+        // --- Observability: Log polling started ---
+        eventLogger.started('contract_upload', 'parse_polling_started', { contractId })
+
         pollingRef.current = setInterval(async () => {
             pollingCountRef.current++
             if (pollingCountRef.current > MAX_POLLING_ATTEMPTS) {
                 if (pollingRef.current) clearInterval(pollingRef.current)
                 setAssessment(prev => ({ ...prev, uploadedContractStatus: 'failed' }))
                 addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
+
+                // --- Observability: Log parse completed (timeout) ---
+                eventLogger.failed('contract_upload', 'parse_completed',
+                    `Polling timed out after ${MAX_POLLING_ATTEMPTS} attempts`, 'POLLING_TIMEOUT')
                 return
             }
             try {
@@ -904,16 +979,28 @@ function ContractCreationContent() {
                         if (pollingRef.current) clearInterval(pollingRef.current)
                         setAssessment(prev => ({ ...prev, uploadedContractStatus: 'ready' }))
                         addClarenceMessage(CLARENCE_MESSAGES.upload_ready)
+
+                        // --- Observability: Log parse completed (success) ---
+                        eventLogger.completed('contract_upload', 'parse_completed', {
+                            clauseCount: data.clauseCount || null,
+                            contractId
+                        })
                     } else if (data.status === 'failed' || data.status === 'error') {
                         if (pollingRef.current) clearInterval(pollingRef.current)
                         setAssessment(prev => ({ ...prev, uploadedContractStatus: 'failed' }))
                         addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
+
+                        // --- Observability: Log parse completed (failed) ---
+                        eventLogger.failed('contract_upload', 'parse_completed',
+                            data.error || `Parse status: ${data.status}`, 'PARSE_FAILED')
                     }
                 }
-            } catch (err) { console.error('Polling error:', err) }
+            } catch (err) {
+                console.error('Polling error:', err)
+            }
         }, POLLING_INTERVAL)
     }
-
+    
     // ========================================================================
     // SECTION 5G: SELECTION HANDLERS (WP1 REORDERED + WP3 ENHANCED)
     // ========================================================================
