@@ -1,18 +1,23 @@
 'use client'
 
 // ============================================================================
-// CLARENCE Create Contract Page - V4 WITH TENDERING SUPPORT
+// CLARENCE Create Contract Page - V5 THREE PATHWAYS RENAME
 // ============================================================================
 // File: /app/auth/create-contract/page.tsx
 // Purpose: Contract creation assessment wizard with training mode support
 // Training Mode: Activated via ?mode=training URL parameter
 // Stage: CREATE (Emerald) - Training overrides to Amber
 // 
-// V3 CHANGES (WP1):
-// 1. Reordered steps: Contract Type now comes BEFORE Mediation Type
-// 2. Updated CLARENCE_MESSAGES for new conversational flow
-// 3. Updated progress panel step order
-// 4. Updated step handlers for new flow
+// V5 CHANGES (THREE PATHWAYS):
+// 1. Renamed: Straight to Contract → Quick Create (quick_create)
+// 2. Renamed: Partial Mediation → Contract Create (contract_create)
+// 3. Renamed: Full Mediation → Co-Create (co_create)
+// 4. Pathway prefixes: STC→QC, PM→CC, FM→CO
+// 5. Co-Create skips template source/selection (no starting document)
+// 6. Co-Create redirects to coming-soon page after session creation
+// 7. Updated CLARENCE messages for new pathway names
+// 8. Progress panel hides Starting Point step for Co-Create
+// 9. Summary shows CLARENCE clause generation for Co-Create
 //
 // V4 CHANGES (WP3):
 // 1. Enhanced Quick Intake with Tendering Configuration
@@ -27,7 +32,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import FeedbackButton from '@/app/components/FeedbackButton'
 import { createClient } from '@/lib/supabase'
-import { eventLogger } from '@/lib/eventLogger'
 
 // Import TransitionModal and pathway utilities
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
@@ -49,7 +53,7 @@ import { type PartyRole, getContractType } from '@/lib/role-matrix'
 // SECTION 1: TYPE DEFINITIONS
 // ============================================================================
 
-type MediationType = 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
+type MediationType = 'quick_create' | 'contract_create' | 'co_create' | null
 type ContractType = 'nda' | 'saas' | 'bpo' | 'msa' | 'employment' | 'custom' | null
 type TemplateSource = 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
 
@@ -154,24 +158,24 @@ const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstu
 
 const MEDIATION_OPTIONS: AssessmentOption[] = [
     {
-        id: 'straight',
-        label: 'Quick to Contract',
-        description: 'Standard template with minimal or no negotiation. Perfect for routine agreements like NDAs or standard service terms.',
-        value: 'straight_to_contract',
+        id: 'quick_create',
+        label: 'Quick Create',
+        description: 'Standard contracts, fast. Use a template or upload with minimal negotiation. Perfect for routine agreements like NDAs, leases, or standard service terms.',
+        value: 'quick_create',
         icon: '*'
     },
     {
-        id: 'partial',
-        label: 'Partial Mediation',
-        description: 'Most terms are fixed (~85%) with specific clauses open for negotiation. Ideal when you have standard terms but need flexibility on key points.',
-        value: 'partial_mediation',
+        id: 'contract_create',
+        label: 'Contract Create',
+        description: 'Your contract, professionally mediated. Start from a template or upload, then negotiate on all or selected clauses with full CLARENCE analysis and recommendations.',
+        value: 'contract_create',
         icon: '*'
     },
     {
-        id: 'full',
-        label: 'Full Mediation',
-        description: 'All contract terms are negotiable. Best for complex deals, strategic partnerships, or bespoke agreements.',
-        value: 'full_mediation',
+        id: 'co_create',
+        label: 'Co-Create',
+        description: 'Built together, from the ground up. No starting document — CLARENCE generates clauses based on both parties\' inputs. Ideal for new partnerships and equal-leverage deals.',
+        value: 'co_create',
         icon: '*'
     }
 ]
@@ -269,21 +273,21 @@ First, let's confirm your role in this agreement...`,
 This tells CLARENCE which side of the negotiation you're on, so I can show you the right perspective on every clause position.`,
 
     // WP1 CHANGE: Mediation selection now comes after contract type
-    mediation_selection: `**How much negotiation do you expect?**
+    mediation_selection: `**Which pathway suits this contract?**
 
 This determines how CLARENCE will facilitate the process:`,
 
-    mediation_stc_selected: `**Straight to Contract** - efficient and streamlined.
+    mediation_qc_selected: `**Quick Create** - efficient and streamlined.
 
-Since there's minimal negotiation, we'll use standard positions. Let's choose how to start building your contract.`,
+Since there's minimal negotiation, we'll use standard positions. Let me take you to the Quick Create studio...`,
 
-    mediation_pm_selected: `**Partial Mediation** - a balanced approach.
+    mediation_cc_selected: `**Contract Create** - your contract, professionally mediated.
 
-Most terms will use standard positions, with key clauses open for negotiation. Before we continue, I need a bit more context about this deal.`,
+You'll bring the starting document and CLARENCE will analyse, recommend, and mediate. Before we continue, I need a bit more context about this deal.`,
 
-    mediation_fm_selected: `**Full Mediation** - comprehensive negotiation support.
+    mediation_co_selected: `**Co-Create** - built together, from the ground up.
 
-All terms are on the table. To help you negotiate effectively, I need to understand more about this deal.`,
+Neither party needs to bring an existing contract. CLARENCE will generate the clause set and both parties will shape the agreement together. First, let me understand the deal context.`,
 
     // WP3: Updated quick_intake message for tendering context
     quick_intake: `**Let me understand your deal context.**
@@ -299,6 +303,11 @@ Let me help you configure the provider evaluation criteria. This will help filte
     quick_intake_complete: `**Thanks! I now have a clearer picture of your deal.**
 
 I'll use this context to calculate leverage and recommend initial positions. Now let's decide how you want to start building the contract.`,
+
+    // Co-Create skips template source, so different completion message
+    quick_intake_complete_co_create: `**Thanks! I now have a clearer picture of your deal.**
+
+Since you've chosen Co-Create, CLARENCE will generate the clause set based on the contract type and deal context. Let's review everything before we create your session.`,
 
     quick_intake_complete_tendering: `**Perfect! Your tendering configuration is set.**
 
@@ -343,6 +352,10 @@ Please try uploading again or choose a different source option.`,
 
 I'll create your contract with these settings. Once you confirm, you'll proceed to review and configure the clauses before inviting providers.`,
 
+    summary_co_create: `**Great! Here's a summary of your Co-Create session:**
+
+Once you confirm, I'll create the session and set up the collaborative workspace. Both parties will work together with CLARENCE to build the contract from scratch.`,
+
     summary_training: `**Great! Here's a summary of your training contract setup:** 
 
 I'll create your practice contract with these settings. Once you confirm, you'll be ready to start your training session.`,
@@ -351,11 +364,15 @@ I'll create your practice contract with these settings. Once you confirm, you'll
 
 Setting up your contract workspace. This will just take a moment.`,
 
+    creating_co_create: `**Creating your Co-Create session...**
+
+Setting up the collaborative workspace. This will just take a moment.`,
+
     creating_training: `**Creating your training session...** 
 
 Setting up your practice contract. This will just take a moment.`,
 
-    training_complete: `**Your training contract is ready!** 🎓
+    training_complete: `**Your training contract is ready!** ðŸŽ“
 
 Taking you to choose your AI counterpart now. You'll select who to negotiate against and CLARENCE will generate their positions.`,
 
@@ -532,26 +549,11 @@ function ContractCreationContent() {
         } catch { router.push('/auth/login'); return null }
     }, [router])
 
-
     // ========================================================================
-    // SECTION 5D: EFFECTS (WP1 UPDATED + OBSERVABILITY)
+    // SECTION 5D: EFFECTS (WP1 UPDATED)
     // ========================================================================
 
     useEffect(() => { const user = loadUserInfo(); if (user) setUserInfo(user) }, [loadUserInfo])
-
-    // --- Observability: Set user context and log page load ---
-    useEffect(() => {
-        if (userInfo) {
-            eventLogger.setUser(userInfo.userId)
-            // Use a trace ID so all contract_upload events in this page session are linked
-            eventLogger.setSession(userInfo.userId + '-' + Date.now())
-            eventLogger.completed('contract_upload', 'upload_page_loaded', {
-                surface: 'create_contract',
-                pathway: assessment.mediationType || 'not_selected',
-                hasPreFill: hasPrefill
-            })
-        }
-    }, [userInfo])
 
     // WP6: Handle pre-fill from Contract Library
     useEffect(() => {
@@ -621,7 +623,6 @@ function ContractCreationContent() {
             setShowTenderingSection(true)
         }
     }, [assessment.quickIntake.bidderCount])
-
 
     // ========================================================================
     // SECTION 5E: HELPER FUNCTIONS
@@ -726,17 +727,21 @@ function ContractCreationContent() {
     }
 
     // ========================================================================
-    // SECTION 5E-2: PATHWAY HELPER FUNCTIONS
+    // SECTION 5E-2: PATHWAY HELPER FUNCTIONS (RENAMED: QC/CC/CO)
     // ========================================================================
 
     const determinePathwayId = (
         mediationType: MediationType,
         templateSource: TemplateSource
     ): PathwayId | 'UNKNOWN' => {
-        const mediationPrefix: Record<NonNullable<MediationType>, string> = {
-            'straight_to_contract': 'STC',
-            'partial_mediation': 'PM',
-            'full_mediation': 'FM'
+        // Co-Create has no template source — pathway ID is just 'CO'
+        if (mediationType === 'co_create') {
+            return 'CO' as PathwayId
+        }
+
+        const mediationPrefix: Record<string, string> = {
+            'quick_create': 'QC',
+            'contract_create': 'CC'
         }
 
         const sourceSuffix: Record<NonNullable<TemplateSource>, string> = {
@@ -750,14 +755,18 @@ function ContractCreationContent() {
             return 'UNKNOWN'
         }
 
-        return `${mediationPrefix[mediationType]}-${sourceSuffix[templateSource]}` as PathwayId
+        const prefix = mediationPrefix[mediationType]
+        if (!prefix) return 'UNKNOWN'
+
+        return `${prefix}-${sourceSuffix[templateSource]}` as PathwayId
     }
 
     /**
      * Build redirect URL based on pathway
-     * - STC-EXISTING: -> invite-provider (true fast-track)
-     * - Other STC: -> contract-prep (need to configure positions)
-     * - FM/PM: -> strategic-assessment (assessment first, THEN prep)
+     * - QC (Quick Create): Handled earlier — redirects to /auth/quick-contract/create
+     * - CC-EXISTING: -> invite-provider (true fast-track)
+     * - Other CC: -> strategic-assessment (assessment first, THEN prep)
+     * - CO: -> co-create-studio (coming soon page for now)
      */
     const buildRedirectUrl = (
         pathwayId: PathwayId | string,
@@ -772,17 +781,27 @@ function ContractCreationContent() {
             params.set('contract_id', contractId)
         }
 
-        // STC-EXISTING: True fast-track - skip assessment AND prep
-        if (pathwayId === 'STC-EXISTING') {
+        // CO: Co-Create — redirect to coming soon page
+        if (pathwayId === 'CO') {
+            return `/auth/co-create-coming-soon?${params.toString()}`
+        }
+
+        // CC-EXISTING: True fast-track - skip assessment AND prep
+        if (pathwayId === 'CC-EXISTING') {
             return `/auth/invite-providers?${params.toString()}`
         }
 
-        // Other STC paths: Skip assessment, go to contract-prep
-        if (pathwayId.startsWith('STC-')) {
+        // Other CC paths with existing template: Skip assessment, go to contract-prep
+        if (pathwayId === 'CC-MODIFIED' || pathwayId === 'CC-UPLOADED' || pathwayId === 'CC-SCRATCH') {
+            return `/auth/strategic-assessment?${params.toString()}`
+        }
+
+        // QC paths (shouldn't reach here — QC redirects earlier)
+        if (pathwayId.startsWith('QC-')) {
             return `/auth/contract-prep?${params.toString()}`
         }
 
-        // FM/PM paths: Go to strategic-assessment FIRST
+        // Default: strategic-assessment
         return `/auth/strategic-assessment?${params.toString()}`
     }
 
@@ -790,9 +809,25 @@ function ContractCreationContent() {
      * Get the appropriate transition based on pathway
      */
     const getTransitionForPathway = (pathwayId: PathwayId | string): TransitionConfig | null => {
-        // STC-EXISTING skips all transitions (goes directly to invite)
-        if (pathwayId === 'STC-EXISTING') {
-            // Use a custom quick transition
+        // CO: Co-Create transition (cast id — 'transition_to_co_create' not yet in TransitionId type)
+        if (pathwayId === 'CO') {
+            return {
+                id: 'transition_to_prep' as TransitionConfig['id'],
+                fromStage: 'pathway_review',
+                toStage: 'contract_prep',
+                title: 'Co-Create Session Created',
+                message: "Your collaborative session is ready! The Co-Create Studio is currently being built. You'll be able to work with the other party and CLARENCE to build your contract from scratch.",
+                bulletPoints: [
+                    'CLARENCE will generate clauses based on your contract type',
+                    'Both parties will shape the agreement together',
+                    'The Co-Create Studio is coming soon'
+                ],
+                buttonText: 'Continue'
+            }
+        }
+
+        // CC-EXISTING: fast-track to invite
+        if (pathwayId === 'CC-EXISTING') {
             return {
                 id: 'transition_to_invite',
                 fromStage: 'pathway_review',
@@ -808,8 +843,13 @@ function ContractCreationContent() {
             }
         }
 
-        // Other STC paths: Skip assessment, go to prep
-        if (pathwayId.startsWith('STC-')) {
+        // Other CC paths: go to assessment
+        if (pathwayId.startsWith('CC-')) {
+            return TRANSITION_CONFIGS.find(t => t.id === 'transition_to_assessment') || null
+        }
+
+        // QC paths: go to prep (shouldn't reach here normally)
+        if (pathwayId.startsWith('QC-')) {
             return {
                 id: 'transition_to_prep',
                 fromStage: 'pathway_review',
@@ -825,21 +865,26 @@ function ContractCreationContent() {
             }
         }
 
-        // FM/PM paths: Go to strategic assessment
         return TRANSITION_CONFIGS.find(t => t.id === 'transition_to_assessment') || null
     }
 
     const shouldSkipQuickIntake = (mediationType: MediationType): boolean => {
-        return mediationType === 'straight_to_contract'
+        return mediationType === 'quick_create'
     }
 
-    // WP3: Check if this is a multi-provider (tendering) scenario
+    // Co-Create helper: check if current pathway is Co-Create
+    const isCoCreate = (): boolean => {
+        return assessment.mediationType === 'co_create'
+    }
+
+    // WP3: Check if this is a multi-provider (tendering) scenario (not applicable to Co-Create)
     const isMultiProviderScenario = (): boolean => {
+        if (isCoCreate()) return false
         return assessment.quickIntake.bidderCount === 'few' || assessment.quickIntake.bidderCount === 'many'
     }
 
     // ========================================================================
-    // SECTION 5F: UPLOAD FUNCTIONS (with Observability Instrumentation)
+    // SECTION 5F: UPLOAD FUNCTIONS
     // ========================================================================
 
     const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -850,14 +895,6 @@ function ContractCreationContent() {
         const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
         if (!validTypes.includes(file.type) && !hasValidExtension) { setError('Please upload a PDF, DOCX, or TXT file'); return }
         if (file.size > 10 * 1024 * 1024) { setError('File size must be less than 10MB'); return }
-
-        // --- Observability: Log file selected ---
-        eventLogger.completed('contract_upload', 'file_selected', {
-            fileName: file.name,
-            fileType: file.type,
-            fileSizeMb: Math.round(file.size / 1024 / 1024 * 100) / 100
-        })
-
         await processUpload(file)
     }
 
@@ -869,38 +906,9 @@ function ContractCreationContent() {
         addClarenceMessage(CLARENCE_MESSAGES.upload_started)
 
         try {
-            // --- Observability: Log text extraction started ---
-            const extractionMethod = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-                ? 'pdfjs'
-                : file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx')
-                    ? 'mammoth'
-                    : 'text'
-            eventLogger.started('contract_upload', 'text_extraction_started', {
-                fileType: file.type,
-                method: extractionMethod
-            })
-
             const extractedText = await extractTextFromFile(file)
-
-            if (!extractedText || extractedText.length < 100) {
-                // --- Observability: Log extraction failed ---
-                eventLogger.failed('contract_upload', 'text_extraction_completed',
-                    `Insufficient text: ${extractedText?.length || 0} chars`, 'EXTRACTION_INSUFFICIENT')
-                throw new Error('Could not extract sufficient text')
-            }
-
-            // --- Observability: Log text extraction completed ---
-            eventLogger.completed('contract_upload', 'text_extraction_completed', {
-                charCount: extractedText.length,
-                pageCount: null
-            })
-
+            if (!extractedText || extractedText.length < 100) throw new Error('Could not extract sufficient text')
             setUploadProgress('Uploading to CLARENCE...')
-
-            // --- Observability: Log parse workflow triggered ---
-            eventLogger.started('contract_upload', 'parse_workflow_triggered', {
-                webhookUrl: `${API_BASE}/parse-contract-document`
-            })
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
@@ -918,28 +926,15 @@ function ContractCreationContent() {
                 })
             })
 
-            if (!response.ok) {
-                // --- Observability: Log parse workflow failed ---
-                eventLogger.failed('contract_upload', 'parse_workflow_triggered',
-                    `HTTP ${response.status}`, `HTTP_${response.status}`)
-                throw new Error('Upload failed')
-            }
+            if (!response.ok) throw new Error('Upload failed')
 
             const result = await response.json()
 
             if (result.success && result.contractId) {
-                // --- Observability: Log parse workflow completed ---
-                eventLogger.completed('contract_upload', 'parse_workflow_triggered', {
-                    contractId: result.contractId
-                })
-
                 setAssessment(prev => ({ ...prev, step: 'upload_processing', uploadedContractId: result.contractId, uploadedContractStatus: 'processing', uploadedFileName: file.name }))
                 addClarenceMessage(CLARENCE_MESSAGES.upload_processing)
                 startPollingForStatus(result.contractId)
             } else {
-                // --- Observability: Log parse workflow failed ---
-                eventLogger.failed('contract_upload', 'parse_workflow_triggered',
-                    result.error || 'Upload failed', 'RESULT_ERROR')
                 throw new Error(result.error || 'Upload failed')
             }
         } catch (err) {
@@ -955,20 +950,12 @@ function ContractCreationContent() {
     const startPollingForStatus = (contractId: string) => {
         pollingCountRef.current = 0
         if (pollingRef.current) clearInterval(pollingRef.current)
-
-        // --- Observability: Log polling started ---
-        eventLogger.started('contract_upload', 'parse_polling_started', { contractId })
-
         pollingRef.current = setInterval(async () => {
             pollingCountRef.current++
             if (pollingCountRef.current > MAX_POLLING_ATTEMPTS) {
                 if (pollingRef.current) clearInterval(pollingRef.current)
                 setAssessment(prev => ({ ...prev, uploadedContractStatus: 'failed' }))
                 addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
-
-                // --- Observability: Log parse completed (timeout) ---
-                eventLogger.failed('contract_upload', 'parse_completed',
-                    `Polling timed out after ${MAX_POLLING_ATTEMPTS} attempts`, 'POLLING_TIMEOUT')
                 return
             }
             try {
@@ -979,30 +966,18 @@ function ContractCreationContent() {
                         if (pollingRef.current) clearInterval(pollingRef.current)
                         setAssessment(prev => ({ ...prev, uploadedContractStatus: 'ready' }))
                         addClarenceMessage(CLARENCE_MESSAGES.upload_ready)
-
-                        // --- Observability: Log parse completed (success) ---
-                        eventLogger.completed('contract_upload', 'parse_completed', {
-                            clauseCount: data.clauseCount || null,
-                            contractId
-                        })
                     } else if (data.status === 'failed' || data.status === 'error') {
                         if (pollingRef.current) clearInterval(pollingRef.current)
                         setAssessment(prev => ({ ...prev, uploadedContractStatus: 'failed' }))
                         addClarenceMessage(CLARENCE_MESSAGES.upload_failed)
-
-                        // --- Observability: Log parse completed (failed) ---
-                        eventLogger.failed('contract_upload', 'parse_completed',
-                            data.error || `Parse status: ${data.status}`, 'PARSE_FAILED')
                     }
                 }
-            } catch (err) {
-                console.error('Polling error:', err)
-            }
+            } catch (err) { console.error('Polling error:', err) }
         }, POLLING_INTERVAL)
     }
-    
+
     // ========================================================================
-    // SECTION 5G: SELECTION HANDLERS (WP1 REORDERED + WP3 ENHANCED)
+    // SECTION 5G: SELECTION HANDLERS (RENAMED PATHWAYS + CO-CREATE ROUTING)
     // ========================================================================
 
     // WP1: Contract type is now selected FIRST
@@ -1040,7 +1015,7 @@ function ContractCreationContent() {
         addUserMessage(`I'm the ${roleLabel}`)
 
         setTimeout(() => {
-            addClarenceMessage(`**${roleLabel}** - understood! I'll show positions from your perspective.\n\nNow let's decide how much negotiation you expect...`)
+            addClarenceMessage(`**${roleLabel}** - understood! I'll show positions from your perspective.\n\nNow let's choose the right pathway for this contract...`)
             setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
             setTimeout(() => {
                 addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
@@ -1048,14 +1023,14 @@ function ContractCreationContent() {
         }, 300)
     }
 
-    // WP1: Mediation is now selected SECOND
+    // Pathway selection handler (renamed from mediation)
     const handleMediationSelect = (mediationType: MediationType) => {
-        // Quick Contract redirect - STC now has its own dedicated product
-        if (mediationType === 'straight_to_contract') {
-            const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Quick to Contract'
+        // Quick Create: redirect to dedicated Quick Contract studio
+        if (mediationType === 'quick_create') {
+            const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Quick Create'
             addUserMessage(`I'd like ${label}`)
             setTimeout(() => {
-                addClarenceMessage("Great choice! Quick Contract is perfect for standard agreements. Let me take you to the Quick Contract studio...")
+                addClarenceMessage(CLARENCE_MESSAGES.mediation_qc_selected)
                 setTimeout(() => {
                     router.push('/auth/quick-contract/create')
                 }, 1000)
@@ -1064,19 +1039,27 @@ function ContractCreationContent() {
         }
 
         setAssessment(prev => ({ ...prev, mediationType }))
-        const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Mediation'
+        const label = MEDIATION_OPTIONS.find(o => o.value === mediationType)?.label || 'Contract Create'
         addUserMessage(`I'd like ${label}`)
 
+        // Look up the appropriate CLARENCE response message
+        const messageKeyMap: Record<string, keyof typeof CLARENCE_MESSAGES> = {
+            'contract_create': 'mediation_cc_selected',
+            'co_create': 'mediation_co_selected'
+        }
+        const messageKey = messageKeyMap[mediationType || '']
+        const selectedMessage = messageKey ? CLARENCE_MESSAGES[messageKey] : CLARENCE_MESSAGES.template_source
+
         const skipQuickIntake = shouldSkipQuickIntake(mediationType)
-        const messageKey = `mediation_${mediationType?.replace('_', '')?.substring(0, 3).toLowerCase()}_selected` as keyof typeof CLARENCE_MESSAGES
-        const selectedMessage = CLARENCE_MESSAGES[messageKey] || CLARENCE_MESSAGES.template_source
 
         setTimeout(() => {
             addClarenceMessage(selectedMessage)
             if (skipQuickIntake) {
+                // Quick Create with template source (shouldn't reach here, but safety fallback)
                 setAssessment(prev => ({ ...prev, step: 'template_source' }))
                 setTimeout(() => { addClarenceMessage(CLARENCE_MESSAGES.template_source, TEMPLATE_SOURCE_OPTIONS) }, 500)
             } else {
+                // Both Contract Create and Co-Create go to Deal Context
                 setAssessment(prev => ({ ...prev, step: 'quick_intake' }))
                 setTimeout(() => {
                     addClarenceMessage(CLARENCE_MESSAGES.quick_intake)
@@ -1118,12 +1101,24 @@ function ContractCreationContent() {
         }
     }
 
-    // WP3: Enhanced Quick Intake completion with tendering acknowledgment
+    // Quick Intake completion: Co-Create skips template source, goes straight to summary
     const handleQuickIntakeComplete = () => {
         const isMultiProvider = isMultiProviderScenario()
         addUserMessage('Deal context complete')
 
-        // WP3: Use appropriate completion message based on tendering
+        // Co-Create: skip template source, go straight to summary
+        if (isCoCreate()) {
+            setTimeout(() => {
+                addClarenceMessage(CLARENCE_MESSAGES.quick_intake_complete_co_create)
+                setAssessment(prev => ({ ...prev, step: 'summary' }))
+                setTimeout(() => {
+                    addClarenceMessage(CLARENCE_MESSAGES.summary_co_create)
+                }, 500)
+            }, 300)
+            return
+        }
+
+        // Contract Create: continue to template source selection
         const completionMessage = isMultiProvider
             ? CLARENCE_MESSAGES.quick_intake_complete_tendering
             : CLARENCE_MESSAGES.quick_intake_complete
@@ -1147,7 +1142,12 @@ function ContractCreationContent() {
         setIsCreating(true)
         setError(null)
         setAssessment(prev => ({ ...prev, step: 'creating' }))
-        addClarenceMessage(isTrainingMode ? CLARENCE_MESSAGES.creating_training : CLARENCE_MESSAGES.creating)
+        const creatingMessage = isTrainingMode
+            ? CLARENCE_MESSAGES.creating_training
+            : isCoCreate()
+                ? CLARENCE_MESSAGES.creating_co_create
+                : CLARENCE_MESSAGES.creating
+        addClarenceMessage(creatingMessage)
 
         try {
             const pathwayId = determinePathwayId(assessment.mediationType, assessment.templateSource)
@@ -1266,28 +1266,31 @@ function ContractCreationContent() {
     const getTemplateSourceLabel = (source: TemplateSource): string => TEMPLATE_SOURCE_OPTIONS.find(o => o.value === source)?.label || 'Template'
 
     // ========================================================================
-    // SECTION 6: RENDER - PROGRESS PANEL (WP1 UPDATED)
+    // SECTION 6: RENDER - PROGRESS PANEL (RENAMED PATHWAYS)
     // ========================================================================
 
     const renderProgressPanel = () => {
-        // WP1 CHANGE: Reordered steps - contract_type now comes before mediation_type
         // ROLE MATRIX: Added your_role step between contract_type and mediation_type
         const baseSteps = [
             { id: 'contract_type', label: 'Contract Type', icon: '*' },
             { id: 'your_role', label: 'Your Role', icon: '*' },
-            { id: 'mediation_type', label: 'Mediation Type', icon: '*' },
+            { id: 'mediation_type', label: 'Pathway', icon: '*' },
         ]
 
         const quickIntakeStep = !shouldSkipQuickIntake(assessment.mediationType)
             ? [{ id: 'quick_intake', label: 'Deal Context', icon: '*' }]
             : []
 
-        const remainingSteps = [
-            { id: 'template_source', label: 'Starting Point', icon: '*' },
+        // Co-Create skips the Starting Point step (no template source)
+        const templateSourceStep = !isCoCreate()
+            ? [{ id: 'template_source', label: 'Starting Point', icon: '*' }]
+            : []
+
+        const finalStep = [
             { id: 'summary', label: 'Review & Create', icon: '*' }
         ]
 
-        const steps = [...baseSteps, ...quickIntakeStep, ...remainingSteps]
+        const steps = [...baseSteps, ...quickIntakeStep, ...templateSourceStep, ...finalStep]
 
         // ROLE MATRIX: Updated step order with your_role
         const stepOrder = ['welcome', 'contract_type', 'your_role', 'mediation_type', 'quick_intake', 'template_source', 'template_selection', 'upload_processing', 'summary', 'creating']
@@ -1307,7 +1310,7 @@ function ContractCreationContent() {
                             </svg>
                         </Link>
                         <span className="text-slate-300">|</span>
-                        <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">â† {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
+                        <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">Ã¢â€ Â {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
                     </div>
                     <h2 className={`font-semibold ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-lg`}>{isTrainingMode ? 'Training Setup' : 'Create Contract'}</h2>
                 </div>
@@ -1424,10 +1427,10 @@ function ContractCreationContent() {
         </div>
     )
 
-    // WP1: Mediation type renders second now
+    // Pathway selection step (renamed from Mediation Type)
     const renderMediationType = () => (
         <div className="max-w-2xl mx-auto">
-            <h3 className="text-lg font-medium text-slate-800 mb-6">How much negotiation do you expect?</h3>
+            <h3 className="text-lg font-medium text-slate-800 mb-6">Which pathway suits this contract?</h3>
             {/* WP6: Show pre-filled info if applicable */}
             {hasPrefill && (
                 <div className={`mb-6 p-4 rounded-xl ${colors.bgLight} border ${colors.borderLight}`}>
@@ -1486,8 +1489,8 @@ function ContractCreationContent() {
             { value: 'many', label: 'Many', description: '4+ alternatives' }
         ]
 
-        // WP3: Check if tendering section should be shown
-        const isMultiProvider = quickIntake.bidderCount === 'few' || quickIntake.bidderCount === 'many'
+        // WP3: Check if tendering section should be shown (not for Co-Create)
+        const isMultiProvider = !isCoCreate() && (quickIntake.bidderCount === 'few' || quickIntake.bidderCount === 'many')
 
         // WP3: Basic validation - tendering fields optional but recommended
         const isComplete = quickIntake.dealValue && quickIntake.serviceCriticality && quickIntake.timelinePressure && quickIntake.bidderCount
@@ -1872,7 +1875,7 @@ function ContractCreationContent() {
                             const category = getCategoryLabel(template)
                             return (
                                 <button key={template.templateId} onClick={() => handleTemplateSelect(template)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
-                                    <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">📋</span></div>
+                                    <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">ðŸ“‹</span></div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{template.templateName}</h4>
@@ -1880,9 +1883,9 @@ function ContractCreationContent() {
                                         </div>
                                         <p className="text-sm text-slate-500 mb-2">{template.description || `Standard ${template.contractType} template`}</p>
                                         <div className="flex items-center gap-4 text-xs text-slate-400">
-                                            <span>📑 {template.clauseCount} clauses</span>
-                                            {template.industry && <span>🏢 {template.industry}</span>}
-                                            <span>📂 {template.contractType}</span>
+                                            <span>ðŸ“‘ {template.clauseCount} clauses</span>
+                                            {template.industry && <span>ðŸ¢ {template.industry}</span>}
+                                            <span>ðŸ“‚ {template.contractType}</span>
                                         </div>
                                     </div>
                                     <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center text-xl`}>&rarr;</div>
@@ -1895,7 +1898,7 @@ function ContractCreationContent() {
         )
     }
 
-    // WP1 + WP3: Summary now shows Contract Type before Mediation Type and includes tendering
+    // Summary: shows Contract Type, Role, Pathway, and Starting Point (Co-Create aware)
     const renderSummary = () => {
         const isMultiProvider = isMultiProviderScenario()
 
@@ -1942,7 +1945,7 @@ function ContractCreationContent() {
                     {assessment.initiatorPartyRole && assessment.contractTypeKey && (
                         <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">👤</span>
+                                <span className="text-2xl">ðŸ‘¤</span>
                                 <div>
                                     <p className="text-sm text-slate-500">Your Role</p>
                                     <p className="font-medium text-slate-800">
@@ -1959,26 +1962,43 @@ function ContractCreationContent() {
                         </div>
                     )}
 
-                    {/* WP1: Show Mediation Type second */}
+                    {/* Pathway selection */}
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                         <div className="flex items-center gap-3">
                             <span className="text-2xl"></span>
                             <div>
-                                <p className="text-sm text-slate-500">Mediation Type</p>
+                                <p className="text-sm text-slate-500">Pathway</p>
                                 <p className="font-medium text-slate-800">{getMediationTypeLabel(assessment.mediationType)}</p>
                             </div>
                         </div>
                     </div>
-                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                        <div className="flex items-center gap-3">
-                            <span className="text-2xl"></span>
-                            <div>
-                                <p className="text-sm text-slate-500">Starting Point</p>
-                                <p className="font-medium text-slate-800">{getTemplateSourceLabel(assessment.templateSource)}</p>
+
+                    {/* Starting Point — only show for non-Co-Create pathways */}
+                    {!isCoCreate() && (
+                        <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl"></span>
+                                <div>
+                                    <p className="text-sm text-slate-500">Starting Point</p>
+                                    <p className="font-medium text-slate-800">{getTemplateSourceLabel(assessment.templateSource)}</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    {assessment.selectedTemplateName && (
+                    )}
+
+                    {/* Co-Create: show that Clarence will generate clauses */}
+                    {isCoCreate() && (
+                        <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">C</span>
+                                <div>
+                                    <p className={`text-sm ${isTrainingMode ? 'text-amber-600' : 'text-emerald-600'}`}>Starting Point</p>
+                                    <p className={`font-medium ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'}`}>CLARENCE will generate clauses collaboratively</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {!isCoCreate() && assessment.selectedTemplateName && (
                         <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl"></span>
@@ -1989,7 +2009,7 @@ function ContractCreationContent() {
                             </div>
                         </div>
                     )}
-                    {assessment.uploadedFileName && (
+                    {!isCoCreate() && assessment.uploadedFileName && (
                         <div className={`p-4 rounded-lg ${isTrainingMode ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} border`}>
                             <div className="flex items-center gap-3">
                                 <span className="text-2xl"></span>
@@ -2042,7 +2062,14 @@ function ContractCreationContent() {
                 </div>
                 {error && <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">{error}</div>}
                 <div className="flex gap-4">
-                    <button onClick={() => setAssessment(prev => ({ ...prev, step: assessment.uploadedContractId ? 'upload_processing' : assessment.selectedTemplateId ? 'template_selection' : 'template_source' }))} className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">&larr; Back</button>
+                    <button onClick={() => {
+                        if (isCoCreate()) {
+                            // Co-Create: go back to deal context (skip template steps)
+                            setAssessment(prev => ({ ...prev, step: 'quick_intake' }))
+                        } else {
+                            setAssessment(prev => ({ ...prev, step: assessment.uploadedContractId ? 'upload_processing' : assessment.selectedTemplateId ? 'template_selection' : 'template_source' }))
+                        }
+                    }} className="px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">&larr; Back</button>
                     <button onClick={createContract} disabled={isCreating} className={`flex-1 px-6 py-3 rounded-lg ${colors.btnPrimary} text-white font-medium disabled:opacity-50 flex items-center justify-center gap-2`}>
                         {isCreating ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : <>{isTrainingMode ? 'Create Training Session' : 'Create Contract'} &rarr;</>}
                     </button>
