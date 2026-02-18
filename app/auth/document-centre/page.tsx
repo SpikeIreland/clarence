@@ -1492,7 +1492,7 @@ function DocumentCentreContent() {
     }
 
     // ============================================================================
-    // SECTION 11E: SAVE AS TEMPLATE HANDLER
+    // SECTION 11E: SAVE AS TEMPLATE HANDLER (with Observability Instrumentation)
     // ============================================================================
 
     const openSaveTemplateModal = () => {
@@ -1513,6 +1513,13 @@ function DocumentCentreContent() {
         setSaveTemplateDescription('')
         setSaveTemplateResult(null)
         setShowSaveTemplateModal(true)
+
+        // --- Observability: Log save template initiated ---
+        eventLogger.started('template_save', 'save_template_initiated', {
+            sessionId: session.sessionId,
+            isTraining: session.isTraining,
+            source: session.isTraining ? 'training_outcome' : 'negotiation_outcome'
+        })
     }
 
     const handleSaveAsTemplate = async () => {
@@ -1570,11 +1577,16 @@ function DocumentCentreContent() {
                 throw new Error(`Failed to create template: ${templateError.message}`)
             }
 
+            // --- Observability: Log template record created ---
+            eventLogger.completed('template_save', 'template_record_created', {
+                templateId,
+                templateCode,
+                sessionId: session.sessionId,
+                isTraining: session.isTraining
+            })
+
             // Step 4: Map session_clause_positions to template_clauses
-            // UPDATED: Use ORIGINAL positions as template defaults (starting positions)
-            // and store final positions separately for training comparison
             const templateClauses = positionsData.map((pos: Record<string, unknown>, index: number) => {
-                // Starting positions -- used when creating new sessions from this template
                 const customerPos = pos.original_customer_position
                     ? parseFloat(String(pos.original_customer_position))
                     : (pos.customer_position ? parseFloat(String(pos.customer_position)) : 5)
@@ -1582,7 +1594,6 @@ function DocumentCentreContent() {
                     ? parseFloat(String(pos.original_provider_position))
                     : (pos.provider_position ? parseFloat(String(pos.provider_position)) : 5)
 
-                // Final/outcome positions -- for training comparison ("you achieved X, actual was Y")
                 const outcomeCustomerPos = pos.customer_position ? parseFloat(String(pos.customer_position)) : null
                 const outcomeProviderPos = pos.provider_position ? parseFloat(String(pos.provider_position)) : null
 
@@ -1630,6 +1641,13 @@ function DocumentCentreContent() {
                 throw new Error(`Failed to save template clauses: ${clausesError.message}`)
             }
 
+            // --- Observability: Log template clauses saved ---
+            eventLogger.completed('template_save', 'template_clauses_saved', {
+                templateId,
+                clauseCount: templateClauses.length,
+                sessionId: session.sessionId
+            })
+
             // Step 6: Success
             console.log('Template saved:', {
                 sessionId: session.sessionId,
@@ -1643,6 +1661,15 @@ function DocumentCentreContent() {
                 success: true,
                 templateName: saveTemplateName.trim(),
                 clauseCount: templateClauses.length
+            })
+
+            // --- Observability: Log save template completed ---
+            eventLogger.completed('template_save', 'save_template_completed', {
+                templateId,
+                templateName: saveTemplateName.trim(),
+                clauseCount: templateClauses.length,
+                isTraining: session.isTraining,
+                source: sessionSource
             })
 
             // Add CLARENCE chat message about the save
@@ -1661,6 +1688,12 @@ function DocumentCentreContent() {
                 success: false,
                 error: error instanceof Error ? error.message : 'An unexpected error occurred'
             })
+
+            // --- Observability: Log save template failed ---
+            eventLogger.failed('template_save', 'save_template_completed',
+                error instanceof Error ? error.message : 'Unknown error',
+                'SAVE_FAILED'
+            )
         } finally {
             setIsSavingTemplate(false)
         }

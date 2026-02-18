@@ -393,7 +393,7 @@ export default function ContractLibraryPage() {
     }
 
     // ==========================================================================
-    // SECTION 7B: UPLOAD FUNCTIONS
+    // SECTION 7B: UPLOAD FUNCTIONS (with Observability Instrumentation)
     // ==========================================================================
 
     /** Reset upload state to initial values */
@@ -414,6 +414,12 @@ export default function ContractLibraryPage() {
         resetUpload()
         setShowUploadModal(true)
         setUploadStage('selecting')
+
+        // --- Observability: Log upload modal opened ---
+        eventLogger.completed('template_upload', 'upload_page_loaded', {
+            surface: 'contract_library',
+            upload_source: 'contract_library'
+        })
     }
 
     /** Close the upload modal */
@@ -444,6 +450,14 @@ export default function ContractLibraryPage() {
         setUploadFile(file)
         setUploadError(null)
 
+        // --- Observability: Log file selected ---
+        eventLogger.completed('template_upload', 'file_selected', {
+            fileName: file.name,
+            fileType: file.type,
+            fileSizeMb: Math.round(file.size / 1024 / 1024 * 100) / 100,
+            upload_source: 'contract_library'
+        })
+
         // Auto-fill template name from filename (strip extension)
         if (!uploadTemplateName) {
             const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
@@ -459,7 +473,6 @@ export default function ContractLibraryPage() {
         const file = e.dataTransfer.files?.[0]
         if (!file) return
 
-        // Create a synthetic event to reuse validation logic
         const ext = file.name.split('.').pop()?.toLowerCase()
         if (!['pdf', 'docx', 'doc', 'txt'].includes(ext || '')) {
             setUploadError('Unsupported file type. Please upload a PDF, DOCX, or TXT file.')
@@ -474,6 +487,15 @@ export default function ContractLibraryPage() {
 
         setUploadFile(file)
         setUploadError(null)
+
+        // --- Observability: Log file selected (via drop) ---
+        eventLogger.completed('template_upload', 'file_selected', {
+            fileName: file.name,
+            fileType: file.type,
+            fileSizeMb: Math.round(file.size / 1024 / 1024 * 100) / 100,
+            upload_source: 'contract_library',
+            method: 'drag_drop'
+        })
 
         if (!uploadTemplateName) {
             const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
@@ -549,14 +571,35 @@ export default function ContractLibraryPage() {
             setUploadStage('extracting')
             setUploadError(null)
 
+            // --- Observability: Log text extraction started ---
+            const extractionMethod = uploadFile.name.toLowerCase().endsWith('.pdf')
+                ? 'pdfjs'
+                : uploadFile.name.toLowerCase().endsWith('.docx') || uploadFile.name.toLowerCase().endsWith('.doc')
+                    ? 'mammoth'
+                    : 'text'
+            eventLogger.started('template_upload', 'text_extraction_started', {
+                fileType: uploadFile.type,
+                method: extractionMethod,
+                upload_source: 'contract_library'
+            })
+
             console.log('Extracting text from:', uploadFile.name)
             const extractedText = await extractTextFromFile(uploadFile)
 
             if (!extractedText || extractedText.length < 100) {
+                // --- Observability: Log extraction failed ---
+                eventLogger.failed('template_upload', 'text_extraction_completed',
+                    `Insufficient text: ${extractedText?.length || 0} chars`, 'EXTRACTION_INSUFFICIENT')
                 setUploadError('Could not extract sufficient text from the document. Please ensure the file contains readable text (not just scanned images).')
                 setUploadStage('error')
                 return
             }
+
+            // --- Observability: Log text extraction completed ---
+            eventLogger.completed('template_upload', 'text_extraction_completed', {
+                charCount: extractedText.length,
+                upload_source: 'contract_library'
+            })
 
             console.log(`Extracted ${extractedText.length} characters from document`)
 
@@ -592,11 +635,12 @@ export default function ContractLibraryPage() {
                 contractType: payload.contract_type,
             })
 
-            eventLogger.started('contract_library', 'upload_template', {
+            // --- Observability: Log parse workflow triggered ---
+            eventLogger.started('template_upload', 'parse_workflow_triggered', {
                 fileName: uploadFile.name,
                 templateName: uploadTemplateName.trim(),
                 contractType: uploadContractType,
-                fileSize: uploadFile.size
+                upload_source: 'contract_library'
             })
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
@@ -608,6 +652,9 @@ export default function ContractLibraryPage() {
             const result = await response.json()
 
             if (!response.ok || result.success === false) {
+                // --- Observability: Log parse workflow failed ---
+                eventLogger.failed('template_upload', 'parse_workflow_triggered',
+                    result.error || result.message || `HTTP ${response.status}`, `HTTP_${response.status}`)
                 throw new Error(result.error || result.message || 'Failed to parse contract document')
             }
 
@@ -617,10 +664,22 @@ export default function ContractLibraryPage() {
             const returnedContractId = result.contractId || result.contract_id
 
             if (returnedContractId) {
+                // --- Observability: Log parse workflow completed ---
+                eventLogger.completed('template_upload', 'parse_workflow_triggered', {
+                    contractId: returnedContractId,
+                    upload_source: 'contract_library'
+                })
+
                 // If status is 'processing', poll until ready
                 if (result.status === 'processing') {
                     console.log('Contract processing, polling for completion...')
                     setUploadStage('parsing')
+
+                    // --- Observability: Log polling started ---
+                    eventLogger.started('template_upload', 'parse_polling_started', {
+                        contractId: returnedContractId,
+                        upload_source: 'contract_library'
+                    })
 
                     const maxAttempts = 60  // 2 minutes max
                     let attempts = 0
@@ -669,6 +728,13 @@ export default function ContractLibraryPage() {
                         const isReady = await pollForReady()
                         if (isReady) {
                             console.log('Contract ready, redirecting to Studio...')
+
+                            // --- Observability: Log parse completed (success) ---
+                            eventLogger.completed('template_upload', 'parse_completed', {
+                                contractId: returnedContractId,
+                                upload_source: 'contract_library'
+                            })
+
                             router.push(`/auth/quick-contract/studio/${returnedContractId}?mode=template`)
                             return
                         }
@@ -678,11 +744,23 @@ export default function ContractLibraryPage() {
 
                     // Timeout - redirect anyway, Studio will handle it
                     console.warn('Polling timeout, redirecting anyway...')
+
+                    // --- Observability: Log parse completed (timeout) ---
+                    eventLogger.failed('template_upload', 'parse_completed',
+                        `Polling timed out after ${maxAttempts} attempts`, 'POLLING_TIMEOUT')
+
                     router.push(`/auth/quick-contract/studio/${returnedContractId}?mode=template`)
                     return
                 }
 
                 // Already ready, redirect immediately
+                // --- Observability: Log parse completed (immediate) ---
+                eventLogger.completed('template_upload', 'parse_completed', {
+                    contractId: returnedContractId,
+                    upload_source: 'contract_library',
+                    immediate: true
+                })
+
                 router.push(`/auth/quick-contract/studio/${returnedContractId}?mode=template`)
                 return
             }
@@ -694,10 +772,12 @@ export default function ContractLibraryPage() {
                 templateName: uploadTemplateName.trim()
             })
 
-            eventLogger.completed('contract_library', 'upload_template', {
+            // --- Observability: Log parse completed (fallback) ---
+            eventLogger.completed('template_upload', 'parse_completed', {
                 templateName: uploadTemplateName.trim(),
                 clauseCount: result.clauseCount || result.clause_count || 0,
-                contractType: uploadContractType
+                upload_source: 'contract_library',
+                fallback: true
             })
 
             // Refresh templates list
@@ -714,7 +794,8 @@ export default function ContractLibraryPage() {
                     : 'An unexpected error occurred. Please try again.'
             )
 
-            eventLogger.failed('contract_library', 'upload_template',
+            // --- Observability: Log upload failed ---
+            eventLogger.failed('template_upload', 'parse_workflow_triggered',
                 error instanceof Error ? error.message : 'Unknown error',
                 'UPLOAD_FAILED'
             )
