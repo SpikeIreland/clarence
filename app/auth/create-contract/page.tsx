@@ -372,7 +372,7 @@ Setting up the collaborative workspace. This will just take a moment.`,
 
 Setting up your practice contract. This will just take a moment.`,
 
-    training_complete: `**Your training contract is ready!** ðŸŽ“
+    training_complete: `**Your training contract is ready!** 🎓
 
 Taking you to choose your AI counterpart now. You'll select who to negotiate against and CLARENCE will generate their positions.`,
 
@@ -1310,7 +1310,7 @@ function ContractCreationContent() {
                             </svg>
                         </Link>
                         <span className="text-slate-300">|</span>
-                        <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">Ã¢â€ Â {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
+                        <Link href={isTrainingMode ? '/auth/training' : '/auth/contracts'} className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1">←  {isTrainingMode ? 'Back to Training' : 'Back to Library'}</Link>
                     </div>
                     <h2 className={`font-semibold ${isTrainingMode ? 'text-amber-800' : 'text-emerald-800'} text-lg`}>{isTrainingMode ? 'Training Setup' : 'Create Contract'}</h2>
                 </div>
@@ -1875,7 +1875,7 @@ function ContractCreationContent() {
                             const category = getCategoryLabel(template)
                             return (
                                 <button key={template.templateId} onClick={() => handleTemplateSelect(template)} className={`flex items-start gap-4 p-5 rounded-xl border-2 border-slate-200 ${colors.borderHover} ${isTrainingMode ? 'hover:bg-amber-50' : 'hover:bg-emerald-50'} transition-all text-left group`}>
-                                    <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">ðŸ“‹</span></div>
+                                    <div className={`w-14 h-14 rounded-lg ${colors.bgGradient} flex items-center justify-center flex-shrink-0`}><span className="text-white text-2xl">📋</span></div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             <h4 className={`font-semibold text-slate-800 ${isTrainingMode ? 'group-hover:text-amber-800' : 'group-hover:text-emerald-800'}`}>{template.templateName}</h4>
@@ -1883,9 +1883,9 @@ function ContractCreationContent() {
                                         </div>
                                         <p className="text-sm text-slate-500 mb-2">{template.description || `Standard ${template.contractType} template`}</p>
                                         <div className="flex items-center gap-4 text-xs text-slate-400">
-                                            <span>ðŸ“‘ {template.clauseCount} clauses</span>
-                                            {template.industry && <span>ðŸ¢ {template.industry}</span>}
-                                            <span>ðŸ“‚ {template.contractType}</span>
+                                            <span>🔑 {template.clauseCount} clauses</span>
+                                            {template.industry && <span>🏢 {template.industry}</span>}
+                                            <span>📂 {template.contractType}</span>
                                         </div>
                                     </div>
                                     <div className={`text-slate-400 ${isTrainingMode ? 'group-hover:text-amber-500' : 'group-hover:text-emerald-500'} self-center text-xl`}>&rarr;</div>
@@ -1945,7 +1945,7 @@ function ContractCreationContent() {
                     {assessment.initiatorPartyRole && assessment.contractTypeKey && (
                         <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">ðŸ‘¤</span>
+                                <span className="text-2xl">👤</span>
                                 <div>
                                     <p className="text-sm text-slate-500">Your Role</p>
                                     <p className="font-medium text-slate-800">
