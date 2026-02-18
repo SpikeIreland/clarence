@@ -35,7 +35,11 @@ export type JourneyType =
     | 'clause_negotiation'
     | 'clarence_chat'
     | 'tradeoff_analysis'
-    | 'draft_generation';
+    | 'draft_generation'
+    | 'contract_upload'
+    | 'template_upload'
+    | 'playbook_upload'
+    | 'template_save';
 
 /**
  * Event payload structure for API calls

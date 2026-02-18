@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import { eventLogger } from '@/lib/eventLogger'
+
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -151,10 +153,9 @@ function TabNavigation({ activeTab, onTabChange, pendingCount }: TabNavigationPr
     )
 }
 
-// ==// ============================================================================
-// SECTION 5: PLAYBOOKS TAB COMPONENT
 // ============================================================================
-
+// SECTION 5: PLAYBOOKS TAB COMPONENT (with Observability Instrumentation)
+// ============================================================================
 
 interface PlaybooksTabProps {
     playbooks: Playbook[]
@@ -185,6 +186,11 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const menuRef = useRef<HTMLDivElement>(null)
     const renameInputRef = useRef<HTMLInputElement>(null)
 
+    // --- Observability: Log tab loaded ---
+    useEffect(() => {
+        eventLogger.completed('playbook_upload', 'playbook_tab_loaded', { companyId: playbooks?.[0]?.createdBy || null })
+    }, [])
+
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpenMenuId(null)
@@ -205,6 +211,14 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
         if (!allowedTypes.includes(file.type)) { setUploadError('Please upload a PDF or Word document'); return }
         if (file.size > 10 * 1024 * 1024) { setUploadError('File size must be less than 10MB'); return }
+
+        // --- Observability: Log file selected ---
+        eventLogger.completed('playbook_upload', 'playbook_file_selected', {
+            fileName: file.name,
+            fileType: file.type,
+            fileSizeMb: Math.round(file.size / 1024 / 1024 * 100) / 100
+        })
+
         setIsUploading(true)
         setUploadError(null)
         try {
@@ -416,7 +430,11 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                     {p.isActive ? (
                                         <button onClick={() => onDeactivate(p.playbookId)} className="px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-lg">Deactivate</button>
                                     ) : (p.status === 'parsed' || p.status === 'inactive') && (
-                                        <button onClick={() => onActivate(p.playbookId)} className="px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">Activate</button>
+                                        <button onClick={() => {
+                                            onActivate(p.playbookId)
+                                            // --- Observability: Log playbook activation ---
+                                            eventLogger.completed('playbook_upload', 'playbook_activated', { playbookId: p.playbookId, ruleCount: p.rulesExtracted })
+                                        }} className="px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">Activate</button>
                                     )}
                                     <div className="relative" ref={openMenuId === p.playbookId ? menuRef : null}>
                                         <button onClick={() => setOpenMenuId(openMenuId === p.playbookId ? null : p.playbookId)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
@@ -473,6 +491,8 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         </div>
     )
 }
+
+
 
 // ============================================================================
 // SECTION 5B: COMPANY TEMPLATES TAB COMPONENT
@@ -1066,6 +1086,7 @@ function CompanyAdminContent() {
         } catch (e) { console.error('Load company users error:', e); setCompanyUsers([]) } finally { setUsersLoading(false) }
     }, [])
 
+
     const handlePlaybookUpload = async (file: File) => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
@@ -1081,7 +1102,7 @@ function CompanyAdminContent() {
             source_file_name: file.name,
             source_file_path: fileName,
             status: 'pending_parse',
-            created_by_user_id: userInfo?.userId  // ← CHANGED from created_by
+            created_by_user_id: userInfo?.userId
         })
         if (insertError) throw new Error(insertError.message)
         await loadPlaybooks(companyId!)
@@ -1123,15 +1144,32 @@ function CompanyAdminContent() {
 
             // Step 4: Extract text client-side (matching template upload pattern)
             console.log('Extracting text client-side, file type:', fileType)
+
+            // --- Observability: Log text extraction started ---
+            eventLogger.started('playbook_upload', 'playbook_text_extraction_started', { fileType })
+
             const extractedText = await extractTextFromPlaybook(fileData, fileType)
 
             if (!extractedText || extractedText.length < 100) {
+                // --- Observability: Log extraction failed ---
+                eventLogger.failed('playbook_upload', 'playbook_text_extraction_completed',
+                    `Insufficient text: ${extractedText?.length || 0} chars`, 'EXTRACTION_INSUFFICIENT')
                 throw new Error(`Could not extract sufficient text from the document (got ${extractedText?.length || 0} chars). The file may be image-based or corrupted.`)
             }
+
+            // --- Observability: Log text extraction completed ---
+            eventLogger.completed('playbook_upload', 'playbook_text_extraction_completed', {
+                charCount: extractedText.length
+            })
 
             console.log(`Text extracted successfully: ${extractedText.length} characters`)
 
             // Step 5: Send extracted text to N8N webhook
+            // --- Observability: Log parse workflow triggered ---
+            eventLogger.started('playbook_upload', 'playbook_parse_triggered', {
+                webhookUrl: `${API_BASE}/parse-playbook`
+            })
+
             const response = await fetch(`${API_BASE}/parse-playbook`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1146,12 +1184,23 @@ function CompanyAdminContent() {
             console.log('Response:', text)
 
             if (!response.ok) {
+                // --- Observability: Log parse workflow failed ---
+                eventLogger.failed('playbook_upload', 'playbook_parse_triggered',
+                    `HTTP ${response.status}: ${text.substring(0, 200)}`, `HTTP_${response.status}`)
+
                 await supabase.from('company_playbooks').update({
                     status: 'parse_failed',
                     parsing_error: `HTTP ${response.status}: ${text.substring(0, 200)}`
                 }).eq('playbook_id', playbookId)
                 throw new Error(`HTTP ${response.status}`)
             }
+
+            // --- Observability: Log parse workflow completed ---
+            eventLogger.completed('playbook_upload', 'playbook_parse_triggered', {
+                playbookId,
+                statusCode: response.status
+            })
+
         } catch (e) {
             console.error('Parse error:', e)
             // Update status to failed if not already done
