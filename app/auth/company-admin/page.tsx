@@ -494,9 +494,6 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 
 
 
-// ============================================================================
-// SECTION 5B: COMPANY TEMPLATES TAB COMPONENT
-// ============================================================================
 
 interface TemplatesTabProps {
     templates: CompanyTemplate[]
@@ -522,6 +519,14 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
+    // --- Observability: Log tab loaded ---
+    useEffect(() => {
+        eventLogger.completed('template_upload', 'upload_page_loaded', {
+            surface: 'company_admin',
+            upload_source: 'company_admin'
+        })
+    }, [])
+
     const handleFileDrop = (file: File) => {
         const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
         if (!allowedTypes.includes(file.type)) {
@@ -532,6 +537,15 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
             setUploadError('File size must be less than 10MB')
             return
         }
+
+        // --- Observability: Log file selected ---
+        eventLogger.completed('template_upload', 'file_selected', {
+            fileName: file.name,
+            fileType: file.type,
+            fileSizeMb: Math.round(file.size / 1024 / 1024 * 100) / 100,
+            upload_source: 'company_admin'
+        })
+
         setSelectedFile(file)
         setTemplateName(file.name.replace(/\.[^/.]+$/, ''))
         setShowUploadForm(true)
@@ -593,14 +607,41 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
         setUploadProgress('Extracting text from document...')
 
         try {
+            // --- Observability: Log text extraction started ---
+            const extractionMethod = selectedFile.type === 'application/pdf'
+                ? 'pdfjs'
+                : selectedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    ? 'mammoth'
+                    : 'text'
+            eventLogger.started('template_upload', 'text_extraction_started', {
+                fileType: selectedFile.type,
+                method: extractionMethod,
+                upload_source: 'company_admin'
+            })
+
             const extractedText = await extractTextFromFile(selectedFile)
 
             if (!extractedText || extractedText.length < 100) {
+                // --- Observability: Log extraction failed ---
+                eventLogger.failed('template_upload', 'text_extraction_completed',
+                    `Insufficient text: ${extractedText?.length || 0} chars`, 'EXTRACTION_INSUFFICIENT')
                 throw new Error('Could not extract sufficient text from the document')
             }
 
+            // --- Observability: Log text extraction completed ---
+            eventLogger.completed('template_upload', 'text_extraction_completed', {
+                charCount: extractedText.length,
+                upload_source: 'company_admin'
+            })
+
             console.log(`Extracted ${extractedText.length} characters`)
             setUploadProgress('Sending to CLARENCE for analysis...')
+
+            // --- Observability: Log parse workflow triggered ---
+            eventLogger.started('template_upload', 'parse_workflow_triggered', {
+                webhookUrl: `${API_BASE}/parse-contract-document`,
+                upload_source: 'company_admin'
+            })
 
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
@@ -621,6 +662,9 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
 
             if (!response.ok) {
                 const errorText = await response.text()
+                // --- Observability: Log parse workflow failed ---
+                eventLogger.failed('template_upload', 'parse_workflow_triggered',
+                    `Upload failed: ${errorText}`, `HTTP_${response.status}`)
                 throw new Error(`Upload failed: ${errorText}`)
             }
 
@@ -628,11 +672,26 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
             const contractId = result.contract_id || result.contractId
 
             if (!contractId) {
+                // --- Observability: Log parse workflow failed ---
+                eventLogger.failed('template_upload', 'parse_workflow_triggered',
+                    'No contract ID returned', 'NO_CONTRACT_ID')
                 throw new Error('No contract ID returned')
             }
 
+            // --- Observability: Log parse workflow completed ---
+            eventLogger.completed('template_upload', 'parse_workflow_triggered', {
+                contractId,
+                upload_source: 'company_admin'
+            })
+
             setIsProcessing(true)
             setUploadProgress('Processing clauses...')
+
+            // --- Observability: Log polling started ---
+            eventLogger.started('template_upload', 'parse_polling_started', {
+                contractId,
+                upload_source: 'company_admin'
+            })
 
             const supabase = createClient()
             let attempts = 0
@@ -648,8 +707,22 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                 const clauseCount = data?.length || 0
                 setUploadProgress(`Processing clauses... ${clauseCount} found`)
 
-                if (clauseCount >= 3) break
+                if (clauseCount >= 3) {
+                    // --- Observability: Log parse completed (success) ---
+                    eventLogger.completed('template_upload', 'parse_completed', {
+                        clauseCount,
+                        contractId,
+                        upload_source: 'company_admin'
+                    })
+                    break
+                }
                 attempts++
+            }
+
+            if (attempts >= maxAttempts) {
+                // --- Observability: Log parse completed (timeout) ---
+                eventLogger.failed('template_upload', 'parse_completed',
+                    `Polling timed out after ${maxAttempts} attempts`, 'POLLING_TIMEOUT')
             }
 
             setUploadProgress('Redirecting to certification studio...')
