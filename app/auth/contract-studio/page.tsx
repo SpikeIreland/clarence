@@ -19,6 +19,7 @@ type SessionStatus =
     | 'provider_invited'      // Provider has been invited but not completed
     | 'provider_intake'       // Provider completing their questionnaire
     | 'leverage_pending'      // Both done, calculating leverage
+    | 'solo_prep'             // Initiator reviewing clauses before provider completes
     | 'ready'                 // Full negotiation ready
     | 'active'                // Negotiation in progress
 
@@ -1418,7 +1419,7 @@ function formatHistoryTimestamp(timestamp: string): string {
 function getHistoryEventIcon(eventType: string): string {
     switch (eventType) {
         case 'position_change': return '→'
-        case 'agreement': return '✓'
+        case 'agreement': return '✔'
         case 'comment': return '🎓'
         case 'tradeoff_accepted': return '⇄'
         case 'session_started': return '💬'
@@ -2215,6 +2216,11 @@ function ContractStudioContent() {
     const [inviteSending, setInviteSending] = useState(false)
     const [inviteSent, setInviteSent] = useState(false)
 
+    // Solo Prep state (Contract Studio pre-negotiation clause review)
+    const [uploadedContractId, setUploadedContractId] = useState<string | null>(null)
+    const [uploadedContractName, setUploadedContractName] = useState<string | null>(null)
+    const isSoloPrep = sessionStatus === 'solo_prep'
+
     // ============================================================================
     // SECTION 6E: MULTI-PROVIDER STATE
     // ============================================================================
@@ -2554,6 +2560,106 @@ function ContractStudioContent() {
         }
     }, [router])
 
+    // ========================================================================
+    // SECTION 7B: LOAD UPLOADED CLAUSES (SOLO PREP FALLBACK)
+    // ========================================================================
+    // When initiator arrives before session_clause_positions exist,
+    // load the parsed document clauses directly from uploaded_contract_clauses.
+    // Data path: session_id → uploaded_contracts.linked_session_id → contract_id → uploaded_contract_clauses
+
+    const loadUploadedClauses = useCallback(async (sessionId: string): Promise<ContractClause[]> => {
+        const supabase = createClient()
+
+        // Step 1: Find the uploaded contract linked to this session
+        const { data: contractData, error: contractError } = await supabase
+            .from('uploaded_contracts')
+            .select('contract_id, contract_name, status, clause_count')
+            .eq('linked_session_id', sessionId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single()
+
+        if (contractError || !contractData) {
+            console.log('[SoloPrep] No uploaded contract found for session:', sessionId)
+            return []
+        }
+
+        console.log('[SoloPrep] Found uploaded contract:', contractData.contract_id, contractData.contract_name)
+        setUploadedContractId(contractData.contract_id)
+        setUploadedContractName(contractData.contract_name)
+
+        // Step 2: Load the parsed clauses
+        const { data: clausesData, error: clausesError } = await supabase
+            .from('uploaded_contract_clauses')
+            .select('*')
+            .eq('contract_id', contractData.contract_id)
+            .order('display_order', { ascending: true })
+
+        if (clausesError || !clausesData) {
+            console.error('[SoloPrep] Error loading clauses:', clausesError)
+            return []
+        }
+
+        console.log('[SoloPrep] Loaded', clausesData.length, 'uploaded clauses')
+
+        // Step 3: Map uploaded_contract_clauses into ContractClause interface
+        // In solo prep, positions are null — only CLARENCE assessment data is available
+        const mappedClauses: ContractClause[] = clausesData
+            .filter(c => !c.is_header)
+            .map(c => ({
+                clauseId: c.clause_id,
+                positionId: c.clause_id,  // Use clause_id as position_id (no session_clause_positions yet)
+                clauseNumber: c.clause_number || '',
+                clauseName: c.clause_name || 'Unnamed Clause',
+                category: c.category || 'General',
+                description: c.clarence_summary || c.content || '',
+
+                // Nesting
+                parentPositionId: c.parent_clause_id || null,
+                clauseLevel: c.clause_level || 1,
+                displayOrder: c.display_order || 0,
+
+                // Positions — all null in solo prep (no negotiation data yet)
+                customerPosition: null,
+                providerPosition: null,
+                currentCompromise: null,
+                clarenceRecommendation: c.clarence_position || null,
+                industryStandard: null,
+                gapSize: 0,
+                originalCustomerPosition: null,
+                originalProviderPosition: null,
+
+                // Weighting — defaults
+                customerWeight: 5,
+                providerWeight: 5,
+                isDealBreakerCustomer: false,
+                isDealBreakerProvider: false,
+
+                // Content — use CLARENCE assessment data from certification
+                clauseContent: c.content || null,
+                customerNotes: null,
+                providerNotes: null,
+
+                // Status
+                status: 'pending' as const,
+
+                // UI State
+                isExpanded: true,
+
+                // Source tracking
+                sourceType: 'legacy' as const,
+
+                // CLARENCE certification data (carried from uploaded_contract_clauses)
+                aiContext: c.clarence_assessment || null,
+                negotiationGuidance: c.clarence_fairness || null,
+
+                // Category header flag
+                isCategoryHeader: false,
+            }))
+
+        return mappedClauses
+    }, [])
+
     const loadContractData = useCallback(async (
         sessionId: string,
         viewerRole?: string,
@@ -2587,8 +2693,8 @@ function ContractStudioContent() {
                 setSessionStatus('pending_provider')
                 return null
             } else if (status === 'provider_invited' || status === 'providers_invited') {
-                setSessionStatus('provider_invited')
-
+                // SOLO PREP: Initiator has invited providers but they haven't completed intake.
+                // Load the uploaded contract clauses so the initiator can review them.
                 const basicSession: Session = {
                     sessionId: data.session.sessionId || sessionId,
                     sessionNumber: data.session.sessionNumber || '',
@@ -2600,10 +2706,36 @@ function ContractStudioContent() {
                     serviceType: data.session.contractType || 'IT Services',
                     dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
                     phase: parsePhaseFromState(data.session.phase),
-                    status: data.session.status
+                    status: data.session.status,
+                    templateName: data.session.templateName || null,
+                    templatePackId: data.session.templatePackId || null,
+                    clausesSelected: data.session.clausesSelected || false,
+                    clauseCount: data.session.clauseCount || 0,
+                    mediationType: data.session.mediationType || data.session.mediation_type || null,
+                    templateSource: data.session.templateSource || data.session.template_source || null
                 }
 
                 setSession(basicSession)
+
+                // Attempt to load uploaded contract clauses for solo prep review
+                try {
+                    const uploadedClauses = await loadUploadedClauses(sessionId)
+                    if (uploadedClauses.length > 0) {
+                        setClauses(uploadedClauses)
+                        setClauseTree(buildClauseTree(uploadedClauses))
+                        setSelectedClause(uploadedClauses[0])  // Auto-select first clause
+                        setSessionStatus('solo_prep')
+                        console.log('[SoloPrep] Entered solo prep with', uploadedClauses.length, 'clauses')
+                    } else {
+                        // No uploaded clauses found — fall back to simple waiting view
+                        setSessionStatus('provider_invited')
+                        console.log('[SoloPrep] No uploaded clauses — showing waiting view')
+                    }
+                } catch (err) {
+                    console.error('[SoloPrep] Error loading uploaded clauses:', err)
+                    setSessionStatus('provider_invited')
+                }
+
                 return null
             } else if (status === 'provider_intake_complete' || status === 'leverage_pending') {
                 setSessionStatus('leverage_pending')
@@ -2892,7 +3024,7 @@ function ContractStudioContent() {
 
                 {/* Info */}
                 <p className="text-xs text-slate-500 mt-3">
-                    🎓¡ You can start reviewing configured clauses in the list while others are still processing.
+                    🎓 You can start reviewing configured clauses in the list while others are still processing.
                 </p>
             </div>
         )
@@ -3294,7 +3426,7 @@ function ContractStudioContent() {
                     stopWorking()
                     return
                 } else if (status === 'provider_invited' || status === 'providers_invited') {
-                    setSessionStatus('provider_invited')
+                    // SOLO PREP: Load uploaded clauses so initiator can review while waiting
                     const basicSession: Session = {
                         sessionId: data.session.sessionId || sessionId,
                         sessionNumber: data.session.sessionNumber || '',
@@ -3306,12 +3438,42 @@ function ContractStudioContent() {
                         serviceType: data.session.contractType || 'Service Agreement',
                         dealValue: formatCurrency(data.session.dealValue, data.session.currency || 'GBP'),
                         phase: 1,
-                        status: status
+                        status: status,
+                        templateName: data.session.templateName || null,
+                        templatePackId: data.session.templatePackId || null,
+                        clausesSelected: data.session.clausesSelected || false,
+                        clauseCount: data.session.clauseCount || 0,
+                        mediationType: data.session.mediationType || data.session.mediation_type || null,
+                        templateSource: data.session.templateSource || data.session.template_source || null
                     }
                     setSession(basicSession)
                     // Viewer is customer if they can see this status
                     user.role = 'customer'
                     setUserInfo(user)
+
+                    // Attempt to load uploaded contract clauses for solo prep review
+                    try {
+                        const uploadedClauses = await loadUploadedClauses(sessionId)
+                        if (uploadedClauses.length > 0) {
+                            setClauses(uploadedClauses)
+                            setClauseTree(buildClauseTree(uploadedClauses))
+                            setSelectedClause(uploadedClauses[0])  // Auto-select first clause
+                            setSessionStatus('solo_prep')
+                            console.log('[SoloPrep] Init: Entered solo prep with', uploadedClauses.length, 'clauses')
+
+                            // Load CLARENCE chat messages for this session
+                            const messages = await loadClauseChat(sessionId, null)
+                            setChatMessages(messages)
+                        } else {
+                            // No uploaded clauses — fall back to simple waiting view
+                            setSessionStatus('provider_invited')
+                            console.log('[SoloPrep] Init: No uploaded clauses — showing waiting view')
+                        }
+                    } catch (err) {
+                        console.error('[SoloPrep] Init: Error loading uploaded clauses:', err)
+                        setSessionStatus('provider_invited')
+                    }
+
                     setLoading(false)
                     stopWorking()
                     return
@@ -3600,7 +3762,7 @@ function ContractStudioContent() {
         }
 
         init()
-    }, [searchParams, router, loadUserInfo, loadClauseChat, checkPartyStatus, buildClauseTree, stopWorking, formatCurrency, parsePhaseFromState, getPositionOptionsForClause])
+    }, [searchParams, router, loadUserInfo, loadClauseChat, loadUploadedClauses, checkPartyStatus, buildClauseTree, stopWorking, formatCurrency, parsePhaseFromState, getPositionOptionsForClause])
 
     // Scroll to top when page loads
     useEffect(() => {
@@ -4363,7 +4525,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 // ==========================================================
                 if (result.providerResponse) {
                     const decisionEmoji = result.decision === 'accept' ? '✅'
-                        : result.decision === 'counter' ? 'â†”ï¸'
+                        : result.decision === 'counter' ? '⇄️'
                             : '✋'
 
                     const decisionText = result.decision === 'accept'
@@ -4394,7 +4556,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                             positionId: positionId,
                             sender: 'clarence',
                             senderUserId: null,
-                            message: `🎓¡ **CLARENCE's Tip:** ${result.teachingMoment}`,
+                            message: `🎓 **CLARENCE's Tip:** ${result.teachingMoment}`,
                             messageType: 'notification',
                             relatedPositionChange: false,
                             triggeredBy: 'training_ai_move',
@@ -4412,7 +4574,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                         positionId: positionId,
                         sender: 'clarence',
                         senderUserId: null,
-                        message: `ðŸŽ‰ **Agreement Reached!** Both parties have aligned on **${clauseName}** at position ${newCustomerPosition.toFixed(1)}. Great negotiation!`,
+                        message: `🎉 **Agreement Reached!** Both parties have aligned on **${clauseName}** at position ${newCustomerPosition.toFixed(1)}. Great negotiation!`,
                         messageType: 'notification',
                         relatedPositionChange: false,
                         triggeredBy: 'training_ai_move',
@@ -4444,7 +4606,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     positionId: positionId,
                     sender: 'clarence',
                     senderUserId: null,
-                    message: `⚠ï¸ The AI opponent is taking a moment to think. Your position has been saved - they will respond shortly.`,
+                    message: `⚠️ The AI opponent is taking a moment to think. Your position has been saved - they will respond shortly.`,
                     messageType: 'notification',
                     relatedPositionChange: false,
                     triggeredBy: 'training_ai_move',
@@ -4642,7 +4804,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                     console.error('CLARENCE AI response error:', error)
                     // Fallback to simple message on error
                     const fallbackMessage = isNowAligned
-                        ? 'ðŸŽ‰ Agreement reached on **${selectedClause.clauseName}**! Both parties are now aligned.'
+                        ? '🎉 Agreement reached on **${selectedClause.clauseName}**! Both parties are now aligned.'
                         : alignedWithClarence
                             ? `Position updated to match CLARENCE recommendation on **${selectedClause.clauseName}**.`
                             : `Position updated on **${selectedClause.clauseName}**. Current gap: ${newGap.toFixed(1)} points.`
@@ -5086,7 +5248,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         positionId: selectedClause.positionId,
                         sender: 'clarence',
                         senderUserId: null,
-                        message: `â³ **${session.providerContactName || 'AI Opponent'}** is reviewing your confirmation...`,
+                        message: `⏳ **${session.providerContactName || 'AI Opponent'}** is reviewing your confirmation...`,
                         messageType: 'notification',
                         relatedPositionChange: false,
                         triggeredBy: 'training_auto_confirm',
@@ -5351,7 +5513,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
                         className="px-6 py-2 text-slate-600 border border-slate-300 rounded-lg"
                     >
-                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
+                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
                     </button>
                 </div>
             </div>
@@ -5718,7 +5880,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 }}
                                                 title={`Aligned at ${myDbPosition?.toFixed(1)}`}
                                             >
-                                                ✓
+                                                ✔
                                             </div>
                                         ) : myBarPercent !== null && (
                                             <div
@@ -5963,7 +6125,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 }}
                                                 title={`Aligned at ${myDbPosition?.toFixed(1)}`}
                                             >
-                                                ✓
+                                                ✔
                                             </div>
                                         ) : myBarPercent !== null && (
                                             <div
@@ -6037,7 +6199,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 </span>
                                                 <div className="font-medium text-slate-800">
                                                     {(proposedPosition ?? myDbPosition)?.toFixed(1)} / 10
-                                                    {hasProviderInvited && isAligned && <span className="ml-2 text-emerald-600">✓ Aligned with {roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}</span>}
+                                                    {hasProviderInvited && isAligned && <span className="ml-2 text-emerald-600">✔ Aligned with {roleContext ? roleContext.counterpartyRoleLabel : (isCustomer ? 'Provider' : 'Customer')}</span>}
                                                 </div>
                                             </div>
                                             {isProposing && (
@@ -6174,9 +6336,9 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     'text-red-600'
                             }`}>
                             {selectedClause.gapSize < 0.5
-                                ? '0 points apart ✓ Fully Aligned'
+                                ? '0 points apart ✔ Fully Aligned'
                                 : selectedClause.gapSize <= 1
-                                    ? `${selectedClause.gapSize.toFixed(1)} points apart ✓ Nearly Aligned`
+                                    ? `${selectedClause.gapSize.toFixed(1)} points apart ✔ Nearly Aligned`
                                     : selectedClause.gapSize <= 3
                                         ? `${selectedClause.gapSize.toFixed(1)} points apart`
                                         : `${selectedClause.gapSize.toFixed(1)} points apart ⚠ Significant Gap`
@@ -6257,11 +6419,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         <div className="flex items-center gap-3 mb-2">
                             <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                                <span className="text-xs text-slate-500">◆ Baseline:</span>
+                                <span className="text-xs text-slate-500">â—† Baseline:</span>
                                 <span className="text-sm font-bold text-slate-400">--:--</span>
                             </div>
                             <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                                <span className="text-xs text-slate-500">◇ Tracker:</span>
+                                <span className="text-xs text-slate-500">â—‡ Tracker:</span>
                                 <span className="text-sm font-bold text-slate-400">--:--</span>
                             </div>
                         </div>
@@ -6362,7 +6524,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <div className="flex items-center gap-3 mb-2">
                     {/* Baseline - REVERSED: Provider first, Customer second */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                        <span className="text-xs text-slate-500">◆ Baseline:</span>
+                        <span className="text-xs text-slate-500">â—† Baseline:</span>
                         <span className="text-sm font-bold">
                             <span className="text-blue-600">{providerBaseline}</span>
                             <span className="text-slate-400">:</span>
@@ -6372,7 +6534,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                     {/* Tracker - REVERSED: Provider first, Customer second */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                        <span className="text-xs text-slate-500">◇ Tracker:</span>
+                        <span className="text-xs text-slate-500">â—‡ Tracker:</span>
                         <span className="text-sm font-bold">
                             <span className="text-blue-600">{providerTracker}</span>
                             <span className="text-slate-400">:</span>
@@ -6652,7 +6814,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 </span>
                             ) : (
                                 <span className="text-[10px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded">
-                                    ✓ Ready
+                                    ✔ Ready
                                 </span>
                             )
                         )}
@@ -7219,7 +7381,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 {/* Info Box */}
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                     <p className="text-sm text-blue-800">
-                                        <strong>🎓¡ Why this matters:</strong> Deal value and service criticality help
+                                        <strong>🎓 Why this matters:</strong> Deal value and service criticality help
                                         CLARENCE calibrate its range suggestions and negotiation guidance.
                                     </p>
                                 </div>
@@ -7298,7 +7460,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-emerald-800">ðŸŽ“ Agreement Locked</h4>
+                            <h4 className="font-semibold text-emerald-800">🏆 Agreement Locked</h4>
                             <p className="text-sm text-emerald-600">
                                 Both parties confirmed position {selectedClause.finalAgreedPosition?.toFixed(1)} — Ready for drafting
                             </p>
@@ -7324,7 +7486,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-amber-800">â³ Awaiting {otherPartyName}</h4>
+                            <h4 className="font-semibold text-amber-800">⏳ Awaiting {otherPartyName}</h4>
                             <p className="text-sm text-amber-600">
                                 You confirmed position {myConfirmedPosition?.toFixed(1)}. Waiting for the other party to confirm.
                             </p>
@@ -7363,7 +7525,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-blue-800">ðŸ“© {otherPartyName} Has Confirmed</h4>
+                            <h4 className="font-semibold text-blue-800">📩 {otherPartyName} Has Confirmed</h4>
                             <p className="text-sm text-blue-600">
                                 They confirmed position {otherConfirmedPosition?.toFixed(1)} on {otherConfirmedAt
                                     ? new Date(otherConfirmedAt).toLocaleString()
@@ -7411,7 +7573,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </svg>
                         </div>
                         <div className="flex-1">
-                            <h4 className="font-semibold text-emerald-800">✓ Positions Aligned</h4>
+                            <h4 className="font-semibold text-emerald-800">✔ Positions Aligned</h4>
                             <p className="text-sm text-emerald-600">
                                 Both parties are at position {myPosition?.toFixed(1)}. Ready to confirm agreement.
                             </p>
@@ -7820,8 +7982,37 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
             )}
             <PartyStatusBanner />
 
-            {/* Party Chat Slide-Out Panel - Rendered at main component level to prevent remounting */}
-            {session && userInfo && (
+            {/* Solo Prep Banner - shows when initiator is reviewing clauses before provider completes */}
+            {isSoloPrep && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200 px-6 py-3">
+                    <div className="flex items-center justify-between max-w-screen-2xl mx-auto">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                                <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-amber-800">Solo Prep Mode</p>
+                                <p className="text-xs text-amber-600">
+                                    Reviewing {uploadedContractName || 'contract'} clauses.
+                                    Waiting for provider to complete their intake.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
+                                <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
+                                Provider Pending
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Party Chat Slide-Out Panel - Hidden in solo prep (no counterpart yet) */}
+            {session && userInfo && !isSoloPrep && (
                 <PartyChatPanel
                     sessionId={session.sessionId}
                     providerId=""
@@ -7997,9 +8188,12 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                 {/* CENTER PANEL: Main Workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-shrink-0 p-4 pb-0">
-                        <LeverageIndicator />
-                    </div>
+                    {/* Leverage Indicator - hidden in solo prep (no leverage data yet) */}
+                    {!isSoloPrep && (
+                        <div className="flex-shrink-0 p-4 pb-0">
+                            <LeverageIndicator />
+                        </div>
+                    )}
 
                     {selectedClause && (
                         <div className="flex-shrink-0 px-6 py-3 border-b border-slate-200 bg-white mx-4 rounded-t-xl mt-2">
@@ -8015,48 +8209,51 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                         selectedClause.status === 'disputed' ? 'bg-red-100 text-red-700' :
                                                             'bg-slate-100 text-slate-700'
                                             }`}>
-                                            {selectedClause.status === 'agreed' ? 'Ã°Å¸”’ Agreed' :
-                                                selectedClause.status === 'customer_confirmed' ? 'â³ Awaiting Provider' :
-                                                    selectedClause.status === 'provider_confirmed' ? 'â³ Awaiting Customer' :
+                                            {selectedClause.status === 'agreed' ? '🤝 Agreed' :
+                                                selectedClause.status === 'customer_confirmed' ? '⏳ Awaiting Provider' :
+                                                    selectedClause.status === 'provider_confirmed' ? '⏳ Awaiting Customer' :
                                                         selectedClause.status}
                                         </span>
                                     </div>
                                     <p className="text-sm text-slate-500 mt-1">{selectedClause.description}</p>
                                 </div>
 
-                                <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                                    {(['positions', 'tradeoffs', 'history', 'draft'] as const).map(tab => {
-                                        // Calculate unseen count for history tab badge
-                                        const historyBadgeCount = tab === 'history' && selectedClause
-                                            ? (unseenMoves.get(selectedClause.clauseId) || 0)
-                                            : 0
+                                {/* Tab bar — hidden in solo prep (only clause review available) */}
+                                {!isSoloPrep && (
+                                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                                        {(['positions', 'tradeoffs', 'history', 'draft'] as const).map(tab => {
+                                            // Calculate unseen count for history tab badge
+                                            const historyBadgeCount = tab === 'history' && selectedClause
+                                                ? (unseenMoves.get(selectedClause.clauseId) || 0)
+                                                : 0
 
-                                        return (
-                                            <button
-                                                key={tab}
-                                                onClick={() => {
-                                                    setActiveTab(tab)
-                                                    // Mark moves as seen when viewing History tab
-                                                    if (tab === 'history' && selectedClause) {
-                                                        markMovesAsSeen(selectedClause.clauseId)
-                                                    }
-                                                }}
-                                                className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
-                                                    ? 'bg-white text-slate-800 shadow-sm'
-                                                    : 'text-slate-500 hover:text-slate-700'
-                                                    }`}
-                                            >
-                                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                                {/* Unseen moves badge on History tab */}
-                                                {historyBadgeCount > 0 && (
-                                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                                        {historyBadgeCount > 9 ? '9+' : historyBadgeCount}
-                                                    </span>
-                                                )}
-                                            </button>
-                                        )
-                                    })}
-                                </div>
+                                            return (
+                                                <button
+                                                    key={tab}
+                                                    onClick={() => {
+                                                        setActiveTab(tab)
+                                                        // Mark moves as seen when viewing History tab
+                                                        if (tab === 'history' && selectedClause) {
+                                                            markMovesAsSeen(selectedClause.clauseId)
+                                                        }
+                                                    }}
+                                                    className={`relative px-3 py-1.5 text-sm rounded-md transition ${activeTab === tab
+                                                        ? 'bg-white text-slate-800 shadow-sm'
+                                                        : 'text-slate-500 hover:text-slate-700'
+                                                        }`}
+                                                >
+                                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                                    {/* Unseen moves badge on History tab */}
+                                                    {historyBadgeCount > 0 && (
+                                                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                                                            {historyBadgeCount > 9 ? '9+' : historyBadgeCount}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -8067,8 +8264,85 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         {/* Straight to Contract Progress Panel */}
                         <StraightToContractProgressPanel />
 
+                        {/* ==================== SOLO PREP: CLAUSE REVIEW ==================== */}
+                        {isSoloPrep && selectedClause && (
+                            <div className="flex-1 overflow-y-auto p-4 bg-white mx-4 mb-2 rounded-b-xl border border-t-0 border-slate-200">
+                                {/* CLARENCE Assessment */}
+                                {(selectedClause.aiContext || selectedClause.negotiationGuidance) && (
+                                    <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <div className="w-6 h-6 bg-purple-600 rounded-full flex items-center justify-center">
+                                                <span className="text-white text-xs font-bold">C</span>
+                                            </div>
+                                            <h3 className="text-sm font-semibold text-purple-800">CLARENCE Assessment</h3>
+                                        </div>
+                                        {selectedClause.aiContext && (
+                                            <p className="text-sm text-purple-700 leading-relaxed mb-2">{selectedClause.aiContext}</p>
+                                        )}
+                                        {selectedClause.negotiationGuidance && (
+                                            <div className="mt-2 pt-2 border-t border-purple-200">
+                                                <p className="text-xs font-medium text-purple-600 mb-1">Fairness Assessment</p>
+                                                <p className="text-sm text-purple-700">{selectedClause.negotiationGuidance}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* CLARENCE Position (if available from certification) */}
+                                {selectedClause.clarenceRecommendation && (
+                                    <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
+                                        <h3 className="text-sm font-semibold text-slate-700 mb-2">CLARENCE Position</h3>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1">
+                                                <div className="h-2 bg-slate-200 rounded-full relative">
+                                                    <div
+                                                        className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-purple-600 rounded-full border-2 border-white shadow-sm"
+                                                        style={{ left: `${((selectedClause.clarenceRecommendation - 1) / 9) * 100}%`, transform: 'translate(-50%, -50%)' }}
+                                                        title={`CLARENCE: ${selectedClause.clarenceRecommendation.toFixed(1)}`}
+                                                    />
+                                                </div>
+                                                <div className="flex justify-between mt-1 text-xs text-slate-400">
+                                                    <span>Provider Favoured</span>
+                                                    <span>Customer Favoured</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-lg font-bold text-purple-700">{selectedClause.clarenceRecommendation.toFixed(1)}</span>
+                                                <span className="text-xs text-slate-500 block">/ 10</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Clause Content */}
+                                {selectedClause.clauseContent && (
+                                    <div className="mb-4">
+                                        <h3 className="text-sm font-semibold text-slate-700 mb-2">Clause Text</h3>
+                                        <div className="text-sm text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
+                                            {selectedClause.clauseContent}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Pre-negotiation info box */}
+                                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <div className="flex items-start gap-2">
+                                        <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div>
+                                            <p className="text-xs font-medium text-blue-800">Pre-Negotiation Review</p>
+                                            <p className="text-xs text-blue-600 mt-0.5">
+                                                Position adjustments and negotiation tools will activate once the provider completes their intake and CLARENCE calculates leverage positions.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* ==================== POSITIONS TAB ==================== */}
-                        {activeTab === 'positions' && selectedClause && (
+                        {!isSoloPrep && activeTab === 'positions' && selectedClause && (
                             <div
                                 ref={positionPanelRef}
                                 className="flex-1 overflow-y-auto p-3 bg-white mx-4 mb-2 rounded-b-xl border border-t-0 border-slate-200"
@@ -8125,7 +8399,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                 'text-red-600'
                                             }`}>
                                             {selectedClause.gapSize?.toFixed(1)} points
-                                            {selectedClause.gapSize <= 1 && ' ✓ Aligned'}
+                                            {selectedClause.gapSize <= 1 && ' ✔ Aligned'}
                                         </span>
                                     </div>
                                     {selectedClause.clarenceRecommendation && (
@@ -8141,7 +8415,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         )}
 
                         {/* ==================== TRADEOFFS TAB ==================== */}
-                        {activeTab === 'tradeoffs' && selectedClause && (
+                        {!isSoloPrep && activeTab === 'tradeoffs' && selectedClause && (
                             <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-4">
                                 <div className="space-y-3">
                                     {/* Header */}
@@ -8278,7 +8552,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                             {/* Clause names */}
                                                             <div className="text-sm text-slate-700">
                                                                 <span className="font-medium">{tradeOff.clauseA.clauseName}</span>
-                                                                <span className="text-slate-400 mx-1">Ã¢â€ ”</span>
+                                                                <span className="text-slate-400 mx-1">→</span>
                                                                 <span className="font-medium">{tradeOff.clauseB.clauseName}</span>
                                                             </div>
 
@@ -8325,7 +8599,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         )}
 
                         {/* ==================== HISTORY TAB ==================== */}
-                        {activeTab === 'history' && selectedClause && (
+                        {!isSoloPrep && activeTab === 'history' && selectedClause && (
                             <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
                                 <div className="space-y-4">
                                     {/* Header */}
@@ -8389,10 +8663,10 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                             ? 'border-blue-400 bg-white text-blue-600'
                                                                             : 'border-slate-400 bg-slate-100 text-slate-600'
                                                                 }`}>
-                                                                {entry.eventType === 'position_change' ? 'Ã¢â€ ”' :
-                                                                    entry.eventType === 'agreement' ? '✓' :
-                                                                        entry.eventType === 'clause_locked' ? 'Ã°Å¸”’' :
-                                                                            entry.eventType === 'clause_unlocked' ? 'Ã°Å¸”“' :
+                                                                {entry.eventType === 'position_change' ? '→' :
+                                                                    entry.eventType === 'agreement' ? '✔' :
+                                                                        entry.eventType === 'clause_locked' ? '🤝' :
+                                                                            entry.eventType === 'clause_unlocked' ? '🔓' :
                                                                                 entry.eventType === 'session_started' ? '💬' : '•'}
                                                             </div>
 
@@ -8433,7 +8707,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                                             ? 'bg-slate-200 text-slate-700'
                                                                             : 'bg-emerald-100 text-emerald-700'
                                                                             }`}>
-                                                                            {isLocked ? 'Ã°Å¸”’ Locked' : 'Ã°Å¸”“ Unlocked'}
+                                                                            {isLocked ? '🤝 Locked' : '🔓 Unlocked'}
                                                                         </span>
                                                                     </div>
                                                                 )}
@@ -8470,7 +8744,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                             {negotiationHistory.filter(e => e.clauseId === selectedClause.clauseId).length === 0 && (
                                                 <div className="text-center py-8 pl-10">
                                                     <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                                        <span className="text-2xl">ðŸ“‹</span>
+                                                        <span className="text-2xl">📋</span>
                                                     </div>
                                                     <p className="text-slate-600">No changes to this clause yet</p>
                                                     <p className="text-sm text-slate-400 mt-1">
@@ -8485,7 +8759,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                         )}
 
                         {/* ==================== DRAFT TAB ==================== */}
-                        {activeTab === 'draft' && selectedClause && (
+                        {!isSoloPrep && activeTab === 'draft' && selectedClause && (
                             <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-6">
                                 <div className="mb-6">
                                     {/* Header */}
@@ -8547,7 +8821,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                         ) : lastDraftedClauseId === selectedClause.clauseId && draftLanguage ? (
                                             'Regenerate Draft'
                                         ) : (
-                                            '⚠ï¸ Generate Balanced Draft'
+                                            '⚠️ Generate Balanced Draft'
                                         )}
                                     </button>
                                 </div>
@@ -8557,7 +8831,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                     <div className="border border-slate-200 rounded-lg overflow-hidden">
                                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
                                             <span className="text-sm font-medium text-slate-700">
-                                                ⚠ï¸ Balanced Draft Language
+                                                ⚠️ Balanced Draft Language
                                             </span>
                                             <div className="flex gap-2">
                                                 <button
@@ -8567,7 +8841,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                                     }}
                                                     className="px-3 py-1 text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded transition"
                                                 >
-                                                    ðŸ“‹ Copy
+                                                    📋 Copy
                                                 </button>
                                             </div>
                                         </div>
@@ -8586,7 +8860,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 {(!draftLanguage || lastDraftedClauseId !== selectedClause.clauseId) && !isLoadingDraft && (
                                     <div className="text-center py-6 text-slate-500">
                                         <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                                            <span className="text-2xl">ðŸ“„</span>
+                                            <span className="text-2xl">📄</span>
                                         </div>
                                         <p>Click &quot;Generate Balanced Draft&quot; to create contract text</p>
                                         <p className="text-sm text-slate-400 mt-1">
@@ -8599,7 +8873,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                                 {selectedClause.gapSize > 3 && (
                                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-4">
                                         <div className="flex items-start gap-2">
-                                            <span className="text-amber-500">⚠Ã¯Â¸</span>
+                                            <span className="text-amber-500">⚠</span>
                                             <div>
                                                 <p className="text-sm font-medium text-amber-800">Positions Not Yet Aligned</p>
                                                 <p className="text-xs text-amber-600 mt-1">
@@ -8755,7 +9029,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                             {/* Training badge */}
                             <div className="ml-2 px-3 py-1 bg-white/20 rounded-full text-xs font-medium">
-                                ðŸŽ“ Training
+                                🏆 Training
                             </div>
                         </div>
                     </div>
@@ -8763,7 +9037,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                     {/* Optional: Top notification bar */}
                     <div className="fixed top-0 left-0 right-0 z-50">
                         <div className="bg-amber-500 text-white text-center py-2 text-sm font-medium shadow-lg">
-                            â³ Waiting for {session?.providerContactName || 'AI Opponent'} to respond...
+                            ⏳ Waiting for {session?.providerContactName || 'AI Opponent'} to respond...
                         </div>
                     </div>
                 </>
@@ -8822,7 +9096,7 @@ function PendingProviderView({
                         onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
                         className="mt-6 px-6 py-2 text-slate-600 hover:text-slate-800 transition cursor-pointer"
                     >
-                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
+                        {userInfo?.role === 'provider' ? '← Sign Out' : '← Return to Dashboard'}
                     </button>
                 </div>
             </div>
@@ -8869,7 +9143,7 @@ function PendingProviderView({
                                 onClick={() => userInfo?.role === 'provider' ? handleSignOut() : router.push('/auth/contracts-dashboard')}
                                 className="text-slate-400 hover:text-white transition"
                             >
-                                {userInfo?.role === 'provider' ? '← Sign Out' : '← Back to Dashboard'}
+                                {userInfo?.role === 'provider' ? '← Sign Out' : '← Back to Dashboard'}
                             </button>
                         )}
                     </div>
