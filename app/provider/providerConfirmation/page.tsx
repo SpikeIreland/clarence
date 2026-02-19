@@ -1,61 +1,34 @@
 'use client'
-
-// ============================================================================
-// PROVIDER CONFIRMATION PAGE - FIXED
-// Location: app/provider/providerConfirmation/page.tsx
-//
-// This page is shown after the provider completes the strategic questionnaire.
-// It confirms onboarding is complete and provides a clear path forward:
-//
-// 1. Checks bid/session status via API polling
-// 2. Shows "Processing" state while leverage calculation runs
-// 3. Shows "Ready" state with Contract Studio CTA when negotiation_ready
-// 4. Falls back to "We'll notify you" if polling times out
-//
-// FIX (05-Feb-2026): Status check now examines BOTH 'status' (bid status)
-// AND 'sessionStatus' (session status) fields from provider-sessions-api.
-// Previously only checked 'status' which returns 'questionnaire_complete'
-// (a non-ready bid status), missing 'sessionStatus: negotiation_ready'.
-// This caused infinite polling as the page never detected readiness.
-// ============================================================================
-
-// ============================================================================
-// SECTION 1: IMPORTS
-// ============================================================================
-
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { eventLogger } from '@/lib/eventLogger'
-import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
-// SECTION 2: CONSTANTS & TYPES
+// SECTION 1: CONSTANTS
 // ============================================================================
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
-// Poll every 10 seconds, timeout after 5 minutes (30 attempts)
-const POLL_INTERVAL_MS = 10000
-const MAX_POLL_ATTEMPTS = 30
+// ============================================================================
+// SECTION 2: INTERFACES
+// ============================================================================
 
-type ReadinessStatus = 'checking' | 'processing' | 'ready' | 'timeout' | 'error'
-
-interface SessionStatus {
+interface ProviderSession {
     sessionId: string
     sessionNumber: string
-    providerId: string
     customerCompany: string
-    serviceRequired: string
+    contractType: string
     dealValue: string
-    status: string
-    sessionStatus?: string
+    bidStatus: string
     intakeComplete: boolean
     questionnaireComplete: boolean
+    invitedAt: string
+    providerId: string
 }
 
 // ============================================================================
-// SECTION 3: PROVIDER HEADER COMPONENT
+// SECTION 3: SHARED HEADER COMPONENT
 // ============================================================================
 
 function ProviderHeader() {
@@ -63,7 +36,7 @@ function ProviderHeader() {
         <header className="bg-slate-800 text-white">
             <div className="container mx-auto px-6">
                 <nav className="flex justify-between items-center h-16">
-                    <Link href="/" className="flex items-center gap-3">
+                    <Link href="/provider/providerConfirmation" className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
                             <span className="text-white font-bold text-lg">C</span>
                         </div>
@@ -72,10 +45,14 @@ function ProviderHeader() {
                             <div className="text-xs text-slate-400">Provider Portal</div>
                         </div>
                     </Link>
-
-                    <span className="text-sm text-slate-400">
-                        Provider Portal
-                    </span>
+                    <div className="flex items-center gap-4">
+                        <Link
+                            href="/auth/login"
+                            className="text-sm text-slate-400 hover:text-white transition-colors"
+                        >
+                            Customer Portal &rarr;
+                        </Link>
+                    </div>
                 </nav>
             </div>
         </header>
@@ -83,7 +60,7 @@ function ProviderHeader() {
 }
 
 // ============================================================================
-// SECTION 4: PROVIDER FOOTER COMPONENT
+// SECTION 4: SHARED FOOTER COMPONENT
 // ============================================================================
 
 function ProviderFooter() {
@@ -108,662 +85,552 @@ function ProviderFooter() {
 }
 
 // ============================================================================
-// SECTION 5: LOADING SPINNER COMPONENT
+// SECTION 5: STATUS HELPERS
 // ============================================================================
 
-function LoadingSpinner() {
-    return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <ProviderHeader />
-            <main className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-600">Loading...</p>
-                </div>
-            </main>
-            <ProviderFooter />
-        </div>
-    )
-}
+function getStatusConfig(session: ProviderSession): {
+    colour: string
+    bgColour: string
+    badge: string
+    actionLabel: string
+    actionRoute: string | null
+    actionDisabled: boolean
+    description: string
+} {
+    const { bidStatus, intakeComplete, questionnaireComplete, sessionId, providerId } = session
 
-// ============================================================================
-// SECTION 6: ANIMATED PROCESSING INDICATOR
-// ============================================================================
-
-function ProcessingIndicator() {
-    return (
-        <div className="flex flex-col items-center gap-4">
-            {/* Animated rings */}
-            <div className="relative w-24 h-24">
-                <div className="absolute inset-0 border-4 border-blue-200 rounded-full animate-ping opacity-20"></div>
-                <div className="absolute inset-2 border-4 border-blue-300 rounded-full animate-pulse"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
-                        <svg className="w-8 h-8 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-            <div className="text-center">
-                <p className="text-lg font-medium text-slate-800">CLARENCE is Analysing</p>
-                <p className="text-sm text-slate-500 mt-1">Calculating leverage positions and preparing the Contract Studio...</p>
-            </div>
-        </div>
-    )
-}
-
-// ============================================================================
-// SECTION 7: SUCCESS/READY INDICATOR
-// ============================================================================
-
-function ReadyIndicator() {
-    return (
-        <div className="flex flex-col items-center gap-4">
-            <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center">
-                <svg className="w-12 h-12 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-            </div>
-            <div className="text-center">
-                <p className="text-lg font-medium text-slate-800">Ready to Negotiate!</p>
-                <p className="text-sm text-slate-500 mt-1">Your positions have been calculated. The Contract Studio is ready.</p>
-            </div>
-        </div>
-    )
-}
-
-// ============================================================================
-// SECTION 8: MAIN CONTENT COMPONENT
-// ============================================================================
-
-function ProviderConfirmationContent() {
-    const searchParams = useSearchParams()
-
-    // ========================================================================
-    // SECTION 8A: STATE MANAGEMENT
-    // ========================================================================
-
-    const [sessionId, setSessionId] = useState<string | null>(null)
-    const [providerId, setProviderId] = useState<string | null>(null)
-    const [customerCompany, setCustomerCompany] = useState<string>('')
-    const [readinessStatus, setReadinessStatus] = useState<ReadinessStatus>('checking')
-    const [pollCount, setPollCount] = useState(0)
-
-    const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
-    const pollCountRef = useRef(0)
-
-    // ========================================================================
-    // SECTION 8B: INITIALISATION - READ PARAMS & START POLLING
-    // ========================================================================
-
-    useEffect(() => {
-        const sid = searchParams.get('session_id')
-        const pid = searchParams.get('provider_id')
-
-        // Try URL params first, then localStorage fallback
-        let resolvedSessionId = sid
-        let resolvedProviderId = pid
-
-        if (!resolvedSessionId || !resolvedProviderId) {
-            try {
-                const stored = localStorage.getItem('clarence_provider_session')
-                if (stored) {
-                    const parsed = JSON.parse(stored)
-                    resolvedSessionId = resolvedSessionId || parsed.sessionId
-                    resolvedProviderId = resolvedProviderId || parsed.providerId
-                    if (parsed.customerCompany) {
-                        setCustomerCompany(parsed.customerCompany)
-                    }
-                }
-            } catch {
-                // localStorage not available or parse error
-            }
+    // Questionnaire complete - awaiting CLARENCE calculation
+    if (questionnaireComplete || bidStatus === 'questionnaire_complete') {
+        return {
+            colour: 'text-amber-600',
+            bgColour: 'bg-amber-50 border-amber-200',
+            badge: 'Calculating',
+            actionLabel: 'Awaiting Activation',
+            actionRoute: null,
+            actionDisabled: true,
+            description: 'CLARENCE is analysing both parties to calculate leverage positions. You will be notified when the Contract Studio is ready.'
         }
-
-        setSessionId(resolvedSessionId)
-        setProviderId(resolvedProviderId)
-
-        // Set session context for event logging
-        if (resolvedSessionId) {
-            eventLogger.setSession(resolvedSessionId)
-        }
-
-        // LOG: Confirmation page loaded
-        eventLogger.completed('provider_onboarding', 'provider_confirmation_page_loaded', {
-            sessionId: resolvedSessionId,
-            providerId: resolvedProviderId,
-            timestamp: new Date().toISOString()
-        })
-
-        // LOG: Provider onboarding journey complete
-        eventLogger.completed('provider_onboarding', 'provider_onboarding_journey_complete', {
-            sessionId: resolvedSessionId,
-            providerId: resolvedProviderId,
-            completedAt: new Date().toISOString()
-        })
-
-        // Start polling if we have enough info
-        if (resolvedSessionId) {
-            checkReadiness(resolvedSessionId, resolvedProviderId)
-        } else {
-            // No session ID at all — show ready state as fallback
-            setReadinessStatus('ready')
-        }
-
-        // Cleanup polling on unmount
-        return () => {
-            if (pollTimerRef.current) {
-                clearTimeout(pollTimerRef.current)
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams])
-
-    // ========================================================================
-    // SECTION 8C: STATUS POLLING LOGIC (FIXED)
-    //
-    // FIX: The provider-sessions-api returns TWO status fields:
-    //   - status: bid status (e.g. "questionnaire_complete", "ready", "active")
-    //   - sessionStatus: session status (e.g. "negotiation_ready", "active")
-    //
-    // Previously only checked 'status', which for a provider who just
-    // completed the questionnaire returns "questionnaire_complete" — NOT
-    // in the ready list. This caused infinite polling because the page
-    // never detected that the session was actually ready.
-    //
-    // Now checks BOTH fields so either a ready bid status OR a ready
-    // session status will correctly stop polling and show the CTA.
-    // ========================================================================
-
-    const checkReadiness = useCallback(async (sid: string, pid: string | null) => {
-        try {
-            // Use provider-sessions-api to check current status
-            const email = getStoredEmail()
-            if (!email) {
-                // Can't poll without email — skip to ready (optimistic)
-                setReadinessStatus('ready')
-                return
-            }
-
-            const response = await fetch(
-                `${API_BASE}/provider-sessions-api?email=${encodeURIComponent(email)}`
-            )
-
-            if (!response.ok) {
-                throw new Error('Status check failed')
-            }
-
-            const data = await response.json()
-            const sessions: SessionStatus[] = data.sessions || []
-
-            // Find our specific session
-            const ourSession = sessions.find(s => s.sessionId === sid)
-
-            if (!ourSession) {
-                // Session not found — could be timing, show processing
-                scheduleNextPoll(sid, pid)
-                setReadinessStatus('processing')
-                return
-            }
-
-            // Store customer company if available
-            if (ourSession.customerCompany) {
-                setCustomerCompany(ourSession.customerCompany)
-            }
-
-            // ----------------------------------------------------------------
-            // FIX: Check BOTH bid status AND session status fields
-            // The API returns:
-            //   status = bid status (e.g. "questionnaire_complete")
-            //   sessionStatus = session status (e.g. "negotiation_ready")
-            //
-            // Either one indicating "ready" means the Contract Studio is
-            // available for this provider.
-            // ----------------------------------------------------------------
-
-            const readyBidStatuses = ['ready', 'active', 'selected']
-            const readySessionStatuses = ['negotiation_ready', 'active', 'completed']
-
-            const bidStatus = ourSession.status || ''
-            const sessStatus = ourSession.sessionStatus || ''
-
-            const isReady =
-                readyBidStatuses.includes(bidStatus) ||
-                readySessionStatuses.includes(sessStatus) ||
-                // Also treat questionnaire_complete as ready if the session
-                // is negotiation_ready — the provider has done their part
-                (bidStatus === 'questionnaire_complete' && sessStatus === 'negotiation_ready')
-
-            if (isReady) {
-                // Leverage calculation is done — Contract Studio is ready
-                setReadinessStatus('ready')
-
-                eventLogger.completed('provider_onboarding', 'leverage_calculation_ready', {
-                    sessionId: sid,
-                    providerId: pid,
-                    bidStatus: bidStatus,
-                    sessionStatus: sessStatus,
-                    pollAttempts: pollCountRef.current
-                })
-
-                // Stop polling
-                if (pollTimerRef.current) {
-                    clearTimeout(pollTimerRef.current)
-                }
-                return
-            }
-
-            // Still processing — schedule next poll
-            scheduleNextPoll(sid, pid)
-            setReadinessStatus('processing')
-
-        } catch (error) {
-            console.error('Readiness check error:', error)
-            // On error, be optimistic — show ready state
-            // The Contract Studio will handle errors if leverage isn't done
-            setReadinessStatus('ready')
-        }
-    }, [])
-
-    const scheduleNextPoll = useCallback((sid: string, pid: string | null) => {
-        pollCountRef.current += 1
-        setPollCount(pollCountRef.current)
-
-        if (pollCountRef.current >= MAX_POLL_ATTEMPTS) {
-            // Timed out — show timeout state
-            setReadinessStatus('timeout')
-
-            eventLogger.completed('provider_onboarding', 'leverage_poll_timeout', {
-                sessionId: sid,
-                providerId: pid,
-                attempts: pollCountRef.current
-            })
-            return
-        }
-
-        // Schedule next check
-        pollTimerRef.current = setTimeout(() => {
-            checkReadiness(sid, pid)
-        }, POLL_INTERVAL_MS)
-    }, [checkReadiness])
-
-    // ========================================================================
-    // SECTION 8D: HELPER - GET STORED EMAIL
-    // ========================================================================
-
-    const getStoredEmail = (): string | null => {
-        try {
-            // Try clarence_auth first
-            const authStr = localStorage.getItem('clarence_auth')
-            if (authStr) {
-                const auth = JSON.parse(authStr)
-                if (auth?.userInfo?.email) return auth.userInfo.email
-            }
-
-            // Try clarence_provider_session as fallback
-            const providerStr = localStorage.getItem('clarence_provider_session')
-            if (providerStr) {
-                const provider = JSON.parse(providerStr)
-                if (provider?.email) return provider.email
-                if (provider?.providerEmail) return provider.providerEmail
-            }
-
-            // Try direct email key
-            const directEmail = localStorage.getItem('userEmail')
-            if (directEmail) return directEmail
-        } catch {
-            // localStorage not available
-        }
-        return null
     }
 
-    // ========================================================================
-    // SECTION 8E: CONTRACT STUDIO URL BUILDER
-    // ========================================================================
-
-    const getContractStudioUrl = (): string => {
-        const params = new URLSearchParams()
-        if (sessionId) params.set('session_id', sessionId)
-        if (providerId) params.set('provider_id', providerId)
-        return `/auth/contract-studio?${params.toString()}`
+    // Ready or active - can enter studio
+    if (bidStatus === 'ready' || bidStatus === 'active' || bidStatus === 'negotiation_active') {
+        return {
+            colour: 'text-emerald-600',
+            bgColour: 'bg-emerald-50 border-emerald-200',
+            badge: 'Ready',
+            actionLabel: 'Enter Contract Studio',
+            actionRoute: `/auth/contract-studio?session_id=${sessionId}&provider_id=${providerId}`,
+            actionDisabled: false,
+            description: 'Both parties have completed their assessments. The Contract Studio is ready for negotiation.'
+        }
     }
 
-    // ========================================================================
-    // SECTION 8F: MAIN RENDER
-    // ========================================================================
+    // Intake complete - needs questionnaire
+    if (intakeComplete || bidStatus === 'intake_complete') {
+        return {
+            colour: 'text-blue-600',
+            bgColour: 'bg-blue-50 border-blue-200',
+            badge: 'In Progress',
+            actionLabel: 'Complete Assessment',
+            actionRoute: `/provider/questionnaire?session_id=${sessionId}&provider_id=${providerId}`,
+            actionDisabled: false,
+            description: 'Your company details have been submitted. Complete the strategic assessment to proceed.'
+        }
+    }
+
+    // Registered but no intake yet
+    if (bidStatus === 'registered') {
+        return {
+            colour: 'text-blue-600',
+            bgColour: 'bg-blue-50 border-blue-200',
+            badge: 'In Progress',
+            actionLabel: 'Continue Intake',
+            actionRoute: `/provider/intake?session_id=${sessionId}&provider_id=${providerId}`,
+            actionDisabled: false,
+            description: 'Continue completing your company information and capabilities.'
+        }
+    }
+
+    // Completed
+    if (bidStatus === 'completed' || bidStatus === 'agreed') {
+        return {
+            colour: 'text-slate-500',
+            bgColour: 'bg-slate-50 border-slate-200',
+            badge: 'Complete',
+            actionLabel: 'View Summary',
+            actionRoute: `/auth/contract-studio?session_id=${sessionId}&provider_id=${providerId}`,
+            actionDisabled: false,
+            description: 'This negotiation has been completed.'
+        }
+    }
+
+    // Default: invited but not started
+    return {
+        colour: 'text-purple-600',
+        bgColour: 'bg-purple-50 border-purple-200',
+        badge: 'Invited',
+        actionLabel: 'Begin Onboarding',
+        actionRoute: `/provider/welcome?session_id=${sessionId}&provider_id=${providerId}`,
+        actionDisabled: false,
+        description: 'You have been invited to negotiate. Begin onboarding to review the opportunity.'
+    }
+}
+
+function formatTimeAgo(dateString: string): string {
+    if (!dateString) return ''
+    try {
+        const date = new Date(dateString)
+        const now = new Date()
+        const diffMs = now.getTime() - date.getTime()
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+        if (diffDays === 0) return 'Today'
+        if (diffDays === 1) return 'Yesterday'
+        if (diffDays < 7) return `${diffDays} days ago`
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+        return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    } catch {
+        return ''
+    }
+}
+
+// ============================================================================
+// SECTION 6: CONTRACT CARD COMPONENT
+// ============================================================================
+
+function ContractCard({ session }: { session: ProviderSession }) {
+    const router = useRouter()
+    const status = getStatusConfig(session)
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <ProviderHeader />
-
-            <main className="flex-1">
-                <div className="max-w-2xl mx-auto px-4 py-12">
-
-                    {/* ============================================================ */}
-                    {/* SECTION 8F1: STATUS INDICATOR (top of page) */}
-                    {/* ============================================================ */}
-
-                    <div className="text-center mb-10">
-                        {readinessStatus === 'checking' && (
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="w-16 h-16 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
-                                <p className="text-slate-600">Checking status...</p>
-                            </div>
+        <div className={`rounded-xl border-2 ${status.bgColour} p-6 transition-all hover:shadow-md`}>
+            {/* Card Header */}
+            <div className="flex items-start justify-between mb-4">
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-800">
+                        {session.customerCompany || 'Customer'}
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                        {session.contractType || 'Service Agreement'}
+                        {session.sessionNumber && (
+                            <span className="ml-2 text-slate-400">&middot; {session.sessionNumber}</span>
                         )}
-
-                        {readinessStatus === 'processing' && <ProcessingIndicator />}
-
-                        {readinessStatus === 'ready' && <ReadyIndicator />}
-
-                        {readinessStatus === 'timeout' && (
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="w-24 h-24 bg-amber-100 rounded-full flex items-center justify-center">
-                                    <svg className="w-12 h-12 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-lg font-medium text-slate-800">Still Preparing</p>
-                                    <p className="text-sm text-slate-500 mt-1">
-                                        The analysis is taking a little longer than usual.
-                                        We&apos;ll send you an email when the Contract Studio is ready.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-
-                        {readinessStatus === 'error' && (
-                            <div className="flex flex-col items-center gap-4">
-                                <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center">
-                                    <svg className="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-lg font-medium text-slate-800">Something Went Wrong</p>
-                                    <p className="text-sm text-slate-500 mt-1">
-                                        Please try refreshing the page or contact support.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ============================================================ */}
-                    {/* SECTION 8F2: SUBMISSION CONFIRMED CARD */}
-                    {/* ============================================================ */}
-
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mb-8">
-
-                        {/* Submission Receipt */}
-                        <div className="flex items-center gap-4 pb-6 border-b border-slate-100">
-                            <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                            </div>
-                            <div>
-                                <div className="font-medium text-slate-800">Capabilities Submitted Successfully</div>
-                                <div className="text-sm text-slate-500">
-                                    {new Date().toLocaleDateString('en-GB', {
-                                        weekday: 'long',
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit'
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Customer Context (if available) */}
-                        {customerCompany && (
-                            <div className="py-4 border-b border-slate-100">
-                                <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Contract With</div>
-                                <div className="text-sm font-medium text-slate-700">{customerCompany}</div>
-                            </div>
-                        )}
-
-                        {/* What Happens Next - dynamic based on status */}
-                        <div className="pt-6">
-                            <h2 className="text-lg font-medium text-slate-800 mb-4">What Happens Next</h2>
-
-                            <div className="space-y-4">
-                                {/* Step 1: Analysis - always complete at this point */}
-                                <div className="flex items-start gap-4">
-                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                    <div>
-                                        <div className="font-medium text-slate-700">Your Submission</div>
-                                        <p className="text-sm text-slate-500">
-                                            Your capabilities and strategic assessment have been received.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Step 2: Leverage Calculation - depends on status */}
-                                <div className="flex items-start gap-4">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5
-                                        ${readinessStatus === 'ready'
-                                            ? 'bg-blue-100'
-                                            : readinessStatus === 'processing' || readinessStatus === 'checking'
-                                                ? 'bg-blue-100'
-                                                : 'bg-amber-100'
-                                        }`}
-                                    >
-                                        {readinessStatus === 'ready' ? (
-                                            <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        ) : readinessStatus === 'processing' || readinessStatus === 'checking' ? (
-                                            <div className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div>
-                                        ) : (
-                                            <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <div className="font-medium text-slate-700">CLARENCE Leverage Calculation</div>
-                                        <p className="text-sm text-slate-500">
-                                            {readinessStatus === 'ready'
-                                                ? 'Fair leverage positions have been calculated for both parties.'
-                                                : readinessStatus === 'processing' || readinessStatus === 'checking'
-                                                    ? 'Analysing market data, strategic positions, and BATNA to calculate fair leverage...'
-                                                    : 'Analysis is still in progress. You\u0027ll be notified when it\u0027s complete.'
-                                            }
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Step 3: Contract Studio */}
-                                <div className="flex items-start gap-4">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5
-                                        ${readinessStatus === 'ready' ? 'bg-blue-100' : 'bg-slate-100'}`}
-                                    >
-                                        <span className={`text-sm font-medium ${readinessStatus === 'ready' ? 'text-blue-600' : 'text-slate-400'}`}>3</span>
-                                    </div>
-                                    <div>
-                                        <div className={`font-medium ${readinessStatus === 'ready' ? 'text-slate-700' : 'text-slate-400'}`}>
-                                            Enter the Contract Studio
-                                        </div>
-                                        <p className={`text-sm ${readinessStatus === 'ready' ? 'text-slate-500' : 'text-slate-400'}`}>
-                                            Review clause positions, discuss with the customer, and work towards agreement.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ============================================================ */}
-                    {/* SECTION 8F3: CALL TO ACTION */}
-                    {/* ============================================================ */}
-
-                    {/* Ready State: Primary CTA */}
-                    {readinessStatus === 'ready' && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
-                            <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                    </svg>
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-medium text-blue-900 mb-1">Contract Studio is Ready</h3>
-                                    <p className="text-sm text-blue-700 mb-4">
-                                        Your leverage positions have been calculated. You can now enter the Contract Studio
-                                        to review clause positions and begin negotiations.
-                                    </p>
-                                    <Link
-                                        href={getContractStudioUrl()}
-                                        onClick={() => {
-                                            eventLogger.completed('provider_onboarding', 'provider_contract_studio_clicked', {
-                                                sessionId: sessionId,
-                                                providerId: providerId,
-                                                fromStatus: readinessStatus
-                                            })
-                                        }}
-                                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium shadow-sm"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        Go to Contract Studio
-                                    </Link>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Processing State: Informational */}
-                    {(readinessStatus === 'processing' || readinessStatus === 'checking') && (
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 mb-8">
-                            <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <div className="w-5 h-5 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
-                                </div>
-                                <div>
-                                    <h3 className="font-medium text-slate-800 mb-1">Analysis in Progress</h3>
-                                    <p className="text-sm text-slate-500">
-                                        CLARENCE is calculating fair leverage positions based on your submission and
-                                        market data. This usually takes less than a minute. This page will update
-                                        automatically when ready.
-                                    </p>
-                                    {pollCount > 5 && (
-                                        <p className="text-xs text-slate-400 mt-2">
-                                            Still working... ({Math.round(pollCount * POLL_INTERVAL_MS / 1000)}s elapsed)
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Timeout State: Fallback with notification promise */}
-                    {readinessStatus === 'timeout' && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
-                            <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                    </svg>
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-medium text-amber-900 mb-1">We&apos;ll Notify You</h3>
-                                    <p className="text-sm text-amber-700 mb-4">
-                                        The analysis is taking longer than expected. You&apos;ll receive an email
-                                        when the Contract Studio is ready. You can also try accessing it directly:
-                                    </p>
-                                    <Link
-                                        href={getContractStudioUrl()}
-                                        onClick={() => {
-                                            eventLogger.completed('provider_onboarding', 'provider_contract_studio_clicked', {
-                                                sessionId: sessionId,
-                                                providerId: providerId,
-                                                fromStatus: 'timeout'
-                                            })
-                                        }}
-                                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-all font-medium text-sm"
-                                    >
-                                        Try Contract Studio Anyway
-                                    </Link>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ============================================================ */}
-                    {/* SECTION 8F4: SESSION REFERENCE & SECONDARY ACTIONS */}
-                    {/* ============================================================ */}
-
-                    {/* Session Reference */}
-                    {sessionId && (
-                        <div className="bg-white rounded-lg border border-slate-200 p-4 mb-6 text-center">
-                            <span className="text-xs text-slate-500 uppercase tracking-wider">Session Reference</span>
-                            <div className="font-mono text-sm text-slate-600 mt-1">{sessionId}</div>
-                        </div>
-                    )}
-
-                    {/* Secondary Actions */}
-                    <div className="text-center space-y-3">
-                        <Link
-                            href="/provider"
-                            onClick={() => {
-                                eventLogger.completed('provider_onboarding', 'provider_return_portal_clicked', {
-                                    sessionId: sessionId,
-                                    providerId: providerId
-                                })
-                            }}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-all text-sm font-medium"
-                        >
-                            Return to Provider Portal
-                        </Link>
-                    </div>
-
-                    {/* ============================================================ */}
-                    {/* SECTION 8F5: TRUST & SUPPORT */}
-                    {/* ============================================================ */}
-
-                    <div className="mt-12 text-center space-y-3">
-                        <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                            <span>Your data is confidential and only visible to you and the customer.</span>
-                        </div>
-                        <p className="text-sm text-slate-400">
-                            Questions?{' '}
-                            <a href="mailto:support@spikeisland.ai" className="text-blue-500 hover:text-blue-600 hover:underline">
-                                support@spikeisland.ai
-                            </a>
-                        </p>
-                    </div>
+                    </p>
                 </div>
-            </main>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${status.colour} ${status.bgColour}`}>
+                    <span className={`w-2 h-2 rounded-full mr-1.5 ${status.badge === 'Ready' ? 'bg-emerald-500' :
+                            status.badge === 'Calculating' ? 'bg-amber-500 animate-pulse' :
+                                status.badge === 'In Progress' ? 'bg-blue-500' :
+                                    status.badge === 'Complete' ? 'bg-slate-400' :
+                                        'bg-purple-500'
+                        }`}></span>
+                    {status.badge}
+                </span>
+            </div>
 
-            <ProviderFooter />
+            {/* Status Description */}
+            <p className="text-sm text-slate-600 mb-4">{status.description}</p>
 
-            {/* Beta Feedback Button */}
-            <FeedbackButton position="bottom-left" />
+            {/* Card Footer */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-200/60">
+                {session.invitedAt && (
+                    <span className="text-xs text-slate-400">
+                        Invited {formatTimeAgo(session.invitedAt)}
+                    </span>
+                )}
+
+                {status.actionRoute ? (
+                    <button
+                        onClick={() => {
+                            eventLogger.completed('provider_lobby', 'contract_card_action_clicked', {
+                                sessionId: session.sessionId,
+                                providerId: session.providerId,
+                                bidStatus: session.bidStatus,
+                                action: status.actionLabel
+                            })
+                            router.push(status.actionRoute!)
+                        }}
+                        className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        {status.actionLabel} &rarr;
+                    </button>
+                ) : (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 text-sm font-medium rounded-lg">
+                        <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                        {status.actionLabel}
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
 
 // ============================================================================
-// SECTION 9: MAIN EXPORT WITH SUSPENSE WRAPPER
+// SECTION 7: MAIN COMPONENT WRAPPER (Suspense)
 // ============================================================================
 
 export default function ProviderConfirmationPage() {
     return (
-        <Suspense fallback={<LoadingSpinner />}>
-            <ProviderConfirmationContent />
+        <Suspense fallback={
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+                <ProviderHeader />
+                <main className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="w-8 h-8 border-4 border-slate-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-600">Loading Provider Portal...</p>
+                    </div>
+                </main>
+                <ProviderFooter />
+            </div>
+        }>
+            <ProviderLobbyContent />
         </Suspense>
+    )
+}
+
+// ============================================================================
+// SECTION 8: MAIN LOBBY CONTENT
+// ============================================================================
+
+function ProviderLobbyContent() {
+    const router = useRouter()
+    const searchParams = useSearchParams()
+
+    // ========================================================================
+    // SECTION 8A: STATE
+    // ========================================================================
+
+    const [loading, setLoading] = useState(true)
+    const [sessions, setSessions] = useState<ProviderSession[]>([])
+    const [isFirstArrival, setIsFirstArrival] = useState(false)
+    const [providerName, setProviderName] = useState<string>('')
+    const [providerCompany, setProviderCompany] = useState<string>('')
+    const [error, setError] = useState<string | null>(null)
+
+    // ========================================================================
+    // SECTION 8B: INITIALIZATION
+    // ========================================================================
+
+    useEffect(() => {
+        const initialize = async () => {
+            const sessionId = searchParams.get('session_id')
+            const providerId = searchParams.get('provider_id')
+
+            // Load provider info from localStorage
+            const stored = localStorage.getItem('clarence_provider_session')
+            let storedProviderId = providerId || ''
+            let storedEmail = ''
+
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored)
+                    storedProviderId = storedProviderId || parsed.providerId || ''
+                    storedEmail = parsed.contactEmail || parsed.email || ''
+                    setProviderName(parsed.contactName || parsed.providerContact || '')
+                    setProviderCompany(parsed.companyName || parsed.providerCompany || '')
+                } catch (e) {
+                    console.error('Error parsing stored provider session:', e)
+                }
+            }
+
+            // Determine page mode
+            if (sessionId && providerId) {
+                // FIRST ARRIVAL: came from questionnaire with specific session
+                setIsFirstArrival(true)
+
+                // Set session context for event logging
+                eventLogger.setSession(sessionId)
+                eventLogger.completed('provider_lobby', 'provider_lobby_loaded', {
+                    sessionId,
+                    providerId,
+                    mode: 'first_arrival'
+                })
+
+                // Fetch this specific session's data
+                try {
+                    const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+                    if (response.ok) {
+                        const data = await response.json()
+                        const sessionData: ProviderSession = {
+                            sessionId: sessionId,
+                            sessionNumber: data.session?.sessionNumber || data.sessionNumber || data.session_number || '',
+                            customerCompany: data.session?.customerCompany || data.customerCompany || data.customer_company || 'Customer',
+                            contractType: data.session?.contractType || data.contractType || data.contract_type || 'Service Agreement',
+                            dealValue: data.session?.dealValue || data.dealValue || data.deal_value || '',
+                            bidStatus: 'questionnaire_complete',
+                            intakeComplete: true,
+                            questionnaireComplete: true,
+                            invitedAt: '',
+                            providerId: providerId
+                        }
+                        setSessions([sessionData])
+                    } else {
+                        // Fallback: create a basic card from what we know
+                        setSessions([{
+                            sessionId,
+                            sessionNumber: '',
+                            customerCompany: 'Customer',
+                            contractType: 'Service Agreement',
+                            dealValue: '',
+                            bidStatus: 'questionnaire_complete',
+                            intakeComplete: true,
+                            questionnaireComplete: true,
+                            invitedAt: '',
+                            providerId
+                        }])
+                    }
+                } catch (err) {
+                    console.error('Failed to load session data:', err)
+                    // Still show a card with minimal info
+                    setSessions([{
+                        sessionId,
+                        sessionNumber: '',
+                        customerCompany: 'Customer',
+                        contractType: 'Service Agreement',
+                        dealValue: '',
+                        bidStatus: 'questionnaire_complete',
+                        intakeComplete: true,
+                        questionnaireComplete: true,
+                        invitedAt: '',
+                        providerId
+                    }])
+                }
+            } else {
+                // RETURN VISIT: provider logged in, fetch all their sessions
+                setIsFirstArrival(false)
+
+                eventLogger.completed('provider_lobby', 'provider_lobby_loaded', {
+                    providerId: storedProviderId,
+                    mode: 'return_visit'
+                })
+
+                if (storedProviderId || storedEmail) {
+                    try {
+                        const params = new URLSearchParams()
+                        if (storedProviderId) params.set('provider_id', storedProviderId)
+                        if (storedEmail) params.set('email', storedEmail)
+
+                        const response = await fetch(`${API_BASE}/provider-sessions-api?${params.toString()}`)
+                        if (response.ok) {
+                            const data = await response.json()
+                            const sessionsList = Array.isArray(data) ? data : (data.sessions || [])
+
+                            const mapped: ProviderSession[] = sessionsList.map((s: any) => ({
+                                sessionId: s.session_id || s.sessionId || '',
+                                sessionNumber: s.session_number || s.sessionNumber || '',
+                                customerCompany: s.customer_company || s.customerCompany || 'Customer',
+                                contractType: s.contract_type || s.contractType || 'Service Agreement',
+                                dealValue: s.deal_value || s.dealValue || '',
+                                bidStatus: s.bid_status || s.bidStatus || s.status || 'invited',
+                                intakeComplete: s.intake_complete || s.intakeComplete || false,
+                                questionnaireComplete: s.questionnaire_complete || s.questionnaireComplete || false,
+                                invitedAt: s.invited_at || s.invitedAt || '',
+                                providerId: s.provider_id || s.providerId || storedProviderId
+                            }))
+
+                            setSessions(mapped)
+                        } else {
+                            setError('Unable to load your negotiations. Please try refreshing the page.')
+                        }
+                    } catch (err) {
+                        console.error('Failed to load provider sessions:', err)
+                        setError('Unable to connect to CLARENCE. Please check your connection and try again.')
+                    }
+                } else {
+                    // No provider identity found - they need to log in
+                    setError('no_identity')
+                }
+            }
+
+            setLoading(false)
+        }
+
+        initialize()
+    }, [searchParams])
+
+    // ========================================================================
+    // SECTION 8C: LOADING STATE
+    // ========================================================================
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+                <ProviderHeader />
+                <main className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="w-10 h-10 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-slate-600 font-medium">Loading your negotiations...</p>
+                    </div>
+                </main>
+                <ProviderFooter />
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 8D: NO IDENTITY STATE
+    // ========================================================================
+
+    if (error === 'no_identity') {
+        return (
+            <div className="min-h-screen bg-slate-50 flex flex-col">
+                <ProviderHeader />
+                <main className="flex-1 flex items-center justify-center px-4">
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 max-w-md w-full text-center">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                        </div>
+                        <h2 className="text-xl font-semibold text-slate-800 mb-2">Sign In Required</h2>
+                        <p className="text-slate-500 mb-6">
+                            Please sign in to view your active negotiations.
+                        </p>
+                        <Link
+                            href="/provider"
+                            className="inline-block px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            Sign In to Provider Portal
+                        </Link>
+                    </div>
+                </main>
+                <ProviderFooter />
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 9: MAIN RENDER
+    // ========================================================================
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <ProviderHeader />
+
+            <main className="flex-1 py-8 px-4">
+                <div className="max-w-3xl mx-auto">
+
+                    {/* ============================================================ */}
+                    {/* SECTION 9A: FIRST ARRIVAL SUCCESS BANNER */}
+                    {/* ============================================================ */}
+
+                    {isFirstArrival && (
+                        <div className="mb-8 bg-gradient-to-r from-emerald-50 to-blue-50 rounded-xl border border-emerald-200 p-6">
+                            <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-semibold text-slate-800 mb-1">
+                                        Assessment Complete
+                                    </h2>
+                                    <p className="text-slate-600 mb-3">
+                                        Your strategic assessment has been submitted successfully. CLARENCE is now analysing both parties to calculate leverage positions and generate initial negotiating stances.
+                                    </p>
+                                    <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-flex">
+                                        <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                                        This typically takes a few minutes. You&apos;ll be able to enter the Contract Studio once complete.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SECTION 9B: PAGE HEADER */}
+                    {/* ============================================================ */}
+
+                    {!isFirstArrival && (
+                        <div className="mb-8">
+                            <h1 className="text-2xl font-bold text-slate-800 mb-1">
+                                {providerName ? `Welcome back, ${providerName}` : 'Provider Portal'}
+                            </h1>
+                            {providerCompany && (
+                                <p className="text-slate-500">{providerCompany}</p>
+                            )}
+                            <p className="text-sm text-slate-400 mt-2">
+                                Your active contract negotiations are shown below.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SECTION 9C: ERROR STATE */}
+                    {/* ============================================================ */}
+
+                    {error && error !== 'no_identity' && (
+                        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+                            <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div>
+                                <p className="text-sm text-red-700">{error}</p>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="text-sm text-red-600 font-medium hover:text-red-800 mt-1"
+                                >
+                                    Try Again
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SECTION 9D: CONTRACT CARDS */}
+                    {/* ============================================================ */}
+
+                    {sessions.length > 0 && (
+                        <div className="space-y-4">
+                            {!isFirstArrival && (
+                                <div className="flex items-center justify-between mb-2">
+                                    <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">
+                                        Active Negotiations ({sessions.length})
+                                    </h2>
+                                </div>
+                            )}
+
+                            {sessions.map((session) => (
+                                <ContractCard key={session.sessionId} session={session} />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SECTION 9E: EMPTY STATE */}
+                    {/* ============================================================ */}
+
+                    {sessions.length === 0 && !error && (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <h2 className="text-xl font-semibold text-slate-800 mb-2">No Active Negotiations</h2>
+                            <p className="text-slate-500 max-w-sm mx-auto">
+                                You don&apos;t have any active contract negotiations at the moment. When a customer invites you to negotiate, it will appear here.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* ============================================================ */}
+                    {/* SECTION 9F: HELP TEXT */}
+                    {/* ============================================================ */}
+
+                    <div className="mt-12 text-center">
+                        <p className="text-xs text-slate-400">
+                            Need help? Contact the customer who invited you or reach out to{' '}
+                            <a href="mailto:support@clarencelegal.ai" className="text-blue-500 hover:text-blue-600">
+                                support@clarencelegal.ai
+                            </a>
+                        </p>
+                    </div>
+
+                </div>
+            </main>
+
+            <ProviderFooter />
+        </div>
     )
 }
