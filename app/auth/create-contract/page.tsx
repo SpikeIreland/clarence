@@ -14,7 +14,7 @@
 // 3. Renamed: Full Mediation → Co-Create (co_create)
 // 4. Pathway prefixes: STC→QC, PM→CC, FM→CO
 // 5. Co-Create skips template source/selection (no starting document)
-// 6. Co-Create redirects to coming-soon page after session creation
+// 6. Co-Create routes to strategic-assessment after session creation
 // 7. Updated CLARENCE messages for new pathway names
 // 8. Progress panel hides Starting Point step for Co-Create
 // 9. Summary shows CLARENCE clause generation for Co-Create
@@ -766,7 +766,7 @@ function ContractCreationContent() {
      * - QC (Quick Create): Handled earlier — redirects to /auth/quick-contract/create
      * - CC-EXISTING: -> invite-provider (true fast-track)
      * - Other CC: -> strategic-assessment (assessment first, THEN prep)
-     * - CO: -> co-create-studio (coming soon page for now)
+     * - CO: -> strategic-assessment (same as CC)
      */
     const buildRedirectUrl = (
         pathwayId: PathwayId | string,
@@ -781,9 +781,9 @@ function ContractCreationContent() {
             params.set('contract_id', contractId)
         }
 
-        // CO: Co-Create — redirect to coming soon page
+        // CO: Co-Create — route to strategic assessment (same as CC)
         if (pathwayId === 'CO') {
-            return `/auth/co-create-coming-soon?${params.toString()}`
+            return `/auth/strategic-assessment?${params.toString()}`
         }
 
         // CC-EXISTING: True fast-track - skip assessment AND prep
@@ -816,13 +816,13 @@ function ContractCreationContent() {
                 fromStage: 'pathway_review',
                 toStage: 'contract_prep',
                 title: 'Co-Create Session Created',
-                message: "Your collaborative session is ready! The Co-Create Studio is currently being built. You'll be able to work with the other party and CLARENCE to build your contract from scratch.",
+                message: "Your collaborative session is ready! Next, we'll capture your strategic context so CLARENCE can calculate leverage effectively.",
                 bulletPoints: [
-                    'CLARENCE will generate clauses based on your contract type',
-                    'Both parties will shape the agreement together',
-                    'The Co-Create Studio is coming soon'
+                    'Complete your strategic assessment',
+                    'Invite the other party to participate',
+                    'CLARENCE will generate clauses collaboratively'
                 ],
-                buttonText: 'Continue'
+                buttonText: 'Continue to Assessment'
             }
         }
 
@@ -1884,7 +1884,7 @@ function ContractCreationContent() {
                                         <p className="text-sm text-slate-500 mb-2">{template.description || `Standard ${template.contractType} template`}</p>
                                         <div className="flex items-center gap-4 text-xs text-slate-400">
                                             <span>🔑 {template.clauseCount} clauses</span>
-                                            {template.industry && <span>🏢 {template.industry}</span>}
+                                            {template.industry && <span>ðŸ¢ {template.industry}</span>}
                                             <span>📂 {template.contractType}</span>
                                         </div>
                                     </div>
