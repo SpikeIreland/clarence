@@ -7093,11 +7093,40 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             )}
 
                             {/* Provider Status Indicator */}
-                            {!session.providerId && !isTrainingMode && (
-                                <div className="text-center px-3 py-1 bg-amber-500/20 rounded-lg">
-                                    <div className="text-xs text-amber-400">Provider</div>
-                                    <div className="text-sm font-medium text-amber-300">Not Invited</div>
-                                </div>
+                            {!isTrainingMode && (
+                                (() => {
+                                    const activeBid = availableProviders?.[0]
+                                    if (!hasProviderInvited) {
+                                        return (
+                                            <div className="text-center px-3 py-1 bg-amber-500/20 rounded-lg">
+                                                <div className="text-xs text-amber-400">Provider</div>
+                                                <div className="text-sm font-medium text-amber-300">Not Invited</div>
+                                            </div>
+                                        )
+                                    }
+                                    if (activeBid?.questionnaireComplete) {
+                                        return (
+                                            <div className="text-center px-3 py-1 bg-emerald-500/20 rounded-lg">
+                                                <div className="text-xs text-emerald-400">Provider</div>
+                                                <div className="text-sm font-medium text-emerald-300">Ready</div>
+                                            </div>
+                                        )
+                                    }
+                                    if (activeBid?.intakeComplete) {
+                                        return (
+                                            <div className="text-center px-3 py-1 bg-blue-500/20 rounded-lg">
+                                                <div className="text-xs text-blue-400">Provider</div>
+                                                <div className="text-sm font-medium text-blue-300">Completing Assessment</div>
+                                            </div>
+                                        )
+                                    }
+                                    return (
+                                        <div className="text-center px-3 py-1 bg-purple-500/20 rounded-lg">
+                                            <div className="text-xs text-purple-400">Provider</div>
+                                            <div className="text-sm font-medium text-purple-300">Invited - Awaiting Response</div>
+                                        </div>
+                                    )
+                                })()
                             )}
                         </div>
 
