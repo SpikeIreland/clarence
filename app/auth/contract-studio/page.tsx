@@ -6419,11 +6419,11 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                         <div className="flex items-center gap-3 mb-2">
                             <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                                <span className="text-xs text-slate-500">â—† Baseline:</span>
+                                <span className="text-xs text-slate-500">◆ Baseline:</span>
                                 <span className="text-sm font-bold text-slate-400">--:--</span>
                             </div>
                             <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                                <span className="text-xs text-slate-500">â—‡ Tracker:</span>
+                                <span className="text-xs text-slate-500">◇ Tracker:</span>
                                 <span className="text-sm font-bold text-slate-400">--:--</span>
                             </div>
                         </div>
@@ -6524,7 +6524,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <div className="flex items-center gap-3 mb-2">
                     {/* Baseline - REVERSED: Provider first, Customer second */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                        <span className="text-xs text-slate-500">â—† Baseline:</span>
+                        <span className="text-xs text-slate-500">◆ Baseline:</span>
                         <span className="text-sm font-bold">
                             <span className="text-blue-600">{providerBaseline}</span>
                             <span className="text-slate-400">:</span>
@@ -6534,7 +6534,7 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
 
                     {/* Tracker - REVERSED: Provider first, Customer second */}
                     <div className="flex items-center gap-1.5 bg-slate-50 rounded px-2 py-1">
-                        <span className="text-xs text-slate-500">â—‡ Tracker:</span>
+                        <span className="text-xs text-slate-500">◇ Tracker:</span>
                         <span className="text-sm font-bold">
                             <span className="text-blue-600">{providerTracker}</span>
                             <span className="text-slate-400">:</span>
