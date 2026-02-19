@@ -764,8 +764,7 @@ function ContractCreationContent() {
     /**
      * Build redirect URL based on pathway
      * - QC (Quick Create): Handled earlier — redirects to /auth/quick-contract/create
-     * - CC-EXISTING: -> invite-provider (true fast-track)
-     * - Other CC: -> strategic-assessment (assessment first, THEN prep)
+     * - All CC: -> strategic-assessment (assessment first, then invite, then studio)
      * - CO: -> strategic-assessment (same as CC)
      */
     const buildRedirectUrl = (
@@ -786,13 +785,8 @@ function ContractCreationContent() {
             return `/auth/strategic-assessment?${params.toString()}`
         }
 
-        // CC-EXISTING: True fast-track - skip assessment AND prep
-        if (pathwayId === 'CC-EXISTING') {
-            return `/auth/invite-providers?${params.toString()}`
-        }
-
-        // Other CC paths with existing template: Skip assessment, go to contract-prep
-        if (pathwayId === 'CC-MODIFIED' || pathwayId === 'CC-UPLOADED' || pathwayId === 'CC-SCRATCH') {
+        // All CC paths: Go to strategic-assessment first
+        if (pathwayId.startsWith('CC-')) {
             return `/auth/strategic-assessment?${params.toString()}`
         }
 
@@ -826,24 +820,7 @@ function ContractCreationContent() {
             }
         }
 
-        // CC-EXISTING: fast-track to invite
-        if (pathwayId === 'CC-EXISTING') {
-            return {
-                id: 'transition_to_invite',
-                fromStage: 'pathway_review',
-                toStage: 'invite_providers',
-                title: 'Session Created',
-                message: "Your contract session is ready! Since you're using a pre-configured template, we can skip straight to inviting providers.",
-                bulletPoints: [
-                    'Template positions are pre-configured',
-                    'Invite your provider to begin',
-                    'Contract will be generated automatically'
-                ],
-                buttonText: 'Invite Provider'
-            }
-        }
-
-        // Other CC paths: go to assessment
+        // All CC paths: go to assessment
         if (pathwayId.startsWith('CC-')) {
             return TRANSITION_CONFIGS.find(t => t.id === 'transition_to_assessment') || null
         }
