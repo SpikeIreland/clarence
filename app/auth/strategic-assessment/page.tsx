@@ -418,6 +418,7 @@ function IntelligentQuestionnaireContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // URL Parameters
   const sessionId = searchParams.get('session_id')
@@ -495,7 +496,7 @@ function IntelligentQuestionnaireContent() {
       }
     })
 
-    sections.push({ id: 'complete', name: 'Contract Prep', icon: '📝', questionIndices: [] as number[] })
+    sections.push({ id: 'complete', name: 'Invite Provider', icon: '📩', questionIndices: [] as number[] })
 
     return sections
   }, [activeQuestions])
@@ -700,6 +701,13 @@ function IntelligentQuestionnaireContent() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Auto-focus input when CLARENCE finishes typing
+  useEffect(() => {
+    if (!isTyping) {
+      inputRef.current?.focus()
+    }
+  }, [isTyping])
 
   const addClarenceMessage = (content: string, questionKey?: QuestionKey) => {
     setMessages(prev => [...prev, { id: Date.now().toString(), type: 'clarence', content, timestamp: new Date(), questionKey }])
@@ -976,14 +984,14 @@ Your data is saved and ready. Click below to continue.`)
       toStage: 'invite_providers',
       title: assessmentMode === 'fast-track' ? 'Ready to Invite' : 'Strategic Profile Complete',
       message: assessmentMode === 'fast-track'
-        ? "Great! Your strategic defaults are saved. Now invite your counter-party to begin the negotiation."
-        : "Excellent work! I now have a clear picture of your negotiating position. The next step is to invite your counter-party.",
+        ? "Great! Your strategic defaults are saved. Let's invite the other party to begin."
+        : "Excellent work! I now have a clear picture of your negotiating position. Next, you'll:",
       bulletPoints: [
-        'Invite providers to participate in this negotiation',
+        'Invite one or more providers to negotiate',
         'They will complete their own strategic assessment',
-        'Once both parties are ready, the Contract Studio will activate with full leverage analysis'
+        'Once both sides are ready, the Contract Studio activates'
       ],
-      buttonText: 'Continue to Invite'
+      buttonText: 'Continue to Invite Provider'
     }
 
     setTransitionState({
@@ -1361,7 +1369,9 @@ Your data is saved and ready. Click below to continue.`)
                       <div className="border-t border-slate-200 p-4">
                         <form onSubmit={handleSubmit} className="flex gap-3">
                           <input
+                            ref={inputRef}
                             type="text"
+                            autoFocus
                             value={userInput}
                             onChange={(e) => setUserInput(e.target.value)}
                             placeholder="Type your response..."
@@ -1391,7 +1401,7 @@ Your data is saved and ready. Click below to continue.`)
                             </>
                           ) : (
                             <>
-                              Continue to Contract Prep
+                              Continue to Invite Provider
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>

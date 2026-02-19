@@ -1632,6 +1632,13 @@ function InviteProvidersContent() {
                         <li>• Once a provider submits, you&apos;ll be notified and can begin negotiation</li>
                     </ul>
                 </div>
+
+                {/* Transition Modal - must be in main render for post-send display */}
+                <TransitionModal
+                    isOpen={transitionState.isOpen}
+                    transition={transitionState.transition}
+                    onContinue={handleTransitionContinue}
+                />
             </div>
         </div>
     )
