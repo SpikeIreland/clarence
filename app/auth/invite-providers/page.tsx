@@ -1633,8 +1633,6 @@ function InviteProvidersContent() {
                     </ul>
                 </div>
             </div>
-
-            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
