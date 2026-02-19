@@ -86,9 +86,12 @@ interface TransitionState {
 const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 const MEDIATION_LABELS: Record<string, string> = {
-    'straight_to_contract': 'Straight to Contract',
-    'partial_mediation': 'Partial Mediation',
-    'full_mediation': 'Full Mediation'
+    'straight_to_contract': 'Quick Create',
+    'partial_mediation': 'Contract Create',
+    'full_mediation': 'Co-Create',
+    'quick_create': 'Quick Create',
+    'contract_create': 'Contract Create',
+    'co_create': 'Co-Create'
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -614,9 +617,9 @@ function InviteProvidersContent() {
 
     const navigateToStudio = () => {
         const contractId = searchParams.get('contract_id')
-        let url = `/auth/negotiation-studio?session_id=${session?.sessionId}`
+        let url = `/auth/contract-studio/${session?.sessionId}`
         if (contractId) {
-            url += `&contract_id=${contractId}`
+            url += `?contract_id=${contractId}`
         }
         router.push(url)
     }
@@ -624,7 +627,7 @@ function InviteProvidersContent() {
     const navigateToContractPrep = () => {
         const contractId = searchParams.get('contract_id')
         const pathwayId = searchParams.get('pathway_id')
-        let url = `/auth/contract-prep?session_id=${session?.sessionId}`
+        let url = `/auth/strategic-assessment?session_id=${session?.sessionId}`
         if (contractId) {
             url += `&contract_id=${contractId}`
         }
@@ -996,7 +999,7 @@ function InviteProvidersContent() {
                                 <div>
                                     <h3 className="font-semibold text-amber-800 mb-1">Important</h3>
                                     <p className="text-sm text-amber-700">
-                                        The Negotiation Studio will be in <strong>&ldquo;Waiting&rdquo; mode</strong> until providers
+                                        The Contract Studio will be in <strong>&ldquo;Waiting&rdquo; mode</strong> until providers
                                         complete their intake. Leverage calculations and gap analysis require both party
                                         positions to be submitted.
                                     </p>
@@ -1597,7 +1600,7 @@ function InviteProvidersContent() {
                         onClick={navigateToContractPrep}
                         className="px-6 py-3 text-slate-600 hover:text-slate-800 transition-all flex items-center gap-2"
                     >
-                        â† Back to Contract Prep
+                        â† Back to Strategic Assessment
                     </button>
 
                     <div className="flex items-center gap-3">

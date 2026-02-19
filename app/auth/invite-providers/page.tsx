@@ -86,12 +86,9 @@ interface TransitionState {
 const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
 const MEDIATION_LABELS: Record<string, string> = {
-    'straight_to_contract': 'Quick Create',
-    'partial_mediation': 'Contract Create',
-    'full_mediation': 'Co-Create',
-    'quick_create': 'Quick Create',
-    'contract_create': 'Contract Create',
-    'co_create': 'Co-Create'
+    'straight_to_contract': 'Straight to Contract',
+    'partial_mediation': 'Partial Mediation',
+    'full_mediation': 'Full Mediation'
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -616,10 +613,10 @@ function InviteProvidersContent() {
     }
 
     const navigateToStudio = () => {
-        const contractId = searchParams.get('contract_id')
-        let url = `/auth/contract-studio/${session?.sessionId}`
-        if (contractId) {
-            url += `?contract_id=${contractId}`
+        const providerId = searchParams.get('provider_id')
+        let url = `/auth/contract-studio?session_id=${session?.sessionId}`
+        if (providerId) {
+            url += `&provider_id=${providerId}`
         }
         router.push(url)
     }
@@ -627,7 +624,7 @@ function InviteProvidersContent() {
     const navigateToContractPrep = () => {
         const contractId = searchParams.get('contract_id')
         const pathwayId = searchParams.get('pathway_id')
-        let url = `/auth/strategic-assessment?session_id=${session?.sessionId}`
+        let url = `/auth/contract-prep?session_id=${session?.sessionId}`
         if (contractId) {
             url += `&contract_id=${contractId}`
         }
@@ -883,7 +880,7 @@ function InviteProvidersContent() {
                     <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden mb-8">
                         {/* Header with celebration */}
                         <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-10 text-center text-white">
-                            <div className="text-5xl mb-4">ðŸŽ‰</div>
+                            <div className="text-5xl mb-4">🎉</div>
                             <h1 className="text-2xl font-bold mb-2">
                                 Invitations Sent Successfully!
                             </h1>
@@ -898,7 +895,7 @@ function InviteProvidersContent() {
                         {/* What Happens Next */}
                         <div className="px-8 py-6 border-b border-slate-200">
                             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                                <span className="text-xl">ðŸ“§</span> What Happens Next
+                                <span className="text-xl">📧</span> What Happens Next
                             </h2>
                             <div className="space-y-3">
                                 <div className="flex items-start gap-3">
@@ -931,7 +928,7 @@ function InviteProvidersContent() {
                                 </div>
                             </div>
                             <div className="mt-4 flex items-center gap-2 text-sm text-slate-500 bg-slate-50 rounded-lg px-4 py-3">
-                                <span className="text-lg">â³</span>
+                                <span className="text-lg">⏳</span>
                                 <span>Average provider response time: <strong>2-5 business days</strong></span>
                             </div>
                         </div>
@@ -939,7 +936,7 @@ function InviteProvidersContent() {
                         {/* Invitation Summary */}
                         <div className="px-8 py-6 border-b border-slate-200">
                             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                                <span className="text-xl">ðŸ“‹</span> Invitation Summary
+                                <span className="text-xl">📋</span> Invitation Summary
                             </h2>
                             <div className="bg-slate-50 rounded-xl overflow-hidden">
                                 <table className="w-full">
@@ -969,7 +966,7 @@ function InviteProvidersContent() {
                                                 <td className="px-4 py-3 text-right">
                                                     {bid.status === 'submitted' || bid.intake_complete ? (
                                                         <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
-                                                            <span>âœ“</span> Submitted
+                                                            <span>✔</span> Submitted
                                                         </span>
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
@@ -995,13 +992,13 @@ function InviteProvidersContent() {
                         {/* Important Notice */}
                         <div className="px-8 py-6 bg-amber-50 border-b border-amber-200">
                             <div className="flex items-start gap-3">
-                                <span className="text-2xl">⚠ï¸</span>
+                                <span className="text-2xl">⚠️</span>
                                 <div>
                                     <h3 className="font-semibold text-amber-800 mb-1">Important</h3>
                                     <p className="text-sm text-amber-700">
-                                        The Contract Studio will be in <strong>&ldquo;Waiting&rdquo; mode</strong> until providers
-                                        complete their intake. Leverage calculations and gap analysis require both party
-                                        positions to be submitted.
+                                        The Contract Studio will be in <strong>Solo Prep mode</strong> until your provider
+                                        completes their intake. You can review clauses and CLARENCE assessments while waiting.
+                                        Full negotiation activates once both parties have submitted.
                                     </p>
                                 </div>
                             </div>
@@ -1009,35 +1006,24 @@ function InviteProvidersContent() {
 
                         {/* Navigation Buttons */}
                         <div className="px-8 py-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <button
-                                    onClick={navigateToDashboard}
-                                    className="flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-slate-700 to-slate-800 text-white rounded-xl hover:from-slate-800 hover:to-slate-900 transition-all shadow-md"
-                                >
-                                    <span className="text-2xl">ðŸ“Š</span>
-                                    <div className="text-left">
-                                        <div className="font-semibold">View Dashboard</div>
-                                        <div className="text-xs text-slate-300">See all your sessions</div>
-                                    </div>
-                                </button>
-
-                                <button
-                                    onClick={navigateToStudio}
-                                    className="flex items-center justify-center gap-3 px-6 py-4 bg-white border-2 border-slate-200 text-slate-700 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-all"
-                                >
-                                    <span className="text-2xl">ðŸ›ï¸</span>
-                                    <div className="text-left">
-                                        <div className="font-semibold">Preview Studio</div>
-                                        <div className="text-xs text-slate-500">Waiting for responses</div>
-                                    </div>
-                                </button>
-                            </div>
+                            <button
+                                onClick={navigateToStudio}
+                                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-md mb-4"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                                <div className="text-left">
+                                    <div className="font-semibold">View Contract Studio</div>
+                                    <div className="text-xs text-blue-200">Review clauses while waiting for provider</div>
+                                </div>
+                            </button>
 
                             <button
-                                onClick={navigateToAssessment}
+                                onClick={navigateToDashboard}
                                 className="w-full text-center text-sm text-slate-500 hover:text-slate-700 py-2 transition-colors"
                             >
-                                â† Back to Strategic Assessment (modify your positions)
+                                Go to Dashboard
                             </button>
                         </div>
                     </div>
@@ -1046,7 +1032,7 @@ function InviteProvidersContent() {
                     {providers.some(p => p.status === 'error') && (
                         <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
                             <h3 className="text-lg font-medium text-red-800 mb-4 flex items-center gap-2">
-                                <span>⚠ï¸</span> Failed Invitations
+                                <span>⚠️</span> Failed Invitations
                             </h3>
                             <p className="text-sm text-slate-600 mb-4">
                                 The following invitations failed to send. You can retry or remove them.
@@ -1182,7 +1168,7 @@ function InviteProvidersContent() {
                         <div>
                             <span className="text-slate-400 text-xs">Contract Type</span>
                             <div className="text-sm">
-                                {CONTRACT_TYPE_LABELS[session?.contractType || ''] || session?.contractType || 'â€”'}
+                                {CONTRACT_TYPE_LABELS[session?.contractType || ''] || session?.contractType || '—'}
                             </div>
                         </div>
                         {contract && (
@@ -1209,7 +1195,7 @@ function InviteProvidersContent() {
                 {error && (
                     <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center justify-between">
                         <span>{error}</span>
-                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">âœ•</button>
+                        <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">✕</button>
                     </div>
                 )}
 
@@ -1220,25 +1206,25 @@ function InviteProvidersContent() {
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Customer</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {session?.customerCompany || userInfo?.company || 'â€”'}
+                                {session?.customerCompany || userInfo?.company || '—'}
                             </div>
                         </div>
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Contract</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {contract?.contractName || CONTRACT_TYPE_LABELS[session?.contractType || ''] || 'â€”'}
+                                {contract?.contractName || CONTRACT_TYPE_LABELS[session?.contractType || ''] || '—'}
                             </div>
                         </div>
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Clauses Prepared</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {contract?.clauseCount || 'â€”'}
+                                {contract?.clauseCount || '—'}
                             </div>
                         </div>
                         <div className="bg-slate-50 rounded-lg p-4">
                             <span className="text-xs text-slate-500">Deal Value</span>
                             <div className="text-sm font-medium text-slate-800">
-                                {dealContext?.dealValue ? DEAL_VALUE_LABELS[dealContext.dealValue] : 'â€”'}
+                                {dealContext?.dealValue ? DEAL_VALUE_LABELS[dealContext.dealValue] : '—'}
                             </div>
                         </div>
                     </div>
@@ -1504,7 +1490,7 @@ function InviteProvidersContent() {
                                                     ? 'bg-blue-500'
                                                     : 'bg-slate-400'
                                             }`}>
-                                            {provider.status === 'sent' ? 'âœ“' :
+                                            {provider.status === 'sent' ? '✔' :
                                                 provider.status === 'error' ? '!' :
                                                     provider.status === 'sending' ? '...' :
                                                         provider.companyName.charAt(0).toUpperCase()}
@@ -1586,7 +1572,7 @@ function InviteProvidersContent() {
                 {/* Empty State */}
                 {providers.length === 0 && existingBids.length === 0 && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mb-6 text-center">
-                        <div className="text-4xl mb-3">ðŸ“§</div>
+                        <div className="text-4xl mb-3">📧</div>
                         <h3 className="text-lg font-medium text-slate-800 mb-2">No providers added yet</h3>
                         <p className="text-sm text-slate-500">
                             Add providers using the form above to send them invitations
@@ -1597,10 +1583,10 @@ function InviteProvidersContent() {
                 {/* Action Buttons */}
                 <div className="flex justify-between items-center">
                     <button
-                        onClick={navigateToContractPrep}
+                        onClick={navigateToAssessment}
                         className="px-6 py-3 text-slate-600 hover:text-slate-800 transition-all flex items-center gap-2"
                     >
-                        â† Back to Strategic Assessment
+                        ← Back to Strategic Assessment
                     </button>
 
                     <div className="flex items-center gap-3">
