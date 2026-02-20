@@ -95,8 +95,8 @@ interface UserInfo {
 
 const N8N_BASE_URL = 'https://spikeislandstudios.app.n8n.cloud/webhook';
 
-// Document generation endpoints
-const DOCUMENT_ENDPOINTS: Record<string, string> = {
+// Document generation endpoints - Mediation Studio (session-based)
+const MEDIATION_ENDPOINTS: Record<string, string> = {
     'executive-summary': `${N8N_BASE_URL}/document-executive-summary`,
     'leverage-report': `${N8N_BASE_URL}/document-leverage-report`,
     'position-history': `${N8N_BASE_URL}/document-position-history`,
@@ -106,6 +106,19 @@ const DOCUMENT_ENDPOINTS: Record<string, string> = {
     'contract-draft': `${N8N_BASE_URL}/document-contract-draft`,
     'contract-roadmap': `${N8N_BASE_URL}/document-contract-roadmap`,
 };
+
+// Document generation endpoints - Quick Contract (contract_id-based)
+// Each QC workflow is a separate 6.xQ variant with its own webhook
+const QC_ENDPOINTS: Record<string, string> = {
+    'executive-summary': `${N8N_BASE_URL}/document-qc-executive-summary`,
+    'position-history': `${N8N_BASE_URL}/document-qc-position-history`,
+    'chat-transcript': `${N8N_BASE_URL}/document-qc-chat-transcript`,
+    'timeline-audit': `${N8N_BASE_URL}/document-qc-timeline-audit`,
+    'contract-draft': `${N8N_BASE_URL}/document-qc-contract-draft`,
+};
+
+// Legacy alias - kept for any references elsewhere
+const DOCUMENT_ENDPOINTS = MEDIATION_ENDPOINTS;
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook';
 
@@ -1268,9 +1281,10 @@ function DocumentCentreContent() {
             return;
         }
 
-        const endpoint = DOCUMENT_ENDPOINTS[documentId];
+const endpointMap = mode === 'quick_contract' ? QC_ENDPOINTS : MEDIATION_ENDPOINTS;
+        const endpoint = endpointMap[documentId];
         if (!endpoint) {
-            console.error(`No endpoint configured for document: ${documentId}`);
+            console.error(`No endpoint configured for document: ${documentId} in mode: ${mode}`);
             return;
         }
 
