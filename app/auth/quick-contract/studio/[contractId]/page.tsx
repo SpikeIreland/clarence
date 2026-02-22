@@ -380,6 +380,10 @@ function QuickContractStudioContent() {
     const [draftTargetPosition, setDraftTargetPosition] = useState<number | null>(null)
     const draftTargetPositionRef = useRef<number | null>(null)
 
+    // ---- BULK SELECT STATE ----
+    const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
+    const [bulkAgreeInProgress, setBulkAgreeInProgress] = useState(false)
+
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
 
@@ -1311,6 +1315,74 @@ function QuickContractStudioContent() {
             }
             setChatMessages(prev => [...prev, msg])
         }
+    }
+
+    // ========================================================================
+    // SECTION 4D-3: BULK SELECT & AGREE HANDLERS
+    // ========================================================================
+
+    // Toggle a single clause in/out of bulk selection
+    const toggleBulkSelect = (clauseId: string) => {
+        setBulkSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(clauseId)) {
+                next.delete(clauseId)
+            } else {
+                next.add(clauseId)
+            }
+            return next
+        })
+    }
+
+    // Get all eligible clauses (certified leaf clauses not yet agreed by current user)
+    const getEligibleForAgree = (): ContractClause[] => {
+        return clauses.filter(c =>
+            !c.isHeader &&
+            c.clarenceCertified &&
+            !hasCurrentUserAgreed(c.clauseId)
+        )
+    }
+
+    // Smart select: All eligible (not yet agreed by me)
+    const selectAllEligible = () => {
+        const eligible = getEligibleForAgree()
+        setBulkSelectedIds(new Set(eligible.map(c => c.clauseId)))
+    }
+
+    // Smart select: All at balanced position (5.0)
+    const selectAllBalanced = () => {
+        const balanced = clauses.filter(c =>
+            !c.isHeader &&
+            c.clarenceCertified &&
+            !hasCurrentUserAgreed(c.clauseId) &&
+            c.clarencePosition !== null &&
+            c.clarencePosition >= 4.5 &&
+            c.clarencePosition <= 5.5
+        )
+        setBulkSelectedIds(new Set(balanced.map(c => c.clauseId)))
+    }
+
+    // Clear all selections
+    const clearBulkSelection = () => {
+        setBulkSelectedIds(new Set())
+    }
+
+    // Bulk agree: agree to all selected clauses sequentially
+    const handleBulkAgree = async () => {
+        if (bulkSelectedIds.size === 0) return
+
+        setBulkAgreeInProgress(true)
+
+        // Filter to only clauses we haven't already agreed to
+        const toAgree = Array.from(bulkSelectedIds).filter(id => !hasCurrentUserAgreed(id))
+
+        for (const clauseId of toAgree) {
+            await handleAgreeClause(clauseId)
+        }
+
+        // Clear selection after completion
+        setBulkSelectedIds(new Set())
+        setBulkAgreeInProgress(false)
     }
 
     // WITHDRAW AGREEMENT: Un-agree a clause
@@ -3016,6 +3088,81 @@ INSTRUCTIONS:
                         </div>
                     )}
 
+                    {/* ==================== BULK SELECT ACTION BAR ==================== */}
+                    {bulkSelectedIds.size > 0 && (
+                        <div className="px-3 py-2.5 border-b border-slate-200 bg-gradient-to-r from-emerald-50 to-teal-50 flex-shrink-0">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-semibold text-emerald-800">
+                                    {bulkSelectedIds.size} clause{bulkSelectedIds.size !== 1 ? 's' : ''} selected
+                                </span>
+                                <button
+                                    onClick={clearBulkSelection}
+                                    className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleBulkAgree}
+                                    disabled={bulkAgreeInProgress}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-lg text-xs font-medium transition-colors"
+                                >
+                                    {bulkAgreeInProgress ? (
+                                        <>
+                                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Agreeing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Agree Selected ({bulkSelectedIds.size})
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            {/* Smart select shortcuts */}
+                            <div className="flex items-center gap-2 mt-2">
+                                <button
+                                    onClick={selectAllEligible}
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                                >
+                                    Select All
+                                </button>
+                                <button
+                                    onClick={selectAllBalanced}
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                                >
+                                    Select Balanced (5.0)
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Smart select triggers when nothing selected yet */}
+                    {bulkSelectedIds.size === 0 && clauses.filter(c => !c.isHeader && c.clarenceCertified && !hasCurrentUserAgreed(c.clauseId)).length > 0 && (
+                        <div className="px-3 py-2 border-b border-slate-100 flex-shrink-0">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-slate-400">Quick select:</span>
+                                <button
+                                    onClick={selectAllEligible}
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                                >
+                                    All unagreed
+                                </button>
+                                <button
+                                    onClick={selectAllBalanced}
+                                    className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                                >
+                                    Balanced (5.0)
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+
                     {/* ==================== CLAUSE TREE ==================== */}
                     <div ref={clauseListRef} className="flex-1 overflow-y-auto">
                         {/* Waiting for clauses to arrive */}
@@ -3140,75 +3287,91 @@ INSTRUCTIONS:
 
                                                 return (
                                                     <div key={child.clauseId} className="relative group">
-                                                        <button
-                                                            onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
-                                                            disabled={!isClickable}
-                                                            className={`w-full flex items-center gap-2 pl-8 pr-8 py-2 text-left transition-colors ${isSelected
-                                                                ? 'bg-teal-50 border-l-2 border-teal-500'
-                                                                : isClickable
-                                                                    ? 'hover:bg-slate-50 border-l-2 border-transparent'
-                                                                    : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
-                                                                }`}
+                                                        <div className={`w-full flex items-center gap-1 pl-2 pr-8 py-2 text-left transition-colors ${isSelected
+                                                            ? 'bg-teal-50 border-l-2 border-teal-500'
+                                                            : isClickable
+                                                                ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                                                : 'opacity-50 border-l-2 border-transparent'
+                                                            }`}
                                                         >
-                                                            <StatusIcon status={child.processingStatus} />
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-1">
-                                                                    <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'
-                                                                        }`}>
-                                                                        {child.clauseNumber}
-                                                                    </span>
-                                                                    <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'
-                                                                        }`}>
-                                                                        {child.clauseName}
-                                                                    </span>
+                                                            {/* Bulk select checkbox */}
+                                                            {child.clarenceCertified && !hasCurrentUserAgreed(child.clauseId) && (
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={bulkSelectedIds.has(child.clauseId)}
+                                                                    onChange={(e) => {
+                                                                        e.stopPropagation()
+                                                                        toggleBulkSelect(child.clauseId)
+                                                                    }}
+                                                                    className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 focus:ring-1 cursor-pointer flex-shrink-0"
+                                                                />
+                                                            )}
+                                                            {(!child.clarenceCertified || hasCurrentUserAgreed(child.clauseId)) && (
+                                                                <div className="w-3.5 flex-shrink-0" />
+                                                            )}
+                                                            <button
+                                                                onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
+                                                                disabled={!isClickable}
+                                                                className="flex items-center gap-2 flex-1 min-w-0"
+                                                            >
+                                                                <StatusIcon status={child.processingStatus} />
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-1">
+                                                                        <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
+                                                                            {child.clauseNumber}
+                                                                        </span>
+                                                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
+                                                                            {child.clauseName}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                            {child.clarenceCertified && child.clarencePosition && (
-                                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                                    child.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
-                                                                        'bg-blue-100 text-blue-700'
-                                                                    }`}>
-                                                                    {child.clarencePosition.toFixed(1)}
-                                                                </span>
-                                                            )}
-                                                            {/* Agreement/Query status indicator - Dual party tracking */}
-                                                            {(() => {
-                                                                const status = getAgreementStatus(child.clauseId)
-                                                                if (status === 'both') {
-                                                                    return (
-                                                                        <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Both parties agreed">
-                                                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                                            </svg>
-                                                                        </span>
-                                                                    )
-                                                                }
-                                                                if (status === 'you_only') {
-                                                                    return (
-                                                                        <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0" title={`You agreed - awaiting ${getOtherPartyName()}`}>
-                                                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                            </svg>
-                                                                        </span>
-                                                                    )
-                                                                }
-                                                                if (status === 'other_only') {
-                                                                    return (
-                                                                        <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title={`${getOtherPartyName()} agreed - awaiting you`}>
-                                                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
-                                                                            </svg>
-                                                                        </span>
-                                                                    )
-                                                                }
-                                                                return null
-                                                            })()}
-                                                            {queriedClauseIds.has(child.clauseId) && (
-                                                                <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
-                                                                    <span className="text-white text-[9px] font-bold">?</span>
-                                                                </span>
-                                                            )}
-                                                        </button>
+                                                                {child.clarenceCertified && child.clarencePosition && (
+                                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                                        child.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                                            'bg-blue-100 text-blue-700'
+                                                                        }`}>
+                                                                        {child.clarencePosition.toFixed(1)}
+                                                                    </span>
+                                                                )}
+                                                                {/* Agreement/Query status indicator - Dual party tracking */}
+                                                                {(() => {
+                                                                    const status = getAgreementStatus(child.clauseId)
+                                                                    if (status === 'both') {
+                                                                        return (
+                                                                            <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Both parties agreed">
+                                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                                                </svg>
+                                                                            </span>
+                                                                        )
+                                                                    }
+                                                                    if (status === 'you_only') {
+                                                                        return (
+                                                                            <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0" title={`You agreed - awaiting ${getOtherPartyName()}`}>
+                                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                                </svg>
+                                                                            </span>
+                                                                        )
+                                                                    }
+                                                                    if (status === 'other_only') {
+                                                                        return (
+                                                                            <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title={`${getOtherPartyName()} agreed - awaiting you`}>
+                                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
+                                                                                </svg>
+                                                                            </span>
+                                                                        )
+                                                                    }
+                                                                    return null
+                                                                })()}
+                                                                {queriedClauseIds.has(child.clauseId) && (
+                                                                    <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
+                                                                        <span className="text-white text-[9px] font-bold">?</span>
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        </div>
 
                                                         {/* 3-dot kebab menu - Initiator Only */}
                                                         {isInitiator && (
@@ -3261,72 +3424,90 @@ INSTRUCTIONS:
 
                                     return (
                                         <div key={parent.clauseId} className="relative group">
-                                            <button
-                                                onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
-                                                disabled={!isClickable}
-                                                className={`w-full flex items-center gap-2 px-3 pr-8 py-2 text-left transition-colors ${isSelected
-                                                    ? 'bg-teal-50 border-l-2 border-teal-500'
-                                                    : isClickable
-                                                        ? 'hover:bg-slate-50 border-l-2 border-transparent'
-                                                        : 'opacity-50 cursor-not-allowed border-l-2 border-transparent'
-                                                    }`}
+                                            <div className={`w-full flex items-center gap-1 px-2 pr-8 py-2 text-left transition-colors ${isSelected
+                                                ? 'bg-teal-50 border-l-2 border-teal-500'
+                                                : isClickable
+                                                    ? 'hover:bg-slate-50 border-l-2 border-transparent'
+                                                    : 'opacity-50 border-l-2 border-transparent'
+                                                }`}
                                             >
-                                                <StatusIcon status={parent.processingStatus} />
-                                                <div className="flex-1 min-w-0">
-                                                    <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
-                                                        {parent.clauseNumber}.
-                                                    </span>
-                                                    {' '}
-                                                    <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
-                                                        {parent.clauseName}
-                                                    </span>
-                                                </div>
-                                                {parent.clarenceCertified && parent.clarencePosition && (
-                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                        parent.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
-                                                            'bg-blue-100 text-blue-700'
-                                                        }`}>
-                                                        {parent.clarencePosition.toFixed(1)}
-                                                    </span>
+                                                {/* Bulk select checkbox */}
+                                                {parent.clarenceCertified && !hasCurrentUserAgreed(parent.clauseId) && (
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={bulkSelectedIds.has(parent.clauseId)}
+                                                        onChange={(e) => {
+                                                            e.stopPropagation()
+                                                            toggleBulkSelect(parent.clauseId)
+                                                        }}
+                                                        className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 focus:ring-1 cursor-pointer flex-shrink-0"
+                                                    />
                                                 )}
-                                                {/* Agreement/Query status indicator - Dual party tracking */}
-                                                {(() => {
-                                                    const status = getAgreementStatus(parent.clauseId)
-                                                    if (status === 'both') {
-                                                        return (
-                                                            <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Both parties agreed">
-                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                                </svg>
-                                                            </span>
-                                                        )
-                                                    }
-                                                    if (status === 'you_only') {
-                                                        return (
-                                                            <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0" title={`You agreed - awaiting ${getOtherPartyName()}`}>
-                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                </svg>
-                                                            </span>
-                                                        )
-                                                    }
-                                                    if (status === 'other_only') {
-                                                        return (
-                                                            <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title={`${getOtherPartyName()} agreed - awaiting you`}>
-                                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
-                                                                </svg>
-                                                            </span>
-                                                        )
-                                                    }
-                                                    return null
-                                                })()}
-                                                {queriedClauseIds.has(parent.clauseId) && (
-                                                    <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
-                                                        <span className="text-white text-[9px] font-bold">?</span>
-                                                    </span>
+                                                {(!parent.clarenceCertified || hasCurrentUserAgreed(parent.clauseId)) && (
+                                                    <div className="w-3.5 flex-shrink-0" />
                                                 )}
-                                            </button>
+                                                <button
+                                                    onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
+                                                    disabled={!isClickable}
+                                                    className="flex items-center gap-2 flex-1 min-w-0"
+                                                >
+                                                    <StatusIcon status={parent.processingStatus} />
+                                                    <div className="flex-1 min-w-0">
+                                                        <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
+                                                            {parent.clauseNumber}.
+                                                        </span>
+                                                        {' '}
+                                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
+                                                            {parent.clauseName}
+                                                        </span>
+                                                    </div>
+                                                    {parent.clarenceCertified && parent.clarencePosition && (
+                                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                            parent.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                                'bg-blue-100 text-blue-700'
+                                                            }`}>
+                                                            {parent.clarencePosition.toFixed(1)}
+                                                        </span>
+                                                    )}
+                                                    {/* Agreement/Query status indicator - Dual party tracking */}
+                                                    {(() => {
+                                                        const status = getAgreementStatus(parent.clauseId)
+                                                        if (status === 'both') {
+                                                            return (
+                                                                <span className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0" title="Both parties agreed">
+                                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </span>
+                                                            )
+                                                        }
+                                                        if (status === 'you_only') {
+                                                            return (
+                                                                <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0" title={`You agreed - awaiting ${getOtherPartyName()}`}>
+                                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                    </svg>
+                                                                </span>
+                                                            )
+                                                        }
+                                                        if (status === 'other_only') {
+                                                            return (
+                                                                <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title={`${getOtherPartyName()} agreed - awaiting you`}>
+                                                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
+                                                                    </svg>
+                                                                </span>
+                                                            )
+                                                        }
+                                                        return null
+                                                    })()}
+                                                    {queriedClauseIds.has(parent.clauseId) && (
+                                                        <span className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center flex-shrink-0" title="Query pending">
+                                                            <span className="text-white text-[9px] font-bold">?</span>
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            </div>
 
                                             {/* 3-dot kebab menu - Initiator Only */}
                                             {isInitiator && (
