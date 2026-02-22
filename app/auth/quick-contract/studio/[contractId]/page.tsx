@@ -347,6 +347,12 @@ function QuickContractStudioContent() {
         isOnline: boolean
     } | null>(null)
 
+    const [initiatorInfo, setInitiatorInfo] = useState<{
+        name: string
+        company: string | null
+    } | null>(null)
+
+
     // Progressive loading / certification polling state (must be before any early returns)
     const [isPolling, setIsPolling] = useState(false)
     const [certificationProgress, setCertificationProgress] = useState({ certified: 0, total: 0, failed: 0 })
@@ -1143,12 +1149,23 @@ function QuickContractStudioContent() {
         return 'none'
     }
 
-    // Get other party's display name
     const getOtherPartyName = (): string => {
-        if (respondentInfo?.name) {
-            return getPartyRole() === 'initiator' ? respondentInfo.name : (userInfo?.fullName || 'Initiator')
+        if (getPartyRole() === 'initiator') {
+            // Current user is initiator → other party is respondent
+            return respondentInfo?.name || 'Respondent'
+        } else {
+            // Current user is respondent → other party is initiator
+            return initiatorInfo?.name || 'Initiator'
         }
-        return getPartyRole() === 'initiator' ? 'Respondent' : 'Initiator'
+    }
+
+    // Also add a helper for the other party's company
+    const getOtherPartyCompany = (): string | null => {
+        if (getPartyRole() === 'initiator') {
+            return respondentInfo?.company || null
+        } else {
+            return initiatorInfo?.company || null
+        }
     }
 
     // Count fully agreed clauses (both parties)
@@ -1543,11 +1560,11 @@ function QuickContractStudioContent() {
     // Note: getPartyRole() is defined in SECTION 4D above
     // Note: getOtherPartyName() is defined in SECTION 4D above with the agreement helpers
 
-    // Load respondent info from qc_recipients
-    const loadRespondentInfo = useCallback(async () => {
+    // Load both party info - works for both initiator and respondent viewers
+    const loadPartyInfo = useCallback(async () => {
         if (!contractId) return
         try {
-            // Find the quick_contract record, then get recipient
+            // Load respondent info from qc_recipients
             const { data: qcData } = await supabase
                 .from('quick_contracts')
                 .select('quick_contract_id')
@@ -1566,16 +1583,41 @@ function QuickContractStudioContent() {
                     setRespondentInfo({
                         name: recipientData.recipient_name || 'Respondent',
                         company: recipientData.recipient_company || null,
-                        isOnline: false // Will be enhanced with presence tracking later
+                        isOnline: false
+                    })
+                }
+            }
+
+            // Load initiator info from uploaded_contracts → users
+            const { data: contractData } = await supabase
+                .from('uploaded_contracts')
+                .select('uploaded_by_user_id, company_id')
+                .eq('contract_id', contractId)
+                .single()
+
+            if (contractData?.uploaded_by_user_id) {
+                const { data: initiatorUser } = await supabase
+                    .from('users')
+                    .select('first_name, last_name, company_id, companies(company_name)')
+                    .eq('user_id', contractData.uploaded_by_user_id)
+                    .single()
+
+                if (initiatorUser) {
+                    const name = `${initiatorUser.first_name || ''} ${initiatorUser.last_name || ''}`.trim()
+                    setInitiatorInfo({
+                        name: name || 'Initiator',
+                        company: (initiatorUser.companies as any)?.company_name || null
                     })
                 }
             }
         } catch (err) {
-            console.log('Could not load respondent info:', err)
+            console.log('Could not load party info:', err)
         }
     }, [contractId])
 
-
+    useEffect(() => {
+        loadPartyInfo()
+    }, [loadPartyInfo])
 
     // ========================================================================
     // SECTION 4D-2: DRAFT EDITING HANDLERS
@@ -4724,7 +4766,7 @@ INSTRUCTIONS:
                 <QCPartyChatPanel
                     contractId={contractId}
                     otherPartyName={getOtherPartyName()}
-                    otherPartyCompany={respondentInfo?.company}
+                    otherPartyCompany={getOtherPartyCompany()}
                     currentUserId={userInfo.userId}
                     currentUserName={userInfo.fullName}
                     partyRole={getPartyRole()}
