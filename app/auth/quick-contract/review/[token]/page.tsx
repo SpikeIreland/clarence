@@ -209,6 +209,30 @@ function ProviderLobbyContent() {
 
                 const qc = recipientData.quick_contracts as any
 
+                // Guard: if quick_contracts join returned null (RLS or missing data)
+                if (!qc) {
+                    console.error('Quick contract data not accessible — possible RLS policy issue')
+
+                    // Fallback: load quick_contracts directly by ID
+                    const { data: fallbackQc, error: fallbackError } = await supabase
+                        .from('quick_contracts')
+                        .select('quick_contract_id, contract_name, contract_type, description, status, source_contract_id, created_by_user_id, company_id, created_at')
+                        .eq('quick_contract_id', recipientData.quick_contract_id)
+                        .single()
+
+                    if (fallbackError || !fallbackQc) {
+                        console.error('Fallback contract load failed:', fallbackError)
+                        setError('Unable to load contract details. Please try again or contact the sender.')
+                        setLoading(false)
+                        return
+                    }
+
+                    // Use fallback data — continue with same logic below
+                    Object.assign(recipientData, { quick_contracts: fallbackQc })
+                }
+
+                const contract = (recipientData.quick_contracts || qc) as any
+
                 // Step 2: Set recipient info
                 setRecipient({
                     recipientId: recipientData.recipient_id,
@@ -223,11 +247,11 @@ function ProviderLobbyContent() {
                 let senderName: string | null = null
                 let senderCompany: string | null = null
 
-                if (qc.created_by_user_id) {
+                if (contract?.created_by_user_id) {
                     const { data: userData } = await supabase
                         .from('users')
                         .select('first_name, last_name')
-                        .eq('user_id', qc.created_by_user_id)
+                        .eq('user_id', contract.created_by_user_id)
                         .single()
 
                     if (userData) {
@@ -235,11 +259,11 @@ function ProviderLobbyContent() {
                     }
                 }
 
-                if (qc.company_id) {
+                if (contract?.company_id) {
                     const { data: companyData } = await supabase
                         .from('companies')
                         .select('company_name')
-                        .eq('company_id', qc.company_id)
+                        .eq('company_id', contract.company_id)
                         .single()
 
                     if (companyData) {
@@ -247,36 +271,36 @@ function ProviderLobbyContent() {
                     }
                 }
 
-                // Step 4: Get clause stats (count + certified count only, no full clause load)
+                // Step 4: Get clause stats
                 let clauseCount = 0
                 let certifiedCount = 0
 
-                if (qc.source_contract_id) {
+                if (contract?.source_contract_id) {
                     const { data: clauseStats, error: clauseError } = await supabase
                         .from('uploaded_contract_clauses')
                         .select('clause_id, clarence_certified, is_header')
-                        .eq('contract_id', qc.source_contract_id)
+                        .eq('contract_id', contract.source_contract_id)
 
                     if (!clauseError && clauseStats) {
-                        const leafClauses = clauseStats.filter(c => !c.is_header)
+                        const leafClauses = clauseStats.filter((c: any) => !c.is_header)
                         clauseCount = leafClauses.length
-                        certifiedCount = leafClauses.filter(c => c.clarence_certified).length
+                        certifiedCount = leafClauses.filter((c: any) => c.clarence_certified).length
                     }
                 }
 
                 // Step 5: Set contract summary
                 setContract({
-                    contractId: qc.source_contract_id || qc.quick_contract_id,
-                    quickContractId: qc.quick_contract_id,
-                    contractName: qc.contract_name,
-                    contractType: qc.contract_type || 'other',
-                    description: qc.description,
-                    status: qc.status,
+                    contractId: contract?.source_contract_id || contract?.quick_contract_id,
+                    quickContractId: contract?.quick_contract_id,
+                    contractName: contract?.contract_name || 'Contract',
+                    contractType: contract?.contract_type || 'other',
+                    description: contract?.description,
+                    status: contract?.status,
                     clauseCount,
                     certifiedCount,
                     senderName,
                     senderCompany,
-                    createdAt: qc.created_at
+                    createdAt: contract?.created_at
                 })
 
                 // Step 6: Track view (non-blocking)
