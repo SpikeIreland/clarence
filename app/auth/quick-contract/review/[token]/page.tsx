@@ -147,6 +147,13 @@ function ProviderLobbyContent() {
     // ========================================================================
     // SECTION 4B: DATA LOADING
     // ========================================================================
+    // Flow:
+    //   1. Look up qc_recipients by access_token
+    //   2. If user_id is null, CLAIM the invitation (set user_id = current user)
+    //   3. Load quick_contracts (via join or fallback direct query)
+    //   4. Load sender details and clause stats
+    //   5. Update view tracking (first_viewed_at, view_count)
+    // ========================================================================
 
     useEffect(() => {
         async function loadLobbyData() {
@@ -157,7 +164,20 @@ function ProviderLobbyContent() {
             }
 
             try {
-                // Step 1: Validate token and load recipient + quick_contract
+                // ---------------------------------------------------------
+                // STEP 1: Get current authenticated user
+                // ---------------------------------------------------------
+                const { data: { user: authUser } } = await supabase.auth.getUser()
+
+                if (!authUser) {
+                    setError('Please sign in to view this contract. If you don\'t have an account, register first and then click the link again.')
+                    setLoading(false)
+                    return
+                }
+
+                // ---------------------------------------------------------
+                // STEP 2: Look up recipient by access_token
+                // ---------------------------------------------------------
                 const { data: recipientData, error: recipientError } = await supabase
                     .from('qc_recipients')
                     .select(`
@@ -167,20 +187,10 @@ function ProviderLobbyContent() {
                         recipient_company,
                         status,
                         quick_contract_id,
+                        user_id,
                         first_viewed_at,
                         view_count,
-                        access_token_expires_at,
-                        quick_contracts (
-                            quick_contract_id,
-                            contract_name,
-                            contract_type,
-                            description,
-                            status,
-                            source_contract_id,
-                            created_by_user_id,
-                            company_id,
-                            created_at
-                        )
+                        access_token_expires_at
                     `)
                     .eq('access_token', accessToken)
                     .single()
@@ -192,7 +202,9 @@ function ProviderLobbyContent() {
                     return
                 }
 
-                // Check token expiry
+                // ---------------------------------------------------------
+                // STEP 3: Check token expiry
+                // ---------------------------------------------------------
                 if (recipientData.access_token_expires_at) {
                     const expiresAt = new Date(recipientData.access_token_expires_at)
                     if (expiresAt < new Date()) {
@@ -202,38 +214,77 @@ function ProviderLobbyContent() {
                     }
                 }
 
-                // Check if already declined
+                // ---------------------------------------------------------
+                // STEP 4: Claim the invitation (link user_id if unclaimed)
+                // ---------------------------------------------------------
+                if (!recipientData.user_id) {
+                    // First time this invitation is being accessed by an authenticated user
+                    // Claim it by setting user_id to the current user
+                    const { error: claimError } = await supabase
+                        .from('qc_recipients')
+                        .update({
+                            user_id: authUser.id,
+                            first_viewed_at: recipientData.first_viewed_at || new Date().toISOString(),
+                            view_count: (recipientData.view_count || 0) + 1,
+                            last_viewed_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('recipient_id', recipientData.recipient_id)
+
+                    if (claimError) {
+                        console.error('Failed to claim invitation:', claimError)
+                        // Non-fatal — continue loading, they can still view
+                    } else {
+                        console.log('Invitation claimed by user:', authUser.id)
+                    }
+                } else if (recipientData.user_id !== authUser.id) {
+                    // Already claimed by a different user
+                    setError('This invitation has already been claimed by another account. Please sign in with the correct account or contact the sender.')
+                    setLoading(false)
+                    return
+                } else {
+                    // Returning visit — update view tracking
+                    await supabase
+                        .from('qc_recipients')
+                        .update({
+                            view_count: (recipientData.view_count || 0) + 1,
+                            last_viewed_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('recipient_id', recipientData.recipient_id)
+                }
+
+                // ---------------------------------------------------------
+                // STEP 5: Check if already declined
+                // ---------------------------------------------------------
                 if (recipientData.status === 'declined') {
                     setHasDeclined(true)
                 }
 
-                const qc = recipientData.quick_contracts as any
+                // ---------------------------------------------------------
+                // STEP 6: Load quick_contracts (join or fallback)
+                // ---------------------------------------------------------
+                let contract: any = null
 
-                // Guard: if quick_contracts join returned null (RLS or missing data)
-                if (!qc) {
-                    console.error('Quick contract data not accessible — possible RLS policy issue')
+                // Try direct query (more reliable than join with RLS)
+                const { data: contractData, error: contractError } = await supabase
+                    .from('quick_contracts')
+                    .select('quick_contract_id, contract_name, contract_type, description, status, source_contract_id, created_by_user_id, company_id, created_at')
+                    .eq('quick_contract_id', recipientData.quick_contract_id)
+                    .single()
 
-                    // Fallback: load quick_contracts directly by ID
-                    const { data: fallbackQc, error: fallbackError } = await supabase
-                        .from('quick_contracts')
-                        .select('quick_contract_id, contract_name, contract_type, description, status, source_contract_id, created_by_user_id, company_id, created_at')
-                        .eq('quick_contract_id', recipientData.quick_contract_id)
-                        .single()
-
-                    if (fallbackError || !fallbackQc) {
-                        console.error('Fallback contract load failed:', fallbackError)
-                        setError('Unable to load contract details. Please try again or contact the sender.')
-                        setLoading(false)
-                        return
-                    }
-
-                    // Use fallback data — continue with same logic below
-                    Object.assign(recipientData, { quick_contracts: fallbackQc })
+                if (contractError || !contractData) {
+                    console.error('Contract load error:', contractError)
+                    setError('Unable to load contract details. The contract may have been removed.')
+                    setLoading(false)
+                    return
                 }
 
-                const contract = (recipientData.quick_contracts || qc) as any
+                contract = contractData
 
-                // Step 2: Set recipient info
+                // ---------------------------------------------------------
+                // STEP 7: Set recipient state
+                // ---------------------------------------------------------
                 setRecipient({
                     recipientId: recipientData.recipient_id,
                     recipientName: recipientData.recipient_name,
@@ -243,11 +294,13 @@ function ProviderLobbyContent() {
                     quickContractId: recipientData.quick_contract_id
                 })
 
-                // Step 3: Load sender details
+                // ---------------------------------------------------------
+                // STEP 8: Load sender details
+                // ---------------------------------------------------------
                 let senderName: string | null = null
                 let senderCompany: string | null = null
 
-                if (contract?.created_by_user_id) {
+                if (contract.created_by_user_id) {
                     const { data: userData } = await supabase
                         .from('users')
                         .select('first_name, last_name')
@@ -259,7 +312,7 @@ function ProviderLobbyContent() {
                     }
                 }
 
-                if (contract?.company_id) {
+                if (contract.company_id) {
                     const { data: companyData } = await supabase
                         .from('companies')
                         .select('company_name')
@@ -271,11 +324,13 @@ function ProviderLobbyContent() {
                     }
                 }
 
-                // Step 4: Get clause stats
+                // ---------------------------------------------------------
+                // STEP 9: Get clause stats
+                // ---------------------------------------------------------
                 let clauseCount = 0
                 let certifiedCount = 0
 
-                if (contract?.source_contract_id) {
+                if (contract.source_contract_id) {
                     const { data: clauseStats, error: clauseError } = await supabase
                         .from('uploaded_contract_clauses')
                         .select('clause_id, clarence_certified, is_header')
@@ -288,44 +343,27 @@ function ProviderLobbyContent() {
                     }
                 }
 
-                // Step 5: Set contract summary
+                // ---------------------------------------------------------
+                // STEP 10: Set contract summary
+                // ---------------------------------------------------------
                 setContract({
-                    contractId: contract?.source_contract_id || contract?.quick_contract_id,
-                    quickContractId: contract?.quick_contract_id,
-                    contractName: contract?.contract_name || 'Contract',
-                    contractType: contract?.contract_type || 'other',
-                    description: contract?.description,
-                    status: contract?.status,
+                    contractId: contract.source_contract_id || contract.quick_contract_id,
+                    quickContractId: contract.quick_contract_id,
+                    contractName: contract.contract_name || 'Contract',
+                    contractType: contract.contract_type || 'other',
+                    description: contract.description,
+                    status: contract.status,
                     clauseCount,
                     certifiedCount,
                     senderName,
                     senderCompany,
-                    createdAt: contract?.created_at
+                    createdAt: contract.created_at
                 })
-
-                // Step 6: Track view (non-blocking)
-                const updates: Record<string, any> = {
-                    view_count: (recipientData.view_count || 0) + 1,
-                    last_viewed_at: new Date().toISOString()
-                }
-
-                if (!recipientData.first_viewed_at) {
-                    updates.first_viewed_at = new Date().toISOString()
-                    if (recipientData.status === 'invited') {
-                        updates.status = 'viewed'
-                    }
-                }
-
-                await supabase
-                    .from('qc_recipients')
-                    .update(updates)
-                    .eq('recipient_id', recipientData.recipient_id)
-
-                setLoading(false)
 
             } catch (err) {
                 console.error('Lobby load error:', err)
-                setError('An unexpected error occurred. Please try refreshing the page.')
+                setError('Something went wrong loading the contract. Please try refreshing the page.')
+            } finally {
                 setLoading(false)
             }
         }
