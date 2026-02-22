@@ -1281,7 +1281,7 @@ function DocumentCentreContent() {
             return;
         }
 
-const endpointMap = mode === 'quick_contract' ? QC_ENDPOINTS : MEDIATION_ENDPOINTS;
+        const endpointMap = mode === 'quick_contract' ? QC_ENDPOINTS : MEDIATION_ENDPOINTS;
         const endpoint = endpointMap[documentId];
         if (!endpoint) {
             console.error(`No endpoint configured for document: ${documentId} in mode: ${mode}`);

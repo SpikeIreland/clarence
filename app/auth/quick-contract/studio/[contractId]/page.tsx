@@ -368,6 +368,7 @@ function QuickContractStudioContent() {
     // Draft-Position Sync: Prompt to regenerate draft after position change
     const [showDraftOfferPrompt, setShowDraftOfferPrompt] = useState(false)
     const [pendingDraftPosition, setPendingDraftPosition] = useState<number | null>(null)
+    const [isInitiator, setIsInitiator] = useState(true)
     const [generatingPositionDraft, setGeneratingPositionDraft] = useState(false)
     // Track the target position for a generated draft (so we can update clarence_position on save)
     const [draftTargetPosition, setDraftTargetPosition] = useState<number | null>(null)
@@ -440,6 +441,11 @@ function QuickContractStudioContent() {
                     createdAt: contractData.created_at,
                     extractedText: contractData.extracted_text
                 })
+
+                // Set permission flag based on party role
+                const userIsInitiator = contractData.uploaded_by_user_id === user.userId
+                setIsInitiator(userIsInitiator)
+                console.log(`Party role: ${userIsInitiator ? 'initiator' : 'respondent'}`)
 
                 // In the data loading section, after fetching the contract:
                 if (contractData.status === 'processing') {
@@ -2819,70 +2825,73 @@ INSTRUCTIONS:
                             &larr; Back
                         </button>
 
-                        {isTemplateMode ? (
-                            /* ---- TEMPLATE MODE: Save as Template ---- */
+                        {/* Commit / Template buttons - Initiator Only */}
+                        {isInitiator && (
                             <>
-                                <button
-                                    onClick={() => {
-                                        setTemplateName(contract?.contractName || '')
-                                        setShowSaveTemplateModal(true)
-                                    }}
-                                    disabled={clauses.filter(c => !c.isHeader && !c.clarenceCertified).length > 0}
-                                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                    </svg>
-                                    Save as Template
-                                </button>
+                                {isTemplateMode ? (
+                                    /* ---- TEMPLATE MODE: Save as Template ---- */
+                                    <>
+                                        <button
+                                            onClick={() => {
+                                                setTemplateName(contract?.contractName || '')
+                                                setShowSaveTemplateModal(true)
+                                            }}
+                                            disabled={clauses.filter(c => !c.isHeader && !c.clarenceCertified).length > 0}
+                                            className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                            </svg>
+                                            Save as Template
+                                        </button>
+                                    </>
+                                ) : (
+                                    /* ---- NORMAL MODE: Commit Contract ---- */
+                                    (() => {
+                                        const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+                                        const allFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
+                                        const currentUserFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasCurrentUserAgreed(c.clauseId))
+                                        const otherPartyFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasOtherPartyAgreed(c.clauseId))
+
+                                        let buttonClass = 'bg-amber-600 hover:bg-amber-700'
+                                        let buttonText = 'Commit Contract'
+                                        let buttonIcon = (
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                            </svg>
+                                        )
+                                        let buttonAction = () => setCommitModalState('confirm')
+
+                                        if (allFullyAgreed) {
+                                            buttonClass = 'bg-emerald-600 hover:bg-emerald-700'
+                                            buttonText = 'Both Agreed - Commit'
+                                        } else if (currentUserFullyAgreed) {
+                                            buttonClass = 'bg-teal-600 hover:bg-teal-700'
+                                            buttonText = 'Agree'
+                                            buttonIcon = (
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )
+                                            buttonAction = () => {
+                                                router.push(`/auth/document-centre?contract_id=${contract?.contractId || contractId}`)
+                                            }
+                                        } else if (!currentUserFullyAgreed) {
+                                            buttonText = 'Agree All & Commit'
+                                        }
+
+                                        return (
+                                            <button
+                                                onClick={buttonAction}
+                                                className={`px-5 py-2 ${buttonClass} text-white rounded-lg font-medium transition-colors flex items-center gap-2`}
+                                            >
+                                                {buttonIcon}
+                                                {buttonText}
+                                            </button>
+                                        )
+                                    })()
+                                )}
                             </>
-                        ) : (
-                            /* ---- NORMAL MODE: Commit Contract ---- */
-                            (() => {
-                                const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-                                const allFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
-                                const currentUserFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasCurrentUserAgreed(c.clauseId))
-                                const otherPartyFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasOtherPartyAgreed(c.clauseId))
-
-                                // Button state based on agreement status
-                                let buttonClass = 'bg-amber-600 hover:bg-amber-700' // Default: not all agreed
-                                let buttonText = 'Commit Contract'
-                                let buttonIcon = (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                    </svg>
-                                )
-                                let buttonAction = () => setCommitModalState('confirm')
-
-                                if (allFullyAgreed) {
-                                    // Both parties have agreed - show commit button
-                                    buttonClass = 'bg-emerald-600 hover:bg-emerald-700'
-                                    buttonText = 'Both Agreed - Commit'
-                                } else if (currentUserFullyAgreed) {
-                                    // Current user has committed, waiting for other party
-                                    // Show "Agree" button that takes them to Document Centre
-                                    buttonClass = 'bg-teal-600 hover:bg-teal-700'
-                                    buttonText = 'Agree'
-                                    buttonIcon = (
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    )
-                                    buttonAction = () => router.push('/auth/document-centre?contract_id=' + contract?.contractId)
-                                }
-
-                                return (
-                                    <button
-                                        onClick={buttonAction}
-                                        disabled={leafClauses.length === 0}
-                                        className={`px-5 py-2 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${buttonClass} disabled:bg-slate-300 disabled:cursor-not-allowed`}
-                                        title={currentUserFullyAgreed && !allFullyAgreed ? `You've committed. Click to proceed to Document Centre.` : ''}
-                                    >
-                                        {buttonIcon}
-                                        {buttonText}
-                                    </button>
-                                )
-                            })()
                         )}
                     </div>
                 </div>
@@ -3122,42 +3131,44 @@ INSTRUCTIONS:
                                                             )}
                                                         </button>
 
-                                                        {/* 3-dot kebab menu */}
-                                                        <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation()
-                                                                    setClauseMenuOpen(isMenuOpen ? null : child.clauseId)
-                                                                }}
-                                                                className={`p-1 rounded hover:bg-slate-200 transition-colors ${isMenuOpen ? 'bg-slate-200' : 'opacity-0 group-hover:opacity-100'}`}
-                                                                title="Clause options"
-                                                            >
-                                                                <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
-                                                                    <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                                                                </svg>
-                                                            </button>
-
-                                                            {/* Dropdown menu */}
-                                                            {isMenuOpen && (
-                                                                <div
-                                                                    ref={clauseMenuRef}
-                                                                    className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                                        {/* 3-dot kebab menu - Initiator Only */}
+                                                        {isInitiator && (
+                                                            <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        setClauseMenuOpen(isMenuOpen ? null : child.clauseId)
+                                                                    }}
+                                                                    className={`p-1 rounded hover:bg-slate-200 transition-colors ${isMenuOpen ? 'bg-slate-200' : 'opacity-0 group-hover:opacity-100'}`}
+                                                                    title="Clause options"
                                                                 >
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            handleDeleteClauseClick(child)
-                                                                        }}
-                                                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                                    <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                                                    </svg>
+                                                                </button>
+
+                                                                {/* Dropdown menu */}
+                                                                {isMenuOpen && (
+                                                                    <div
+                                                                        ref={clauseMenuRef}
+                                                                        className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
                                                                     >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                                        </svg>
-                                                                        Delete Clause
-                                                                    </button>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation()
+                                                                                handleDeleteClauseClick(child)
+                                                                            }}
+                                                                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                            </svg>
+                                                                            Delete Clause
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )
                                             })}
@@ -3238,42 +3249,44 @@ INSTRUCTIONS:
                                                 )}
                                             </button>
 
-                                            {/* 3-dot kebab menu */}
-                                            <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setClauseMenuOpen(isMenuOpen ? null : parent.clauseId)
-                                                    }}
-                                                    className={`p-1 rounded hover:bg-slate-200 transition-colors ${isMenuOpen ? 'bg-slate-200' : 'opacity-0 group-hover:opacity-100'}`}
-                                                    title="Clause options"
-                                                >
-                                                    <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                                                    </svg>
-                                                </button>
-
-                                                {/* Dropdown menu */}
-                                                {isMenuOpen && (
-                                                    <div
-                                                        ref={clauseMenuRef}
-                                                        className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                            {/* 3-dot kebab menu - Initiator Only */}
+                                            {isInitiator && (
+                                                <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            setClauseMenuOpen(isMenuOpen ? null : parent.clauseId)
+                                                        }}
+                                                        className={`p-1 rounded hover:bg-slate-200 transition-colors ${isMenuOpen ? 'bg-slate-200' : 'opacity-0 group-hover:opacity-100'}`}
+                                                        title="Clause options"
                                                     >
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                handleDeleteClauseClick(parent)
-                                                            }}
-                                                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                        <svg className="w-4 h-4 text-slate-500" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                                        </svg>
+                                                    </button>
+
+                                                    {/* Dropdown menu */}
+                                                    {isMenuOpen && (
+                                                        <div
+                                                            ref={clauseMenuRef}
+                                                            className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
                                                         >
-                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                            </svg>
-                                                            Delete Clause
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    handleDeleteClauseClick(parent)
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                </svg>
+                                                                Delete Clause
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     )
                                 }
@@ -3492,15 +3505,18 @@ INSTRUCTIONS:
                                                     {/* PERSISTENCE: Display user's adjusted position if set, otherwise CLARENCE's */}
                                                     {getUserDisplayPosition(selectedClause) !== null && (
                                                         <div
-                                                            className="absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all cursor-grab active:cursor-grabbing hover:scale-110"
+                                                            className={`absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all ${isInitiator ? 'cursor-grab active:cursor-grabbing hover:scale-110' : 'cursor-default'}`}
                                                             style={{
                                                                 left: `${(((getUserDisplayPosition(selectedClause) || 5) - 1) / 9) * 100}%`,
                                                                 top: '50%',
                                                                 transform: 'translate(-50%, -50%)'
                                                             }}
-                                                            title={`Position: ${(getUserDisplayPosition(selectedClause) || 5).toFixed(1)} - Drag to adjust`}
+                                                            title={isInitiator
+                                                                ? `Position: ${(getUserDisplayPosition(selectedClause) || 5).toFixed(1)} - Drag to adjust`
+                                                                : `Position: ${(getUserDisplayPosition(selectedClause) || 5).toFixed(1)} (view only)`
+                                                            }
                                                             draggable={false}
-                                                            onMouseDown={(e) => {
+                                                            onMouseDown={isInitiator ? (e) => {
                                                                 e.preventDefault()
                                                                 const bar = e.currentTarget.parentElement
                                                                 if (!bar) return
@@ -3510,9 +3526,8 @@ INSTRUCTIONS:
                                                                     const x = moveEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
                                                                     const newPosition = 1 + (percent * 9)
-                                                                    const roundedPosition = Math.round(newPosition * 2) / 2 // Round to nearest 0.5
+                                                                    const roundedPosition = Math.round(newPosition * 2) / 2
 
-                                                                    // PERSISTENCE: Update party position (not clarencePosition)
                                                                     const role = getPartyRole()
                                                                     setClauses(prev => prev.map(c =>
                                                                         c.clauseId === selectedClause.clauseId
@@ -3531,7 +3546,6 @@ INSTRUCTIONS:
                                                                     document.removeEventListener('mousemove', handleMouseMove)
                                                                     document.removeEventListener('mouseup', handleMouseUp)
 
-                                                                    // PERSISTENCE: Calculate final position and mark dirty for auto-save
                                                                     const rect = bar.getBoundingClientRect()
                                                                     const x = upEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
@@ -3542,7 +3556,7 @@ INSTRUCTIONS:
 
                                                                 document.addEventListener('mousemove', handleMouseMove)
                                                                 document.addEventListener('mouseup', handleMouseUp)
-                                                            }}
+                                                            } : undefined}
                                                         >
                                                             C
                                                         </div>
@@ -4127,72 +4141,83 @@ INSTRUCTIONS:
                                                         </div>
                                                     </div>
 
-                                                    {/* Action Buttons */}
-                                                    <div className="flex items-center justify-between">
+                                                    {/* Action Buttons - Initiator Only */}
+                                                    {isInitiator && (
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                {/* Unlock to Edit Button */}
+                                                                <button
+                                                                    onClick={handleStartEditing}
+                                                                    className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors flex items-center gap-2"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                                                    </svg>
+                                                                    Unlock to Edit
+                                                                </button>
+
+                                                                {/* Create More Balanced Draft Button */}
+                                                                <button
+                                                                    onClick={handleCreateBalancedDraft}
+                                                                    disabled={generatingBalancedDraft || !selectedClause.clarenceCertified}
+                                                                    className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                    title={!selectedClause.clarenceCertified ? 'Clause must be certified before generating a balanced draft' : 'Generate a more balanced version of this clause'}
+                                                                >
+                                                                    {generatingBalancedDraft ? (
+                                                                        <>
+                                                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                            </svg>
+                                                                            Generating...
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                                                            </svg>
+                                                                            Create More Balanced Draft
+                                                                        </>
+                                                                    )}
+                                                                </button>
+
+                                                                {/* Discuss with CLARENCE Button */}
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const chatInput = document.querySelector('textarea[placeholder*="CLARENCE"]') as HTMLTextAreaElement
+                                                                        if (chatInput) { chatInput.focus(); chatInput.scrollIntoView({ behavior: 'smooth' }) }
+                                                                    }}
+                                                                    className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors flex items-center gap-2"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                                                    </svg>
+                                                                    Discuss with CLARENCE
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Respondent: Show only "Discuss with CLARENCE" */}
+                                                    {!isInitiator && (
                                                         <div className="flex items-center gap-2">
-                                                            {/* Unlock to Edit Button */}
                                                             <button
-                                                                onClick={handleStartEditing}
-                                                                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors flex items-center gap-2"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                                                                </svg>
-                                                                Unlock to Edit
-                                                            </button>
-
-                                                            {/* Create More Balanced Draft Button */}
-                                                            <button
-                                                                onClick={handleCreateBalancedDraft}
-                                                                disabled={generatingBalancedDraft || !selectedClause.clarenceCertified}
-                                                                className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                title={!selectedClause.clarenceCertified ? 'Clause must be certified before generating a balanced draft' : 'Generate a more balanced version of this clause'}
-                                                            >
-                                                                {generatingBalancedDraft ? (
-                                                                    <>
-                                                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                                        </svg>
-                                                                        Generating...
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                                                                        </svg>
-                                                                        Create More Balanced Draft
-                                                                    </>
-                                                                )}
-                                                            </button>
-
-                                                            {/* Discuss with CLARENCE Button */}
-                                                            <button
-                                                                onClick={handleDiscussClause}
-                                                                disabled={chatLoading}
-                                                                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                                                                onClick={() => {
+                                                                    const chatInput = document.querySelector('textarea[placeholder*="CLARENCE"]') as HTMLTextAreaElement
+                                                                    if (chatInput) { chatInput.focus(); chatInput.scrollIntoView({ behavior: 'smooth' }) }
+                                                                }}
+                                                                className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors flex items-center gap-2"
                                                             >
                                                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                                                 </svg>
                                                                 Discuss with CLARENCE
                                                             </button>
+                                                            <span className="text-xs text-slate-400 italic">
+                                                                Draft editing is managed by the contract initiator
+                                                            </span>
                                                         </div>
-
-                                                        {/* Reset Button (only show if modified) */}
-                                                        {selectedClause.draftModified && (
-                                                            <button
-                                                                onClick={handleResetDraft}
-                                                                disabled={savingDraft}
-                                                                className="px-4 py-2 text-sm text-amber-700 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors flex items-center gap-2"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                                </svg>
-                                                                Reset to Original
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -4676,7 +4701,7 @@ INSTRUCTIONS:
                 DRAFT-POSITION SYNC PROMPT OVERLAY
                 Shows when user changes position significantly from CLARENCE's assessment
                 ================================================================ */}
-            {showDraftOfferPrompt && pendingDraftPosition !== null && selectedClause && (
+            {isInitiator && showDraftOfferPrompt && pendingDraftPosition !== null && selectedClause && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                     <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
                         {/* Header */}
