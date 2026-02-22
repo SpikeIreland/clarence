@@ -390,30 +390,67 @@ function QuickContractStudioContent() {
             }
 
             try {
-                // Get user from localStorage (matching main Contract Studio pattern)
-                const storedAuth = localStorage.getItem('clarence_auth')
-                if (!storedAuth) {
-                    router.push('/auth/login?redirect=/auth/quick-contract/studio/' + contractId)
+                // ---------------------------------------------------------
+                // UNIFIED AUTH: Check Supabase session first (works for
+                // both customers and providers), then supplement with
+                // localStorage for additional user info.
+                // ---------------------------------------------------------
+                const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+
+                if (!supabaseUser) {
+                    // No Supabase session — redirect to login with return URL
+                    const returnUrl = `/auth/quick-contract/studio/${contractId}`
+                    router.push(`/auth/login?redirect=${encodeURIComponent(returnUrl)}`)
                     return
                 }
 
-                const authData = JSON.parse(storedAuth)
-                // Handle nested userInfo structure
-                const user = authData.userInfo || authData
+                // Try to get enriched user info from the users table
+                const { data: dbUser } = await supabase
+                    .from('users')
+                    .select('user_id, first_name, last_name, email, company_id, companies(company_name)')
+                    .eq('user_id', supabaseUser.id)
+                    .single()
 
-                if (!user.userId) {
-                    router.push('/auth/login?redirect=/auth/quick-contract/studio/' + contractId)
-                    return
+                let userId = supabaseUser.id
+                let email = supabaseUser.email || ''
+                let fullName = email
+                let companyId: string | null = null
+                let companyName: string | null = null
+
+                if (dbUser) {
+                    // Registered user with full profile
+                    userId = dbUser.user_id
+                    fullName = `${dbUser.first_name || ''} ${dbUser.last_name || ''}`.trim() || email
+                    companyId = dbUser.company_id || null
+                    companyName = (dbUser.companies as any)?.company_name || null
+                } else {
+                    // User exists in Supabase auth but not in users table
+                    // (could be a provider who registered via /provider/ flow)
+                    // Fall back to localStorage for supplementary info
+                    const storedAuth = localStorage.getItem('clarence_auth')
+                        || localStorage.getItem('clarence_provider_session')
+
+                    if (storedAuth) {
+                        try {
+                            const parsed = JSON.parse(storedAuth)
+                            const info = parsed.userInfo || parsed
+                            fullName = info.firstName
+                                ? `${info.firstName} ${info.lastName || ''}`.trim()
+                                : (info.contactName || info.companyName || email)
+                            companyId = info.companyId || null
+                            companyName = info.company || info.companyName || null
+                        } catch { /* ignore parse errors */ }
+                    }
                 }
 
                 setUserInfo({
-                    userId: user.userId,
-                    email: user.email || '',
-                    fullName: user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : (user.email || 'User'),
-                    companyId: user.companyId || null,
-                    companyName: user.company || null
+                    userId,
+                    email,
+                    fullName,
+                    companyId,
+                    companyName
                 })
-                setRoleUserId(user.userId || null)
+                setRoleUserId(userId)
 
                 // Load contract
                 const { data: contractData, error: contractError } = await supabase
@@ -443,7 +480,7 @@ function QuickContractStudioContent() {
                 })
 
                 // Set permission flag based on party role
-                const userIsInitiator = contractData.uploaded_by_user_id === user.userId
+                const userIsInitiator = contractData.uploaded_by_user_id === userId
                 setIsInitiator(userIsInitiator)
                 console.log(`Party role: ${userIsInitiator ? 'initiator' : 'respondent'}`)
 
@@ -631,7 +668,7 @@ function QuickContractStudioContent() {
                     setQueriedClauseIds(queried)
 
                     // Calculate initial unread count for current user
-                    const currentRole = contractData.uploaded_by_user_id === user.userId ? 'initiator' : 'respondent'
+                    const currentRole = contractData.uploaded_by_user_id === userId ? 'initiator' : 'respondent'
                     const unreadCount = mappedEvents.filter(e => {
                         if (currentRole === 'initiator') return !e.readByInitiator
                         return !e.readByRespondent
