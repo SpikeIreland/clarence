@@ -2,14 +2,16 @@
 
 // ============================================================================
 // QUICK CONTRACT STUDIO - Clause Review & Agreement
-// Version: 3.6 - Certification Polling Race Condition Fix
-// Date: 12 February 2026
-// Path: /app/auth/quick-contract/studio/[id]/page.tsx
+// Version: 3.7 - Loading Spinner Fix
+// Date: 24 February 2026
+// Path: /app/auth/quick-contract/studio/[contractId]/page.tsx
 // 
-// CHANGES in v3.6:
-// - FIX: Polling now checks BOTH processingStatus AND clarenceCertified
-// - FIX: "Save as Template" button was disabled even when all clauses certified
-// - Root cause: Polling stopped when status='certified' but before clarence_certified=true
+// CHANGES in v3.7:
+// - FIX: Loading spinner hung forever due to premature return in loadData
+//   Root cause: setResolvedContractId() is async (React state), but the
+//   next line checked the OLD value (still null) and returned early,
+//   never reaching setLoading(false)
+// - Added setLoading(false) to clause arrival polling as safety net
 //
 // CHANGES in v3.5:
 // - FIX: Added clause arrival polling when page loads before workflow completes
@@ -524,7 +526,8 @@ function QuickContractStudioContent() {
 
                 setResolvedContractId(contractData.contract_id)
 
-                if (!resolvedContractId) return
+                // NOTE: Use contractData.contract_id directly below (not resolvedContractId,
+                // which is still null until the next React render cycle)
 
                 // Set permission flag based on party role
                 const userIsInitiator = contractData.uploaded_by_user_id === userId
@@ -2730,7 +2733,8 @@ INSTRUCTIONS:
 
                     setClauses(mappedClauses)
 
-                    // Update contract clause count
+                    // Belt-and-suspenders: ensure loading spinner is cleared
+                    setLoading(false)
                     setContract(prev => prev ? { ...prev, clauseCount: clausesData.length } : prev)
 
                     // Auto-select first non-header clause
