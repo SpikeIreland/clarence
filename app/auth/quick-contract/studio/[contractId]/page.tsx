@@ -287,33 +287,70 @@ function CreateQuickContractContent() {
         let enrichedUserInfo = { ...authData.userInfo }
 
         // ----------------------------------------------------------------
-        // FIX: The login page stores company NAME but not company ID.
-        // Look up company_id from Supabase users table if missing.
-        // This mirrors the pattern used by QC Studio for robust auth.
+        // FIX: The login page stores company NAME but not company_id.
+        // Look up company_id from Supabase if missing. Try both column
+        // names (auth_id and user_id) since different pages use different
+        // conventions for the same table.
         // ----------------------------------------------------------------
         if (!enrichedUserInfo.companyId) {
+            console.log('🟡 AUTH FIX: companyId missing from localStorage, looking up from Supabase...')
             try {
                 const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+                console.log('🟡 AUTH FIX: Supabase user:', supabaseUser?.id, supabaseUser?.email)
+
                 if (supabaseUser) {
-                    const { data: dbUser } = await supabase
+                    // Attempt 1: Query by auth_id (login page convention)
+                    let { data: dbUser } = await supabase
                         .from('users')
                         .select('company_id, company_name')
                         .eq('auth_id', supabaseUser.id)
                         .single()
 
+                    // Attempt 2: Query by user_id (QC Studio convention)
+                    if (!dbUser?.company_id) {
+                        console.log('🟡 AUTH FIX: auth_id lookup returned no company_id, trying user_id...')
+                        const { data: dbUser2 } = await supabase
+                            .from('users')
+                            .select('company_id, company_name')
+                            .eq('user_id', supabaseUser.id)
+                            .single()
+                        if (dbUser2?.company_id) {
+                            dbUser = dbUser2
+                        }
+                    }
+
+                    // Attempt 3: Query by email as last resort
+                    if (!dbUser?.company_id) {
+                        console.log('🟡 AUTH FIX: user_id lookup returned no company_id, trying email...')
+                        const { data: dbUser3 } = await supabase
+                            .from('users')
+                            .select('company_id, company_name')
+                            .eq('email', supabaseUser.email)
+                            .single()
+                        if (dbUser3?.company_id) {
+                            dbUser = dbUser3
+                        }
+                    }
+
                     if (dbUser?.company_id) {
                         enrichedUserInfo.companyId = dbUser.company_id
                         enrichedUserInfo.company = enrichedUserInfo.company || dbUser.company_name
-                        console.log('🔵 AUTH: Enriched with company_id from users table:', dbUser.company_id)
+                        console.log('🟢 AUTH FIX: Got company_id:', dbUser.company_id)
 
-                        // Update localStorage so future loads are faster
+                        // Update localStorage so future page loads are faster
                         authData.userInfo = enrichedUserInfo
                         localStorage.setItem('clarence_auth', JSON.stringify(authData))
+                    } else {
+                        console.error('🔴 AUTH FIX: Could not find company_id in users table for user:', supabaseUser.id)
                     }
+                } else {
+                    console.error('🔴 AUTH FIX: No Supabase session found')
                 }
             } catch (err) {
-                console.warn('Could not enrich user with company_id:', err)
+                console.error('🔴 AUTH FIX: Error looking up company_id:', err)
             }
+        } else {
+            console.log('🟢 AUTH: companyId already in localStorage:', enrichedUserInfo.companyId)
         }
 
         setUserInfo(enrichedUserInfo)
