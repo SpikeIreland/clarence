@@ -471,7 +471,7 @@ function QuickContractStudioContent() {
                 let { data: contractData, error: contractError } = await supabase
                     .from('uploaded_contracts')
                     .select('*')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId)
                     .single()
 
                 // If not found, contractId might be a quick_contract_id - look up the source
@@ -612,7 +612,7 @@ function QuickContractStudioContent() {
                 const { data: rangeMappingData } = await supabase
                     .from('clause_range_mappings')
                     .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId)
                     .eq('is_displayable', true)
 
                 if (rangeMappingData && rangeMappingData.length > 0) {
@@ -660,7 +660,7 @@ function QuickContractStudioContent() {
                 const { data: eventsData } = await supabase
                     .from('qc_clause_events')
                     .select('*')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId)
                     .order('created_at', { ascending: true })
 
                 if (eventsData && eventsData.length > 0) {
@@ -746,7 +746,7 @@ function QuickContractStudioContent() {
         }
 
         loadData()
-    }, [contractId, router])
+    }, [resolvedContractId, router])
 
     // ========================================================================
     // SECTION: TRIGGER CERTIFICATION ON STUDIO LOAD
@@ -797,10 +797,10 @@ function QuickContractStudioContent() {
         fetch('https://spikeislandstudios.app.n8n.cloud/webhook/certify-next-clause', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contract_id: contractId })
+            body: JSON.stringify({contract_id: resolvedContractId })
         }).catch(err => console.error('Failed to trigger certification:', err))
 
-    }, [contractId, clauses.length, certificationTriggered])
+    }, [resolvedContractId, clauses.length, certificationTriggered])
 
     // ========================================================================
     // SECTION 4C: CHAT FUNCTIONS
@@ -1256,7 +1256,7 @@ function QuickContractStudioContent() {
         const { data, error: insertError } = await supabase
             .from('qc_clause_events')
             .insert({
-                contract_id: contractId,
+               contract_id: resolvedContractId,
                 clause_id: clauseId,
                 event_type: eventType,
                 user_id: userInfo.userId,
@@ -1672,15 +1672,13 @@ function QuickContractStudioContent() {
     // Note: getPartyRole() is defined in SECTION 4D above
     // Note: getOtherPartyName() is defined in SECTION 4D above with the agreement helpers
 
-    // Load both party info - works for both initiator and respondent viewers
     const loadPartyInfo = useCallback(async () => {
-        if (!contractId) return
+        if (!resolvedContractId) return
         try {
-            // Load respondent info from qc_recipients
             const { data: qcData } = await supabase
                 .from('quick_contracts')
                 .select('quick_contract_id')
-                .eq('source_contract_id', contractId)
+                .eq('source_contract_id', resolvedContractId)
                 .single()
 
             if (qcData) {
@@ -1700,11 +1698,10 @@ function QuickContractStudioContent() {
                 }
             }
 
-            // Load initiator info from uploaded_contracts → users
             const { data: contractData } = await supabase
                 .from('uploaded_contracts')
                 .select('uploaded_by_user_id, company_id')
-                .eq('contract_id', contractId)
+                .eq('contract_id', resolvedContractId)
                 .single()
 
             if (contractData?.uploaded_by_user_id) {
@@ -1725,7 +1722,7 @@ function QuickContractStudioContent() {
         } catch (err) {
             console.log('Could not load party info:', err)
         }
-    }, [contractId])
+    }, [resolvedContractId])
 
     useEffect(() => {
         loadPartyInfo()
@@ -2248,7 +2245,7 @@ INSTRUCTIONS:
                     clause_count: newClauseCount,
                     updated_at: new Date().toISOString()
                 })
-                .eq('contract_id', contractId)
+                .eq('contract_id', resolvedContractId)
 
             // Update local state
             setClauses(prev => prev.filter(c =>
@@ -2292,7 +2289,7 @@ INSTRUCTIONS:
                 event_type: 'clause_deleted',
                 source_system: 'quick_contract_studio',
                 context: {
-                    contract_id: contractId,
+                   contract_id: resolvedContractId,
                     clause_id: deleteClauseTarget.clauseId,
                     clause_name: deleteClauseTarget.clauseName,
                     clause_number: deleteClauseTarget.clauseNumber,
@@ -2363,7 +2360,7 @@ INSTRUCTIONS:
 
     // Subscribe to qc_clause_events for live notification push
     useEffect(() => {
-        if (!contractId || !userInfo) return
+        if (!resolvedContractId || !userInfo) return
 
         const channel = supabase
             .channel(`qc-events-${contractId}`)
@@ -2373,7 +2370,7 @@ INSTRUCTIONS:
                     event: 'INSERT',
                     schema: 'public',
                     table: 'qc_clause_events',
-                    filter: `contract_id=eq.${contractId}`
+                    filter: `contract_id=eq.${resolvedContractId}`
                 },
                 (payload) => {
                     const e = payload.new as Record<string, unknown>
@@ -2444,7 +2441,7 @@ INSTRUCTIONS:
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [contractId, userInfo, supabase])
+    }, [resolvedContractId, userInfo, supabase])
 
     // Mark all unread events as read for current user
     const markActivityAsRead = useCallback(async () => {
@@ -2457,7 +2454,7 @@ INSTRUCTIONS:
         const { error } = await supabase
             .from('qc_clause_events')
             .update({ [readColumn]: true })
-            .eq('contract_id', contractId)
+            .eq('contract_id', resolvedContractId)
             .eq(readColumn, false)
 
         if (error) {
@@ -2471,7 +2468,7 @@ INSTRUCTIONS:
             ...(partyRole === 'initiator' ? { readByInitiator: true } : { readByRespondent: true })
         })))
         setUnreadActivityCount(0)
-    }, [contractId, userInfo, unreadActivityCount, supabase])
+    }, [resolvedContractId, userInfo, unreadActivityCount, supabase])
 
     // Auto-mark as read when History tab is active
     useEffect(() => {
@@ -2761,7 +2758,7 @@ INSTRUCTIONS:
                 const { data: contractData } = await supabase
                     .from('uploaded_contracts')
                     .select('status, clause_count')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId)
                     .single()
 
                 if (contractData) {
@@ -2778,7 +2775,7 @@ INSTRUCTIONS:
         }, 3000) // Poll every 3 seconds
 
         return () => clearInterval(pollForClauses)
-    }, [contractId, contract?.status, clauses.length])
+    }, [resolvedContractId, contract?.status, clauses.length])
 
     // POLL FOR CERTIFICATION STATUS (when clauses exist but still being certified)
     // Also refreshes range mappings as they are generated during certification
@@ -2807,7 +2804,7 @@ INSTRUCTIONS:
                 const { data: updatedClauses, error } = await supabase
                     .from('uploaded_contract_clauses')
                     .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId)
                     .order('display_order', { ascending: true })
 
                 if (error || !updatedClauses) return
@@ -2850,7 +2847,7 @@ INSTRUCTIONS:
                     const { data: rangeMappingData } = await supabase
                         .from('clause_range_mappings')
                         .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                        .eq('contract_id', contractId)
+                        .eq('contract_id', resolvedContractId)
                         .eq('is_displayable', true)
 
                     if (rangeMappingData && rangeMappingData.length > currentMappingCount) {
@@ -2891,7 +2888,7 @@ INSTRUCTIONS:
         }, 4000) // Poll every 4 seconds
 
         return () => clearInterval(pollInterval)
-    }, [contractId, clauses.length, isPolling, rangeMappings.size])
+    }, [resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // RANGE MAPPING CATCH-UP: After certification polling stops,
     // do a few final fetches to catch trailing range mappings
@@ -2918,7 +2915,7 @@ INSTRUCTIONS:
                 const { data: rangeMappingData } = await supabase
                     .from('clause_range_mappings')
                     .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId)
                     .eq('is_displayable', true)
 
                 if (rangeMappingData && rangeMappingData.length > rangeMappings.size) {
@@ -2958,7 +2955,7 @@ INSTRUCTIONS:
         }, 5000) // Every 5 seconds
 
         return () => clearInterval(catchUpInterval)
-    }, [contractId, clauses.length, isPolling, rangeMappings.size])
+    }, [resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // ========================================================================
     // SECTION 5: LOADING STATE
