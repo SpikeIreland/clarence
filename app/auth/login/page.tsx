@@ -161,7 +161,7 @@ function LoginSignupContent() {
           timestamp: new Date().toISOString()
         }
         localStorage.setItem('clarence_auth', JSON.stringify(authData))
-        router.push('/auth/contracts-dashboard')
+        router.push('/auth/create')
       }
     } catch (err: unknown) {
       console.error('Login error:', err)
@@ -239,7 +239,7 @@ function LoginSignupContent() {
           localStorage.setItem('clarence_auth', JSON.stringify(authData))
 
           setTimeout(() => {
-            router.push('/auth/contracts-dashboard')
+            router.push('/auth/create')
           }, 1500)
         } else {
           // Email confirmation required - show confirmation message

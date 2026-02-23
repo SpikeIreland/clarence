@@ -497,7 +497,7 @@ export default function QuickContractDashboard() {
             {/* SECTION 14: NAVIGATION HEADER */}
             {/* ================================================================== */}
             <AuthenticatedHeader
-                activePage="quick-contracts"
+                activePage="create"
                 userInfo={userInfo}
                 onSignOut={handleSignOut}
             />

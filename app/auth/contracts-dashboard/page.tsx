@@ -855,7 +855,7 @@ export default function ContractsDashboard() {
       {/* SECTION 19: NAVIGATION HEADER */}
       {/* ================================================================== */}
       <AuthenticatedHeader
-        activePage="negotiations"
+        activePage="create"
         userInfo={userInfo}
         onSignOut={handleSignOut}
       />

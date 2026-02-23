@@ -1,14 +1,20 @@
 'use client'
 
 // ============================================================================
-// AUTHENTICATED HEADER COMPONENT V2
+// AUTHENTICATED HEADER COMPONENT V3
 // Location: components/AuthenticatedHeader.tsx
 //
-// Unified navigation header for all Tier 1 authenticated pages:
-//   - Negotiations  (/auth/contracts-dashboard)
-//   - Contracts      (/auth/contracts)
-//   - Quick Contracts (/auth/quick-contract)
-//   - Training       (/auth/training)
+// FA-26: Navigation restructured to three items:
+//   - Create     (/auth/create)       — Pathway gateway
+//   - Templates  (/auth/contracts)    — Contract template library
+//   - Training   (/auth/training)     — Training studio
+//
+// V3 CHANGES:
+//   - "Dashboard" and "Quick Contracts" removed, replaced by "Create"
+//   - Logo links to /auth/create (was /auth/contracts-dashboard)
+//   - ActivePage type updated: 'create' | 'contracts' | 'training'
+//   - Nav order: Create, Templates, Training
+//   - Create icon uses emerald plus symbol
 //
 // Props:
 //   activePage  – which nav link to highlight
@@ -19,7 +25,7 @@
 //   Training page  → amber highlight  (bg-amber-600/80)
 //   All other pages → emerald/slate    (bg-slate-700)
 //
-// Version: 2.0
+// Version: 3.0
 // ============================================================================
 
 // ============================================================================
@@ -41,7 +47,7 @@ interface UserInfo {
     company?: string
 }
 
-type ActivePage = 'negotiations' | 'contracts' | 'quick-contracts' | 'training'
+type ActivePage = 'create' | 'contracts' | 'training'
 
 interface AuthenticatedHeaderProps {
     activePage: ActivePage
@@ -55,12 +61,12 @@ interface AuthenticatedHeaderProps {
 
 const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.ReactNode }[] = [
     {
-        key: 'negotiations',
-        label: 'Dashboard',
-        href: '/auth/contracts-dashboard',
+        key: 'create',
+        label: 'Create',
+        href: '/auth/create',
         icon: (
             <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
         ),
     },
@@ -71,16 +77,6 @@ const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.Rea
         icon: (
             <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-        ),
-    },
-    {
-        key: 'quick-contracts',
-        label: 'Quick to Contract',
-        href: '/auth/quick-contract',
-        icon: (
-            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
         ),
     },
@@ -135,8 +131,9 @@ export default function AuthenticatedHeader({ activePage, userInfo, onSignOut }:
 
                         {/* ================================================ */}
                         {/* LEFT: Logo & Brand */}
+                        {/* FA-26: Now links to /auth/create gateway */}
                         {/* ================================================ */}
-                        <Link href="/auth/contracts-dashboard" className="flex items-center gap-2 flex-shrink-0">
+                        <Link href="/auth/create" className="flex items-center gap-2 flex-shrink-0">
                             <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
                                 <span className="text-white font-bold text-sm">C</span>
                             </div>
@@ -145,6 +142,7 @@ export default function AuthenticatedHeader({ activePage, userInfo, onSignOut }:
 
                         {/* ================================================ */}
                         {/* CENTRE: Navigation Links */}
+                        {/* FA-26: Three items — Create, Templates, Training */}
                         {/* ================================================ */}
                         <div className="absolute left-1/2 transform -translate-x-1/2 hidden md:flex items-center gap-1">
                             {NAV_ITEMS.map((item) => (
@@ -194,7 +192,7 @@ export default function AuthenticatedHeader({ activePage, userInfo, onSignOut }:
                                             <div className="text-xs text-slate-400 mt-1">{userInfo?.company}</div>
                                         </div>
 
-                                        {/* Quick Links — all four nav destinations */}
+                                        {/* Quick Links — all three nav destinations */}
                                         <div className="py-2">
                                             {NAV_ITEMS.map((item) => (
                                                 <Link
