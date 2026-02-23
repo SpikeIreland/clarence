@@ -26,6 +26,18 @@ import mammoth from 'mammoth'
 
 // Note: pdfjs-dist is imported dynamically in extractTextFromPDF to avoid SSR issues
 
+
+import {
+    CONTRACT_TYPE_DEFINITIONS,
+    getContractType,
+    getContractTypesByCategory,
+    getCategoryDisplayName,
+    getRoleContext,
+    type PartyRole,
+    type ContractTypeDefinition,
+} from '@/lib/role-matrix'
+
+
 // ============================================================================
 // SECTION 2: TYPE DEFINITIONS
 // ============================================================================
@@ -91,13 +103,17 @@ interface ParsedClause {
 
 type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content' | 'parsing' | 'invite'
 type SourceType = 'template' | 'upload' | 'blank' | null
-type ContractType = 'nda' | 'service_agreement' | 'lease' | 'employment' | 'contractor' | 'vendor' | 'other' | null
+type ContractType = string | null
 type ParsingStatus = 'idle' | 'parsing' | 'certifying' | 'complete' | 'error'
 
 interface CreateState {
     step: CreateStep
     sourceType: SourceType
     contractType: ContractType
+    contractTypeKey: string | null        // Role-matrix key (e.g. 'service_agreement')
+    creatorPartyRole: PartyRole | null    // 'protected' or 'providing'
+    customProtectedLabel: string          // Custom label for 'other' type
+    customProvidingLabel: string          // Custom label for 'other' type
     contractName: string
     description: string
     referenceNumber: string
@@ -125,14 +141,6 @@ interface CreateState {
 
 const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
-const CONTRACT_TYPE_OPTIONS = [
-    { value: 'nda', label: 'Non-Disclosure Agreement', description: 'Protect confidential information' },
-    { value: 'service_agreement', label: 'Service Agreement', description: 'Define service terms and deliverables' },
-    { value: 'lease', label: 'Lease Agreement', description: 'Property or equipment rental terms' },
-    { value: 'contractor', label: 'Contractor Agreement', description: 'Independent contractor terms' },
-    { value: 'vendor', label: 'Vendor Agreement', description: 'Supplier and vendor terms' },
-    { value: 'other', label: 'Other', description: 'Custom contract type' }
-]
 
 const SOURCE_OPTIONS = [
     {
@@ -195,7 +203,12 @@ const initialState: CreateState = {
     parsingStatus: 'idle',
     parsingError: null,
     // Session state
-    sessionId: null
+    sessionId: null,
+    contractTypeKey: null,
+    creatorPartyRole: null,
+    customProtectedLabel: '',
+    customProvidingLabel: '',
+
 }
 
 // ============================================================================
@@ -767,10 +780,18 @@ function CreateQuickContractContent() {
             setError('Please enter a contract name')
             return
         }
-
+        if (!state.contractTypeKey) {
+            setError('Please select a contract type')
+            return
+        }
+        if (!state.creatorPartyRole) {
+            setError('Please select your role in this contract')
+            return
+        }
         setError(null)
         setState(prev => ({ ...prev, step: 'content' }))
     }
+
 
     function handleContentComplete() {
         if (!state.documentContent.trim()) {
@@ -1008,6 +1029,10 @@ function CreateQuickContractContent() {
                     file_size: state.documentContent.length,
                     raw_text: state.documentContent.replace(/<[^>]*>/g, '\n'),
                     contract_type: state.contractType,
+                    contract_type_key: state.contractTypeKey,
+                    creator_party_role: state.creatorPartyRole,
+                    custom_protected_label: state.customProtectedLabel || null,
+                    custom_providing_label: state.customProvidingLabel || null,
                     mediation_type: 'stc',
                     template_source: state.uploadedFileName ? 'uploaded' : 'manual'
                 })
@@ -1298,6 +1323,12 @@ function CreateQuickContractContent() {
                     recipient_name: inviteName.trim(),
                     recipient_company: inviteCompany?.trim() || '',
 
+                    // Role matrix data
+                    contract_type_key: state.contractTypeKey,
+                    creator_party_role: state.creatorPartyRole,
+                    custom_protected_label: state.customProtectedLabel || null,
+                    custom_providing_label: state.customProvidingLabel || null,
+
                     // Personal message (optional)
                     personal_message: inviteMessage?.trim() || '',
 
@@ -1354,7 +1385,11 @@ function CreateQuickContractContent() {
                     .from('uploaded_contracts')
                     .update({
                         contract_name: state.contractName,
-                        contract_type: state.contractType
+                        contract_type: state.contractType,
+                        contract_type_key: state.contractTypeKey,
+                        creator_party_role: state.creatorPartyRole,
+                        custom_protected_label: state.customProtectedLabel || null,
+                        custom_providing_label: state.customProvidingLabel || null,
                     })
                     .eq('contract_id', state.uploadedContractId)
 
@@ -1378,6 +1413,10 @@ function CreateQuickContractContent() {
                         created_by_user_id: userInfo.userId,
                         contract_name: state.contractName,
                         contract_type: state.contractType,
+                        contract_type_key: state.contractTypeKey,
+                        creator_party_role: state.creatorPartyRole,
+                        custom_protected_label: state.customProtectedLabel || null,
+                        custom_providing_label: state.customProvidingLabel || null,
                         description: state.description,
                         reference_number: state.referenceNumber || null,
                         document_content: state.documentContent,
@@ -1432,9 +1471,20 @@ function CreateQuickContractContent() {
         }
     }
 
-    function getContractTypeLabel(type: ContractType): string {
-        const option = CONTRACT_TYPE_OPTIONS.find(o => o.value === type)
-        return option?.label || 'Other'
+    function getContractTypeLabel(type: string): string {
+        const ct = getContractType(type)
+        if (ct) return ct.contractTypeName
+        // Fallback for legacy values
+        const legacyLabels: Record<string, string> = {
+            nda: 'Non-Disclosure Agreement',
+            service_agreement: 'Service Agreement',
+            lease: 'Lease Agreement',
+            employment: 'Employment Contract',
+            contractor: 'Contractor Agreement',
+            vendor: 'Vendor Agreement',
+            other: 'Other',
+        }
+        return legacyLabels[type] || type
     }
 
     function getCategoryColor(category: string): string {
@@ -1455,6 +1505,37 @@ function CreateQuickContractContent() {
             'Force Majeure': 'bg-yellow-100 text-yellow-700'
         }
         return colors[category] || 'bg-slate-100 text-slate-600'
+    }
+
+    // Get the party labels for the currently selected contract type
+    function getSelectedPartyLabels(): { protectedLabel: string, providingLabel: string } | null {
+        if (!state.contractTypeKey) return null
+        const ct = getContractType(state.contractTypeKey)
+        if (!ct) return null
+        if (state.contractTypeKey === 'other') {
+            return {
+                protectedLabel: state.customProtectedLabel || 'Party A',
+                providingLabel: state.customProvidingLabel || 'Party B',
+            }
+        }
+        return {
+            protectedLabel: ct.protectedPartyLabel,
+            providingLabel: ct.providingPartyLabel,
+        }
+    }
+
+    // Get the user's selected role label
+    function getCreatorRoleLabel(): string {
+        const labels = getSelectedPartyLabels()
+        if (!labels || !state.creatorPartyRole) return 'Not selected'
+        return state.creatorPartyRole === 'protected' ? labels.protectedLabel : labels.providingLabel
+    }
+
+    // Get the counterparty role label
+    function getCounterpartyRoleLabel(): string {
+        const labels = getSelectedPartyLabels()
+        if (!labels || !state.creatorPartyRole) return 'Not selected'
+        return state.creatorPartyRole === 'protected' ? labels.providingLabel : labels.protectedLabel
     }
 
     // ==========================================================================
@@ -1950,29 +2031,218 @@ function CreateQuickContractContent() {
                                 />
                             </div>
 
-                            {/* Contract Type */}
+                            {/* Contract Type - Grouped by Category */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                    Contract Type
+                                    Contract Type <span className="text-red-500">*</span>
                                 </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {CONTRACT_TYPE_OPTIONS.map(option => (
+                                <div className="space-y-4">
+                                    {Object.entries(getContractTypesByCategory()).map(([category, types]) => {
+                                        if (types.length === 0) return null
+                                        return (
+                                            <div key={category}>
+                                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                                                    {getCategoryDisplayName(category)}
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {types.map(ct => (
+                                                        <button
+                                                            key={ct.contractTypeKey}
+                                                            onClick={() => setState(prev => ({
+                                                                ...prev,
+                                                                contractType: ct.contractTypeKey as ContractType,
+                                                                contractTypeKey: ct.contractTypeKey,
+                                                                // Reset role when type changes
+                                                                creatorPartyRole: null,
+                                                                customProtectedLabel: '',
+                                                                customProvidingLabel: '',
+                                                            }))}
+                                                            className={`p-3 rounded-lg border-2 text-left transition-colors ${state.contractTypeKey === ct.contractTypeKey
+                                                                ? 'border-teal-500 bg-teal-50'
+                                                                : 'border-slate-200 hover:border-slate-300'
+                                                                }`}
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={`w-2 h-2 rounded-full ${state.contractTypeKey === ct.contractTypeKey ? 'bg-teal-500' : 'bg-slate-300'}`} />
+                                                                <span className="font-medium text-sm text-slate-800">{ct.contractTypeName}</span>
+                                                            </div>
+                                                            {state.contractTypeKey === ct.contractTypeKey && (
+                                                                <p className="text-xs text-slate-500 mt-1 ml-4">
+                                                                    {ct.protectedPartyLabel} ↔ {ct.providingPartyLabel}
+                                                                </p>
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+
+                                    {/* Other / Custom option */}
+                                    <div>
+                                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                                            Other
+                                        </p>
                                         <button
-                                            key={option.value}
-                                            onClick={() => setState(prev => ({ ...prev, contractType: option.value as ContractType }))}
-                                            className={`p-3 rounded-lg border-2 text-left transition-colors ${state.contractType === option.value
+                                            onClick={() => setState(prev => ({
+                                                ...prev,
+                                                contractType: 'other' as ContractType,
+                                                contractTypeKey: 'other',
+                                                creatorPartyRole: null,
+                                                customProtectedLabel: '',
+                                                customProvidingLabel: '',
+                                            }))}
+                                            className={`p-3 rounded-lg border-2 text-left transition-colors w-full ${state.contractTypeKey === 'other'
                                                 ? 'border-teal-500 bg-teal-50'
                                                 : 'border-slate-200 hover:border-slate-300'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${state.contractType === option.value ? 'bg-teal-500' : 'bg-slate-300'}`}></div>
-                                                <span className="font-medium text-sm text-slate-800">{option.label}</span>
+                                                <div className={`w-2 h-2 rounded-full ${state.contractTypeKey === 'other' ? 'bg-teal-500' : 'bg-slate-300'}`} />
+                                                <span className="font-medium text-sm text-slate-800">Other / Custom</span>
                                             </div>
+                                            <p className="text-xs text-slate-500 mt-1 ml-4">Define your own party labels</p>
                                         </button>
-                                    ))}
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Custom Party Labels - Only for 'Other' */}
+                            {state.contractTypeKey === 'other' && (
+                                <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+                                    <p className="text-sm font-medium text-slate-700">Define the party labels for this contract</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs text-slate-500 mb-1">
+                                                Party A (Position 10 favours)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={state.customProtectedLabel}
+                                                onChange={(e) => setState(prev => ({ ...prev, customProtectedLabel: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                placeholder="e.g., Licensor"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-slate-500 mb-1">
+                                                Party B (Position 1 favours)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={state.customProvidingLabel}
+                                                onChange={(e) => setState(prev => ({ ...prev, customProvidingLabel: e.target.value }))}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                                                placeholder="e.g., Licensee"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Role Selection - Appears after contract type is chosen */}
+                            {state.contractTypeKey && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Your Role <span className="text-red-500">*</span>
+                                    </label>
+                                    <p className="text-xs text-slate-500 mb-3">
+                                        Which party are you in this {getContractType(state.contractTypeKey)?.contractTypeName || 'contract'}?
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {/* Protected Party Option */}
+                                        <button
+                                            onClick={() => setState(prev => ({ ...prev, creatorPartyRole: 'protected' }))}
+                                            className={`p-4 rounded-lg border-2 text-left transition-all ${state.creatorPartyRole === 'protected'
+                                                ? 'border-emerald-500 bg-emerald-50 shadow-sm'
+                                                : 'border-slate-200 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${state.creatorPartyRole === 'protected'
+                                                    ? 'border-emerald-500'
+                                                    : 'border-slate-300'
+                                                    }`}>
+                                                    {state.creatorPartyRole === 'protected' && (
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                                    )}
+                                                </div>
+                                                <span className={`font-semibold text-sm ${state.creatorPartyRole === 'protected' ? 'text-emerald-800' : 'text-slate-800'}`}>
+                                                    {(() => {
+                                                        if (state.contractTypeKey === 'other') {
+                                                            return state.customProtectedLabel || 'Party A'
+                                                        }
+                                                        return getContractType(state.contractTypeKey)?.protectedPartyLabel || 'Party A'
+                                                    })()}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-500 ml-5">
+                                                {(() => {
+                                                    if (state.contractTypeKey === 'other') {
+                                                        return 'Higher positions (7-10) favour you'
+                                                    }
+                                                    return getContractType(state.contractTypeKey)?.protectedPartyDescription || 'The protected party'
+                                                })()}
+                                            </p>
+                                        </button>
+
+                                        {/* Providing Party Option */}
+                                        <button
+                                            onClick={() => setState(prev => ({ ...prev, creatorPartyRole: 'providing' }))}
+                                            className={`p-4 rounded-lg border-2 text-left transition-all ${state.creatorPartyRole === 'providing'
+                                                ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                                : 'border-slate-200 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${state.creatorPartyRole === 'providing'
+                                                    ? 'border-blue-500'
+                                                    : 'border-slate-300'
+                                                    }`}>
+                                                    {state.creatorPartyRole === 'providing' && (
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                                    )}
+                                                </div>
+                                                <span className={`font-semibold text-sm ${state.creatorPartyRole === 'providing' ? 'text-blue-800' : 'text-slate-800'}`}>
+                                                    {(() => {
+                                                        if (state.contractTypeKey === 'other') {
+                                                            return state.customProvidingLabel || 'Party B'
+                                                        }
+                                                        return getContractType(state.contractTypeKey)?.providingPartyLabel || 'Party B'
+                                                    })()}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-500 ml-5">
+                                                {(() => {
+                                                    if (state.contractTypeKey === 'other') {
+                                                        return 'Lower positions (1-3) favour you'
+                                                    }
+                                                    return getContractType(state.contractTypeKey)?.providingPartyDescription || 'The providing party'
+                                                })()}
+                                            </p>
+                                        </button>
+                                    </div>
+
+                                    {/* Confirmation Banner */}
+                                    {state.creatorPartyRole && (
+                                        <div className="mt-3 p-3 bg-teal-50 border border-teal-200 rounded-lg">
+                                            <div className="flex items-start gap-2">
+                                                <svg className="w-4 h-4 text-teal-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <div>
+                                                    <p className="text-sm text-teal-800">
+                                                        You are the <strong>{getCreatorRoleLabel()}</strong> in this {getContractType(state.contractTypeKey!)?.contractTypeName || 'contract'}.
+                                                    </p>
+                                                    <p className="text-xs text-teal-600 mt-0.5">
+                                                        The other party will be referred to as the <strong>{getCounterpartyRoleLabel()}</strong>.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Description */}
                             <div>
@@ -2588,7 +2858,7 @@ function CreateQuickContractContent() {
                         {/* Contract Summary */}
                         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                             <h3 className="font-semibold text-slate-800 mb-4">Contract Summary</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <div>
                                     <span className="text-xs text-slate-400 uppercase tracking-wider">Name</span>
                                     <p className="font-medium text-slate-800 mt-1 truncate">{state.contractName}</p>
@@ -2596,18 +2866,32 @@ function CreateQuickContractContent() {
                                 <div>
                                     <span className="text-xs text-slate-400 uppercase tracking-wider">Type</span>
                                     <p className="font-medium text-slate-800 mt-1">
-                                        {state.contractType ? getContractTypeLabel(state.contractType) : 'Not specified'}
+                                        {getContractType(state.contractTypeKey || '')?.contractTypeName || state.contractType || 'Not specified'}
                                     </p>
                                 </div>
                                 <div>
                                     <span className="text-xs text-slate-400 uppercase tracking-wider">Clauses</span>
                                     <p className="font-medium text-slate-800 mt-1">{state.parsedClauses.length}</p>
                                 </div>
-                                <div>
-                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Mode</span>
-                                    <p className="font-medium text-teal-600 mt-1">Quick Contract</p>
-                                </div>
                             </div>
+                            {/* Role confirmation strip */}
+                            {state.creatorPartyRole && (
+                                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-6">
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${state.creatorPartyRole === 'protected' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                                        <span className="text-sm text-slate-600">
+                                            You: <strong className="text-slate-800">{getCreatorRoleLabel()}</strong>
+                                        </span>
+                                    </div>
+                                    <div className="text-slate-300">↔</div>
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-2.5 h-2.5 rounded-full ${state.creatorPartyRole === 'protected' ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                                        <span className="text-sm text-slate-600">
+                                            Other party: <strong className="text-slate-800">{getCounterpartyRoleLabel()}</strong>
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Invite Form */}
