@@ -86,13 +86,13 @@ export default function MainNavigation() {
                             href="/auth/login"
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
                         >
-                            Customer Sign In
+                            Sign In
                         </Link>
                         <a
                             href="https://www.clarencelegal.ai/provider"
                             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
                         >
-                            Provider Sign In
+                            Respondent Access
                         </a>
                     </div>
                 </nav>

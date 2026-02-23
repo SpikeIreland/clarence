@@ -275,23 +275,23 @@ export default function Home() {
       </section>
 
       {/* ================================================================== */}
-      {/* SECTION 6: STATISTICS / SOCIAL PROOF */}
+      {/* SECTION 6: PLATFORM PRINCIPLES */}
+      {/* FA-26: Replaced unverified stats with defensible platform values */}
       {/* ================================================================== */}
       <section className="py-16 bg-slate-800">
         <div className="container mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto text-center">
-            <div>
-              <div className="text-4xl font-bold text-emerald-400 mb-2">90%</div>
-              <div className="text-slate-300 text-sm">Faster Agreement Time</div>
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="flex items-center justify-center gap-4 md:gap-8 mb-6">
+              <span className="text-2xl md:text-3xl font-bold text-emerald-400">Neutral</span>
+              <span className="text-slate-600 text-2xl font-light">·</span>
+              <span className="text-2xl md:text-3xl font-bold text-slate-300">Transparent</span>
+              <span className="text-slate-600 text-2xl font-light">·</span>
+              <span className="text-2xl md:text-3xl font-bold text-violet-400">Fair</span>
             </div>
-            <div>
-              <div className="text-4xl font-bold text-slate-300 mb-2">100%</div>
-              <div className="text-slate-300 text-sm">Transparent Leverage</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold text-violet-400 mb-2">0</div>
-              <div className="text-slate-300 text-sm">Hidden Agendas</div>
-            </div>
+            <p className="text-slate-400 text-sm max-w-xl mx-auto">
+              CLARENCE mediates with no hidden agendas, full leverage visibility,
+              and a principled framework that serves both parties equally.
+            </p>
           </div>
         </div>
       </section>
