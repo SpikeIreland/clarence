@@ -264,8 +264,8 @@ function QuickContractStudioLoading() {
                         <span className="text-2xl font-bold text-purple-600">C</span>
                     </div>
                 </div>
-                <h2 className="text-xl font-semibold text-slate-700">Loading Contract Studio...</h2>
-                <p className="text-slate-500 mt-2">Preparing your Quick Contract review</p>
+                <h2 className="text-xl font-semibold text-slate-700">Loading Quick Create Studio...</h2>
+                <p className="text-slate-500 mt-2">Preparing your contract review</p>
             </div>
         </div>
     )
@@ -389,6 +389,15 @@ function QuickContractStudioContent() {
     // ---- BULK SELECT STATE ----
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
     const [bulkAgreeInProgress, setBulkAgreeInProgress] = useState(false)
+
+    // ---- INVITE MODAL STATE ----
+    const [showInviteModal, setShowInviteModal] = useState(false)
+    const [inviteName, setInviteName] = useState('')
+    const [inviteEmail, setInviteEmail] = useState('')
+    const [inviteCompany, setInviteCompany] = useState('')
+    const [inviteMessage, setInviteMessage] = useState('')
+    const [sendingInvite, setSendingInvite] = useState(false)
+    const [inviteSuccess, setInviteSuccess] = useState(false)
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
@@ -735,7 +744,7 @@ function QuickContractStudioContent() {
                 setChatMessages([{
                     id: 'welcome',
                     role: 'assistant',
-                    content: `Welcome to the Quick Contract Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
+                    content: `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
                     timestamp: new Date()
                 }])
 
@@ -2962,6 +2971,67 @@ INSTRUCTIONS:
     }, [contractId, clauses.length, isPolling, rangeMappings.size])
 
     // ========================================================================
+    // SECTION 5B: INVITE HANDLER
+    // ========================================================================
+
+    const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
+
+    async function handleSendInvite() {
+        if (!userInfo || !contract) return
+        if (!inviteEmail.trim() || !inviteName.trim()) return
+
+        setSendingInvite(true)
+
+        try {
+            const response = await fetch(`${API_BASE}/qc-send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contract_id: contract.contractId,
+                    contract_name: contract.contractName,
+                    contract_type: contract.contractType || 'other',
+                    initiator_user_id: userInfo.userId,
+                    initiator_company_id: userInfo.companyId,
+                    initiator_email: userInfo.email,
+                    initiator_name: userInfo.fullName,
+                    initiator_company: userInfo.companyName || '',
+                    recipient_email: inviteEmail.trim(),
+                    recipient_name: inviteName.trim(),
+                    recipient_company: inviteCompany?.trim() || '',
+                    personal_message: inviteMessage?.trim() || '',
+                    mediation_type: 'stc'
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || `Failed to send invite: ${response.status}`)
+            }
+
+            const result = await response.json()
+            console.log('Invite sent:', result)
+
+            setInviteSuccess(true)
+
+            // Reset after 3 seconds
+            setTimeout(() => {
+                setShowInviteModal(false)
+                setInviteSuccess(false)
+                setInviteName('')
+                setInviteEmail('')
+                setInviteCompany('')
+                setInviteMessage('')
+            }, 2500)
+
+        } catch (err) {
+            console.error('Invite error:', err)
+            alert(err instanceof Error ? err.message : 'Failed to send invite')
+        } finally {
+            setSendingInvite(false)
+        }
+    }
+
+    // ========================================================================
     // SECTION 5: LOADING STATE
     // ========================================================================
 
@@ -2989,7 +3059,7 @@ INSTRUCTIONS:
                         onClick={() => router.push('/auth/quick-contract')}
                         className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
                     >
-                        Back to Quick Contract
+                        Back to Quick Create
                     </button>
                 </div>
             </div>
@@ -3015,7 +3085,7 @@ INSTRUCTIONS:
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
                             <div>
-                                <h1 className="font-semibold text-slate-800">Quick Contract Studio</h1>
+                                <h1 className="font-semibold text-slate-800">Quick Create Studio</h1>
                                 <p className="text-xs text-slate-500">
                                     {isTemplateMode
                                         ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
@@ -3102,6 +3172,19 @@ INSTRUCTIONS:
                                         {partyChatUnread > 9 ? '9+' : partyChatUnread}
                                     </span>
                                 )}
+                            </button>
+                        )}
+
+                        {/* Invite Provider Button (non-template mode, initiator only) */}
+                        {!isTemplateMode && isInitiator && (
+                            <button
+                                onClick={() => setShowInviteModal(true)}
+                                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                                Invite
                             </button>
                         )}
 
@@ -4774,6 +4857,130 @@ INSTRUCTIONS:
                     </div>
                 </div>
             </div>
+
+            {/* ============================================================ */}
+            {/* INVITE MODAL */}
+            {/* ============================================================ */}
+            {showInviteModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                        {inviteSuccess ? (
+                            <div className="p-8 text-center">
+                                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Invite Sent!</h3>
+                                <p className="text-slate-600 text-sm">
+                                    {inviteName} will receive an email with a link to review this contract.
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="p-6 border-b border-slate-200">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-slate-800">Invite Counterparty</h3>
+                                            <p className="text-sm text-slate-500 mt-1">Send a link to review and negotiate this contract</p>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowInviteModal(false)}
+                                            className="p-1 hover:bg-slate-100 rounded-lg transition"
+                                        >
+                                            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="p-6 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={inviteName}
+                                            onChange={(e) => setInviteName(e.target.value)}
+                                            className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                            placeholder="e.g., John Smith"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Email <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={inviteEmail}
+                                            onChange={(e) => setInviteEmail(e.target.value)}
+                                            className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                            placeholder="e.g., john@company.com"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Company <span className="text-slate-400 font-normal">(optional)</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={inviteCompany}
+                                            onChange={(e) => setInviteCompany(e.target.value)}
+                                            className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                            placeholder="e.g., Acme Corporation"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Message <span className="text-slate-400 font-normal">(optional)</span>
+                                        </label>
+                                        <textarea
+                                            value={inviteMessage}
+                                            onChange={(e) => setInviteMessage(e.target.value)}
+                                            rows={3}
+                                            className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm resize-none"
+                                            placeholder="Add a personal note (optional)"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setShowInviteModal(false)}
+                                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSendInvite}
+                                        disabled={sendingInvite || !inviteEmail.trim() || !inviteName.trim()}
+                                        className="px-5 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                    >
+                                        {sendingInvite ? (
+                                            <>
+                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                Sending...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                                </svg>
+                                                Send Invite
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* ============================================================ */}
             {/* COMMIT CONFIRMATION MODAL */}
