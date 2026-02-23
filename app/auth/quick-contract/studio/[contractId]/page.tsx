@@ -1647,7 +1647,7 @@ function QuickContractStudioContent() {
             const { data: qcData } = await supabase
                 .from('quick_contracts')
                 .select('quick_contract_id')
-                .eq('contract_id', contractId)
+                .eq('source_contract_id', contractId)
                 .single()
 
             if (qcData) {
