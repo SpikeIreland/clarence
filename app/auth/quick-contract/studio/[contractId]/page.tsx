@@ -75,6 +75,8 @@ interface Contract {
     contractId: string
     contractName: string
     contractType: string
+    contractTypeKey: string | null
+    initiatorPartyRole: string | null
     description: string | null
     status: string
     clauseCount: number
@@ -480,6 +482,8 @@ function QuickContractStudioContent() {
                     contractId: contractData.contract_id,
                     contractName: contractData.contract_name,
                     contractType: contractData.detected_contract_type || 'Contract',
+                    contractTypeKey: contractData.contract_type_key || null,
+                    initiatorPartyRole: contractData.initiator_party_role || null,
                     description: contractData.description,
                     status: contractData.status,
                     clauseCount: contractData.clause_count || 0,
@@ -795,10 +799,13 @@ function QuickContractStudioContent() {
                     clauseName: selectedClause?.clauseName,
                     clauseCategory: selectedClause?.category,
                     context: 'quick_contract_studio',
-                    // NEW: Context builder fields
+                    // Context builder fields
                     viewerRole: getPartyRole(),
                     viewerUserId: userInfo?.userId,
                     viewerCompanyId: userInfo?.companyId,
+                    // Role matrix fields — enables contract-type-specific party labels
+                    contractTypeKey: contract?.contractTypeKey || null,
+                    initiatorPartyRole: contract?.initiatorPartyRole || null,
                 })
             })
 
