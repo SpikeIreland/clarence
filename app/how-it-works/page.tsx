@@ -156,7 +156,7 @@ export default function HowItWorksPage() {
                       <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
-                      <span>Choose mediation level: Quick to Contract, Partial, or Full Mediation</span>
+                      <span>Choose your pathway: Quick Create, Contract Create, or Co-Create</span>
                     </li>
                     <li className="flex items-start gap-3">
                       <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -306,39 +306,46 @@ export default function HowItWorksPage() {
       </section>
 
       {/* ================================================================== */}
-      {/* SECTION 6: MEDIATION LEVELS */}
+      {/* SECTION 6: THREE PATHWAYS */}
+      {/* FA-26: Migrated from "Mediation Levels" to "Pathways" */}
+      {/* Reference: Bible Chapter 4, CLARENCEThreePathwaysArchitecture.pdf */}
       {/* ================================================================== */}
       <section className="py-20 bg-white border-t border-slate-200">
         <div className="container mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Choose Your Mediation Level
+              Choose Your Pathway
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
-              CLARENCE adapts to your needs—from quick standard agreements to
-              fully negotiable complex contracts.
+              Three ways to work with CLARENCE—each following the same principled
+              framework, adapted to how you want to engage.
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {/* Quick to Contract */}
+
+            {/* Quick Create */}
             <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
               <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mb-4">
                 <span className="text-2xl">⚡</span>
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                Quick to Contract
+              <h3 className="text-lg font-semibold text-slate-800 mb-1">
+                Quick Create
               </h3>
+              <p className="text-xs text-slate-400 italic mb-3">
+                Standard contracts, fast.
+              </p>
               <p className="text-sm text-slate-600 mb-4">
-                Standard template with minimal negotiation. Perfect for routine
-                agreements like NDAs or standard service terms.
+                Upload or select a template and let CLARENCE handle the rest.
+                AI auto-configures clause ranges and positions so you can
+                review, adjust, and send—without full mediation.
               </p>
               <div className="text-xs text-slate-500">
-                <span className="font-medium">Best for:</span> Simple, routine contracts
+                <span className="font-medium">Best for:</span> Routine agreements, renewals, NDAs, and standard service terms
               </div>
             </div>
 
-            {/* Partial Mediation */}
+            {/* Contract Create */}
             <div className="bg-white rounded-xl border-2 border-emerald-200 p-6 hover:shadow-lg transition-shadow relative">
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-emerald-500 text-white text-xs font-medium rounded-full">
                 Most Popular
@@ -346,34 +353,43 @@ export default function HowItWorksPage() {
               <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-4">
                 <span className="text-2xl">⚖️</span>
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                Partial Mediation
+              <h3 className="text-lg font-semibold text-slate-800 mb-1">
+                Contract Create
               </h3>
+              <p className="text-xs text-slate-400 italic mb-3">
+                Your contract, professionally mediated.
+              </p>
               <p className="text-sm text-slate-600 mb-4">
-                Most terms fixed (~85%) with specific clauses open for negotiation.
-                Ideal when you need flexibility on key points.
+                Bring your own contract template, complete the strategic assessment,
+                and invite the other party. CLARENCE provides full leverage analysis,
+                three-position negotiation, and clause-by-clause mediation.
               </p>
               <div className="text-xs text-slate-500">
-                <span className="font-medium">Best for:</span> Standard contracts with key negotiables
+                <span className="font-medium">Best for:</span> Procurement, legal teams, and enterprise contracts requiring structured negotiation
               </div>
             </div>
 
-            {/* Full Mediation */}
+            {/* Co-Create */}
             <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow">
               <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center mb-4">
                 <span className="text-2xl">🤝</span>
               </div>
-              <h3 className="text-lg font-semibold text-slate-800 mb-2">
-                Full Mediation
+              <h3 className="text-lg font-semibold text-slate-800 mb-1">
+                Co-Create
               </h3>
+              <p className="text-xs text-slate-400 italic mb-3">
+                Built together, from the ground up.
+              </p>
               <p className="text-sm text-slate-600 mb-4">
-                All contract terms are negotiable. Best for complex deals, strategic
-                partnerships, or bespoke agreements.
+                No starting document from either side. CLARENCE generates the
+                clause set based on the contract type, and both parties shape
+                the agreement collaboratively from inception.
               </p>
               <div className="text-xs text-slate-500">
-                <span className="font-medium">Best for:</span> Complex, high-value negotiations
+                <span className="font-medium">Best for:</span> New partnerships, equal-leverage deals, and parties who want neutral ground
               </div>
             </div>
+
           </div>
         </div>
       </section>
