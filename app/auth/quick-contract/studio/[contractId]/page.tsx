@@ -2860,6 +2860,72 @@ INSTRUCTIONS:
         return () => clearInterval(pollInterval)
     }, [contractId, clauses.length, isPolling, rangeMappings.size])
 
+    // RANGE MAPPING CATCH-UP: After certification polling stops,
+    // do a few final fetches to catch trailing range mappings
+    // (range mapping fires in parallel with certification chain,
+    // so the last few may still be generating when polling stops)
+    useEffect(() => {
+        if (!contractId || !clauses.length) return
+        if (isPolling) return // Still polling, main loop handles it
+
+        const nonHeaderCount = clauses.filter(c => !c.isHeader).length
+        const currentMappingCount = rangeMappings.size
+
+        // All mappings present — nothing to catch up
+        if (currentMappingCount >= nonHeaderCount) return
+
+        console.log(`[QC Studio] Range mapping catch-up: have ${currentMappingCount} of ${nonHeaderCount}, fetching stragglers...`)
+
+        let attempts = 0
+        const maxAttempts = 8 // Up to ~40 seconds of catch-up
+
+        const catchUpInterval = setInterval(async () => {
+            attempts++
+            try {
+                const { data: rangeMappingData } = await supabase
+                    .from('clause_range_mappings')
+                    .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
+                    .eq('contract_id', contractId)
+                    .eq('is_displayable', true)
+
+                if (rangeMappingData && rangeMappingData.length > rangeMappings.size) {
+                    const mappingMap = new Map<string, RangeMapping>()
+                    for (const rm of rangeMappingData) {
+                        mappingMap.set(rm.clause_id, {
+                            clauseId: rm.clause_id,
+                            contractId: rm.contract_id,
+                            isDisplayable: rm.is_displayable,
+                            valueType: rm.value_type,
+                            rangeUnit: rm.range_unit,
+                            industryStandardMin: rm.industry_standard_min,
+                            industryStandardMax: rm.industry_standard_max,
+                            rangeData: rm.range_data as RangeMappingData
+                        })
+                    }
+                    setRangeMappings(mappingMap)
+                    console.log(`[QC Studio] Catch-up: ${rangeMappingData.length} of ${nonHeaderCount} range mappings loaded`)
+
+                    // All caught up — stop
+                    if (rangeMappingData.length >= nonHeaderCount) {
+                        console.log('[QC Studio] All range mappings loaded')
+                        clearInterval(catchUpInterval)
+                    }
+                }
+
+                // Give up after max attempts
+                if (attempts >= maxAttempts) {
+                    console.log(`[QC Studio] Catch-up complete after ${attempts} attempts (${rangeMappings.size} mappings)`)
+                    clearInterval(catchUpInterval)
+                }
+
+            } catch (err) {
+                console.error('Range mapping catch-up error:', err)
+                clearInterval(catchUpInterval)
+            }
+        }, 5000) // Every 5 seconds
+
+        return () => clearInterval(catchUpInterval)
+    }, [contractId, clauses.length, isPolling, rangeMappings.size])
 
     // ========================================================================
     // SECTION 5: LOADING STATE
