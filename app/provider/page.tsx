@@ -608,6 +608,16 @@ function ProviderAuthContent() {
             };
             localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
 
+
+            // ================================================================
+            // STEP 2B: Check for redirect parameter (from QC invite link)
+            // ================================================================
+            const redirectPath = searchParams.get('redirect')
+            if (redirectPath && redirectPath.startsWith('/auth/')) {
+                router.push(redirectPath)
+                return
+            }
+
             // ================================================================
             // STEP 3: Check for session data from token validation first
             // ================================================================
