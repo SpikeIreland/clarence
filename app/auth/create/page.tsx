@@ -17,8 +17,11 @@
 //     - Contract Create → /auth/contracts-dashboard (existing Contracts Dashboard)
 //     - Co-Create       → Coming Soon
 //
+// AUTH PATTERN:
+//   Uses localStorage('clarence_auth') — matching QC Dashboard, Contract
+//   Studio, and all other authenticated pages in the system.
+//
 // FUTURE:
-//   - Summary stats per pathway (active sessions count)
 //   - Pathway-specific "New Contract" buttons that pre-select the pathway
 //   - Tendering section within Contract Create
 // ============================================================================
@@ -32,7 +35,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import AuthenticatedHeader from '@/components/AuthenticatedHeader'
-import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 3: TYPE DEFINITIONS
@@ -59,6 +61,7 @@ interface PathwaySummary {
 
 export default function CreateGatewayPage() {
     const router = useRouter()
+    const supabase = createClient()
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
     const [loading, setLoading] = useState(true)
     const [pathwaySummary, setPathwaySummary] = useState<PathwaySummary>({
@@ -68,113 +71,108 @@ export default function CreateGatewayPage() {
     })
 
     // ==========================================================================
-    // SECTION 5: AUTHENTICATION CHECK
+    // SECTION 5: AUTHENTICATION — localStorage PATTERN
+    // Matches QC Dashboard, Contract Studio, and all other authenticated pages.
+    // User data is stored in localStorage at login time by the login page.
     // ==========================================================================
 
-    const loadUserAndData = useCallback(async () => {
+    const loadUserInfo = useCallback((): UserInfo | null => {
+        const auth = localStorage.getItem('clarence_auth')
+        if (!auth) {
+            router.push('/auth/login')
+            return null
+        }
+
         try {
-            const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
-
-            if (!user) {
-                router.push('/auth/login')
-                return
-            }
-
-            // Load user profile
-            const { data: profile } = await supabase
-                .from('user_profiles')
-                .select('first_name, last_name, email, company_name, role')
-                .eq('user_id', user.id)
-                .single()
-
-            if (profile) {
-                setUserInfo({
-                    firstName: profile.first_name,
-                    lastName: profile.last_name,
-                    email: profile.email || user.email,
-                    company: profile.company_name,
-                    role: profile.role,
-                    userId: user.id,
-                })
-            } else {
-                setUserInfo({
-                    email: user.email,
-                    userId: user.id,
-                })
-            }
-
-            // Load pathway summary counts
-            await loadPathwaySummary(supabase, user.id)
-
-        } catch (err) {
-            console.error('Error loading user data:', err)
-        } finally {
-            setLoading(false)
+            const authData = JSON.parse(auth)
+            const info = authData.userInfo || authData
+            setUserInfo(info)
+            return info
+        } catch {
+            router.push('/auth/login')
+            return null
         }
     }, [router])
 
     // ==========================================================================
     // SECTION 6: PATHWAY SUMMARY DATA
+    // Quick Create   → counted from quick_contracts table (created_by_user_id)
+    // Contract Create → counted from sessions table (customer_user_id, non-training)
+    // Co-Create      → not yet built, always 0
     // ==========================================================================
 
-    async function loadPathwaySummary(supabase: any, userId: string) {
+    const loadPathwaySummary = useCallback(async (userId: string) => {
         try {
-            // Get all sessions for this user (non-training)
-            const { data: sessions } = await supabase
+            const summary: PathwaySummary = {
+                quickCreate: { active: 0, completed: 0 },
+                contractCreate: { active: 0, completed: 0 },
+                coCreate: { active: 0, completed: 0 },
+            }
+
+            // --- Quick Create: from quick_contracts table ---
+            const { data: qcData } = await supabase
+                .from('quick_contracts')
+                .select('quick_contract_id, status')
+                .eq('created_by_user_id', userId)
+
+            if (qcData) {
+                qcData.forEach((qc: any) => {
+                    const isCompleted = qc.status === 'accepted' || qc.status === 'completed'
+                    if (isCompleted) {
+                        summary.quickCreate.completed++
+                    } else {
+                        summary.quickCreate.active++
+                    }
+                })
+            }
+
+            // --- Contract Create: from sessions table ---
+            // Includes both new values (contract_create) and legacy (partial_mediation, full_mediation)
+            const { data: sessionsData } = await supabase
                 .from('sessions')
                 .select('session_id, mediation_type, status, is_training')
                 .eq('customer_user_id', userId)
                 .eq('is_training', false)
+                .in('mediation_type', ['contract_create', 'partial_mediation', 'full_mediation'])
 
-            if (sessions) {
-                const summary: PathwaySummary = {
-                    quickCreate: { active: 0, completed: 0 },
-                    contractCreate: { active: 0, completed: 0 },
-                    coCreate: { active: 0, completed: 0 },
-                }
-
-                sessions.forEach((s: any) => {
+            if (sessionsData) {
+                sessionsData.forEach((s: any) => {
                     const isCompleted = s.status === 'completed'
-                    const key = s.mediation_type === 'quick_create' ? 'quickCreate'
-                        : s.mediation_type === 'contract_create' ? 'contractCreate'
-                            : s.mediation_type === 'co_create' ? 'coCreate'
-                                // Legacy mapping
-                                : s.mediation_type === 'straight_to_contract' ? 'quickCreate'
-                                    : s.mediation_type === 'partial_mediation' ? 'contractCreate'
-                                        : s.mediation_type === 'full_mediation' ? 'contractCreate'
-                                            : null
-
-                    if (key) {
-                        if (isCompleted) {
-                            summary[key].completed++
-                        } else {
-                            summary[key].active++
-                        }
+                    if (isCompleted) {
+                        summary.contractCreate.completed++
+                    } else {
+                        summary.contractCreate.active++
                     }
                 })
-
-                setPathwaySummary(summary)
             }
+
+            setPathwaySummary(summary)
         } catch (err) {
             console.error('Error loading pathway summary:', err)
         }
-    }
+    }, [supabase])
 
     // ==========================================================================
     // SECTION 7: EFFECTS
     // ==========================================================================
 
     useEffect(() => {
-        loadUserAndData()
-    }, [loadUserAndData])
+        const init = async () => {
+            const user = loadUserInfo()
+            if (user?.userId) {
+                await loadPathwaySummary(user.userId)
+            }
+            setLoading(false)
+        }
+        init()
+    }, [loadUserInfo, loadPathwaySummary])
 
     // ==========================================================================
     // SECTION 8: SIGN OUT HANDLER
     // ==========================================================================
 
     const handleSignOut = async () => {
-        const supabase = createClient()
+        localStorage.removeItem('clarence_auth')
         await supabase.auth.signOut()
         router.push('/')
     }
@@ -203,6 +201,7 @@ export default function CreateGatewayPage() {
 
             {/* ================================================================== */}
             {/* SECTION 11: NAVIGATION HEADER */}
+            {/* FeedbackButton is inside AuthenticatedHeader — not duplicated here */}
             {/* ================================================================== */}
             <AuthenticatedHeader
                 activePage="create"
@@ -212,20 +211,18 @@ export default function CreateGatewayPage() {
 
             {/* ================================================================== */}
             {/* SECTION 12: PAGE HEADER */}
+            {/* No FeedbackButton here — already in AuthenticatedHeader */}
             {/* ================================================================== */}
             <div className="bg-white border-b border-slate-200">
                 <div className="max-w-6xl mx-auto px-6 py-8">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-800 mb-1">
-                                Create
-                            </h1>
-                            <p className="text-slate-500">
-                                Choose how you want to build your contract. Each pathway follows the same
-                                principled framework—adapted to your needs.
-                            </p>
-                        </div>
-                        <FeedbackButton position="header" />
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-800 mb-1">
+                            Create
+                        </h1>
+                        <p className="text-slate-500">
+                            Choose how you want to build your contract. Each pathway follows the same
+                            principled framework—adapted to your needs.
+                        </p>
                     </div>
                 </div>
             </div>
