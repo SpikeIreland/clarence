@@ -2741,6 +2741,7 @@ INSTRUCTIONS:
     }, [contractId, contract?.status, clauses.length])
 
     // POLL FOR CERTIFICATION STATUS (when clauses exist but still being certified)
+    // Also refreshes range mappings as they are generated during certification
     useEffect(() => {
         if (!contractId || !clauses.length) return
 
@@ -2800,6 +2801,37 @@ INSTRUCTIONS:
                 const failed = updatedClauses.filter(c => c.status === 'failed' && !c.is_header).length
                 setCertificationProgress({ certified, total, failed })
 
+                // RANGE MAPPING REFRESH: Re-fetch range mappings as they arrive
+                // Range mappings are generated per-clause during certification,
+                // so we need to keep loading new ones as they appear
+                const nonHeaderCount = updatedClauses.filter(c => !c.is_header).length
+                const currentMappingCount = rangeMappings.size
+                if (currentMappingCount < nonHeaderCount) {
+                    const { data: rangeMappingData } = await supabase
+                        .from('clause_range_mappings')
+                        .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
+                        .eq('contract_id', contractId)
+                        .eq('is_displayable', true)
+
+                    if (rangeMappingData && rangeMappingData.length > currentMappingCount) {
+                        const mappingMap = new Map<string, RangeMapping>()
+                        for (const rm of rangeMappingData) {
+                            mappingMap.set(rm.clause_id, {
+                                clauseId: rm.clause_id,
+                                contractId: rm.contract_id,
+                                isDisplayable: rm.is_displayable,
+                                valueType: rm.value_type,
+                                rangeUnit: rm.range_unit,
+                                industryStandardMin: rm.industry_standard_min,
+                                industryStandardMax: rm.industry_standard_max,
+                                rangeData: rm.range_data as RangeMappingData
+                            })
+                        }
+                        setRangeMappings(mappingMap)
+                        console.log(`[QC Studio] Range mappings updated: ${rangeMappingData.length} of ${nonHeaderCount} clauses`)
+                    }
+                }
+
                 // Stop polling when done - must check BOTH status AND clarence_certified
                 const stillProcessing = updatedClauses.some(c =>
                     !c.is_header && (
@@ -2819,7 +2851,8 @@ INSTRUCTIONS:
         }, 4000) // Poll every 4 seconds
 
         return () => clearInterval(pollInterval)
-    }, [contractId, clauses.length, isPolling])
+    }, [contractId, clauses.length, isPolling, rangeMappings.size])
+
 
     // ========================================================================
     // SECTION 5: LOADING STATE
