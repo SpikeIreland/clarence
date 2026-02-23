@@ -382,6 +382,8 @@ function QuickContractStudioContent() {
     const [draftTargetPosition, setDraftTargetPosition] = useState<number | null>(null)
     const draftTargetPositionRef = useRef<number | null>(null)
 
+    const [resolvedContractId, setResolvedContractId] = useState<string | null>(null)
+
     // ---- BULK SELECT STATE ----
     const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
     const [bulkAgreeInProgress, setBulkAgreeInProgress] = useState(false)
@@ -520,6 +522,10 @@ function QuickContractStudioContent() {
                     extractedText: contractData.extracted_text
                 })
 
+                setResolvedContractId(contractData.contract_id)
+
+                if (!resolvedContractId) return
+
                 // Set permission flag based on party role
                 const userIsInitiator = contractData.uploaded_by_user_id === userId
                 setIsInitiator(userIsInitiator)
@@ -538,7 +544,7 @@ function QuickContractStudioContent() {
                 const { data: clausesData, error: clausesError } = await supabase
                     .from('uploaded_contract_clauses')
                     .select('*')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', contractData.contract_id)
                     .order('display_order', { ascending: true })
 
                 if (clausesError) {
@@ -2682,7 +2688,7 @@ INSTRUCTIONS:
                 const { data: clausesData, error: clausesError } = await supabase
                     .from('uploaded_contract_clauses')
                     .select('*')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId)
                     .order('display_order', { ascending: true })
 
                 if (clausesError) {
