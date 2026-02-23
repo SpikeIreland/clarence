@@ -850,43 +850,29 @@ export default function PublicRecipientPage() {
                     </div>
                 )}
 
-                {/* ============================================================== */}
-                {/* SECTION 23: RESPONSE BUTTONS */}
+{/* ============================================================== */}
+                {/* SECTION 23: REVIEW IN STUDIO BUTTON */}
                 {/* ============================================================== */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                    <h2 className="font-semibold text-slate-800 mb-4 text-center">Your Response</h2>
+                    <h2 className="font-semibold text-slate-800 mb-2 text-center">Ready to Review?</h2>
+                    <p className="text-slate-500 text-sm text-center mb-4">
+                        Sign in to review each clause, chat with the sender, and agree or query terms individually.
+                    </p>
 
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button
-                            onClick={handleDecline}
-                            disabled={!canRespond()}
-                            className="px-8 py-3 border-2 border-red-300 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    <div className="flex justify-center">
+                        <a
+                            href={`/provider?redirect=${encodeURIComponent('/auth/quick-contract/studio/' + (contract?.quickContractId || ''))}`}
+                            className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 no-underline"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            Decline
-                        </button>
-                        <button
-                            onClick={handleAccept}
-                            disabled={!canRespond()}
-                            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Accept Contract
-                        </button>
+                            Review Contract in Studio
+                        </a>
                     </div>
 
-                    {!canRespond() && contract?.requireFullScroll && (
-                        <p className="text-center text-sm text-amber-600 mt-4">
-                            Please scroll through the entire contract to enable response buttons
-                        </p>
-                    )}
-
                     <p className="text-center text-xs text-slate-400 mt-4">
-                        By accepting, you agree to the terms outlined in this contract.
+                        You'll be asked to sign in or create an account to proceed.
                     </p>
                 </div>
             </main>
