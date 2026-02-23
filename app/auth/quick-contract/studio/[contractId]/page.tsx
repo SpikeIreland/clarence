@@ -465,11 +465,38 @@ function QuickContractStudioContent() {
                 setRoleUserId(userId)
 
                 // Load contract
-                const { data: contractData, error: contractError } = await supabase
+                // Try as uploaded_contracts.contract_id first
+                let { data: contractData, error: contractError } = await supabase
                     .from('uploaded_contracts')
                     .select('*')
                     .eq('contract_id', contractId)
                     .single()
+
+                // If not found, contractId might be a quick_contract_id - look up the source
+                if (contractError || !contractData) {
+                    const { data: qcLookup } = await supabase
+                        .from('quick_contracts')
+                        .select('source_contract_id')
+                        .eq('quick_contract_id', contractId)
+                        .single()
+
+                    if (qcLookup?.source_contract_id) {
+                        const result = await supabase
+                            .from('uploaded_contracts')
+                            .select('*')
+                            .eq('contract_id', qcLookup.source_contract_id)
+                            .single()
+                        contractData = result.data
+                        contractError = result.error
+                    }
+                }
+
+                if (contractError || !contractData) {
+                    console.error('Contract error:', contractError)
+                    setError('Contract not found')
+                    setLoading(false)
+                    return
+                }
 
                 if (contractError || !contractData) {
                     console.error('Contract error:', contractError)
