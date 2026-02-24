@@ -247,13 +247,21 @@ function QuickContractCreateContent() {
     const loadUserInfo = useCallback(async () => {
         const auth = localStorage.getItem('clarence_auth')
         if (!auth) {
+            console.log('🔴 QC Create: No clarence_auth in localStorage, redirecting to login')
             router.push('/login')
             return null
         }
 
         try {
             const parsed = JSON.parse(auth)
-            const info: UserInfo = {
+            console.log('🔵 QC Create loadUserInfo: localStorage parsed', {
+                email: parsed.email,
+                companyId: parsed.companyId || '(missing)',
+                userId: parsed.userId || '(missing)',
+                company: parsed.companyName || parsed.company || '(missing)'
+            })
+
+            let info: UserInfo = {
                 firstName: parsed.firstName || '',
                 lastName: parsed.lastName || '',
                 email: parsed.email || '',
@@ -262,13 +270,111 @@ function QuickContractCreateContent() {
                 role: parsed.role || 'user',
                 userId: parsed.userId || ''
             }
+
+            // ============================================================
+            // ENRICHMENT: If companyId is missing from localStorage,
+            // look it up from Supabase users table.
+            // The login page stores company name but not company_id,
+            // so this fallback is essential for template filtering.
+            // ============================================================
+            if (!info.companyId) {
+                console.log('🟡 QC Create: companyId missing from localStorage, enriching from Supabase...')
+                try {
+                    // Strategy 1: Look up by auth_id (most reliable)
+                    const { data: { user: authUser } } = await supabase.auth.getUser()
+
+                    if (authUser) {
+                        const { data: dbUser, error: dbError } = await supabase
+                            .from('users')
+                            .select('user_id, company_id, email, first_name, last_name')
+                            .eq('auth_id', authUser.id)
+                            .single()
+
+                        if (dbUser && !dbError) {
+                            console.log('🟢 QC Create: Enriched from Supabase users table (auth_id match)', {
+                                companyId: dbUser.company_id,
+                                userId: dbUser.user_id,
+                                email: dbUser.email
+                            })
+                            info = {
+                                ...info,
+                                companyId: dbUser.company_id || '',
+                                userId: dbUser.user_id || info.userId,
+                                email: dbUser.email || info.email,
+                                firstName: dbUser.first_name || info.firstName,
+                                lastName: dbUser.last_name || info.lastName
+                            }
+
+                            // Persist enrichment back to localStorage so future loads are instant
+                            try {
+                                const authData = JSON.parse(localStorage.getItem('clarence_auth') || '{}')
+                                authData.companyId = info.companyId
+                                authData.userId = info.userId
+                                localStorage.setItem('clarence_auth', JSON.stringify(authData))
+                                console.log('🟢 QC Create: Persisted companyId back to localStorage')
+                            } catch (persistErr) {
+                                console.warn('Could not persist enrichment to localStorage:', persistErr)
+                            }
+                        } else {
+                            console.log('🟡 QC Create: auth_id lookup returned no match, trying email fallback...')
+
+                            // Strategy 2: Look up by email
+                            if (info.email) {
+                                const { data: emailUser } = await supabase
+                                    .from('users')
+                                    .select('user_id, company_id, first_name, last_name')
+                                    .eq('email', info.email)
+                                    .single()
+
+                                if (emailUser) {
+                                    console.log('🟢 QC Create: Enriched from Supabase users table (email match)', {
+                                        companyId: emailUser.company_id,
+                                        userId: emailUser.user_id
+                                    })
+                                    info = {
+                                        ...info,
+                                        companyId: emailUser.company_id || '',
+                                        userId: emailUser.user_id || info.userId,
+                                        firstName: emailUser.first_name || info.firstName,
+                                        lastName: emailUser.last_name || info.lastName
+                                    }
+
+                                    // Persist back
+                                    try {
+                                        const authData = JSON.parse(localStorage.getItem('clarence_auth') || '{}')
+                                        authData.companyId = info.companyId
+                                        authData.userId = info.userId
+                                        localStorage.setItem('clarence_auth', JSON.stringify(authData))
+                                        console.log('🟢 QC Create: Persisted companyId back to localStorage (email fallback)')
+                                    } catch (persistErr) {
+                                        console.warn('Could not persist enrichment to localStorage:', persistErr)
+                                    }
+                                } else {
+                                    console.log('🔴 QC Create: Email lookup also returned no match')
+                                }
+                            }
+                        }
+                    } else {
+                        console.log('🔴 QC Create: No authenticated Supabase user found')
+                    }
+                } catch (enrichErr) {
+                    console.warn('🟡 QC Create: Enrichment failed (non-fatal):', enrichErr)
+                }
+            }
+
+            console.log('🔵 QC Create loadUserInfo FINAL:', {
+                email: info.email,
+                companyId: info.companyId || '(STILL MISSING)',
+                userId: info.userId
+            })
+
             setUserInfo(info)
             return info
         } catch {
             router.push('/login')
             return null
         }
-    }, [router])
+    }, [router, supabase])
 
     const loadTemplates = useCallback(async (companyId: string, userId: string) => {
         try {
