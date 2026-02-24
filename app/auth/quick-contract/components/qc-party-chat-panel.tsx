@@ -414,7 +414,7 @@ export function QCPartyChatPanel({
                 .insert({
                     contract_id: contractId,
                     sender_user_id: currentUserId,
-                    sender_name: currentUserName,
+                    sender_name: currentUserName || 'Unknown User',
                     sender_role: partyRole,
                     message_text: messageText,
                     is_system_message: false,
@@ -675,7 +675,7 @@ export function QCPartyChatPanel({
                     }
                 }}
             />
-            
+
             {/* Backdrop removed - users can work while chatting */}
 
             {/* Chat Panel - Docked or Detached */}
