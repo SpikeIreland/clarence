@@ -426,6 +426,13 @@ function QuickContractStudioContent() {
                 // ---------------------------------------------------------
                 const { data: { user: supabaseUser } } = await supabase.auth.getUser()
 
+                console.log('[QC Studio Auth]', {
+                    hasSupabaseUser: !!supabaseUser,
+                    userId: supabaseUser?.id?.slice(0, 8),
+                    email: supabaseUser?.email,
+                    hasRedirectedAlready: hasRedirected.current
+                })
+
                 if (!supabaseUser) {
                     // Guard: only redirect once
                     if (hasRedirected.current) return
@@ -436,6 +443,7 @@ function QuickContractStudioContent() {
                     // React re-render loop due to GoTrueClient/searchParams interaction.
                     const returnUrl = `/auth/quick-contract/studio/${contractId}`
                     sessionStorage.setItem('clarence_qc_redirect', returnUrl)
+                    console.log('[QC Studio] Stored redirect in sessionStorage:', returnUrl)
                     window.location.href = '/provider'
                     return
                 }

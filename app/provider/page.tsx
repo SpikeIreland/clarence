@@ -609,6 +609,10 @@ function ProviderAuthContent() {
             // URL param issues with React re-rendering.
             // ================================================================
             const qcRedirect = sessionStorage.getItem('clarence_qc_redirect');
+            console.log('[Provider Login] sessionStorage check:', {
+                qcRedirect: qcRedirect,
+                hasStoredSession: !!localStorage.getItem('clarence_provider_session')
+            });
             if (qcRedirect) {
                 sessionStorage.removeItem('clarence_qc_redirect');
                 console.log('Provider login: redirecting to', qcRedirect);
