@@ -556,6 +556,11 @@ function ProviderAuthContent() {
 
     // ========================================================================
     // SECTION 7E: LOGIN HANDLER
+    // CHANGELOG:
+    // 25 Feb 2026 - Added Step 5B: QC contract lookup via qc_recipients
+    //   Resolves the return-visit gap where a QC provider logs in without
+    //   coming through the Token Page (no sessionStorage redirect).
+    //   QC contracts take routing priority since they need no onboarding.
     // ========================================================================
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -644,6 +649,7 @@ function ProviderAuthContent() {
 
             // ================================================================
             // STEP 4: Check for session data from token validation
+            // (Contract Create flow — token pre-populated localStorage)
             // ================================================================
             const storedSession = localStorage.getItem('clarence_provider_session');
             let tokenSession: ProviderSession | null = null;
@@ -688,52 +694,126 @@ function ProviderAuthContent() {
             }
 
             // ================================================================
-            // STEP 5: No token session - fetch active sessions for this provider
+            // STEP 5: Fetch Contract Create sessions for this provider
             // ================================================================
             const sessionsResponse = await fetch(
                 `${API_BASE}/provider-sessions-api?email=${encodeURIComponent(loginForm.email)}`
             );
 
-            let sessions: ProviderSession[] = [];
+            let ccSessions: ProviderSession[] = [];
 
             if (sessionsResponse.ok) {
                 const sessionsData = await sessionsResponse.json();
-                sessions = sessionsData.sessions || [];
+                ccSessions = sessionsData.sessions || [];
             }
 
             // ================================================================
-            // STEP 6: Route based on sessions
+            // STEP 5B: Fetch Quick Create contracts for this provider
+            // Queries qc_recipients by email, joined with quick_contracts.
+            // Filters for active statuses (not declined, not cancelled).
+            // This resolves the return-visit gap: a QC provider who logs
+            // in without coming through the Token Page can still reach
+            // their QC Studio.
+            // ================================================================
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let qcContracts: any[] = [];
+
+            try {
+                const { data: qcData, error: qcError } = await supabase
+                    .from('qc_recipients')
+                    .select(`
+                        recipient_id,
+                        status,
+                        quick_contract_id,
+                        quick_contracts (
+                            quick_contract_id,
+                            contract_name,
+                            contract_type,
+                            status,
+                            created_at
+                        )
+                    `)
+                    .eq('recipient_email', loginForm.email)
+                    .in('status', ['sent', 'pending', 'viewed', 'accepted']);
+
+                if (!qcError && qcData) {
+                    // Supabase returns joined relations as arrays
+                    // Normalise to a flat structure for easier routing
+                    qcContracts = qcData
+                        .map(qc => {
+                            const contract = Array.isArray(qc.quick_contracts)
+                                ? qc.quick_contracts[0]
+                                : qc.quick_contracts;
+                            return { ...qc, quick_contracts: contract || null };
+                        })
+                        .filter(
+                            qc => qc.quick_contracts &&
+                                !['cancelled', 'completed', 'expired'].includes(qc.quick_contracts.status)
+                        );
+                }
+            } catch (qcFetchError) {
+                // QC lookup failure is non-blocking — fall through to CC routing
+                console.error('QC contracts lookup error:', qcFetchError);
+            }
+
+            // ================================================================
+            // STEP 6: Route based on available contracts
+            // Priority: QC contracts first (no onboarding needed, simple
+            // journey), then Contract Create sessions.
             // HARD NAV: All post-login redirects use window.location.href
             // to prevent GoTrueClient render loop (dual-mount issue).
             // ================================================================
-            if (sessions.length === 0) {
-                // No active sessions — route to lobby (providerConfirmation)
-                // The lobby will show an empty state message
+
+            // 6A: If QC contracts exist, route to the most recent QC Studio
+            if (qcContracts.length > 0) {
+                // Sort by created_at descending (most recent first)
+                const sorted = qcContracts.sort((a, b) => {
+                    const dateA = a.quick_contracts?.created_at || '';
+                    const dateB = b.quick_contracts?.created_at || '';
+                    return dateB.localeCompare(dateA);
+                });
+
+                const mostRecent = sorted[0];
+                const contractId = mostRecent.quick_contracts?.quick_contract_id || mostRecent.quick_contract_id;
+
+                eventLogger.completed('provider_onboarding', 'qc_return_visit_routed', {
+                    contractId,
+                    contractName: mostRecent.quick_contracts?.contract_name,
+                    qcCount: qcContracts.length,
+                    ccCount: ccSessions.length
+                });
+
+                window.location.href = `/auth/quick-contract/studio/${contractId}`;
+                return;
+            }
+
+            // 6B: If Contract Create sessions exist, use CC routing logic
+            if (ccSessions.length > 0) {
+                if (ccSessions.length === 1) {
+                    const session = ccSessions[0];
+                    localStorage.setItem('clarence_provider_session', JSON.stringify(session));
+
+                    if (!session.intakeComplete) {
+                        window.location.href = `/provider/intake?session_id=${session.sessionId}&provider_id=${session.providerId}`;
+                    } else if (!session.questionnaireComplete) {
+                        window.location.href = `/provider/questionnaire?session_id=${session.sessionId}&provider_id=${session.providerId}`;
+                    } else {
+                        window.location.href = `/provider/providerConfirmation?session_id=${session.sessionId}&provider_id=${session.providerId}`;
+                    }
+                    return;
+                }
+
+                // Multiple CC sessions — store most recent, route to confirmation
+                const mostRecent = ccSessions[0];
+                localStorage.setItem('clarence_provider_session', JSON.stringify(mostRecent));
                 window.location.href = '/provider/providerConfirmation';
                 return;
             }
 
-            if (sessions.length === 1) {
-                // Single session - go directly
-                const session = sessions[0];
-                localStorage.setItem('clarence_provider_session', JSON.stringify(session));
-
-                // Determine where to redirect based on completion status
-                if (!session.intakeComplete) {
-                    window.location.href = `/provider/intake?session_id=${session.sessionId}&provider_id=${session.providerId}`;
-                } else if (!session.questionnaireComplete) {
-                    window.location.href = `/provider/questionnaire?session_id=${session.sessionId}&provider_id=${session.providerId}`;
-                } else {
-                    // Route to lobby (will show contract card with 'Enter Studio')
-                    window.location.href = '/provider/providerConfirmation';
-                }
-                return;
-            }
-
-            // Multiple sessions - route to lobby (shows all contract cards)
-            const mostRecent = sessions[0];
-            localStorage.setItem('clarence_provider_session', JSON.stringify(mostRecent));
-            window.location.href = '/provider/providerConfirmation';
+            // 6C: No contracts of any type found
+            setSuccessMessage('Login successful! You have no active contracts at the moment. When a customer invites you to negotiate, your contract will appear here.');
+            setIsLoading(false);
 
         } catch (error) {
             console.error('Login error:', error);
