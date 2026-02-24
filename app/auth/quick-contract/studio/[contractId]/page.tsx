@@ -3068,10 +3068,26 @@ INSTRUCTIONS:
                     <h2 className="text-xl font-semibold text-slate-800 mb-2">Unable to Load Contract</h2>
                     <p className="text-slate-600 mb-6">{error}</p>
                     <button
-                        onClick={() => router.push('/auth/quick-contract')}
+                        onClick={() => {
+                            // Role-aware routing: providers go to /provider, customers to /auth/quick-contract
+                            // At error state, contract may not be loaded so check localStorage
+                            let isProvider = false
+                            try {
+                                const auth = localStorage.getItem('clarence_auth')
+                                if (auth) {
+                                    const parsed = JSON.parse(auth)
+                                    isProvider = parsed?.userInfo?.role === 'provider'
+                                }
+                            } catch { /* ignore */ }
+                            if (isProvider) {
+                                window.location.href = '/provider'
+                            } else {
+                                router.push('/auth/quick-contract')
+                            }
+                        }}
                         className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
                     >
-                        Back to Quick Create
+                        Go Back
                     </button>
                 </div>
             </div>
@@ -3093,6 +3109,25 @@ INSTRUCTIONS:
                     {/* Left: Logo & Contract Info */}
                     <div className="flex items-center gap-4 min-w-0 flex-1">
                         <div className="flex items-center gap-3 flex-shrink-0">
+                            {/* Home Icon — role-aware routing */}
+                            <button
+                                onClick={() => {
+                                    if (getPartyRole() === 'respondent') {
+                                        // Provider: hard nav to prevent GoTrueClient render loop
+                                        window.location.href = '/provider'
+                                    } else {
+                                        // Customer: standard navigation to dashboard
+                                        router.push('/auth/contracts-dashboard')
+                                    }
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
+                                title={getPartyRole() === 'respondent' ? 'Provider Portal' : 'Dashboard'}
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                                </svg>
+                            </button>
+                            <div className="h-5 w-px bg-slate-200"></div>
                             <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md">
                                 <span className="text-white font-bold text-lg">C</span>
                             </div>
@@ -3201,11 +3236,18 @@ INSTRUCTIONS:
                         )}
 
                         <button
-                            onClick={() => router.push(
-                                isTemplateMode
-                                    ? (isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
-                                    : '/auth/quick-contract'
-                            )}
+                            onClick={() => {
+                                if (isTemplateMode) {
+                                    // Template mode: always customer routes
+                                    router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
+                                } else if (getPartyRole() === 'respondent') {
+                                    // Provider: hard nav back to provider portal
+                                    window.location.href = '/provider'
+                                } else {
+                                    // Customer: back to Quick Create dashboard
+                                    router.push('/auth/quick-contract')
+                                }
+                            }}
                             className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
                         >
                             &larr; Back
