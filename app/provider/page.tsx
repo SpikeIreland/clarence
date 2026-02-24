@@ -18,7 +18,7 @@
 // SECTION 1: IMPORTS
 // ============================================================================
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { eventLogger } from '@/lib/eventLogger';
@@ -179,6 +179,9 @@ function ProviderAuthContent() {
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+
+    // Navigation guard - prevents re-render loop from blocking redirect
+    const isNavigatingAway = useRef(false);
 
     // Token validation state
     const [tokenValidation, setTokenValidation] = useState<TokenValidation | null>(null);
@@ -616,9 +619,13 @@ function ProviderAuthContent() {
             const redirectUrl = searchParams.get('redirect');
             if (redirectUrl) {
                 console.log('Provider login: redirecting to', redirectUrl);
-                // Use hard navigation (not router.push) to ensure Supabase
-                // session cookies are fully persisted before Studio loads
-                window.location.href = redirectUrl;
+                isNavigatingAway.current = true;
+                // Use setTimeout to break out of React's render cycle —
+                // Supabase onAuthStateChange triggers infinite re-renders
+                // that block synchronous navigation
+                setTimeout(() => {
+                    window.location.href = redirectUrl;
+                }, 100);
                 return;
             }
 
@@ -726,7 +733,11 @@ function ProviderAuthContent() {
             eventLogger.failed('provider_onboarding', 'login_attempted',
                 error instanceof Error ? error.message : 'Login failed', 'LOGIN_ERROR');
         } finally {
-            setIsLoading(false);
+            // Don't update state if we're navigating away — this prevents
+            // the re-render cascade that blocks window.location.href
+            if (!isNavigatingAway.current) {
+                setIsLoading(false);
+            }
         }
     };
 
