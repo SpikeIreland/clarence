@@ -427,12 +427,16 @@ function QuickContractStudioContent() {
                 const { data: { user: supabaseUser } } = await supabase.auth.getUser()
 
                 if (!supabaseUser) {
-                    // Guard: only redirect once to prevent infinite loop
+                    // Guard: only redirect once to prevent re-fires
                     if (hasRedirected.current) return
                     hasRedirected.current = true
 
+                    // MUST use hard navigation (not router.push) — client-side
+                    // navigation keeps the Studio mounted alongside the Provider
+                    // page, causing dual GoTrueClient instances and an infinite
+                    // React re-render loop (uf/uc cascade)
                     const returnUrl = `/auth/quick-contract/studio/${contractId}`
-                    router.push(`/provider?redirect=${encodeURIComponent(returnUrl)}`)
+                    window.location.href = `/provider?redirect=${encodeURIComponent(returnUrl)}`
                     return
                 }
 
