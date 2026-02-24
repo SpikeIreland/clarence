@@ -426,13 +426,6 @@ function QuickContractStudioContent() {
                 // ---------------------------------------------------------
                 const { data: { user: supabaseUser } } = await supabase.auth.getUser()
 
-                console.log('[QC Studio Auth]', {
-                    hasSupabaseUser: !!supabaseUser,
-                    userId: supabaseUser?.id?.slice(0, 8),
-                    email: supabaseUser?.email,
-                    hasRedirectedAlready: hasRedirected.current
-                })
-
                 if (!supabaseUser) {
                     // Guard: only redirect once
                     if (hasRedirected.current) return
