@@ -2,11 +2,21 @@
 
 // ============================================================================
 // QUICK CONTRACT - PUBLIC RECIPIENT PAGE
-// Version: 1.0
-// Date: 27 January 2026
+// Version: 1.1
+// Date: 25 February 2026
 // Path: /app/qc/[token]/page.tsx
 // Description: Public page for recipients to view and respond to contracts
 // Note: This page does NOT require authentication
+//
+// CHANGELOG:
+// 25 Feb 2026 - v1.1: ENTER STUDIO SUPPORT (Task 2)
+//   - Added handleEnterStudio (Section 8B) - stores contract context in
+//     sessionStorage (clarence_qc_redirect) and hard-navs to /provider
+//   - Added Enter Studio CTA card (Section 22B) between comments and 
+//     response buttons
+//   - Added Enter Studio link on post-acceptance confirmation (Section 16)
+//   - This completes the routing chain: Token Page → Auth → QC Studio
+//     (see HANDOVER-Provider-Experience.docx Section 5.3, Option C)
 // ============================================================================
 
 // ============================================================================
@@ -412,6 +422,50 @@ export default function PublicRecipientPage() {
     }
 
     // ==========================================================================
+    // SECTION 8B: ENTER STUDIO HANDLER
+    // Stores contract context in sessionStorage and navigates to /provider.
+    // The Provider Landing Page (Task 1) checks for this on login and
+    // routes to /auth/quick-contract/studio/[contractId].
+    // Uses window.location.href (hard nav) to prevent GoTrueClient render loop.
+    // See: HANDOVER-Provider-Experience.docx Section 5.3 (Option C)
+    // ==========================================================================
+
+    async function handleEnterStudio() {
+        if (!contract) return
+
+        // Store QC redirect context in sessionStorage
+        // The Provider Landing Page (Section 7E, Step 3) reads this after login
+        const qcRedirect = {
+            contractId: contract.quickContractId,
+            contractName: contract.contractName,
+            contractType: contract.contractType,
+            senderCompany: contract.senderCompany,
+            source: 'qc_token_page'
+        }
+        sessionStorage.setItem('clarence_qc_redirect', JSON.stringify(qcRedirect))
+
+        // Log audit event (fire-and-forget — navigate regardless of outcome)
+        if (recipient) {
+            try {
+                await supabase
+                    .from('qc_audit_log')
+                    .insert({
+                        quick_contract_id: contract.quickContractId,
+                        recipient_id: recipient.recipientId,
+                        event_type: 'enter_studio_clicked',
+                        event_description: 'Recipient clicked Enter Studio — routing to authentication',
+                        event_data: { source: 'qc_token_page' }
+                    })
+            } catch {
+                // Audit log failure is non-blocking
+            }
+        }
+
+        // Hard nav to provider auth page
+        window.location.href = '/provider'
+    }
+
+    // ==========================================================================
     // SECTION 9: COMMENT HANDLER
     // ==========================================================================
 
@@ -556,7 +610,7 @@ export default function PublicRecipientPage() {
                     </div>
                     <h1 className="text-xl font-bold text-slate-800 mb-2">Contract Expired</h1>
                     <p className="text-slate-500 mb-6">
-                        This contract has expired and is no longer available for review. Please contact the sender if you need a new contract.
+                        This contract has expired and is no longer available for response. Please contact the sender if you believe this is an error.
                     </p>
                     <Link
                         href="/"
@@ -631,9 +685,23 @@ export default function PublicRecipientPage() {
                             <p className="text-sm text-slate-500">{getContractTypeLabel(contract.contractType)}</p>
                         </div>
                     )}
+
+                    {/* Enter Studio option for accepted contracts */}
+                    {isAccepted && contract && (
+                        <button
+                            onClick={handleEnterStudio}
+                            className="mt-4 w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            Enter CLARENCE Studio
+                        </button>
+                    )}
+
                     <Link
                         href="/"
-                        className="mt-6 inline-block text-teal-600 hover:text-teal-700 font-medium text-sm"
+                        className="mt-4 inline-block text-teal-600 hover:text-teal-700 font-medium text-sm"
                     >
                         Go to CLARENCE Homepage
                     </Link>
@@ -680,6 +748,27 @@ export default function PublicRecipientPage() {
                             <p className="text-sm text-slate-400 mt-1">From: {contract.senderCompany}</p>
                         )}
                     </div>
+
+                    {/* Enter Studio CTA for accepted contracts */}
+                    {isAccepted && contract && (
+                        <div className="mb-6">
+                            <div className="border border-blue-200 bg-blue-50 rounded-lg p-4">
+                                <p className="text-sm text-blue-800 mb-3">
+                                    Ready to negotiate the details? Enter the CLARENCE Studio to discuss terms with the sender.
+                                </p>
+                                <button
+                                    onClick={handleEnterStudio}
+                                    className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                    </svg>
+                                    Enter CLARENCE Studio
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <p className="text-xs text-slate-400">
                         You can close this window now.
                     </p>
@@ -850,32 +939,158 @@ export default function PublicRecipientPage() {
                     </div>
                 )}
 
-{/* ============================================================== */}
-                {/* SECTION 23: REVIEW IN STUDIO BUTTON */}
+                {/* ============================================================== */}
+                {/* SECTION 22B: ENTER STUDIO CALL-TO-ACTION */}
+                {/* This is the primary action for mediation-type QC contracts.    */}
+                {/* Routes provider through authentication into the QC Studio.     */}
+                {/* ============================================================== */}
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6 mb-6">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                        <div className="flex-shrink-0">
+                            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div className="flex-1 text-center sm:text-left">
+                            <h2 className="font-semibold text-slate-800 mb-1">
+                                Want to negotiate the terms?
+                            </h2>
+                            <p className="text-sm text-slate-600">
+                                Enter the CLARENCE Studio to review each clause, discuss changes, and reach agreement with {contract?.senderCompany || 'the sender'} — powered by CLARENCE, The Honest Broker.
+                            </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                            <button
+                                onClick={handleEnterStudio}
+                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
+                            >
+                                Enter Studio
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ============================================================== */}
+                {/* SECTION 23: RESPONSE BUTTONS (Accept / Decline) */}
                 {/* ============================================================== */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                    <h2 className="font-semibold text-slate-800 mb-2 text-center">Ready to Review?</h2>
-                    <p className="text-slate-500 text-sm text-center mb-4">
-                        Sign in to review each clause, chat with the sender, and agree or query terms individually.
+                    <h2 className="font-semibold text-slate-800 mb-1 text-center">Quick Response</h2>
+                    <p className="text-sm text-slate-500 mb-4 text-center">
+                        Accept or decline without entering the studio
                     </p>
 
-                    <div className="flex justify-center">
-                        <a
-                            href={`/provider?redirect=${encodeURIComponent('/auth/quick-contract/studio/' + (contract?.quickContractId || ''))}`}
-                            className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 no-underline"
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button
+                            onClick={handleDecline}
+                            disabled={!canRespond()}
+                            className="px-8 py-3 border-2 border-red-300 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
-                            Review Contract in Studio
-                        </a>
+                            Decline
+                        </button>
+                        <button
+                            onClick={handleAccept}
+                            disabled={!canRespond()}
+                            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Accept Contract
+                        </button>
                     </div>
 
+                    {!canRespond() && contract?.requireFullScroll && (
+                        <p className="text-center text-sm text-amber-600 mt-4">
+                            Please scroll through the entire contract to enable response buttons
+                        </p>
+                    )}
+
                     <p className="text-center text-xs text-slate-400 mt-4">
-                        You'll be asked to sign in or create an account to proceed.
+                        By accepting, you agree to the terms outlined in this contract.
                     </p>
                 </div>
             </main>
+
+            {/* ================================================================== */}
+            {/* SECTION 24: RESPONSE MODAL */}
+            {/* ================================================================== */}
+            {showResponseModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                        <h2 className="text-lg font-bold text-slate-800 mb-4">
+                            {responseType === 'accepted' ? 'Confirm Acceptance' : 'Confirm Decline'}
+                        </h2>
+
+                        {responseType === 'declined' && (
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Reason for declining (optional)
+                                </label>
+                                <select
+                                    value={declineReason}
+                                    onChange={(e) => setDeclineReason(e.target.value)}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                >
+                                    <option value="">Select a reason...</option>
+                                    <option value="terms_unfavorable">Terms are unfavorable</option>
+                                    <option value="pricing">Pricing concerns</option>
+                                    <option value="timeline">Timeline doesn&apos;t work</option>
+                                    <option value="scope">Scope mismatch</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                        )}
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Message to sender (optional)
+                            </label>
+                            <textarea
+                                value={responseMessage}
+                                onChange={(e) => setResponseMessage(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                                placeholder={responseType === 'accepted'
+                                    ? 'Any comments for the sender...'
+                                    : 'Explain your decision...'}
+                            />
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowResponseModal(false)
+                                    setResponseType(null)
+                                    setDeclineReason('')
+                                    setResponseMessage('')
+                                }}
+                                className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={submitResponse}
+                                disabled={submitting}
+                                className={`flex-1 px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50
+                                    ${responseType === 'accepted'
+                                        ? 'bg-emerald-600 hover:bg-emerald-700'
+                                        : 'bg-red-600 hover:bg-red-700'
+                                    }`}
+                            >
+                                {submitting ? 'Submitting...' : (responseType === 'accepted' ? 'Confirm Accept' : 'Confirm Decline')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
