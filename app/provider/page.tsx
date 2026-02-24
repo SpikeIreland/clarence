@@ -552,10 +552,6 @@ function ProviderAuthContent() {
         setSuccessMessage('');
         setShowActivateAccount(false);
 
-        // Capture redirect URL BEFORE auth — signInWithPassword triggers
-        // Supabase onAuthStateChange which causes React re-render storms
-        const redirectUrl = searchParams.get('redirect');
-
         try {
             if (!loginForm.email || !loginForm.password) {
                 throw new Error('Please enter your email and password.');
@@ -609,16 +605,15 @@ function ProviderAuthContent() {
 
             // ================================================================
             // STEP 2B: FAST-PATH REDIRECT (e.g. from QC Studio)
-            // If a redirect URL was captured before auth, navigate NOW
-            // before Supabase onAuthStateChange causes a re-render storm.
-            // We skip all other post-login logic — the target page will
-            // handle session/state setup from the Supabase session.
+            // The Studio stores the return URL in sessionStorage to avoid
+            // URL param issues with React re-rendering.
             // ================================================================
-            if (redirectUrl) {
-                console.log('Provider login: fast-path redirect to', redirectUrl);
-                // Hard navigate immediately — no state updates, no React
-                window.location.replace(redirectUrl);
-                // Halt all further execution in this handler
+            const qcRedirect = sessionStorage.getItem('clarence_qc_redirect');
+            if (qcRedirect) {
+                sessionStorage.removeItem('clarence_qc_redirect');
+                console.log('Provider login: redirecting to', qcRedirect);
+                window.location.replace(qcRedirect);
+                // Halt execution — never-resolving promise prevents finally block
                 return await new Promise(() => { });
             }
 
