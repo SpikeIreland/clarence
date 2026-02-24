@@ -270,14 +270,16 @@ function QuickContractCreateContent() {
         }
     }, [router])
 
-    const loadTemplates = useCallback(async (companyId: string) => {
+    const loadTemplates = useCallback(async (companyId: string, userId: string) => {
         try {
             // Load from contract_templates table
+            // Broad server-side filter, then narrow client-side by ownership
             const { data, error: loadError } = await supabase
                 .from('contract_templates')
                 .select('*')
-                .or(`company_id.eq.${companyId},is_system.eq.true,is_public.eq.true`)
-                .order('times_used', { ascending: false })
+                .eq('is_active', true)
+                .eq('is_system', false)
+                .order('template_name')
 
             if (loadError) {
                 console.error('Error loading templates:', loadError)
@@ -285,7 +287,7 @@ function QuickContractCreateContent() {
             }
 
             if (data) {
-                const mapped: QCTemplate[] = data.map(t => ({
+                const allTemplates: QCTemplate[] = data.map(t => ({
                     templateId: t.template_id,
                     templateName: t.template_name,
                     templateCategory: t.template_category || 'Other',
@@ -297,13 +299,24 @@ function QuickContractCreateContent() {
                     isPublic: t.is_public || false,
                     companyId: t.company_id,
                     createdByUserId: t.created_by_user_id,
-                    sourceContractId: t.source_contract_id,
+                    sourceContractId: t.source_contract_id || t.source_session_id || null,
                     documentContent: '',
                     documentFormat: '',
                     variableSchema: t.variable_schema || [],
                     isSystemTemplate: t.is_system || false
                 }))
-                setTemplates(mapped)
+
+                // Client-side filter by ownership:
+                // Company templates = public + same company
+                // My templates = private + created by this user
+                const companyTemplates = allTemplates.filter(t =>
+                    t.isPublic && t.companyId === companyId
+                )
+                const myTemplates = allTemplates.filter(t =>
+                    !t.isPublic && t.createdByUserId === userId
+                )
+
+                setTemplates([...companyTemplates, ...myTemplates])
             }
         } catch (err) {
             console.error('Error loading templates:', err)
@@ -652,7 +665,7 @@ function QuickContractCreateContent() {
             const user = await loadUserInfo()
             if (!user || !mounted) return
 
-            await loadTemplates(user.companyId)
+            await loadTemplates(user.companyId, user.userId)
 
             // Auto-load template if source_template_id is in URL
             if (sourceTemplateId) {
