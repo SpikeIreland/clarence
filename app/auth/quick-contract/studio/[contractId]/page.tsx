@@ -1494,17 +1494,10 @@ function QuickContractStudioContent() {
     }
 
     // QUERY: Flag a clause with a question
-    // Step 1: Records event in qc_clause_events (History tab / activity feed)
-    // Step 2: Pushes query into qc_party_messages (Party Chat + Realtime to other party)
-    // Step 3: Shows confirmation in CLARENCE AI chat (local, right panel)
     const handleQueryClause = async (clauseId: string, queryMessage: string) => {
         if (!queryMessage.trim()) return
 
         const clause = clauses.find(c => c.clauseId === clauseId)
-        const effectiveContractId = resolvedContractId || contractId
-        const partyRole = getPartyRole()
-
-        // Step 1: Record the query event in qc_clause_events (activity feed / history)
         const event = await recordClauseEvent('queried', clauseId, queryMessage, {
             clause_name: clause?.clauseName,
             clause_number: clause?.clauseNumber
@@ -1514,40 +1507,17 @@ function QuickContractStudioContent() {
             setQueriedClauseIds(prev => new Set([...prev, clauseId]))
             setQueryText('')
 
-            // Step 2: Push query into qc_party_messages so it appears in Party Chat
-            // This is a system message — the other party sees it via Supabase Realtime
-            try {
-                const { error: chatInsertError } = await supabase
-                    .from('qc_party_messages')
-                    .insert({
-                        contract_id: effectiveContractId,
-                        sender_user_id: userInfo!.userId,
-                        sender_name: userInfo!.fullName || userInfo!.email || 'Unknown',
-                        sender_role: partyRole,
-                        message_text: `Query on ${clause?.clauseNumber || 'clause'} - ${clause?.clauseName || ''}:\n\n"${queryMessage}"`,
-                        related_clause_id: clauseId,
-                        related_clause_number: clause?.clauseNumber || null,
-                        related_clause_name: clause?.clauseName || null,
-                        is_system_message: true,
-                        is_read: false
-                    })
-
-                if (chatInsertError) {
-                    console.error('[QC Studio] Failed to push query to party chat:', chatInsertError)
-                    // Non-blocking: query event is already recorded, chat insert is best-effort
-                }
-            } catch (chatErr) {
-                console.error('[QC Studio] Party chat insert error:', chatErr)
-            }
-
-            // Step 3: CLARENCE AI chat notification (local only, right panel)
+            // Chat notification
             const msg: ChatMessage = {
                 id: `query-${Date.now()}`,
                 role: 'assistant',
-                content: `\u2753 Query raised on "${clause?.clauseName}" (${clause?.clauseNumber}):\n\n"${queryMessage}"\n\nThis has been recorded and the other party has been notified via Party Chat.`,
+                content: `\u2753 Query raised on "${clause?.clauseName}" (${clause?.clauseNumber}):\n\n"${queryMessage}"\n\nThis has been recorded and the other party will be notified.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
+
+            // Query is saved to qc_party_messages via the insert above
+            // The QCPartyChatPanel component will receive it via Supabase Realtime
         }
     }
 
@@ -3328,6 +3298,43 @@ INSTRUCTIONS:
                                     Invite
                                 </button>
                             )
+                        )}
+
+                        {/* Save as Template Button (template mode only) */}
+                        {isTemplateMode && (
+                            <button
+                                onClick={() => setShowSaveTemplateModal(true)}
+                                disabled={templateSaved || clauses.filter(c => !c.isHeader && c.clarenceCertified).length === 0}
+                                className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${templateSaved
+                                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
+                                        : clauses.filter(c => !c.isHeader && c.clarenceCertified).length === 0
+                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                            : 'bg-teal-600 hover:bg-teal-700 text-white'
+                                    }`}
+                                title={
+                                    templateSaved
+                                        ? 'Template saved'
+                                        : clauses.filter(c => !c.isHeader && c.clarenceCertified).length === 0
+                                            ? 'Wait for certification to complete'
+                                            : 'Save this contract as a reusable template'
+                                }
+                            >
+                                {templateSaved ? (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Template Saved
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                        </svg>
+                                        Save as Template
+                                    </>
+                                )}
+                            </button>
                         )}
 
                         <button
