@@ -3301,41 +3301,51 @@ INSTRUCTIONS:
                         )}
 
                         {/* Save as Template Button (template mode only) */}
-                        {isTemplateMode && (
-                            <button
-                                onClick={() => setShowSaveTemplateModal(true)}
-                                disabled={templateSaved || clauses.filter(c => !c.isHeader && c.clarenceCertified).length === 0}
-                                className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${templateSaved
-                                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
-                                        : clauses.filter(c => !c.isHeader && c.clarenceCertified).length === 0
-                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                            : 'bg-teal-600 hover:bg-teal-700 text-white'
-                                    }`}
-                                title={
-                                    templateSaved
-                                        ? 'Template saved'
-                                        : clauses.filter(c => !c.isHeader && c.clarenceCertified).length === 0
-                                            ? 'Wait for certification to complete'
-                                            : 'Save this contract as a reusable template'
-                                }
-                            >
-                                {templateSaved ? (
-                                    <>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                        Template Saved
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                        </svg>
-                                        Save as Template
-                                    </>
-                                )}
-                            </button>
-                        )}
+                        {/* Only enabled when polling is finished AND all non-header clauses are certified */}
+                        {isTemplateMode && (() => {
+                            const leafClauses = clauses.filter(c => !c.isHeader)
+                            const certifiedCount = leafClauses.filter(c => c.clarenceCertified).length
+                            const allCertified = leafClauses.length > 0 && certifiedCount === leafClauses.length
+                            const isReady = !isPolling && allCertified
+
+                            return (
+                                <button
+                                    onClick={() => setShowSaveTemplateModal(true)}
+                                    disabled={templateSaved || !isReady}
+                                    className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${templateSaved
+                                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
+                                            : !isReady
+                                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                                : 'bg-teal-600 hover:bg-teal-700 text-white'
+                                        }`}
+                                    title={
+                                        templateSaved
+                                            ? 'Template saved'
+                                            : isPolling
+                                                ? `Certifying... ${certifiedCount}/${leafClauses.length}`
+                                                : !allCertified
+                                                    ? `${certifiedCount}/${leafClauses.length} clauses certified — waiting for all`
+                                                    : 'Save this contract as a reusable template'
+                                    }
+                                >
+                                    {templateSaved ? (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Template Saved
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                            </svg>
+                                            Save as Template
+                                        </>
+                                    )}
+                                </button>
+                            )
+                        })()}
 
                         <button
                             onClick={() => {
