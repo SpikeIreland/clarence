@@ -1643,16 +1643,18 @@ function QuickContractStudioContent() {
                     template_name: templateName.trim(),
                     description: `Certified from uploaded contract: ${contract?.contractName || 'Unknown'}`,
                     contract_type: contract?.contractType || 'custom',
+                    industry: null,
                     is_system: false,
                     is_public: isCompanyTemplate,
                     is_active: true,
                     company_id: userInfo.companyId,
                     created_by_user_id: userInfo.userId,
+                    source_session_id: contractId,
                     clause_count: certifiedClauses.length,
                     version: 1,
                     times_used: 0,
-                    certification_status: 'certified',
-                    source_contract_id: contractId,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
                 })
                 .select('template_id')
                 .single()
@@ -1691,7 +1693,10 @@ function QuickContractStudioContent() {
 
         } catch (error) {
             console.error('Failed to save template:', error)
-            alert('Failed to save template. Please try again.')
+            const errMsg = error && typeof error === 'object' && 'message' in error
+                ? (error as { message: string }).message
+                : JSON.stringify(error)
+            alert(`Failed to save template: ${errMsg}`)
         } finally {
             setSavingTemplate(false)
         }
