@@ -18,7 +18,7 @@
 // SECTION 1: IMPORTS
 // ============================================================================
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { eventLogger } from '@/lib/eventLogger';
@@ -179,9 +179,6 @@ function ProviderAuthContent() {
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
-
-    // Navigation guard - prevents re-render loop from blocking redirect
-    const isNavigatingAway = useRef(false);
 
     // Token validation state
     const [tokenValidation, setTokenValidation] = useState<TokenValidation | null>(null);
@@ -555,6 +552,10 @@ function ProviderAuthContent() {
         setSuccessMessage('');
         setShowActivateAccount(false);
 
+        // Capture redirect URL BEFORE auth — signInWithPassword triggers
+        // Supabase onAuthStateChange which causes React re-render storms
+        const redirectUrl = searchParams.get('redirect');
+
         try {
             if (!loginForm.email || !loginForm.password) {
                 throw new Error('Please enter your email and password.');
@@ -589,11 +590,6 @@ function ProviderAuthContent() {
             const user = authData.user;
             const metadata = user.user_metadata || {};
 
-            eventLogger.completed('provider_onboarding', 'login_successful', {
-                userId: user.id,
-                email: user.email
-            });
-
             // ================================================================
             // STEP 2: Set clarence_auth in localStorage
             // ================================================================
@@ -612,22 +608,24 @@ function ProviderAuthContent() {
             localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
 
             // ================================================================
-            // STEP 2B: Check for redirect parameter (e.g. from QC Studio)
-            // This takes highest priority — the provider was trying to reach
-            // a specific page and got bounced here to authenticate first.
+            // STEP 2B: FAST-PATH REDIRECT (e.g. from QC Studio)
+            // If a redirect URL was captured before auth, navigate NOW
+            // before Supabase onAuthStateChange causes a re-render storm.
+            // We skip all other post-login logic — the target page will
+            // handle session/state setup from the Supabase session.
             // ================================================================
-            const redirectUrl = searchParams.get('redirect');
             if (redirectUrl) {
-                console.log('Provider login: redirecting to', redirectUrl);
-                isNavigatingAway.current = true;
-                // Use setTimeout to break out of React's render cycle —
-                // Supabase onAuthStateChange triggers infinite re-renders
-                // that block synchronous navigation
-                setTimeout(() => {
-                    window.location.href = redirectUrl;
-                }, 100);
-                return;
+                console.log('Provider login: fast-path redirect to', redirectUrl);
+                // Hard navigate immediately — no state updates, no React
+                window.location.replace(redirectUrl);
+                // Halt all further execution in this handler
+                return await new Promise(() => { });
             }
+
+            eventLogger.completed('provider_onboarding', 'login_successful', {
+                userId: user.id,
+                email: user.email
+            });
 
             // ================================================================
             // STEP 3: Check for session data from token validation first
@@ -733,11 +731,7 @@ function ProviderAuthContent() {
             eventLogger.failed('provider_onboarding', 'login_attempted',
                 error instanceof Error ? error.message : 'Login failed', 'LOGIN_ERROR');
         } finally {
-            // Don't update state if we're navigating away — this prevents
-            // the re-render cascade that blocks window.location.href
-            if (!isNavigatingAway.current) {
-                setIsLoading(false);
-            }
+            setIsLoading(false);
         }
     };
 
