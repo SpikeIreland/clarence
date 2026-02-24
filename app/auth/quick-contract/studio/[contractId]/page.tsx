@@ -423,9 +423,13 @@ function QuickContractStudioContent() {
                 const { data: { user: supabaseUser } } = await supabase.auth.getUser()
 
                 if (!supabaseUser) {
-                    // No Supabase session — redirect to login with return URL
+                    // No Supabase session — redirect to provider login with return URL.
+                    // Providers arrive here from the Review lobby (no session yet).
+                    // Customers will already have a session from /auth/login.
+                    // If a customer somehow lands here without a session, the provider
+                    // page has a "Customer Portal →" link they can use.
                     const returnUrl = `/auth/quick-contract/studio/${contractId}`
-                    router.push(`/auth/login?redirect=${encodeURIComponent(returnUrl)}`)
+                    router.push(`/provider?redirect=${encodeURIComponent(returnUrl)}`)
                     return
                 }
 
@@ -788,7 +792,7 @@ function QuickContractStudioContent() {
                 c.clarencePosition !== null && c.clarencePosition !== undefined
             )
             if (preCertifiedClauses.length > 0) {
-                console.log(`ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
+                console.log(`✨ ${preCertifiedClauses.length} clauses already pre-certified from template, skipping certification`)
                 // Update local state to reflect certified status
                 setClauses(prev => prev.map(c => {
                     if (!c.isHeader && c.clarencePosition !== null && c.clarencePosition !== undefined &&
@@ -1251,7 +1255,7 @@ function QuickContractStudioContent() {
             'agreed': `${userInfo.fullName} agreed to ${clauseName}`,
             'agreement_withdrawn': `${userInfo.fullName} withdrew agreement on ${clauseName}`,
             'queried': `${userInfo.fullName} raised a query on ${clauseName}`,
-            'query_resolved': `Query resolved on ${clauseName} Ã¢â‚¬â€ both parties agreed`,
+            'query_resolved': `Query resolved on ${clauseName} — both parties agreed`,
             'position_changed': `${userInfo.fullName} adjusted position on ${clauseName}`,
             'redrafted': `${userInfo.fullName} redrafted ${clauseName}`,
             'draft_created': `${userInfo.fullName} created a draft for ${clauseName}`,
@@ -1353,7 +1357,7 @@ function QuickContractStudioContent() {
                 const resolveMsg: ChatMessage = {
                     id: `query-resolved-${Date.now()}`,
                     role: 'assistant',
-                    content: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
+                    content: `✓ Query on "${clause?.clauseName}" has been resolved - both parties have agreed.`,
                     timestamp: new Date()
                 }
                 setChatMessages(prev => [...prev, resolveMsg])
@@ -1362,7 +1366,7 @@ function QuickContractStudioContent() {
             const msg: ChatMessage = {
                 id: `agree-${Date.now()}`,
                 role: 'assistant',
-                content: `ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
+                content: `✓ You agreed to "${clause?.clauseName}" (${clause?.clauseNumber}). ${statusMsg}`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
@@ -1665,7 +1669,7 @@ function QuickContractStudioContent() {
                     .insert(templateClauses)
             }
 
-            console.log(`ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Template saved with ${certifiedClauses.length} pre-certified clauses`)
+            console.log(`✨ ${certifiedClauses.length} pre-certified clauses`)
             setTemplateSaved(true)
             setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
 
@@ -1960,9 +1964,9 @@ INSTRUCTIONS:
                                     ? `This version strengthens customer protections with more provider accountability.\n\n`
                                     : `This version balances both parties' interests.\n\n`) +
                             `The draft is now in the editor. You can:\n` +
-                            `â€¢ **Save Draft** to keep this version\n` +
-                            `â€¢ **Edit** the text further before saving\n` +
-                            `â€¢ **Cancel** to discard`,
+                            `• **Save Draft** to keep this version\n` +
+                            `• **Edit** the text further before saving\n` +
+                            `• **Cancel** to discard`,
                         timestamp: new Date()
                     }
                     setChatMessages(prev => [...prev, confirmMessage])
@@ -2291,7 +2295,7 @@ INSTRUCTIONS:
             const confirmMessage: ChatMessage = {
                 id: `clause-deleted-${Date.now()}`,
                 role: 'assistant',
-                content: `ÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã¢â‚¬ËœÃƒÂ¯Ã‚Â¸Ã‚Â Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
+                content: `🗑️ Clause "${deleteClauseTarget.clauseName}" (${deleteClauseTarget.clauseNumber}) has been removed from the ${isTemplateMode ? 'template' : 'contract'}.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, confirmMessage])
@@ -2500,7 +2504,7 @@ INSTRUCTIONS:
     }, [contract, userInfo])
 
     // Helper: Get the display position for the current user
-    // Falls back: user's adjusted position ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ CLARENCE assessment ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ null
+    // Falls back: user's adjusted position → CLARENCE assessment → null
     const getUserDisplayPosition = useCallback((clause: ContractClause): number | null => {
         const role = getPartyRole()
         const userPosition = role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
@@ -2541,7 +2545,7 @@ INSTRUCTIONS:
                 }
 
                 if (failCount === 0) {
-                    // All saved successfully ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â clear dirty state
+                    // All saved successfully → clear dirty state
                     setDirtyPositions(new Map())
                     setAutoSaveStatus('saved')
                     setLastSavedAt(new Date())
@@ -4469,7 +4473,7 @@ INSTRUCTIONS:
                                                                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                                                 </svg>
-                                                                                {event.eventData?.clause_number ? `${String(event.eventData.clause_number)} Ã¢â‚¬â€ ` : null}
+                                                                                {event.eventData?.clause_number ? `${String(event.eventData.clause_number)} — ` : null}
                                                                                 {String(event.eventData?.clause_name || 'Clause')}
                                                                             </div>
                                                                         )}
@@ -5080,7 +5084,7 @@ INSTRUCTIONS:
                                             {bothWillBeFullyAgreed ? (
                                                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
                                                     <p className="text-sm text-emerald-800 font-medium">
-                                                        ÃƒÂ¢Ã…â€œÃ¢â‚¬Å“ {getOtherPartyName()} has already committed.
+                                                        ✓ {getOtherPartyName()} has already committed.
                                                     </p>
                                                     <p className="text-sm text-emerald-700 mt-1">
                                                         Your commit will finalise the agreement for both parties.
@@ -5345,7 +5349,7 @@ INSTRUCTIONS:
                                 <div className="text-center">
                                     <div className="text-xs text-slate-500 mb-1">CLARENCE Assessment</div>
                                     <div className="text-lg font-bold text-purple-600">
-                                        {selectedClause.clarencePosition?.toFixed(1) ?? 'Ã¢â‚¬â€'}
+                                        {selectedClause.clarencePosition?.toFixed(1) ?? '—'}
                                     </div>
                                 </div>
                                 <div className="text-slate-300">Ã¢â€ â€™</div>
@@ -5381,7 +5385,7 @@ INSTRUCTIONS:
                                     </>
                                 ) : (
                                     <>
-                                        <span>Ã¢Å“Â¨</span>
+                                        <span>✨</span>
                                         Redraft for Position {pendingDraftPosition.toFixed(1)}
                                     </>
                                 )}

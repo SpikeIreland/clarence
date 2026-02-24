@@ -108,7 +108,7 @@ function ProviderHeader() {
                         href="/auth/login"
                         className="text-sm text-slate-400 hover:text-white transition-colors"
                     >
-                        Customer Portal â†’
+                        Customer Portal →
                     </Link>
                 </nav>
             </div>
@@ -608,14 +608,16 @@ function ProviderAuthContent() {
             };
             localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
 
-
             // ================================================================
-            // STEP 2B: Check for redirect parameter (from QC invite link)
+            // STEP 2B: Check for redirect parameter (e.g. from QC Studio)
+            // This takes highest priority — the provider was trying to reach
+            // a specific page and got bounced here to authenticate first.
             // ================================================================
-            const redirectPath = searchParams.get('redirect')
-            if (redirectPath && redirectPath.startsWith('/auth/')) {
-                router.push(redirectPath)
-                return
+            const redirectUrl = searchParams.get('redirect');
+            if (redirectUrl) {
+                console.log('Provider login: redirecting to', redirectUrl);
+                router.push(redirectUrl);
+                return;
             }
 
             // ================================================================
