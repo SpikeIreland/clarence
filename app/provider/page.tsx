@@ -616,7 +616,9 @@ function ProviderAuthContent() {
             const redirectUrl = searchParams.get('redirect');
             if (redirectUrl) {
                 console.log('Provider login: redirecting to', redirectUrl);
-                router.push(redirectUrl);
+                // Use hard navigation (not router.push) to ensure Supabase
+                // session cookies are fully persisted before Studio loads
+                window.location.href = redirectUrl;
                 return;
             }
 
