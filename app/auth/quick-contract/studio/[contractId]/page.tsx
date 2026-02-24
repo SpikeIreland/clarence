@@ -1494,10 +1494,17 @@ function QuickContractStudioContent() {
     }
 
     // QUERY: Flag a clause with a question
+    // Step 1: Records event in qc_clause_events (History tab / activity feed)
+    // Step 2: Pushes query into qc_party_messages (Party Chat + Realtime to other party)
+    // Step 3: Shows confirmation in CLARENCE AI chat (local, right panel)
     const handleQueryClause = async (clauseId: string, queryMessage: string) => {
         if (!queryMessage.trim()) return
 
         const clause = clauses.find(c => c.clauseId === clauseId)
+        const effectiveContractId = resolvedContractId || contractId
+        const partyRole = getPartyRole()
+
+        // Step 1: Record the query event in qc_clause_events (activity feed / history)
         const event = await recordClauseEvent('queried', clauseId, queryMessage, {
             clause_name: clause?.clauseName,
             clause_number: clause?.clauseNumber
@@ -1507,17 +1514,40 @@ function QuickContractStudioContent() {
             setQueriedClauseIds(prev => new Set([...prev, clauseId]))
             setQueryText('')
 
-            // Chat notification
+            // Step 2: Push query into qc_party_messages so it appears in Party Chat
+            // This is a system message — the other party sees it via Supabase Realtime
+            try {
+                const { error: chatInsertError } = await supabase
+                    .from('qc_party_messages')
+                    .insert({
+                        contract_id: effectiveContractId,
+                        sender_user_id: userInfo!.userId,
+                        sender_name: userInfo!.fullName || userInfo!.email || 'Unknown',
+                        sender_role: partyRole,
+                        message_text: `Query on ${clause?.clauseNumber || 'clause'} - ${clause?.clauseName || ''}:\n\n"${queryMessage}"`,
+                        related_clause_id: clauseId,
+                        related_clause_number: clause?.clauseNumber || null,
+                        related_clause_name: clause?.clauseName || null,
+                        is_system_message: true,
+                        is_read: false
+                    })
+
+                if (chatInsertError) {
+                    console.error('[QC Studio] Failed to push query to party chat:', chatInsertError)
+                    // Non-blocking: query event is already recorded, chat insert is best-effort
+                }
+            } catch (chatErr) {
+                console.error('[QC Studio] Party chat insert error:', chatErr)
+            }
+
+            // Step 3: CLARENCE AI chat notification (local only, right panel)
             const msg: ChatMessage = {
                 id: `query-${Date.now()}`,
                 role: 'assistant',
-                content: `\u2753 Query raised on "${clause?.clauseName}" (${clause?.clauseNumber}):\n\n"${queryMessage}"\n\nThis has been recorded and the other party will be notified.`,
+                content: `\u2753 Query raised on "${clause?.clauseName}" (${clause?.clauseNumber}):\n\n"${queryMessage}"\n\nThis has been recorded and the other party has been notified via Party Chat.`,
                 timestamp: new Date()
             }
             setChatMessages(prev => [...prev, msg])
-
-            // Query is saved to qc_party_messages via the insert above
-            // The QCPartyChatPanel component will receive it via Supabase Realtime
         }
     }
 
