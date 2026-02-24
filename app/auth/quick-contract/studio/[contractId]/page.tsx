@@ -398,6 +398,7 @@ function QuickContractStudioContent() {
     const [inviteMessage, setInviteMessage] = useState('')
     const [sendingInvite, setSendingInvite] = useState(false)
     const [inviteSuccess, setInviteSuccess] = useState(false)
+    const [inviteSent, setInviteSent] = useState(false)
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
@@ -3038,8 +3039,9 @@ INSTRUCTIONS:
             console.log('Invite sent:', result)
 
             setInviteSuccess(true)
+            setInviteSent(true)  // Persists after modal closes
 
-            // Reset after 3 seconds
+            // Reset modal after 3 seconds (but inviteSent stays true)
             setTimeout(() => {
                 setShowInviteModal(false)
                 setInviteSuccess(false)
@@ -3123,28 +3125,19 @@ INSTRUCTIONS:
                     {/* Left: Logo & Contract Info */}
                     <div className="flex items-center gap-4 min-w-0 flex-1">
                         <div className="flex items-center gap-3 flex-shrink-0">
-                            {/* Home Icon — role-aware routing */}
                             <button
                                 onClick={() => {
                                     if (getPartyRole() === 'respondent') {
-                                        // Provider: hard nav to prevent GoTrueClient render loop
                                         window.location.href = '/provider'
                                     } else {
-                                        // Customer: standard navigation to dashboard
                                         router.push('/auth/contracts-dashboard')
                                     }
                                 }}
-                                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
-                                title={getPartyRole() === 'respondent' ? 'Provider Portal' : 'Dashboard'}
+                                className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md hover:from-purple-600 hover:to-purple-800 transition-all"
+                                title="Back to dashboard"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                </svg>
-                            </button>
-                            <div className="h-5 w-px bg-slate-200"></div>
-                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md">
                                 <span className="text-white font-bold text-lg">C</span>
-                            </div>
+                            </button>
                             <div>
                                 <h1 className="font-semibold text-slate-800">Quick Create Studio</h1>
                                 <p className="text-xs text-slate-500">
@@ -3163,6 +3156,55 @@ INSTRUCTIONS:
                                 {contract?.contractType} &middot; {clauses.filter(c => !c.isHeader).length} clauses &middot; {getFullyAgreedCount()} fully agreed
                             </p>
                         </div>
+
+                        {/* ==================== PARTY IDENTIFICATION ==================== */}
+                        {!isTemplateMode && (
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                                {/* Initiator (Customer) */}
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                                    <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
+                                    <div className="text-xs">
+                                        <span className="font-medium text-emerald-800">
+                                            {initiatorInfo?.company || initiatorInfo?.name || userInfo?.companyName || 'Initiator'}
+                                        </span>
+                                        <span className="text-emerald-600 ml-1">
+                                            · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
+                                                ? roleContext.userRoleLabel
+                                                : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
+                                                    ? roleContext.counterpartyRoleLabel
+                                                    : 'Customer'}
+                                        </span>
+                                        {getPartyRole() === 'initiator' && (
+                                            <span className="text-emerald-500 ml-1">(You)</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <span className="text-slate-300 text-xs">vs</span>
+
+                                {/* Respondent (Provider) */}
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                    <div className="text-xs">
+                                        <span className="font-medium text-blue-800">
+                                            {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
+                                        </span>
+                                        {respondentInfo && (
+                                            <span className="text-blue-600 ml-1">
+                                                · {roleContext?.counterpartyRoleLabel && getPartyRole() === 'initiator'
+                                                    ? roleContext.counterpartyRoleLabel
+                                                    : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
+                                                        ? roleContext.userRoleLabel
+                                                        : 'Provider'}
+                                            </span>
+                                        )}
+                                        {getPartyRole() === 'respondent' && (
+                                            <span className="text-blue-500 ml-1">(You)</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Agreement Progress Indicator (non-template mode) */}
                         {!isTemplateMode && clauses.length > 0 && (() => {
@@ -3236,105 +3278,42 @@ INSTRUCTIONS:
                             </button>
                         )}
 
-                        {/* Invite Provider Button (non-template mode, initiator only) */}
+                        {/* Invite Provider Button / Pending State (non-template mode, initiator only) */}
                         {!isTemplateMode && isInitiator && (
-                            <button
-                                onClick={() => setShowInviteModal(true)}
-                                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                </svg>
-                                Invite
-                            </button>
+                            inviteSent || respondentInfo ? (
+                                <div className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
+                                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Pending
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setShowInviteModal(true)}
+                                    className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                    Invite
+                                </button>
+                            )
                         )}
 
                         <button
                             onClick={() => {
                                 if (isTemplateMode) {
-                                    // Template mode: always customer routes
                                     router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
                                 } else if (getPartyRole() === 'respondent') {
-                                    // Provider: hard nav back to provider portal
                                     window.location.href = '/provider'
                                 } else {
-                                    // Customer: back to Quick Create dashboard
                                     router.push('/auth/quick-contract')
                                 }
                             }}
                             className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
                         >
-                            &larr; Back
+                            Back
                         </button>
-
-                        {/* Commit / Template buttons - Initiator Only */}
-                        {isInitiator && (
-                            <>
-                                {isTemplateMode ? (
-                                    /* ---- TEMPLATE MODE: Save as Template ---- */
-                                    <>
-                                        <button
-                                            onClick={() => {
-                                                setTemplateName(contract?.contractName || '')
-                                                setShowSaveTemplateModal(true)
-                                            }}
-                                            disabled={clauses.filter(c => !c.isHeader && !c.clarenceCertified).length > 0}
-                                            className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                            </svg>
-                                            Save as Template
-                                        </button>
-                                    </>
-                                ) : (
-                                    /* ---- NORMAL MODE: Commit Contract ---- */
-                                    (() => {
-                                        const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-                                        const allFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
-                                        const currentUserFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasCurrentUserAgreed(c.clauseId))
-                                        const otherPartyFullyAgreed = leafClauses.length > 0 && leafClauses.every(c => hasOtherPartyAgreed(c.clauseId))
-
-                                        let buttonClass = 'bg-amber-600 hover:bg-amber-700'
-                                        let buttonText = 'Commit Contract'
-                                        let buttonIcon = (
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                            </svg>
-                                        )
-                                        let buttonAction = () => setCommitModalState('confirm')
-
-                                        if (allFullyAgreed) {
-                                            buttonClass = 'bg-emerald-600 hover:bg-emerald-700'
-                                            buttonText = 'Both Agreed - Commit'
-                                        } else if (currentUserFullyAgreed) {
-                                            buttonClass = 'bg-teal-600 hover:bg-teal-700'
-                                            buttonText = 'Agree'
-                                            buttonIcon = (
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                            )
-                                            buttonAction = () => {
-                                                router.push(`/auth/document-centre?contract_id=${contract?.contractId || contractId}`)
-                                            }
-                                        } else if (!currentUserFullyAgreed) {
-                                            buttonText = 'Agree All & Commit'
-                                        }
-
-                                        return (
-                                            <button
-                                                onClick={buttonAction}
-                                                className={`px-5 py-2 ${buttonClass} text-white rounded-lg font-medium transition-colors flex items-center gap-2`}
-                                            >
-                                                {buttonIcon}
-                                                {buttonText}
-                                            </button>
-                                        )
-                                    })()
-                                )}
-                            </>
-                        )}
                     </div>
                 </div>
             </header>
@@ -3559,7 +3538,7 @@ INSTRUCTIONS:
                                                 >
                                                     <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                                                 </svg>
-                                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex-1 truncate">
+                                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide flex-1 truncate text-left">
                                                     {parent.clauseNumber}. {parent.clauseName}
                                                 </span>
                                                 <span className="text-xs text-slate-400">
@@ -3606,7 +3585,7 @@ INSTRUCTIONS:
                                                                 className="flex items-center gap-2 flex-1 min-w-0"
                                                             >
                                                                 <StatusIcon status={child.processingStatus} />
-                                                                <div className="flex-1 min-w-0">
+                                                                <div className="flex-1 min-w-0 text-left">
                                                                     <div className="flex items-center gap-1">
                                                                         <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
                                                                             {child.clauseNumber}
@@ -3743,7 +3722,7 @@ INSTRUCTIONS:
                                                     className="flex items-center gap-2 flex-1 min-w-0"
                                                 >
                                                     <StatusIcon status={parent.processingStatus} />
-                                                    <div className="flex-1 min-w-0">
+                                                    <div className="flex-1 min-w-0 text-left">
                                                         <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
                                                             {parent.clauseNumber}.
                                                         </span>

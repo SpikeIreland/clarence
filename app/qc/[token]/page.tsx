@@ -674,10 +674,13 @@ export default function PublicRecipientPage() {
                         )}
                     </div>
                     <h1 className="text-xl font-bold text-slate-800 mb-2">
-                        Contract {isAccepted ? 'Accepted' : 'Declined'}
+                        {isAccepted ? 'Contract Under Review' : 'Contract Declined'}
                     </h1>
                     <p className="text-slate-500 mb-2">
-                        You {isAccepted ? 'accepted' : 'declined'} this contract on {formatDate(recipient?.respondedAt || null)}.
+                        {isAccepted
+                            ? 'You are reviewing this contract.'
+                            : `You declined this contract on ${formatDate(recipient?.respondedAt || null)}.`
+                        }
                     </p>
                     {contract && (
                         <div className="mt-4 p-4 bg-slate-50 rounded-lg text-left">
@@ -685,30 +688,34 @@ export default function PublicRecipientPage() {
                             <p className="text-sm text-slate-500">{getContractTypeLabel(contract.contractType)}</p>
                         </div>
                     )}
-
-                    {/* Enter Studio option for accepted contracts */}
-                    {isAccepted && contract && (
+                    {isAccepted && contract?.quickContractId && (
                         <button
-                            onClick={handleEnterStudio}
-                            className="mt-4 w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                            onClick={() => {
+                                const studioUrl = `/auth/quick-contract/studio/${contract.quickContractId}`
+                                sessionStorage.setItem('clarence_qc_redirect', studioUrl)
+                                window.location.href = '/provider'
+                            }}
+                            className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors text-sm"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            Enter CLARENCE Studio
+                            Return to Review Studio
                         </button>
                     )}
-
-                    <Link
-                        href="/"
-                        className="mt-4 inline-block text-teal-600 hover:text-teal-700 font-medium text-sm"
-                    >
-                        Go to CLARENCE Homepage
-                    </Link>
+                    {!isAccepted && (
+                        <Link
+                            href="/"
+                            className="mt-6 inline-block text-teal-600 hover:text-teal-700 font-medium text-sm"
+                        >
+                            Go to CLARENCE Homepage
+                        </Link>
+                    )}
                 </div>
             </div>
         )
     }
+
 
     // ==========================================================================
     // SECTION 16: RENDER - SUBMITTED STATE
@@ -976,45 +983,54 @@ export default function PublicRecipientPage() {
                 </div>
 
                 {/* ============================================================== */}
-                {/* SECTION 23: RESPONSE BUTTONS (Accept / Decline) */}
+                {/* SECTION 23: REVIEW CONTRACT BUTTON */}
                 {/* ============================================================== */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                    <h2 className="font-semibold text-slate-800 mb-1 text-center">Quick Response</h2>
-                    <p className="text-sm text-slate-500 mb-4 text-center">
-                        Accept or decline without entering the studio
+                    <h2 className="font-semibold text-slate-800 mb-2 text-center">Ready to Review?</h2>
+                    <p className="text-sm text-slate-500 text-center mb-6">
+                        Open the contract in the CLARENCE Studio to review clauses, discuss terms, and collaborate with {contract?.senderCompany || 'the sender'}.
                     </p>
 
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <div className="flex justify-center">
                         <button
-                            onClick={handleDecline}
-                            disabled={!canRespond()}
-                            className="px-8 py-3 border-2 border-red-300 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            onClick={async () => {
+                                // Auto-accept in background (reviewing = engaging)
+                                try {
+                                    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+                                    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+                                    if (supabaseUrl && supabaseKey) {
+                                        const { createClient } = await import('@supabase/supabase-js')
+                                        const sb = createClient(supabaseUrl, supabaseKey)
+                                        await sb
+                                            .from('qc_recipients')
+                                            .update({
+                                                status: 'accepted',
+                                                response_type: 'accepted',
+                                                responded_at: new Date().toISOString()
+                                            })
+                                            .eq('recipient_id', recipient?.recipientId)
+                                    }
+                                } catch (err) {
+                                    console.warn('Auto-accept failed (non-blocking):', err)
+                                }
+
+                                // Set redirect and navigate to provider auth
+                                const studioUrl = `/auth/quick-contract/studio/${contract?.quickContractId}`
+                                sessionStorage.setItem('clarence_qc_redirect', studioUrl)
+                                window.location.href = '/provider'
+                            }}
+                            disabled={!contract?.quickContractId}
+                            className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            Decline
-                        </button>
-                        <button
-                            onClick={handleAccept}
-                            disabled={!canRespond()}
-                            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Accept Contract
+                            Review Contract
                         </button>
                     </div>
 
-                    {!canRespond() && contract?.requireFullScroll && (
-                        <p className="text-center text-sm text-amber-600 mt-4">
-                            Please scroll through the entire contract to enable response buttons
-                        </p>
-                    )}
-
                     <p className="text-center text-xs text-slate-400 mt-4">
-                        By accepting, you agree to the terms outlined in this contract.
+                        You will be asked to sign in or create an account to access the review studio.
                     </p>
                 </div>
             </main>
