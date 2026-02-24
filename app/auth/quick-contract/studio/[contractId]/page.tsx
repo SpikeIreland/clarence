@@ -546,6 +546,7 @@ function QuickContractStudioContent() {
                 })
 
                 setResolvedContractId(contractData.contract_id)
+                console.log(`[QC Studio] Contract ID resolved: URL param=${contractId}, actual=${contractData.contract_id}, match=${contractId === contractData.contract_id}`)
 
                 // NOTE: Use contractData.contract_id directly below (not resolvedContractId,
                 // which is still null until the next React render cycle)
@@ -633,10 +634,14 @@ function QuickContractStudioContent() {
                 }
 
                 // Load range mappings for this contract
+                // CRITICAL: Use contractData.contract_id (not URL param contractId)
+                // because the URL may contain a quick_contract_id which differs from
+                // the uploaded_contracts.contract_id used in clause_range_mappings
+                const actualContractId = contractData.contract_id
                 const { data: rangeMappingData } = await supabase
                     .from('clause_range_mappings')
                     .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', actualContractId)
                     .eq('is_displayable', true)
 
                 if (rangeMappingData && rangeMappingData.length > 0) {
@@ -657,7 +662,7 @@ function QuickContractStudioContent() {
                 }
 
                 // PERSISTENCE: Restore selected clause from LocalStorage, or default to first
-                const savedClauseIndex = localStorage.getItem(`qc_studio_${contractId}_selectedClause`)
+                const savedClauseIndex = localStorage.getItem(`qc_studio_${actualContractId}_selectedClause`)
                 if (savedClauseIndex !== null && parseInt(savedClauseIndex) < mappedClauses.length) {
                     setSelectedClauseIndex(parseInt(savedClauseIndex))
                 } else if (mappedClauses.length > 0) {
@@ -665,13 +670,13 @@ function QuickContractStudioContent() {
                 }
 
                 // PERSISTENCE: Restore active tab from LocalStorage
-                const savedTab = localStorage.getItem(`qc_studio_${contractId}_activeTab`)
+                const savedTab = localStorage.getItem(`qc_studio_${actualContractId}_activeTab`)
                 if (savedTab && ['overview', 'history', 'tradeoffs', 'draft'].includes(savedTab)) {
                     setActiveTab(savedTab as 'overview' | 'history' | 'tradeoffs' | 'draft')
                 }
 
                 // PERSISTENCE: Restore expanded sections from LocalStorage
-                const savedSections = localStorage.getItem(`qc_studio_${contractId}_expandedSections`)
+                const savedSections = localStorage.getItem(`qc_studio_${actualContractId}_expandedSections`)
                 if (savedSections) {
                     try {
                         setExpandedSections(new Set(JSON.parse(savedSections)))
@@ -684,7 +689,7 @@ function QuickContractStudioContent() {
                 const { data: eventsData } = await supabase
                     .from('qc_clause_events')
                     .select('*')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', actualContractId)
                     .order('created_at', { ascending: true })
 
                 if (eventsData && eventsData.length > 0) {
@@ -821,10 +826,10 @@ function QuickContractStudioContent() {
         fetch('https://spikeislandstudios.app.n8n.cloud/webhook/certify-next-clause', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contract_id: contractId })
+            body: JSON.stringify({ contract_id: resolvedContractId || contractId })
         }).catch(err => console.error('Failed to trigger certification:', err))
 
-    }, [contractId, clauses.length, certificationTriggered])
+    }, [contractId, resolvedContractId, clauses.length, certificationTriggered])
 
     // ========================================================================
     // SECTION 4C: CHAT FUNCTIONS
@@ -851,7 +856,7 @@ function QuickContractStudioContent() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: userMessage.content,
-                    contractId: contractId,
+                    contractId: resolvedContractId || contractId,
                     clauseId: selectedClause?.clauseId,
                     clauseName: selectedClause?.clauseName,
                     clauseCategory: selectedClause?.category,
@@ -1253,7 +1258,8 @@ function QuickContractStudioContent() {
         message?: string,
         eventData?: Record<string, unknown>
     ): Promise<ClauseEvent | null> => {
-        if (!userInfo || !contractId) return null
+        const effectiveContractId = resolvedContractId || contractId
+        if (!userInfo || !effectiveContractId) return null
 
         const partyRole = getPartyRole()
 
@@ -1280,7 +1286,7 @@ function QuickContractStudioContent() {
         const { data, error: insertError } = await supabase
             .from('qc_clause_events')
             .insert({
-                contract_id: contractId,
+                contract_id: effectiveContractId,
                 clause_id: clauseId,
                 event_type: eventType,
                 user_id: userInfo.userId,
@@ -1936,7 +1942,7 @@ INSTRUCTIONS:
 - Use clear, professional legal language
 - Do not add new topics or remove existing coverage areas
 - Preserve any specific values, dates, or defined terms from the original`,
-                    contractId: contractId,
+                    contractId: resolvedContractId || contractId,
                     clauseId: selectedClause.clauseId,
                     clauseName: selectedClause.clauseName,
                     clauseCategory: selectedClause.category,
@@ -2136,7 +2142,7 @@ INSTRUCTIONS:
 - Use clear, professional legal language
 - Do not add new topics or remove existing coverage areas
 - Preserve any specific values, dates, or defined terms from the original`,
-                    contractId: contractId,
+                    contractId: resolvedContractId || contractId,
                     clauseId: selectedClause.clauseId,
                     clauseName: selectedClause.clauseName,
                     clauseCategory: selectedClause.category,
@@ -2269,7 +2275,7 @@ INSTRUCTIONS:
                     clause_count: newClauseCount,
                     updated_at: new Date().toISOString()
                 })
-                .eq('contract_id', contractId)
+                .eq('contract_id', resolvedContractId || contractId)
 
             // Update local state
             setClauses(prev => prev.filter(c =>
@@ -2313,7 +2319,7 @@ INSTRUCTIONS:
                 event_type: 'clause_deleted',
                 source_system: 'quick_contract_studio',
                 context: {
-                    contract_id: contractId,
+                    contract_id: resolvedContractId || contractId,
                     clause_id: deleteClauseTarget.clauseId,
                     clause_name: deleteClauseTarget.clauseName,
                     clause_number: deleteClauseTarget.clauseNumber,
@@ -2384,17 +2390,18 @@ INSTRUCTIONS:
 
     // Subscribe to qc_clause_events for live notification push
     useEffect(() => {
-        if (!contractId || !userInfo) return
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId || !userInfo) return
 
         const channel = supabase
-            .channel(`qc-events-${contractId}`)
+            .channel(`qc-events-${effectiveId}`)
             .on(
                 'postgres_changes',
                 {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'qc_clause_events',
-                    filter: `contract_id=eq.${contractId}`
+                    filter: `contract_id=eq.${effectiveId}`
                 },
                 (payload) => {
                     const e = payload.new as Record<string, unknown>
@@ -2465,11 +2472,12 @@ INSTRUCTIONS:
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [contractId, userInfo, supabase])
+    }, [contractId, resolvedContractId, userInfo, supabase])
 
     // Mark all unread events as read for current user
     const markActivityAsRead = useCallback(async () => {
-        if (!contractId || !userInfo || unreadActivityCount === 0) return
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId || !userInfo || unreadActivityCount === 0) return
 
         const partyRole = getPartyRole()
         const readColumn = partyRole === 'initiator' ? 'read_by_initiator' : 'read_by_respondent'
@@ -2478,7 +2486,7 @@ INSTRUCTIONS:
         const { error } = await supabase
             .from('qc_clause_events')
             .update({ [readColumn]: true })
-            .eq('contract_id', contractId)
+            .eq('contract_id', effectiveId)
             .eq(readColumn, false)
 
         if (error) {
@@ -2492,7 +2500,7 @@ INSTRUCTIONS:
             ...(partyRole === 'initiator' ? { readByInitiator: true } : { readByRespondent: true })
         })))
         setUnreadActivityCount(0)
-    }, [contractId, userInfo, unreadActivityCount, supabase])
+    }, [contractId, resolvedContractId, userInfo, unreadActivityCount, supabase])
 
     // Auto-mark as read when History tab is active
     useEffect(() => {
@@ -2577,21 +2585,24 @@ INSTRUCTIONS:
 
     // Save UI state to LocalStorage when it changes
     useEffect(() => {
-        if (!contractId) return
+        const key = resolvedContractId || contractId
+        if (!key) return
         if (selectedClauseIndex !== null) {
-            localStorage.setItem(`qc_studio_${contractId}_selectedClause`, String(selectedClauseIndex))
+            localStorage.setItem(`qc_studio_${key}_selectedClause`, String(selectedClauseIndex))
         }
-    }, [selectedClauseIndex, contractId])
+    }, [selectedClauseIndex, contractId, resolvedContractId])
 
     useEffect(() => {
-        if (!contractId) return
-        localStorage.setItem(`qc_studio_${contractId}_activeTab`, activeTab)
-    }, [activeTab, contractId])
+        const key = resolvedContractId || contractId
+        if (!key) return
+        localStorage.setItem(`qc_studio_${key}_activeTab`, activeTab)
+    }, [activeTab, contractId, resolvedContractId])
 
     useEffect(() => {
-        if (!contractId) return
-        localStorage.setItem(`qc_studio_${contractId}_expandedSections`, JSON.stringify([...expandedSections]))
-    }, [expandedSections, contractId])
+        const key = resolvedContractId || contractId
+        if (!key) return
+        localStorage.setItem(`qc_studio_${key}_expandedSections`, JSON.stringify([...expandedSections]))
+    }, [expandedSections, contractId, resolvedContractId])
 
     // Save dirty positions immediately when user navigates away
     useEffect(() => {
@@ -2783,7 +2794,7 @@ INSTRUCTIONS:
                 const { data: contractData } = await supabase
                     .from('uploaded_contracts')
                     .select('status, clause_count')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', resolvedContractId || contractId)
                     .single()
 
                 if (contractData) {
@@ -2805,7 +2816,8 @@ INSTRUCTIONS:
     // POLL FOR CERTIFICATION STATUS (when clauses exist but still being certified)
     // Also refreshes range mappings as they are generated during certification
     useEffect(() => {
-        if (!contractId || !clauses.length) return
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId || !clauses.length) return
 
         // Check if there are any uncertified non-header clauses
         // Must check BOTH processingStatus AND clarenceCertified
@@ -2829,7 +2841,7 @@ INSTRUCTIONS:
                 const { data: updatedClauses, error } = await supabase
                     .from('uploaded_contract_clauses')
                     .select('clause_id, status, is_header, clarence_certified, clarence_position, clarence_fairness, clarence_summary, clarence_assessment, clarence_flags, content, original_text, extracted_value, extracted_unit, value_type')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', effectiveId)
                     .order('display_order', { ascending: true })
 
                 if (error || !updatedClauses) return
@@ -2872,7 +2884,7 @@ INSTRUCTIONS:
                     const { data: rangeMappingData } = await supabase
                         .from('clause_range_mappings')
                         .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                        .eq('contract_id', contractId)
+                        .eq('contract_id', effectiveId)
                         .eq('is_displayable', true)
 
                     if (rangeMappingData && rangeMappingData.length > currentMappingCount) {
@@ -2913,14 +2925,15 @@ INSTRUCTIONS:
         }, 4000) // Poll every 4 seconds
 
         return () => clearInterval(pollInterval)
-    }, [contractId, clauses.length, isPolling, rangeMappings.size])
+    }, [contractId, resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // RANGE MAPPING CATCH-UP: After certification polling stops,
     // do a few final fetches to catch trailing range mappings
     // (range mapping fires in parallel with certification chain,
     // so the last few may still be generating when polling stops)
     useEffect(() => {
-        if (!contractId || !clauses.length) return
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId || !clauses.length) return
         if (isPolling) return // Still polling, main loop handles it
 
         const nonHeaderCount = clauses.filter(c => !c.isHeader).length
@@ -2940,7 +2953,7 @@ INSTRUCTIONS:
                 const { data: rangeMappingData } = await supabase
                     .from('clause_range_mappings')
                     .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                    .eq('contract_id', contractId)
+                    .eq('contract_id', effectiveId)
                     .eq('is_displayable', true)
 
                 if (rangeMappingData && rangeMappingData.length > rangeMappings.size) {
@@ -2980,7 +2993,7 @@ INSTRUCTIONS:
         }, 5000) // Every 5 seconds
 
         return () => clearInterval(catchUpInterval)
-    }, [contractId, clauses.length, isPolling, rangeMappings.size])
+    }, [contractId, resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // ========================================================================
     // SECTION 5B: INVITE HANDLER
@@ -5346,7 +5359,7 @@ INSTRUCTIONS:
             {/* ============================================================ */}
             {!isTemplateMode && userInfo && (
                 <QCPartyChatPanel
-                    contractId={contractId}
+                    contractId={resolvedContractId || contractId}
                     otherPartyName={getOtherPartyName()}
                     otherPartyCompany={getOtherPartyCompany()}
                     currentUserId={userInfo.userId}

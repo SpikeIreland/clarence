@@ -1,13 +1,15 @@
 'use client'
 
 // ============================================================================
-// QUICK CREATE - CREATE PAGE
-// Version: 2.0
-// Date: 24 February 2026
+// QUICK CONTRACT - CREATE PAGE
+// Version: 1.2
+// Date: 27 January 2026
 // Path: /app/auth/quick-contract/create/page.tsx
-// Description: Create a new Quick Contract from template or upload.
-//              Simplified flow: Source → Details → Content → Studio redirect.
-//              Removed Review Clauses and Invite steps (consolidated to Studio).
+// Description: Create a new Quick Contract from template or upload
+// Fixes: 
+//   - Added Suspense boundary for useSearchParams()
+//   - Memoized Supabase client to prevent infinite re-renders
+//   - Improved useEffect with proper cleanup
 // ============================================================================
 
 // ============================================================================
@@ -23,18 +25,6 @@ import FeedbackButton from '@/app/components/FeedbackButton'
 import mammoth from 'mammoth'
 
 // Note: pdfjs-dist is imported dynamically in extractTextFromPDF to avoid SSR issues
-
-
-import {
-    CONTRACT_TYPE_DEFINITIONS,
-    getContractType,
-    getContractTypesByCategory,
-    getCategoryDisplayName,
-    getRoleContext,
-    type PartyRole,
-    type ContractTypeDefinition,
-} from '@/lib/role-matrix'
-
 
 // ============================================================================
 // SECTION 2: TYPE DEFINITIONS
@@ -99,19 +89,15 @@ interface ParsedClause {
     clarenceCertifiedAt?: string | null
 }
 
-type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content'
+type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content' | 'parsing' | 'invite'
 type SourceType = 'template' | 'upload' | 'blank' | null
-type ContractType = string | null
-type ParsingStatus = 'idle' | 'submitting' | 'error'
+type ContractType = 'nda' | 'service_agreement' | 'lease' | 'employment' | 'contractor' | 'vendor' | 'other' | null
+type ParsingStatus = 'idle' | 'parsing' | 'certifying' | 'complete' | 'error'
 
 interface CreateState {
     step: CreateStep
     sourceType: SourceType
     contractType: ContractType
-    contractTypeKey: string | null        // Role-matrix key (e.g. 'service_agreement')
-    creatorPartyRole: PartyRole | null    // 'protected' or 'providing'
-    customProtectedLabel: string          // Custom label for 'other' type
-    customProvidingLabel: string          // Custom label for 'other' type
     contractName: string
     description: string
     referenceNumber: string
@@ -139,6 +125,14 @@ interface CreateState {
 
 const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
+const CONTRACT_TYPE_OPTIONS = [
+    { value: 'nda', label: 'Non-Disclosure Agreement', description: 'Protect confidential information' },
+    { value: 'service_agreement', label: 'Service Agreement', description: 'Define service terms and deliverables' },
+    { value: 'lease', label: 'Lease Agreement', description: 'Property or equipment rental terms' },
+    { value: 'contractor', label: 'Contractor Agreement', description: 'Independent contractor terms' },
+    { value: 'vendor', label: 'Vendor Agreement', description: 'Supplier and vendor terms' },
+    { value: 'other', label: 'Other', description: 'Custom contract type' }
+]
 
 const SOURCE_OPTIONS = [
     {
@@ -156,7 +150,9 @@ const SOURCE_OPTIONS = [
 const STEPS_CONFIG = [
     { id: 'source', label: 'Source', number: 1 },
     { id: 'details', label: 'Details', number: 2 },
-    { id: 'content', label: 'Content', number: 3 }
+    { id: 'content', label: 'Content', number: 3 },
+    { id: 'parsing', label: 'Review Clauses', number: 4 },
+    { id: 'invite', label: 'Invite', number: 5 }
 ]
 
 const CLAUSE_CATEGORIES = [
@@ -199,12 +195,7 @@ const initialState: CreateState = {
     parsingStatus: 'idle',
     parsingError: null,
     // Session state
-    sessionId: null,
-    contractTypeKey: null,
-    creatorPartyRole: null,
-    customProtectedLabel: '',
-    customProvidingLabel: '',
-
+    sessionId: null
 }
 
 // ============================================================================
@@ -258,7 +249,11 @@ function CreateQuickContractContent() {
     const [error, setError] = useState<string | null>(null)
 
     // Invite step state
-    // (Invite state moved to Studio page)
+    const [inviteEmail, setInviteEmail] = useState('')
+    const [inviteName, setInviteName] = useState('')
+    const [inviteCompany, setInviteCompany] = useState('')
+    const [sendingInvite, setSendingInvite] = useState(false)
+    const [inviteMessage, setInviteMessage] = useState('')
 
     // Duplicate mode
     const duplicateId = searchParams.get('duplicate')
@@ -269,8 +264,13 @@ function CreateQuickContractContent() {
     const sourceContractType = searchParams.get('contract_type')
 
     // Review panel state
-    // (Review clause selection moved to Studio page)
+    const [selectedReviewClauseIndex, setSelectedReviewClauseIndex] = useState<number | null>(null)
     const [clauseSearchTerm, setClauseSearchTerm] = useState('')
+
+    // Derived: Get the currently selected clause
+    const selectedReviewClause = selectedReviewClauseIndex !== null
+        ? state.parsedClauses[selectedReviewClauseIndex]
+        : null
 
     // ==========================================================================
     // SECTION 9: DATA LOADING
@@ -287,31 +287,28 @@ function CreateQuickContractContent() {
         let enrichedUserInfo = { ...authData.userInfo }
 
         // ----------------------------------------------------------------
-        // FIX: The login page stores company NAME but not company_id.
-        // Look up company_id from Supabase if missing.
+        // FIX: The login page stores company NAME but not company ID.
+        // Look up company_id from Supabase users table if missing.
+        // This mirrors the pattern used by QC Studio for robust auth.
         // ----------------------------------------------------------------
         if (!enrichedUserInfo.companyId) {
-            console.log('🟡 AUTH: companyId missing, looking up from Supabase...')
             try {
                 const { data: { user: supabaseUser } } = await supabase.auth.getUser()
                 if (supabaseUser) {
-                    // Try auth_id first, then user_id, then email
-                    let dbUser = null
-                    for (const col of ['auth_id', 'user_id', 'email']) {
-                        const val = col === 'email' ? supabaseUser.email : supabaseUser.id
-                        const { data } = await supabase
-                            .from('users')
-                            .select('company_id, company_name')
-                            .eq(col, val)
-                            .single()
-                        if (data?.company_id) { dbUser = data; break }
-                    }
+                    const { data: dbUser } = await supabase
+                        .from('users')
+                        .select('company_id, company_name')
+                        .eq('auth_id', supabaseUser.id)
+                        .single()
+
                     if (dbUser?.company_id) {
                         enrichedUserInfo.companyId = dbUser.company_id
                         enrichedUserInfo.company = enrichedUserInfo.company || dbUser.company_name
+                        console.log('🔵 AUTH: Enriched with company_id from users table:', dbUser.company_id)
+
+                        // Update localStorage so future loads are faster
                         authData.userInfo = enrichedUserInfo
                         localStorage.setItem('clarence_auth', JSON.stringify(authData))
-                        console.log('🟢 AUTH: Got company_id:', dbUser.company_id)
                     }
                 }
             } catch (err) {
@@ -648,8 +645,17 @@ function CreateQuickContractContent() {
                     })
                     .eq('template_id', templateId)
 
-                // Template loaded - redirect straight to Studio
-                console.log('Template loaded, redirecting to Studio:', newContractId)
+                setState(prev => ({
+                    ...prev,
+                    step: 'invite',
+                    sourceType: 'template',
+                    contractName: templateName || templateData.template_name,
+                    contractType: (contractType || templateData.contract_type || 'other') as ContractType,
+                    uploadedContractId: newContractId,
+                    parsedClauses,
+                    parsingStatus: 'complete'
+                }))
+
                 eventLogger.completed('quick_contract_create', 'template_loaded', {
                     templateId,
                     contractId: newContractId,
@@ -660,7 +666,6 @@ function CreateQuickContractContent() {
 
                 console.log('=== loadFromTemplate COMPLETE ===')
                 setLoadingTemplate(false)
-                router.push(`/auth/quick-contract/studio/${newContractId}`)
                 return
             }
 
@@ -691,40 +696,40 @@ function CreateQuickContractContent() {
         const init = async () => {
             try {
                 setLoading(true)
-                console.log('🔵 INIT: Starting...')
-                console.log('🔵 INIT: sourceTemplateId =', sourceTemplateId)
+                console.log('ðŸ”µ INIT: Starting...')
+                console.log('ðŸ”µ INIT: sourceTemplateId =', sourceTemplateId)
 
                 const user = await loadUserInfo()
-                console.log('🔵 INIT: loadUserInfo complete, user =', user?.email)
+                console.log('ðŸ”µ INIT: loadUserInfo complete, user =', user?.email)
 
                 if (!isMounted) return
 
                 if (user) {
-                    console.log('🔵 INIT: Calling loadTemplates...')
+                    console.log('ðŸ”µ INIT: Calling loadTemplates...')
                     await loadTemplates(user)
-                    console.log('🔵 INIT: loadTemplates complete')
+                    console.log('ðŸ”µ INIT: loadTemplates complete')
 
                     if (!isMounted) return
 
                     // Priority 1: Incoming template from Contracts page "Use Template"
                     if (sourceTemplateId) {
-                        console.log('🔵 INIT: Calling loadFromTemplate with', sourceTemplateId)
+                        console.log('ðŸ”µ INIT: Calling loadFromTemplate with', sourceTemplateId)
                         await loadFromTemplate(sourceTemplateId, sourceTemplateName, sourceContractType, user)
                     }
                     // Priority 2: Duplicate an existing contract
                     else if (duplicateId) {
-                        console.log('🔵 INIT: Calling loadDuplicateContract')
+                        console.log('ðŸ”µ INIT: Calling loadDuplicateContract')
                         await loadDuplicateContract(duplicateId)
                     }
                 } else {
-                    console.log('🔵 INIT: No user found!')
+                    console.log('ðŸ”µ INIT: No user found!')
                 }
             } catch (err) {
-                console.error('🔴 INIT ERROR:', err)
+                console.error('ðŸ”´ INIT ERROR:', err)
             } finally {
                 if (isMounted) {
                     setLoading(false)
-                    console.log('🔵 INIT: Complete, loading = false')
+                    console.log('ðŸ”µ INIT: Complete, loading = false')
                 }
             }
         }
@@ -736,8 +741,6 @@ function CreateQuickContractContent() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [duplicateId, sourceTemplateId])
-
-    // ==========================================================================
 
     // ==========================================================================
     // SECTION 11: NAVIGATION HANDLERS
@@ -796,20 +799,23 @@ function CreateQuickContractContent() {
             setError('Please enter a contract name')
             return
         }
-        if (!state.contractTypeKey) {
-            setError('Please select a contract type')
-            return
-        }
-        if (!state.creatorPartyRole) {
-            setError('Please select your role in this contract')
-            return
-        }
+
         setError(null)
         setState(prev => ({ ...prev, step: 'content' }))
     }
 
+    function handleContentComplete() {
+        if (!state.documentContent.trim()) {
+            setError('Please add some content to your contract')
+            return
+        }
+
+        setError(null)
+        setState(prev => ({ ...prev, step: 'invite' }))
+    }
+
     function handleBack() {
-        const stepOrder: CreateStep[] = ['source', 'template_select', 'variables', 'details', 'content']
+        const stepOrder: CreateStep[] = ['source', 'template_select', 'variables', 'details', 'content', 'parsing', 'invite']
         const currentIndex = stepOrder.indexOf(state.step)
 
         if (currentIndex > 0) {
@@ -825,10 +831,20 @@ function CreateQuickContractContent() {
                 prevStep = 'template_select'
             }
 
+            // Reset parsing state when going back from parsing
+            if (state.step === 'parsing') {
+                setState(prev => ({
+                    ...prev,
+                    step: prevStep,
+                    parsingStatus: 'idle',
+                    parsingError: null
+                }))
+                return
+            }
+
             setState(prev => ({ ...prev, step: prevStep }))
         }
     }
-
 
     // ==========================================================================
     // SECTION 12: FILE UPLOAD HANDLER
@@ -993,32 +1009,26 @@ function CreateQuickContractContent() {
         }
     }
 
-
     // ==========================================================================
-    // SECTION 13: SUBMIT TO STUDIO HANDLER
+    // SECTION 13: PARSING HANDLERS
     // ==========================================================================
 
-    async function handleSubmitToStudio() {
+    async function handleStartParsing() {
         if (!userInfo || !state.documentContent) {
             setError('Missing document content')
             return
         }
 
-        if (!userInfo.companyId) {
-            setError('Missing company ID. Please log out and log back in.')
-            return
-        }
-
         setState(prev => ({
             ...prev,
-            parsingStatus: 'submitting',
+            step: 'parsing',
+            parsingStatus: 'parsing',
             parsingError: null
         }))
 
         try {
-            console.log('Submitting document to Studio...')
+            console.log('Starting document parsing...')
 
-            // Call parse API - this creates the uploaded_contract record and starts parsing
             const response = await fetch(`${API_BASE}/parse-contract-document`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1030,10 +1040,6 @@ function CreateQuickContractContent() {
                     file_size: state.documentContent.length,
                     raw_text: state.documentContent.replace(/<[^>]*>/g, '\n'),
                     contract_type: state.contractType,
-                    contract_type_key: state.contractTypeKey,
-                    creator_party_role: state.creatorPartyRole,
-                    custom_protected_label: state.customProtectedLabel || null,
-                    custom_providing_label: state.customProvidingLabel || null,
                     mediation_type: 'stc',
                     template_source: state.uploadedFileName ? 'uploaded' : 'manual'
                 })
@@ -1041,40 +1047,331 @@ function CreateQuickContractContent() {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
-                throw new Error(errorData.error || `Submission failed with status ${response.status}`)
+                throw new Error(errorData.error || `Parsing failed with status ${response.status}`)
             }
 
             const result = await response.json()
-            console.log('Submit result:', result)
+            console.log('Parsing result:', result)
 
             if (result.success && result.contractId) {
-                console.log('Redirecting to Studio:', result.contractId)
-                eventLogger.completed('quick_contract_create', 'submitted_to_studio', {
-                    contractId: result.contractId,
-                    contractName: state.contractName
-                })
-
-                // Redirect immediately — Studio will show real-time parsing progress
-                router.push(`/auth/quick-contract/studio/${result.contractId}`)
+                // Start polling for parsing completion
+                await pollForParsingComplete(result.contractId)
             } else {
-                throw new Error(result.error || 'Submission failed')
+                throw new Error(result.error || 'Parsing failed')
             }
 
         } catch (err) {
-            console.error('Submit error:', err)
-            const errorMsg = err instanceof Error ? err.message : 'Failed to submit document'
-            setError(errorMsg)
+            console.error('Parsing error:', err)
             setState(prev => ({
                 ...prev,
                 parsingStatus: 'error',
-                parsingError: errorMsg
+                parsingError: err instanceof Error ? err.message : 'Failed to parse document'
             }))
         }
     }
 
+    async function pollForParsingComplete(contractId: string) {
+        const maxAttempts = 60
+        let attempts = 0
+        const startTime = Date.now()
+
+        const poll = async () => {
+            attempts++
+            const elapsed = Math.round((Date.now() - startTime) / 1000)
+            console.log(`Polling attempt ${attempts}/${maxAttempts}... (${elapsed}s elapsed)`)
+
+            try {
+                const { data: contractData, error: contractError } = await supabase
+                    .from('uploaded_contracts')
+                    .select('status, clause_count')
+                    .eq('contract_id', contractId)
+                    .single()
+
+                if (contractError) {
+                    throw new Error('Failed to check parsing status')
+                }
+
+                console.log('Contract status:', contractData.status)
+
+                if (contractData.status === 'ready') {
+                    // Fetch the parsed clauses
+                    const { data: clausesData, error: clausesError } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select(`
+                        clause_id,
+                        clause_number,
+                        clause_name,
+                        category,
+                        content,
+                        clause_level,
+                        parent_clause_id,
+                        display_order,
+                        clarence_certified,
+                        clarence_position,
+                        clarence_fairness,
+                        clarence_summary,
+                        clarence_assessment,
+                        clarence_flags,
+                        clarence_certified_at
+                    `)
+                        .eq('contract_id', contractId)
+                        .order('display_order', { ascending: true })
+
+                    if (clausesError) {
+                        console.error('Clauses fetch error:', clausesError)
+                        throw new Error('Failed to fetch parsed clauses')
+                    }
+
+                    const parsedClauses: ParsedClause[] = (clausesData || []).map(c => ({
+                        clauseId: c.clause_id,
+                        clauseNumber: c.clause_number,
+                        clauseName: c.clause_name,
+                        category: c.category || 'Other',
+                        clauseText: c.content || '',
+                        level: c.clause_level || 1,
+                        parentClauseNumber: null,
+                        displayOrder: c.display_order,
+                        isExpanded: false,
+                        clarenceCertified: c.clarence_certified || false,
+                        clarencePosition: c.clarence_position,
+                        clarenceFairness: c.clarence_fairness,
+                        clarenceSummary: c.clarence_summary,
+                        clarenceAssessment: c.clarence_assessment,
+                        clarenceFlags: c.clarence_flags || [],
+                        clarenceCertifiedAt: c.clarence_certified_at
+                    }))
+
+                    console.log(`Parsing complete! Found ${parsedClauses.length} clauses`)
+
+                    // Clauses loaded - certification happens later in Studio page
+                    setState(prev => ({
+                        ...prev,
+                        uploadedContractId: contractId,
+                        parsedClauses,
+                        parsingStatus: 'complete'
+                    }))
+
+                    // Auto-select first clause for review
+                    if (parsedClauses.length > 0) {
+                        setSelectedReviewClauseIndex(0)
+                    }
+
+                    return
+                }
+
+                if (contractData.status === 'failed') {
+                    throw new Error('Document parsing failed. Please try again.')
+                }
+
+                // Still processing, continue polling
+                if (attempts < maxAttempts) {
+                    setTimeout(poll, 3000)
+                } else {
+                    throw new Error(
+                        'Parsing is taking longer than expected. The document may still be processing in the background. ' +
+                        'Try clicking "Try Again" in a moment, or go back and re-upload.'
+                    )
+                }
+
+            } catch (err) {
+                console.error('Polling error:', err)
+                setState(prev => ({
+                    ...prev,
+                    parsingStatus: 'error',
+                    parsingError: err instanceof Error ? err.message : 'Failed to check parsing status'
+                }))
+            }
+        }
+
+        poll()
+    }
+
+    async function reloadClauses(contractId: string) {
+        try {
+            const { data: clausesData, error: clausesError } = await supabase
+                .from('uploaded_contract_clauses')
+                .select(`
+                clause_id,
+                clause_number,
+                clause_name,
+                category,
+                content,
+                clause_level,
+                parent_clause_id,
+                display_order,
+                clarence_certified,
+                clarence_position,
+                clarence_fairness,
+                clarence_summary,
+                clarence_assessment,
+                clarence_flags,
+                clarence_certified_at
+            `)
+                .eq('contract_id', contractId)
+                .order('display_order', { ascending: true })
+
+            if (clausesError) {
+                throw clausesError
+            }
+
+            const parsedClauses: ParsedClause[] = (clausesData || []).map(c => ({
+                clauseId: c.clause_id,
+                clauseNumber: c.clause_number,
+                clauseName: c.clause_name,
+                category: c.category || 'Other',
+                clauseText: c.content || '',
+                level: c.clause_level || 1,
+                parentClauseNumber: null,
+                displayOrder: c.display_order,
+                isExpanded: false,
+                clarenceCertified: c.clarence_certified || false,
+                clarencePosition: c.clarence_position,
+                clarenceFairness: c.clarence_fairness,
+                clarenceSummary: c.clarence_summary,
+                clarenceAssessment: c.clarence_assessment,
+                clarenceFlags: c.clarence_flags || [],
+                clarenceCertifiedAt: c.clarence_certified_at
+            }))
+
+            console.log(`Reloaded ${parsedClauses.length} clauses, ${parsedClauses.filter(c => c.clarenceCertified).length} certified`)
+
+            setState(prev => ({
+                ...prev,
+                parsedClauses,
+                parsingStatus: 'complete'
+            }))
+
+        } catch (err) {
+            console.error('Error reloading clauses:', err)
+            setState(prev => ({
+                ...prev,
+                parsingStatus: 'complete' // Continue anyway
+            }))
+        }
+    }
+
+    function handleClauseNameChange(index: number, newName: string) {
+        setState(prev => ({
+            ...prev,
+            parsedClauses: prev.parsedClauses.map((clause, i) =>
+                i === index ? { ...clause, clauseName: newName } : clause
+            )
+        }))
+    }
+
+    function handleClauseCategoryChange(index: number, newCategory: string) {
+        setState(prev => ({
+            ...prev,
+            parsedClauses: prev.parsedClauses.map((clause, i) =>
+                i === index ? { ...clause, category: newCategory } : clause
+            )
+        }))
+    }
+
+    function handleRetryParsing() {
+        setState(prev => ({
+            ...prev,
+            step: 'content',
+            parsingStatus: 'idle',
+            parsingError: null,
+            parsedClauses: []
+        }))
+    }
+
+    function handleToggleClauseExpanded(index: number) {
+        setState(prev => ({
+            ...prev,
+            parsedClauses: prev.parsedClauses.map((clause, i) =>
+                i === index ? { ...clause, isExpanded: !clause.isExpanded } : clause
+            )
+        }))
+    }
+
     // ==========================================================================
-    // SECTION 14: DRAFT SAVE HANDLER
+    // SECTION 14: SESSION AND INVITE HANDLERS
     // ==========================================================================
+
+    async function handleCreateSessionAndInvite() {
+        if (!userInfo || !state.uploadedContractId) {
+            setError('Missing required data')
+            return
+        }
+
+        if (!inviteEmail.trim() || !inviteName.trim()) {
+            setError('Please enter recipient name and email')
+            return
+        }
+
+        setSendingInvite(true)
+        setError(null)
+
+        try {
+            console.log('Creating Quick Contract session and sending invite...')
+
+            // Create session via QC-Send workflow (Quick Contract specific)
+            const response = await fetch(`${API_BASE}/qc-send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    // Contract details
+                    contract_id: state.uploadedContractId,
+                    contract_name: state.contractName,
+                    contract_type: state.contractType || 'other',
+
+                    // Initiator (sender) details
+                    initiator_user_id: userInfo.userId,
+                    initiator_company_id: userInfo.companyId,
+                    initiator_email: userInfo.email,
+                    initiator_name: `${userInfo.firstName} ${userInfo.lastName}`,
+                    initiator_company: userInfo.company,
+
+                    // Recipient details
+                    recipient_email: inviteEmail.trim(),
+                    recipient_name: inviteName.trim(),
+                    recipient_company: inviteCompany?.trim() || '',
+
+                    // Personal message (optional)
+                    personal_message: inviteMessage?.trim() || '',
+
+                    // Mode
+                    mediation_type: 'stc'
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || `Failed to send: ${response.status}`)
+            }
+
+            const result = await response.json()
+            console.log('Quick Contract sent:', result)
+
+            if (result.success) {
+                const sessionId = result.sessionId || result.session_id
+
+                if (sessionId) {
+                    setState(prev => ({
+                        ...prev,
+                        sessionId: sessionId
+                    }))
+
+                    // Redirect to the contract studio (STC mode)
+                    router.push(`/auth/quick-contract/studio/${sessionId}`)
+                } else {
+                    // New - redirects to studio
+                    router.push(`/auth/quick-contract/studio/${state.uploadedContractId}`)
+                }
+            } else {
+                throw new Error(result.error || 'Failed to send contract')
+            }
+
+        } catch (err) {
+            console.error('Quick Contract send error:', err)
+            setError(err instanceof Error ? err.message : 'Failed to send contract')
+        } finally {
+            setSendingInvite(false)
+        }
+    }
 
     async function handleSaveDraft() {
         if (!userInfo) return
@@ -1089,11 +1386,7 @@ function CreateQuickContractContent() {
                     .from('uploaded_contracts')
                     .update({
                         contract_name: state.contractName,
-                        contract_type: state.contractType,
-                        contract_type_key: state.contractTypeKey,
-                        creator_party_role: state.creatorPartyRole,
-                        custom_protected_label: state.customProtectedLabel || null,
-                        custom_providing_label: state.customProvidingLabel || null,
+                        contract_type: state.contractType
                     })
                     .eq('contract_id', state.uploadedContractId)
 
@@ -1117,10 +1410,6 @@ function CreateQuickContractContent() {
                         created_by_user_id: userInfo.userId,
                         contract_name: state.contractName,
                         contract_type: state.contractType,
-                        contract_type_key: state.contractTypeKey,
-                        creator_party_role: state.creatorPartyRole,
-                        custom_protected_label: state.customProtectedLabel || null,
-                        custom_providing_label: state.customProvidingLabel || null,
                         description: state.description,
                         reference_number: state.referenceNumber || null,
                         document_content: state.documentContent,
@@ -1166,25 +1455,18 @@ function CreateQuickContractContent() {
                 return 2
             case 'content':
                 return 3
+            case 'parsing':
+                return 4
+            case 'invite':
+                return 5
             default:
                 return 1
         }
     }
 
-    function getContractTypeLabel(type: string): string {
-        const ct = getContractType(type)
-        if (ct) return ct.contractTypeName
-        // Fallback for legacy values
-        const legacyLabels: Record<string, string> = {
-            nda: 'Non-Disclosure Agreement',
-            service_agreement: 'Service Agreement',
-            lease: 'Lease Agreement',
-            employment: 'Employment Contract',
-            contractor: 'Contractor Agreement',
-            vendor: 'Vendor Agreement',
-            other: 'Other',
-        }
-        return legacyLabels[type] || type
+    function getContractTypeLabel(type: ContractType): string {
+        const option = CONTRACT_TYPE_OPTIONS.find(o => o.value === type)
+        return option?.label || 'Other'
     }
 
     function getCategoryColor(category: string): string {
@@ -1205,37 +1487,6 @@ function CreateQuickContractContent() {
             'Force Majeure': 'bg-yellow-100 text-yellow-700'
         }
         return colors[category] || 'bg-slate-100 text-slate-600'
-    }
-
-    // Get the party labels for the currently selected contract type
-    function getSelectedPartyLabels(): { protectedLabel: string, providingLabel: string } | null {
-        if (!state.contractTypeKey) return null
-        const ct = getContractType(state.contractTypeKey)
-        if (!ct) return null
-        if (state.contractTypeKey === 'other') {
-            return {
-                protectedLabel: state.customProtectedLabel || 'Party A',
-                providingLabel: state.customProvidingLabel || 'Party B',
-            }
-        }
-        return {
-            protectedLabel: ct.protectedPartyLabel,
-            providingLabel: ct.providingPartyLabel,
-        }
-    }
-
-    // Get the user's selected role label
-    function getCreatorRoleLabel(): string {
-        const labels = getSelectedPartyLabels()
-        if (!labels || !state.creatorPartyRole) return 'Not selected'
-        return state.creatorPartyRole === 'protected' ? labels.protectedLabel : labels.providingLabel
-    }
-
-    // Get the counterparty role label
-    function getCounterpartyRoleLabel(): string {
-        const labels = getSelectedPartyLabels()
-        if (!labels || !state.creatorPartyRole) return 'Not selected'
-        return state.creatorPartyRole === 'protected' ? labels.providingLabel : labels.protectedLabel
     }
 
     // ==========================================================================
@@ -1265,7 +1516,7 @@ function CreateQuickContractContent() {
                             </div>
                             <div>
                                 <div className="font-semibold text-white tracking-wide">CLARENCE</div>
-                                <div className="text-xs text-slate-400">Quick Create</div>
+                                <div className="text-xs text-slate-400">Quick Contract</div>
                             </div>
                         </Link>
 
@@ -1342,7 +1593,7 @@ function CreateQuickContractContent() {
                 {state.step === 'source' && (
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
                         <div className="text-center mb-8">
-                            <h1 className="text-2xl font-bold text-slate-800 mb-2">Create a Quick Contract</h1>
+                            <h1 className="text-2xl font-bold text-slate-800 mb-2">Create Quick Contract</h1>
                             <p className="text-slate-500">How would you like to start?</p>
                         </div>
 
@@ -1731,218 +1982,29 @@ function CreateQuickContractContent() {
                                 />
                             </div>
 
-                            {/* Contract Type - Grouped by Category */}
+                            {/* Contract Type */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                    Contract Type <span className="text-red-500">*</span>
+                                    Contract Type
                                 </label>
-                                <div className="space-y-4">
-                                    {Object.entries(getContractTypesByCategory()).map(([category, types]) => {
-                                        if (types.length === 0) return null
-                                        return (
-                                            <div key={category}>
-                                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                                                    {getCategoryDisplayName(category)}
-                                                </p>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {types.map(ct => (
-                                                        <button
-                                                            key={ct.contractTypeKey}
-                                                            onClick={() => setState(prev => ({
-                                                                ...prev,
-                                                                contractType: ct.contractTypeKey as ContractType,
-                                                                contractTypeKey: ct.contractTypeKey,
-                                                                // Reset role when type changes
-                                                                creatorPartyRole: null,
-                                                                customProtectedLabel: '',
-                                                                customProvidingLabel: '',
-                                                            }))}
-                                                            className={`p-3 rounded-lg border-2 text-left transition-colors ${state.contractTypeKey === ct.contractTypeKey
-                                                                ? 'border-teal-500 bg-teal-50'
-                                                                : 'border-slate-200 hover:border-slate-300'
-                                                                }`}
-                                                        >
-                                                            <div className="flex items-center gap-2">
-                                                                <div className={`w-2 h-2 rounded-full ${state.contractTypeKey === ct.contractTypeKey ? 'bg-teal-500' : 'bg-slate-300'}`} />
-                                                                <span className="font-medium text-sm text-slate-800">{ct.contractTypeName}</span>
-                                                            </div>
-                                                            {state.contractTypeKey === ct.contractTypeKey && (
-                                                                <p className="text-xs text-slate-500 mt-1 ml-4">
-                                                                    {ct.protectedPartyLabel} ↔ {ct.providingPartyLabel}
-                                                                </p>
-                                                            )}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-
-                                    {/* Other / Custom option */}
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                                            Other
-                                        </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {CONTRACT_TYPE_OPTIONS.map(option => (
                                         <button
-                                            onClick={() => setState(prev => ({
-                                                ...prev,
-                                                contractType: 'other' as ContractType,
-                                                contractTypeKey: 'other',
-                                                creatorPartyRole: null,
-                                                customProtectedLabel: '',
-                                                customProvidingLabel: '',
-                                            }))}
-                                            className={`p-3 rounded-lg border-2 text-left transition-colors w-full ${state.contractTypeKey === 'other'
+                                            key={option.value}
+                                            onClick={() => setState(prev => ({ ...prev, contractType: option.value as ContractType }))}
+                                            className={`p-3 rounded-lg border-2 text-left transition-colors ${state.contractType === option.value
                                                 ? 'border-teal-500 bg-teal-50'
                                                 : 'border-slate-200 hover:border-slate-300'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${state.contractTypeKey === 'other' ? 'bg-teal-500' : 'bg-slate-300'}`} />
-                                                <span className="font-medium text-sm text-slate-800">Other / Custom</span>
+                                                <div className={`w-2 h-2 rounded-full ${state.contractType === option.value ? 'bg-teal-500' : 'bg-slate-300'}`}></div>
+                                                <span className="font-medium text-sm text-slate-800">{option.label}</span>
                                             </div>
-                                            <p className="text-xs text-slate-500 mt-1 ml-4">Define your own party labels</p>
                                         </button>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
-
-                            {/* Custom Party Labels - Only for 'Other' */}
-                            {state.contractTypeKey === 'other' && (
-                                <div className="bg-slate-50 rounded-lg p-4 space-y-3">
-                                    <p className="text-sm font-medium text-slate-700">Define the party labels for this contract</p>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs text-slate-500 mb-1">
-                                                Party A (Position 10 favours)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={state.customProtectedLabel}
-                                                onChange={(e) => setState(prev => ({ ...prev, customProtectedLabel: e.target.value }))}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                                placeholder="e.g., Licensor"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs text-slate-500 mb-1">
-                                                Party B (Position 1 favours)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={state.customProvidingLabel}
-                                                onChange={(e) => setState(prev => ({ ...prev, customProvidingLabel: e.target.value }))}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                                                placeholder="e.g., Licensee"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Role Selection - Appears after contract type is chosen */}
-                            {state.contractTypeKey && (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                                        Your Role <span className="text-red-500">*</span>
-                                    </label>
-                                    <p className="text-xs text-slate-500 mb-3">
-                                        Which party are you in this {getContractType(state.contractTypeKey)?.contractTypeName || 'contract'}?
-                                    </p>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {/* Protected Party Option */}
-                                        <button
-                                            onClick={() => setState(prev => ({ ...prev, creatorPartyRole: 'protected' }))}
-                                            className={`p-4 rounded-lg border-2 text-left transition-all ${state.creatorPartyRole === 'protected'
-                                                ? 'border-emerald-500 bg-emerald-50 shadow-sm'
-                                                : 'border-slate-200 hover:border-slate-300'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${state.creatorPartyRole === 'protected'
-                                                    ? 'border-emerald-500'
-                                                    : 'border-slate-300'
-                                                    }`}>
-                                                    {state.creatorPartyRole === 'protected' && (
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                                    )}
-                                                </div>
-                                                <span className={`font-semibold text-sm ${state.creatorPartyRole === 'protected' ? 'text-emerald-800' : 'text-slate-800'}`}>
-                                                    {(() => {
-                                                        if (state.contractTypeKey === 'other') {
-                                                            return state.customProtectedLabel || 'Party A'
-                                                        }
-                                                        return getContractType(state.contractTypeKey)?.protectedPartyLabel || 'Party A'
-                                                    })()}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-slate-500 ml-5">
-                                                {(() => {
-                                                    if (state.contractTypeKey === 'other') {
-                                                        return 'Higher positions (7-10) favour you'
-                                                    }
-                                                    return getContractType(state.contractTypeKey)?.protectedPartyDescription || 'The protected party'
-                                                })()}
-                                            </p>
-                                        </button>
-
-                                        {/* Providing Party Option */}
-                                        <button
-                                            onClick={() => setState(prev => ({ ...prev, creatorPartyRole: 'providing' }))}
-                                            className={`p-4 rounded-lg border-2 text-left transition-all ${state.creatorPartyRole === 'providing'
-                                                ? 'border-blue-500 bg-blue-50 shadow-sm'
-                                                : 'border-slate-200 hover:border-slate-300'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${state.creatorPartyRole === 'providing'
-                                                    ? 'border-blue-500'
-                                                    : 'border-slate-300'
-                                                    }`}>
-                                                    {state.creatorPartyRole === 'providing' && (
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                                    )}
-                                                </div>
-                                                <span className={`font-semibold text-sm ${state.creatorPartyRole === 'providing' ? 'text-blue-800' : 'text-slate-800'}`}>
-                                                    {(() => {
-                                                        if (state.contractTypeKey === 'other') {
-                                                            return state.customProvidingLabel || 'Party B'
-                                                        }
-                                                        return getContractType(state.contractTypeKey)?.providingPartyLabel || 'Party B'
-                                                    })()}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-slate-500 ml-5">
-                                                {(() => {
-                                                    if (state.contractTypeKey === 'other') {
-                                                        return 'Lower positions (1-3) favour you'
-                                                    }
-                                                    return getContractType(state.contractTypeKey)?.providingPartyDescription || 'The providing party'
-                                                })()}
-                                            </p>
-                                        </button>
-                                    </div>
-
-                                    {/* Confirmation Banner */}
-                                    {state.creatorPartyRole && (
-                                        <div className="mt-3 p-3 bg-teal-50 border border-teal-200 rounded-lg">
-                                            <div className="flex items-start gap-2">
-                                                <svg className="w-4 h-4 text-teal-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                <div>
-                                                    <p className="text-sm text-teal-800">
-                                                        You are the <strong>{getCreatorRoleLabel()}</strong> in this {getContractType(state.contractTypeKey!)?.contractTypeName || 'contract'}.
-                                                    </p>
-                                                    <p className="text-xs text-teal-600 mt-0.5">
-                                                        The other party will be referred to as the <strong>{getCounterpartyRoleLabel()}</strong>.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
 
                             {/* Description */}
                             <div>
@@ -2032,9 +2094,8 @@ function CreateQuickContractContent() {
                                 <div>
                                     <p className="text-sm text-blue-800 font-medium">What happens next?</p>
                                     <p className="text-sm text-blue-700 mt-1">
-                                        CLARENCE will open the Studio where you can watch your contract being analysed in real time.
-                                        Each clause will be assessed, certified, and given a position range.
-                                        Once complete, you can review everything before inviting the other party.
+                                        CLARENCE will analyze this document and extract individual clauses.
+                                        You&apos;ll be able to review and adjust the extracted clauses before inviting the other party.
                                     </p>
                                 </div>
                             </div>
@@ -2050,28 +2111,652 @@ function CreateQuickContractContent() {
                             </button>
 
                             <button
-                                onClick={handleSubmitToStudio}
-                                disabled={!state.documentContent.trim() || state.parsingStatus === 'submitting'}
+                                onClick={handleStartParsing}
+                                disabled={!state.documentContent.trim()}
                                 className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
                             >
-                                {state.parsingStatus === 'submitting' ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        Submitting to Studio...
-                                    </>
-                                ) : (
-                                    <>
-                                        Open in Studio
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                        </svg>
-                                    </>
-                                )}
+                                Parse into Clauses
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                </svg>
                             </button>
                         </div>
                     </div>
                 )}
 
+                {/* ============================================================== */}
+                {/* SECTION 25: STEP - PARSING / REVIEW CLAUSES (3-PANEL LAYOUT) */}
+                {/* ============================================================== */}
+                {state.step === 'parsing' && (
+                    <>
+                        {/* Parsing In Progress - Keep in container */}
+                        {state.parsingStatus === 'parsing' && (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                                <div className="text-center py-16">
+                                    <div className="w-16 h-16 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+                                    <h2 className="text-xl font-bold text-slate-800 mb-2">Analyzing Your Contract</h2>
+                                    <p className="text-slate-500 mb-2">CLARENCE is identifying and extracting clauses...</p>
+                                    <p className="text-sm text-slate-400 mb-4">Larger documents may take 2-3 minutes</p>
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full">
+                                        <div className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></div>
+                                        <span className="text-xs text-slate-500">Processing in progress</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Parsing Error - Keep in container */}
+                        {state.parsingStatus === 'error' && (
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                                <div className="text-center py-16">
+                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                        <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                    </div>
+                                    <h2 className="text-xl font-bold text-slate-800 mb-2">Processing Failed</h2>
+                                    <p className="text-slate-500 mb-6">{state.parsingError || 'Something went wrong.'}</p>
+                                    <div className="flex justify-center gap-3">
+                                        <button
+                                            onClick={handleRetryParsing}
+                                            className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors"
+                                        >
+                                            Go Back & Edit
+                                        </button>
+                                        <button
+                                            onClick={handleStartParsing}
+                                            className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors"
+                                        >
+                                            Try Again
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* FULL-WIDTH 3-PANEL REVIEW LAYOUT - Breaks out of container */}
+                {state.step === 'parsing' && state.parsingStatus === 'complete' && (
+                    <div className="fixed inset-0 z-40 bg-slate-100">
+                        <div className="flex flex-col h-full">
+
+                            {/* Header Bar */}
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white shadow-sm">
+                                <div className="flex items-center gap-4">
+                                    {/* Logo/Brand */}
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-lg flex items-center justify-center">
+                                            <span className="text-white font-bold text-sm">C</span>
+                                        </div>
+                                        <span className="font-semibold text-slate-800">CLARENCE</span>
+                                    </div>
+                                    <div className="h-6 w-px bg-slate-200"></div>
+                                    <div>
+                                        <h1 className="text-lg font-bold text-slate-800">Review Extracted Clauses</h1>
+                                        <p className="text-sm text-slate-500">
+                                            {state.contractName || 'Untitled Contract'} {state.parsedClauses.length} clauses
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={handleRetryParsing}
+                                        className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg text-sm transition-colors flex items-center gap-1"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                        </svg>
+                                        Back
+                                    </button>
+                                    <button
+                                        onClick={handleSaveDraft}
+                                        disabled={saving}
+                                        className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                                    >
+                                        {saving ? 'Saving...' : 'Save Draft'}
+                                    </button>
+                                    <button
+                                        onClick={() => setState(prev => ({ ...prev, step: 'invite' }))}
+                                        className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                                    >
+                                        Continue to Invite
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 3-Panel Content Area */}
+                            <div className="flex flex-1 overflow-hidden">
+
+                                {/* LEFT PANEL: Clause List */}
+                                <div className="w-80 border-r border-slate-200 flex flex-col bg-white">
+                                    {/* Search/Filter */}
+                                    <div className="p-4 border-b border-slate-200">
+                                        <div className="relative">
+                                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                            <input
+                                                type="text"
+                                                placeholder="Search clauses..."
+                                                value={clauseSearchTerm}
+                                                onChange={(e) => setClauseSearchTerm(e.target.value)}
+                                                className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Clause List */}
+                                    <div className="flex-1 overflow-y-auto">
+                                        {state.parsedClauses
+                                            .filter(c => {
+                                                if (!clauseSearchTerm) return true
+                                                const search = clauseSearchTerm.toLowerCase()
+                                                return (
+                                                    c.clauseName.toLowerCase().includes(search) ||
+                                                    c.clauseNumber.toLowerCase().includes(search) ||
+                                                    c.category.toLowerCase().includes(search)
+                                                )
+                                            })
+                                            .map((clause, index) => {
+                                                const actualIndex = state.parsedClauses.findIndex(c => c.clauseId === clause.clauseId)
+                                                const isSelected = selectedReviewClauseIndex === actualIndex
+                                                const isCertified = clause.clarenceCertified
+                                                const hasFlags = clause.clarenceFlags && clause.clarenceFlags.length > 0 && !clause.clarenceFlags.includes('none')
+
+                                                return (
+                                                    <div
+                                                        key={`clause-nav-${clause.clauseId || index}`}
+                                                        onClick={() => setSelectedReviewClauseIndex(actualIndex)}
+                                                        className={`px-4 py-3 border-b border-slate-100 cursor-pointer transition-all ${isSelected
+                                                            ? 'bg-teal-50 border-l-4 border-l-teal-500'
+                                                            : 'hover:bg-slate-50 border-l-4 border-l-transparent'
+                                                            }`}
+                                                        style={{ paddingLeft: `${16 + (clause.level - 1) * 12}px` }}
+                                                    >
+                                                        <div className="flex items-start gap-3">
+                                                            {/* Certification Status Icon */}
+                                                            <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs mt-0.5 ${!isCertified
+                                                                ? 'bg-slate-200 text-slate-400'
+                                                                : hasFlags
+                                                                    ? 'bg-amber-100 text-amber-600'
+                                                                    : clause.clarenceFairness === 'balanced'
+                                                                        ? 'bg-emerald-100 text-emerald-600'
+                                                                        : 'bg-blue-100 text-blue-600'
+                                                                }`}>
+                                                                {!isCertified ? '' : hasFlags ? '!' : ''}
+                                                            </div>
+
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 mb-0.5">
+                                                                    <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                        {clause.clauseNumber}
+                                                                    </span>
+                                                                </div>
+                                                                <p className={`text-sm leading-snug ${isSelected ? 'text-teal-700 font-medium' : 'text-slate-700'}`}>
+                                                                    {clause.clauseName}
+                                                                </p>
+                                                                <span className={`inline-block mt-1.5 px-2 py-0.5 text-xs rounded-full ${getCategoryColor(clause.category)}`}>
+                                                                    {clause.category}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                    </div>
+
+                                    {/* Clause Stats Footer */}
+                                    <div className="p-4 border-t border-slate-200 bg-slate-50">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">Total: <strong className="text-slate-700">{state.parsedClauses.length}</strong></span>
+                                            <span className="text-emerald-600 flex items-center gap-1">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                </svg>
+                                                {state.parsedClauses.filter(c => c.clarenceCertified).length} certified
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* MIDDLE PANEL: Clause Detail */}
+                                <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+                                    {selectedReviewClause ? (
+                                        <>
+                                            {/* Clause Header */}
+                                            <div className="px-8 py-5 border-b border-slate-200 bg-white">
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-3 mb-3">
+                                                            <span className="text-sm font-mono text-slate-500 bg-slate-100 px-2.5 py-1 rounded">
+                                                                {selectedReviewClause.clauseNumber}
+                                                            </span>
+                                                            <select
+                                                                value={selectedReviewClause.category}
+                                                                onChange={(e) => handleClauseCategoryChange(selectedReviewClauseIndex!, e.target.value)}
+                                                                className={`px-3 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${getCategoryColor(selectedReviewClause.category)}`}
+                                                            >
+                                                                {CLAUSE_CATEGORIES.map(cat => (
+                                                                    <option key={cat} value={cat}>{cat}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <input
+                                                            type="text"
+                                                            value={selectedReviewClause.clauseName}
+                                                            onChange={(e) => handleClauseNameChange(selectedReviewClauseIndex!, e.target.value)}
+                                                            className="text-2xl font-bold text-slate-800 w-full bg-transparent border-0 border-b-2 border-transparent hover:border-slate-200 focus:border-teal-500 focus:outline-none transition-colors px-0 py-1"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(selectedReviewClause.clauseText || '')
+                                                        }}
+                                                        className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                                        title="Copy clause text"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Clause Content */}
+                                            <div className="flex-1 overflow-y-auto p-8">
+                                                <div className="max-w-4xl mx-auto">
+                                                    <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
+                                                        <p className="text-slate-700 whitespace-pre-wrap leading-relaxed text-base">
+                                                            {selectedReviewClause.clauseText || 'No content available for this clause.'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="mt-3 text-sm text-slate-400 text-right">
+                                                        {selectedReviewClause.clauseText?.length || 0} characters
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Navigation Footer */}
+                                            <div className="px-8 py-4 border-t border-slate-200 bg-white flex items-center justify-between">
+                                                <button
+                                                    onClick={() => setSelectedReviewClauseIndex(Math.max(0, (selectedReviewClauseIndex || 0) - 1))}
+                                                    disabled={selectedReviewClauseIndex === 0}
+                                                    className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                                    </svg>
+                                                    Previous
+                                                </button>
+                                                <span className="text-sm text-slate-500 font-medium">
+                                                    Clause {(selectedReviewClauseIndex || 0) + 1} of {state.parsedClauses.length}
+                                                </span>
+                                                <button
+                                                    onClick={() => setSelectedReviewClauseIndex(Math.min(state.parsedClauses.length - 1, (selectedReviewClauseIndex || 0) + 1))}
+                                                    disabled={selectedReviewClauseIndex === state.parsedClauses.length - 1}
+                                                    className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                                                >
+                                                    Next
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        /* No clause selected */
+                                        <div className="flex-1 flex items-center justify-center">
+                                            <div className="text-center">
+                                                <svg className="w-20 h-20 text-slate-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                                <p className="text-slate-500 text-lg">Select a clause from the list to view details</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* RIGHT PANEL: CLARENCE Advisor */}
+                                <div className="w-96 border-l border-slate-200 flex flex-col bg-white">
+                                    {selectedReviewClause ? (
+                                        <>
+                                            {/* Certification Status Header */}
+                                            <div className={`px-6 py-4 border-b ${selectedReviewClause.clarenceCertified
+                                                ? selectedReviewClause.clarenceFairness === 'balanced'
+                                                    ? 'bg-emerald-50 border-emerald-200'
+                                                    : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                        ? 'bg-amber-50 border-amber-200'
+                                                        : 'bg-blue-50 border-blue-200'
+                                                : 'bg-slate-50 border-slate-200'
+                                                }`}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedReviewClause.clarenceCertified
+                                                        ? selectedReviewClause.clarenceFairness === 'balanced'
+                                                            ? 'bg-emerald-100'
+                                                            : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                ? 'bg-amber-100'
+                                                                : 'bg-blue-100'
+                                                        : 'bg-slate-200'
+                                                        }`}>
+                                                        {selectedReviewClause.clarenceCertified ? (
+                                                            <svg className={`w-6 h-6 ${selectedReviewClause.clarenceFairness === 'balanced'
+                                                                ? 'text-emerald-600'
+                                                                : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                    ? 'text-amber-600'
+                                                                    : 'text-blue-600'
+                                                                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                            </svg>
+                                                        ) : (
+                                                            <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-bold text-slate-800 text-lg">
+                                                            {selectedReviewClause.clarenceCertified ? 'CLARENCE Certified' : 'Pending Certification'}
+                                                        </h3>
+                                                        {selectedReviewClause.clarenceCertified && (
+                                                            <p className={`text-sm font-medium ${selectedReviewClause.clarenceFairness === 'balanced'
+                                                                ? 'text-emerald-600'
+                                                                : selectedReviewClause.clarenceFairness === 'review_recommended'
+                                                                    ? 'text-amber-600'
+                                                                    : 'text-blue-600'
+                                                                }`}>
+                                                                {selectedReviewClause.clarenceFairness?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Certification Details */}
+                                            <div className="flex-1 overflow-y-auto p-6">
+                                                {selectedReviewClause.clarenceCertified ? (
+                                                    <div className="space-y-6">
+                                                        {/* Position Score */}
+                                                        {selectedReviewClause.clarencePosition && (
+                                                            <div>
+                                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Position Score</h4>
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+                                                                        <div
+                                                                            className={`h-full rounded-full transition-all ${selectedReviewClause.clarencePosition <= 4
+                                                                                ? 'bg-green-500'
+                                                                                : selectedReviewClause.clarencePosition <= 6
+                                                                                    ? 'bg-emerald-500'
+                                                                                    : 'bg-blue-500'
+                                                                                }`}
+                                                                            style={{ width: `${(selectedReviewClause.clarencePosition / 10) * 100}%` }}
+                                                                        />
+                                                                    </div>
+                                                                    <span className="text-2xl font-bold text-slate-800 w-12 text-right">
+                                                                        {selectedReviewClause.clarencePosition.toFixed(1)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between text-xs text-slate-400 mt-2">
+                                                                    <span>Customer-Favoring</span>
+                                                                    <span>Provider-Favoring</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Summary */}
+                                                        {selectedReviewClause.clarenceSummary && (
+                                                            <div>
+                                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">What This Means</h4>
+                                                                <p className="text-sm text-slate-700 leading-relaxed">
+                                                                    {selectedReviewClause.clarenceSummary}
+                                                                </p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Assessment */}
+                                                        {selectedReviewClause.clarenceAssessment && (
+                                                            <div>
+                                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Assessment</h4>
+                                                                <p className="text-sm text-slate-700 leading-relaxed">
+                                                                    {selectedReviewClause.clarenceAssessment}
+                                                                </p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Flags */}
+                                                        {selectedReviewClause.clarenceFlags && selectedReviewClause.clarenceFlags.length > 0 && !selectedReviewClause.clarenceFlags.includes('none') && (
+                                                            <div>
+                                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Attention Points</h4>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {selectedReviewClause.clarenceFlags.filter(f => f !== 'none').map((flag, i) => (
+                                                                        <span
+                                                                            key={i}
+                                                                            className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full"
+                                                                        >
+                                                                            {flag.replace(/_/g, ' ')}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Certification Date */}
+                                                        {selectedReviewClause.clarenceCertifiedAt && (
+                                                            <div className="pt-4 border-t border-slate-200">
+                                                                <p className="text-xs text-slate-400">
+                                                                    Certified: {new Date(selectedReviewClause.clarenceCertifiedAt).toLocaleDateString()}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-12">
+                                                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="text-sm text-slate-500 mb-6">
+                                                            This clause hasn't been certified yet.
+                                                        </p>
+                                                        <p className="text-xs text-slate-500 italic">Certification will happen automatically in the Studio.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* CLARENCE Chat Section */}
+                                            <div className="border-t border-slate-200 p-4 bg-slate-50">
+                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Ask CLARENCE</h4>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Ask about this clause..."
+                                                        className="w-full px-4 py-3 pr-12 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white"
+                                                        disabled
+                                                    />
+                                                    <button
+                                                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-teal-600 transition-colors rounded-lg hover:bg-slate-100"
+                                                        disabled
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <p className="text-xs text-slate-400 mt-2 text-center">
+                                                    Chat coming soon
+                                                </p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex-1 flex items-center justify-center">
+                                            <div className="text-center px-8">
+                                                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                    <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                    </svg>
+                                                </div>
+                                                <p className="text-slate-500">
+                                                    Select a clause to view CLARENCE's certification assessment
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ============================================================== */}
+                {/* SECTION 27: STEP - REVIEW */}
+                {/* ============================================================== */}
+
+                {state.step === 'invite' && (
+                    <div className="space-y-6">
+                        {/* Contract Summary */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                            <h3 className="font-semibold text-slate-800 mb-4">Contract Summary</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Name</span>
+                                    <p className="font-medium text-slate-800 mt-1 truncate">{state.contractName}</p>
+                                </div>
+                                <div>
+                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Type</span>
+                                    <p className="font-medium text-slate-800 mt-1">
+                                        {state.contractType ? getContractTypeLabel(state.contractType) : 'Not specified'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Clauses</span>
+                                    <p className="font-medium text-slate-800 mt-1">{state.parsedClauses.length}</p>
+                                </div>
+                                <div>
+                                    <span className="text-xs text-slate-400 uppercase tracking-wider">Mode</span>
+                                    <p className="font-medium text-teal-600 mt-1">Quick Contract</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Invite Form */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">Invite Counterparty</h2>
+                                    <p className="text-slate-500 text-sm">Enter the details of the person you want to review this contract</p>
+                                </div>
+                                <button
+                                    onClick={() => setState(prev => ({ ...prev, step: 'parsing' }))}
+                                    className="text-slate-500 hover:text-slate-700 text-sm flex items-center gap-1"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                    Back
+                                </button>
+                            </div>
+
+                            <div className="max-w-md space-y-5">
+                                {/* Recipient Name */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Recipient Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inviteName}
+                                        onChange={(e) => setInviteName(e.target.value)}
+                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                        placeholder="e.g., John Smith"
+                                    />
+                                </div>
+
+                                {/* Recipient Email */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Recipient Email <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={inviteEmail}
+                                        onChange={(e) => setInviteEmail(e.target.value)}
+                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                        placeholder="e.g., john@company.com"
+                                    />
+                                </div>
+
+                                {/* Recipient Company */}
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                        Company Name <span className="text-slate-400 font-normal">(optional)</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={inviteCompany}
+                                        onChange={(e) => setInviteCompany(e.target.value)}
+                                        className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                                        placeholder="e.g., Acme Corporation"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* What They'll See */}
+                            <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm text-blue-800 font-medium">What the recipient will see</p>
+                                        <ul className="text-sm text-blue-700 mt-2 space-y-1 list-disc list-inside">
+                                            <li>Contract clauses in a read-only view</li>
+                                            <li>Ability to discuss via party chat</li>
+                                            <li>Chat with CLARENCE for questions</li>
+                                            <li>Accept or request changes button</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                            <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+                                <button
+                                    onClick={handleSaveDraft}
+                                    disabled={saving}
+                                    className="px-5 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg font-medium text-sm transition-colors disabled:opacity-50"
+                                >
+                                    {saving ? 'Saving...' : 'Save as Draft'}
+                                </button>
+
+                                <button
+                                    onClick={handleCreateSessionAndInvite}
+                                    disabled={sendingInvite || !inviteEmail.trim() || !inviteName.trim()}
+                                    className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {sendingInvite ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Creating Session...
+                                        </>
+                                    ) : (
+                                        <>
+                                            Create Session & Send Invite
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                            </svg>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
             </main>
         </div>
