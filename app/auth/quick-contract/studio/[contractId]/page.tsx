@@ -1651,6 +1651,7 @@ function QuickContractStudioContent() {
                     version: 1,
                     times_used: 0,
                     certification_status: 'certified',
+                    source_contract_id: contractId,
                 })
                 .select('template_id')
                 .single()

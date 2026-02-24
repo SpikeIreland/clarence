@@ -616,6 +616,99 @@ function CreateQuickContractContent() {
                 const certifiedCount = clauseCopies.filter(c => c.clarence_certified).length
                 console.log(`Copied ${clauseCopies.length} clauses to new contract (${certifiedCount} pre-certified)`)
 
+                // =========================================================
+                // COPY RANGE MAPPINGS from source contract to new contract
+                // Range mappings are keyed by (contract_id, clause_id).
+                // New clauses have fresh UUIDs, so we match by clause_number
+                // to map source clause_ids → new clause_ids.
+                // =========================================================
+                if (sourceContractId) {
+                    try {
+                        console.log(`[Range Copy] Copying range mappings from source: ${sourceContractId} to new: ${newContractId}`)
+
+                        // Step 1: Get range mappings from the source contract
+                        const { data: sourceRanges, error: rangeReadError } = await supabase
+                            .from('clause_range_mappings')
+                            .select('*')
+                            .eq('contract_id', sourceContractId)
+
+                        if (rangeReadError) {
+                            console.warn('[Range Copy] Error reading source ranges:', rangeReadError)
+                        } else if (sourceRanges && sourceRanges.length > 0) {
+                            // Step 2: Get the newly created clauses (with their fresh clause_ids)
+                            const { data: newClauses } = await supabase
+                                .from('uploaded_contract_clauses')
+                                .select('clause_id, clause_number, clause_name')
+                                .eq('contract_id', newContractId)
+
+                            // Step 3: Get the source clauses (to map source clause_id → clause_number)
+                            const { data: sourceClauses } = await supabase
+                                .from('uploaded_contract_clauses')
+                                .select('clause_id, clause_number, clause_name')
+                                .eq('contract_id', sourceContractId)
+
+                            if (newClauses && sourceClauses) {
+                                // Build lookup: source clause_id → clause_number
+                                const sourceClauseIdToNumber = new Map<string, string>()
+                                for (const sc of sourceClauses) {
+                                    sourceClauseIdToNumber.set(sc.clause_id, sc.clause_number)
+                                }
+
+                                // Build lookup: clause_number → new clause_id
+                                const numberToNewClauseId = new Map<string, string>()
+                                for (const nc of newClauses) {
+                                    numberToNewClauseId.set(nc.clause_number, nc.clause_id)
+                                }
+
+                                // Step 4: Map and copy range mappings
+                                const rangeCopies = sourceRanges
+                                    .map(rm => {
+                                        const clauseNumber = sourceClauseIdToNumber.get(rm.clause_id)
+                                        if (!clauseNumber) return null
+                                        const newClauseId = numberToNewClauseId.get(clauseNumber)
+                                        if (!newClauseId) return null
+
+                                        // Copy all fields, replacing contract_id and clause_id
+                                        // Omit mapping_id so Supabase auto-generates a new one
+                                        const { mapping_id, ...rest } = rm
+                                        return {
+                                            ...rest,
+                                            contract_id: newContractId,
+                                            clause_id: newClauseId
+                                        }
+                                    })
+                                    .filter(Boolean)
+
+                                if (rangeCopies.length > 0) {
+                                    const { error: rangeWriteError } = await supabase
+                                        .from('clause_range_mappings')
+                                        .insert(rangeCopies)
+
+                                    if (rangeWriteError) {
+                                        console.warn('[Range Copy] Error writing range mappings:', rangeWriteError)
+                                    } else {
+                                        console.log(`[Range Copy] ✅ Copied ${rangeCopies.length} range mappings to new contract`)
+                                    }
+                                } else {
+                                    console.log('[Range Copy] No clause_number matches found between source and new contract')
+                                }
+                            }
+                        } else {
+                            console.log('[Range Copy] No range mappings found on source contract')
+                        }
+                    } catch (rangeErr) {
+                        // Non-blocking: range mappings enhance the experience but aren't critical
+                        console.warn('[Range Copy] Failed to copy range mappings:', rangeErr)
+                    }
+                } else if (clausesFromTemplateTable) {
+                    // Strategy E: Clauses came from template_clauses table directly.
+                    // No sourceContractId available, so we can't copy ranges.
+                    // The Studio will fall back to DEFAULT_POSITION_OPTIONS (generic 1-10).
+                    // Future enhancement: store source_contract_id on contract_templates
+                    // when saving via "Save as Template" so this path can also copy ranges.
+                    console.log('[Range Copy] Skipped: clauses from template_clauses (no source contract_id)')
+                }
+
                 // Map for display
                 const parsedClauses: ParsedClause[] = existingClauses.map(c => ({
                     clauseId: c.clause_id,
