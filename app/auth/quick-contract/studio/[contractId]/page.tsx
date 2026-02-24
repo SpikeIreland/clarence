@@ -402,6 +402,10 @@ function QuickContractStudioContent() {
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
 
+    // Guard to prevent infinite redirect loop — loadData's useEffect depends
+    // on router, which can change reference on push, re-triggering the effect
+    const hasRedirected = useRef(false)
+
     // ========================================================================
     // SECTION 4B: AUTHENTICATION & DATA LOADING
     // ========================================================================
@@ -423,11 +427,10 @@ function QuickContractStudioContent() {
                 const { data: { user: supabaseUser } } = await supabase.auth.getUser()
 
                 if (!supabaseUser) {
-                    // No Supabase session — redirect to provider login with return URL.
-                    // Providers arrive here from the Review lobby (no session yet).
-                    // Customers will already have a session from /auth/login.
-                    // If a customer somehow lands here without a session, the provider
-                    // page has a "Customer Portal →" link they can use.
+                    // Guard: only redirect once to prevent infinite loop
+                    if (hasRedirected.current) return
+                    hasRedirected.current = true
+
                     const returnUrl = `/auth/quick-contract/studio/${contractId}`
                     router.push(`/provider?redirect=${encodeURIComponent(returnUrl)}`)
                     return
