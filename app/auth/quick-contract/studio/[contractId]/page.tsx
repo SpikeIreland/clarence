@@ -1649,7 +1649,6 @@ function QuickContractStudioContent() {
                     is_active: true,
                     company_id: userInfo.companyId,
                     created_by_user_id: userInfo.userId,
-                    source_session_id: contractId,
                     clause_count: certifiedClauses.length,
                     version: 1,
                     times_used: 0,
