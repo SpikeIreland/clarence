@@ -1,23 +1,26 @@
 'use client';
 
 // ============================================================================
-// PROVIDER PORTAL - HOME BASE
+// PROVIDER AUTH PAGE - REDESIGNED
 // Location: app/provider/page.tsx
 // 
-// Provider's central hub for all CLARENCE contract activity.
-// 
-// FLOW:
-// 1. Provider arrives → check for existing Supabase session
-// 2. If session exists → show dashboard with all active contracts
-// 3. If no session → show login/signup form
-// 4. After login → show dashboard
+// Two-tab auth page for providers:
+// - Sign Up tab: For new providers arriving from invitation email
+// - Log In tab: For returning providers
 //
-// DASHBOARD shows:
-// - Quick Create contracts (from qc_recipients)
-// - Contract Studio sessions (from provider-sessions-api)
-// Each item has a status badge and "Continue" / "Enter" button
+// Token is ONLY used to validate invitation during signup.
+// After account creation, providers use standard email/password login.
 //
 // DATA PROTECTION: Only collects name and work email (no phone numbers)
+//
+// CHANGELOG:
+// 25 Feb 2026 - SUPABASE SINGLETON FIX
+//   - Migrated from @supabase/supabase-js direct import to @/lib/supabase
+//   - Removed manual env var initialization (duplicate GoTrueClient fix)
+//   - Moved supabase instance inside component (matches platform pattern)
+//   - Changed post-login redirects to window.location.href (prevents 
+//     GoTrueClient render loop caused by dual-mount during router.push)
+//   - Post-signup still uses router.push (same auth state, no conflict)
 // ============================================================================
 
 // ============================================================================
@@ -28,16 +31,16 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { eventLogger } from '@/lib/eventLogger';
-import { createClient } from '@supabase/supabase-js';
-import FeedbackButton from '@/app/components/FeedbackButton';
+import { createClient } from '@/lib/supabase';
 
 // ============================================================================
-// SECTION 2: SUPABASE INITIALIZATION
+// SECTION 2: CONSTANTS
 // ============================================================================
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Supabase client is created via @/lib/supabase singleton (inside component).
+// DO NOT create a standalone client here — multiple GoTrueClient instances
+// cause infinite uf/uc render loops on auth state changes.
+// See: HANDOVER-Provider-Experience.docx Section 3 (GoTrueClient Render Loop)
 
 const API_BASE = 'https://spikeislandstudios.app.n8n.cloud/webhook';
 
@@ -91,29 +94,6 @@ interface ProviderSession {
     questionnaireComplete: boolean;
 }
 
-// Dashboard item - unified type for both QC and Contract Studio
-interface DashboardItem {
-    id: string;
-    type: 'quick_create' | 'contract_studio';
-    name: string;
-    contractType: string;
-    status: string;
-    statusLabel: string;
-    customerCompany: string;
-    description?: string;
-    lastActivity?: string;
-    route: string;
-}
-
-// Logged-in user info for dashboard header
-interface LoggedInUser {
-    userId: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    company: string;
-}
-
 // ============================================================================
 // SECTION 4: HEADER COMPONENT
 // ============================================================================
@@ -127,11 +107,18 @@ function ProviderHeader() {
                         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
                             <span className="text-white font-bold text-lg">C</span>
                         </div>
-                        <span className="font-semibold text-lg">CLARENCE</span>
+                        <div>
+                            <div className="font-semibold text-white tracking-wide">CLARENCE</div>
+                            <div className="text-xs text-slate-400">Provider Portal</div>
+                        </div>
                     </Link>
-                    <div className="flex items-center gap-4">
-                        <FeedbackButton />
-                    </div>
+
+                    <Link
+                        href="/auth/login"
+                        className="text-sm text-slate-400 hover:text-white transition-colors"
+                    >
+                        Customer Portal →
+                    </Link>
                 </nav>
             </div>
         </header>
@@ -144,11 +131,20 @@ function ProviderHeader() {
 
 function ProviderFooter() {
     return (
-        <footer className="bg-slate-50 border-t border-slate-200 py-6 mt-auto">
-            <div className="container mx-auto px-6 text-center">
-                <p className="text-sm text-slate-400">
-                    &copy; {new Date().getFullYear()} Clarence Legal Limited. All rights reserved.
-                </p>
+        <footer className="bg-slate-900 text-slate-400 py-8">
+            <div className="container mx-auto px-6">
+                <div className="flex flex-col md:flex-row justify-between items-center">
+                    <div className="flex items-center gap-3 mb-4 md:mb-0">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">C</span>
+                        </div>
+                        <span className="text-white font-medium">CLARENCE</span>
+                        <span className="text-slate-500 text-sm">Provider Portal</span>
+                    </div>
+                    <div className="text-sm">
+                        &copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.
+                    </div>
+                </div>
             </div>
         </footer>
     );
@@ -160,22 +156,31 @@ function ProviderFooter() {
 
 function LoadingSpinner() {
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-            <div className="text-center">
-                <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
-                <p className="text-slate-500 text-sm">Loading Provider Portal...</p>
-            </div>
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <ProviderHeader />
+            <main className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-600">Loading...</p>
+                </div>
+            </main>
+            <ProviderFooter />
         </div>
     );
 }
 
 // ============================================================================
-// SECTION 7: MAIN COMPONENT
+// SECTION 7: MAIN AUTH CONTENT COMPONENT
 // ============================================================================
 
 function ProviderAuthContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
+
+    // SUPABASE SINGLETON: Created via shared @/lib/supabase factory.
+    // This ensures all pages share one GoTrueClient instance,
+    // preventing the infinite uf/uc render loop.
+    const supabase = createClient();
 
     // ========================================================================
     // SECTION 7A: STATE MANAGEMENT
@@ -211,219 +216,132 @@ function ProviderAuthContent() {
         password: ''
     });
 
-    // Reset password
-    const [showResetPassword, setShowResetPassword] = useState(false);
-    const [resetEmailSent, setResetEmailSent] = useState(false);
-
-    // Dashboard state
-    const [showDashboard, setShowDashboard] = useState(false);
-    const [dashboardItems, setDashboardItems] = useState<DashboardItem[]>([]);
-    const [dashboardLoading, setDashboardLoading] = useState(false);
-    const [loggedInUser, setLoggedInUser] = useState<LoggedInUser | null>(null);
-
     // ========================================================================
-    // SECTION 7B: AUTO-SESSION CHECK ON MOUNT
+    // SECTION 7B: INITIALIZATION - CHECK URL PARAMS
     // ========================================================================
 
     useEffect(() => {
-        async function checkExistingSession() {
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    const metadata = user.user_metadata || {};
-                    const userInfo: LoggedInUser = {
-                        userId: user.id,
-                        email: user.email || '',
-                        firstName: metadata.first_name || '',
-                        lastName: metadata.last_name || '',
-                        company: metadata.company || ''
-                    };
-                    setLoggedInUser(userInfo);
-                    console.log('[Provider] Existing session found for', user.email);
-                    await fetchDashboardItems(user.email || '');
-                }
-            } catch (err) {
-                console.error('[Provider] Session check error:', err);
-            }
+        const token = searchParams.get('token');
+        const sessionId = searchParams.get('session_id');
+
+        if (token) {
+            // Arrived from email link - go to signup tab and validate token
+            setActiveTab('signup');
+            setSignupForm(prev => ({ ...prev, token }));
+            validateToken(token, sessionId || '');
+
+            eventLogger.completed('provider_onboarding', 'invitation_link_clicked', {
+                hasToken: true,
+                hasSessionId: !!sessionId
+            });
+        } else {
+            // Arrived from homepage - stay on login tab
+            eventLogger.completed('provider_onboarding', 'provider_portal_loaded', {
+                hasToken: false
+            });
         }
-        checkExistingSession();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [searchParams]);
 
     // ========================================================================
-    // SECTION 7C: FETCH DASHBOARD ITEMS
+    // SECTION 7C: TOKEN VALIDATION
     // ========================================================================
 
-    async function fetchDashboardItems(email: string) {
-        setDashboardLoading(true);
-        console.log('[Provider Dashboard] Fetching items for', email);
-
-        const items: DashboardItem[] = [];
-
-        // ------------------------------------------------------------------
-        // PART 1: Fetch Quick Create contracts (qc_recipients)
-        // ------------------------------------------------------------------
-        try {
-            const { data: qcData, error: qcError } = await supabase
-                .from('qc_recipients')
-                .select(`
-                    recipient_id, status, recipient_email, recipient_name,
-                    quick_contracts!inner (
-                        quick_contract_id, contract_name, contract_type,
-                        status, description, created_at, updated_at,
-                        companies!quick_contracts_company_id_fkey (company_name)
-                    )
-                `)
-                .eq('recipient_email', email);
-
-            if (qcError) {
-                console.error('[Provider Dashboard] QC query error:', qcError);
-            } else if (qcData) {
-                console.log('[Provider Dashboard] QC contracts found:', qcData.length);
-                for (const row of qcData) {
-                    const qc = row.quick_contracts as unknown as Record<string, unknown>;
-                    if (!qc) continue;
-
-                    // Skip cancelled contracts
-                    const contractStatus = qc.status as string;
-                    if (contractStatus === 'cancelled') continue;
-
-                    // Determine status label
-                    let statusLabel = 'Pending Review';
-                    const recipientStatus = row.status;
-                    if (recipientStatus === 'accepted') statusLabel = 'Accepted';
-                    else if (recipientStatus === 'declined') statusLabel = 'Declined';
-                    else if (contractStatus === 'sent') statusLabel = 'Awaiting Response';
-                    else if (contractStatus === 'negotiating') statusLabel = 'In Negotiation';
-
-                    const companies = qc.companies as Record<string, string> | null;
-
-                    items.push({
-                        id: qc.quick_contract_id as string,
-                        type: 'quick_create',
-                        name: qc.contract_name as string || 'Untitled Contract',
-                        contractType: qc.contract_type as string || 'standard',
-                        status: recipientStatus,
-                        statusLabel,
-                        customerCompany: companies?.company_name || 'Unknown',
-                        description: qc.description as string || undefined,
-                        lastActivity: qc.updated_at as string || qc.created_at as string,
-                        route: `/auth/quick-contract/studio/${qc.quick_contract_id as string}`
-                    });
-                }
-            }
-        } catch (err) {
-            console.error('[Provider Dashboard] QC fetch error:', err);
+    const validateToken = async (token: string, sessionId: string) => {
+        if (!token.trim()) {
+            setTokenValidation(null);
+            setTokenValidated(false);
+            return;
         }
 
-        // ------------------------------------------------------------------
-        // PART 2: Fetch Contract Studio sessions (existing API)
-        // ------------------------------------------------------------------
-        try {
-            const sessionsResponse = await fetch(
-                `${API_BASE}/provider-sessions-api?email=${encodeURIComponent(email)}`
-            );
-
-            if (sessionsResponse.ok) {
-                const sessionsData = await sessionsResponse.json();
-                const sessions: ProviderSession[] = sessionsData.sessions || [];
-                console.log('[Provider Dashboard] Contract Studio sessions found:', sessions.length);
-
-                for (const session of sessions) {
-                    // Determine status and route
-                    let statusLabel = 'Active';
-                    let route = `/auth/contract-studio?session_id=${session.sessionId}&provider_id=${session.providerId}`;
-
-                    if (!session.intakeComplete) {
-                        statusLabel = 'Intake Required';
-                        route = `/provider/intake?session_id=${session.sessionId}&provider_id=${session.providerId}`;
-                    } else if (!session.questionnaireComplete) {
-                        statusLabel = 'Questionnaire Required';
-                        route = `/provider/questionnaire?session_id=${session.sessionId}&provider_id=${session.providerId}`;
-                    }
-
-                    items.push({
-                        id: session.sessionId,
-                        type: 'contract_studio',
-                        name: session.serviceRequired || 'Contract Negotiation',
-                        contractType: 'negotiation',
-                        status: session.status,
-                        statusLabel,
-                        customerCompany: session.customerCompany || 'Unknown',
-                        description: session.dealValue ? `Deal value: ${session.dealValue}` : undefined,
-                        lastActivity: undefined,
-                        route
-                    });
-                }
-            }
-        } catch (err) {
-            console.error('[Provider Dashboard] Sessions fetch error:', err);
-        }
-
-        // ------------------------------------------------------------------
-        // PART 3: Sort by most recent activity and show dashboard
-        // ------------------------------------------------------------------
-        items.sort((a, b) => {
-            if (a.lastActivity && b.lastActivity) {
-                return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
-            }
-            return a.lastActivity ? -1 : 1;
-        });
-
-        console.log('[Provider Dashboard] Total items:', items.length);
-        setDashboardItems(items);
-        setDashboardLoading(false);
-        setShowDashboard(true);
-        setIsLoading(false);
-    }
-
-    // ========================================================================
-    // SECTION 7D: TOKEN VALIDATION (for signup)
-    // ========================================================================
-
-    async function validateToken(token: string, email: string) {
         setIsValidatingToken(true);
-        setTokenValidation(null);
+        setErrorMessage('');
 
         try {
-            const response = await fetch(
-                `${API_BASE}/provider-validate-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`
-            );
-            if (!response.ok) throw new Error('Validation failed');
+            const url = sessionId
+                ? `${API_BASE}/validate-provider-token?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sessionId)}`
+                : `${API_BASE}/validate-provider-token?token=${encodeURIComponent(token)}`;
+
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw new Error('Token validation failed');
+            }
 
             const data = await response.json();
-            setTokenValidation(data);
-            setTokenValidated(true);
 
-            // Pre-fill form if data available
-            if (data.valid && data.invitedEmail) {
-                setSignupForm(prev => ({
-                    ...prev,
-                    email: data.invitedEmail,
-                    companyName: data.providerCompany || prev.companyName
-                }));
+            if (data.valid) {
+                setTokenValidation(data);
+                setTokenValidated(true);
+
+                // Pre-fill email if provided
+                if (data.invitedEmail) {
+                    setSignupForm(prev => ({
+                        ...prev,
+                        email: data.invitedEmail
+                    }));
+                }
+
+                // If already registered, store session data and suggest login
+                if (data.alreadyRegistered && data.providerId) {
+                    // Store the session data from token validation
+                    // This ensures login has the correct providerId
+                    const tokenSessionData = {
+                        providerId: data.providerId,
+                        sessionId: data.sessionId,
+                        sessionNumber: data.sessionNumber || '',
+                        companyName: data.providerCompany || '',
+                        customerCompany: data.customerCompany || '',
+                        serviceRequired: data.serviceRequired || data.contractType || '',
+                        dealValue: data.dealValue || '',
+                        intakeComplete: data.intakeComplete || false,
+                        questionnaireComplete: data.questionnaireComplete || false,
+                        fromTokenValidation: true  // Flag to indicate this came from token validation
+                    };
+                    localStorage.setItem('clarence_provider_session', JSON.stringify(tokenSessionData));
+
+                    setSuccessMessage('You already have an account. Please log in to continue.');
+                    setActiveTab('login');
+                    setLoginForm(prev => ({
+                        ...prev,
+                        email: data.invitedEmail || ''
+                    }));
+                } else if (data.alreadyRegistered) {
+                    // alreadyRegistered but no providerId - shouldn't happen but handle gracefully
+                    setSuccessMessage('You already have an account. Please log in to continue.');
+                    setActiveTab('login');
+                    setLoginForm(prev => ({
+                        ...prev,
+                        email: data.invitedEmail || ''
+                    }));
+                }
+
+                eventLogger.completed('provider_onboarding', 'invite_token_validated', {
+                    sessionId: data.sessionId,
+                    alreadyRegistered: data.alreadyRegistered
+                });
+            } else {
+                setTokenValidation(null);
+                setTokenValidated(false);
+                setErrorMessage(data.error || 'Invalid or expired invitation token.');
+
+                eventLogger.failed('provider_onboarding', 'invite_token_validated',
+                    data.error || 'Invalid token', 'INVALID_TOKEN');
             }
         } catch (error) {
             console.error('Token validation error:', error);
-            setTokenValidation({
-                valid: false,
-                sessionId: '',
-                sessionNumber: '',
-                customerCompany: '',
-                invitedEmail: '',
-                contractType: '',
-                dealValue: '',
-                serviceRequired: '',
-                alreadyRegistered: false,
-                error: 'Failed to validate invitation token'
-            });
+            setTokenValidation(null);
+            setTokenValidated(false);
+            setErrorMessage('Unable to validate token. Please try again.');
+
+            eventLogger.failed('provider_onboarding', 'invite_token_validated',
+                error instanceof Error ? error.message : 'Validation failed', 'VALIDATION_ERROR');
         } finally {
             setIsValidatingToken(false);
         }
-    }
+    };
 
     // ========================================================================
-    // SECTION 7D2: SIGNUP HANDLER
+    // SECTION 7D: SIGNUP HANDLER
     // ========================================================================
 
     const handleSignup = async (e: React.FormEvent) => {
@@ -433,26 +351,38 @@ function ProviderAuthContent() {
         setSuccessMessage('');
 
         try {
-            if (signupForm.password !== signupForm.confirmPassword) {
-                throw new Error('Passwords do not match');
+            // Validation
+            if (!tokenValidated || !tokenValidation) {
+                throw new Error('Please enter a valid invitation token first.');
+            }
+
+            if (!signupForm.email || !signupForm.password || !signupForm.companyName || !signupForm.contactName) {
+                throw new Error('Please fill in all required fields.');
             }
 
             if (signupForm.password.length < 8) {
-                throw new Error('Password must be at least 8 characters');
+                throw new Error('Password must be at least 8 characters.');
             }
 
-            if (!tokenValidated || !tokenValidation?.valid) {
-                throw new Error('Please enter a valid invitation token first');
+            if (signupForm.password !== signupForm.confirmPassword) {
+                throw new Error('Passwords do not match.');
             }
 
-            // Create Supabase Auth user
+            // Split name for Supabase
+            const nameParts = signupForm.contactName.trim().split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+
+            // ================================================================
+            // STEP 1: Create Supabase Auth Account
+            // ================================================================
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: signupForm.email,
                 password: signupForm.password,
                 options: {
                     data: {
-                        first_name: signupForm.contactName.split(' ')[0] || '',
-                        last_name: signupForm.contactName.split(' ').slice(1).join(' ') || '',
+                        first_name: firstName,
+                        last_name: lastName,
                         company: signupForm.companyName,
                         role: 'provider'
                     }
@@ -460,52 +390,165 @@ function ProviderAuthContent() {
             });
 
             if (authError) {
-                // Check if this is an "already exists" type error - redirect to login
-                if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
-                    throw new Error('An account with this email already exists. Please use the Login tab.');
+                // Check for various "already registered" error messages
+                const errorMsg = authError.message.toLowerCase();
+                if (errorMsg.includes('already registered') ||
+                    errorMsg.includes('already exists') ||
+                    errorMsg.includes('user already')) {
+                    // Auto-switch to login tab with helpful message
+                    setSuccessMessage('You already have an account. Please log in to continue.');
+                    setActiveTab('login');
+                    setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                    setIsLoading(false);
+                    return;
                 }
                 throw new Error(authError.message);
             }
 
             if (!authData.user) {
-                throw new Error('Account creation failed. Please try again.');
+                throw new Error('Failed to create account.');
             }
 
-            eventLogger.completed('provider_onboarding', 'signup_successful', {
-                userId: authData.user.id,
-                email: signupForm.email
-            });
+            // IMPORTANT: Supabase returns a user even for existing emails when email confirmation is disabled
+            // Check if this is actually a new user by looking at identities array
+            // If identities is empty or user was created long ago, they already exist
+            const identities = authData.user.identities || [];
+            const createdAt = new Date(authData.user.created_at || 0);
+            const now = new Date();
+            const secondsSinceCreation = (now.getTime() - createdAt.getTime()) / 1000;
 
-            // If session exists (email verification disabled), go to dashboard
-            if (authData.session) {
-                const userInfo: LoggedInUser = {
-                    userId: authData.user.id,
-                    email: signupForm.email,
-                    firstName: signupForm.contactName.split(' ')[0] || '',
-                    lastName: signupForm.contactName.split(' ').slice(1).join(' ') || '',
-                    company: signupForm.companyName
-                };
-                setLoggedInUser(userInfo);
-
-                localStorage.setItem('clarence_auth', JSON.stringify({
-                    authenticated: true,
-                    userInfo: { ...userInfo, role: 'provider' },
-                    loginTime: new Date().toISOString()
-                }));
-
-                await fetchDashboardItems(signupForm.email);
+            if (identities.length === 0 || secondsSinceCreation > 60) {
+                // User already exists - switch to login
+                setSuccessMessage('You already have an account. Please log in to continue.');
+                setActiveTab('login');
+                setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                setIsLoading(false);
                 return;
             }
 
-            setSuccessMessage('Account created! Please check your email to verify your account, then log in.');
-            setActiveTab('login');
+            const userId = authData.user.id;
+
+            eventLogger.completed('provider_onboarding', 'user_account_created', {
+                userId,
+                email: signupForm.email
+            });
+
+            // ================================================================
+            // STEP 2: Register provider via N8N workflow
+            // REMOVED: contactPhone field - data protection compliance
+            // ================================================================
+            const registerResponse = await fetch(`${API_BASE}/provider-register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    token: signupForm.token,
+                    sessionId: tokenValidation.sessionId,
+                    userId: userId,
+                    companyName: signupForm.companyName,
+                    contactName: signupForm.contactName,
+                    contactEmail: signupForm.email,
+                    // REMOVED: contactPhone - data protection compliance
+                    registeredAt: new Date().toISOString()
+                })
+            });
+
+            if (!registerResponse.ok) {
+                // Check if this might be a duplicate registration attempt
+                const errorText = await registerResponse.text().catch(() => '');
+                if (errorText.toLowerCase().includes('already') || errorText.toLowerCase().includes('exists')) {
+                    setSuccessMessage('You already have an account. Please log in to continue.');
+                    setActiveTab('login');
+                    setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                    setIsLoading(false);
+                    return;
+                }
+                throw new Error('Provider registration failed. Please try again.');
+            }
+
+            // Safely parse JSON response - handle empty responses
+            let registerResult;
+            const responseText = await registerResponse.text();
+
+            if (!responseText || responseText.trim() === '') {
+                throw new Error('Registration service returned empty response. Please try again.');
+            }
+
+            try {
+                registerResult = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('Failed to parse registration response:', responseText);
+                throw new Error('Registration service error. Please try again.');
+            }
+
+            if (!registerResult.success) {
+                throw new Error(registerResult.message || 'Registration failed.');
+            }
+
+            eventLogger.completed('provider_onboarding', 'provider_record_created', {
+                providerId: registerResult.providerId,
+                sessionId: tokenValidation.sessionId
+            });
+
+            // ================================================================
+            // STEP 3: Set clarence_auth in localStorage
+            // ================================================================
+            const clarenceAuth = {
+                authenticated: true,
+                userInfo: {
+                    userId: userId,
+                    email: signupForm.email,
+                    firstName: firstName,
+                    lastName: lastName,
+                    company: signupForm.companyName,
+                    role: 'provider'
+                },
+                loginTime: new Date().toISOString()
+            };
+            localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
+
+            // ================================================================
+            // STEP 4: Store provider session for this contract
+            // ================================================================
+            const providerSession = {
+                providerId: registerResult.providerId,
+                sessionId: tokenValidation.sessionId,
+                sessionNumber: tokenValidation.sessionNumber,
+                companyName: signupForm.companyName,
+                customerCompany: tokenValidation.customerCompany,
+                serviceRequired: tokenValidation.serviceRequired || tokenValidation.contractType,
+                dealValue: tokenValidation.dealValue
+            };
+            localStorage.setItem('clarence_provider_session', JSON.stringify(providerSession));
+
+            // ================================================================
+            // STEP 5: Redirect to welcome/intake
+            // NOTE: router.push is safe here because we're navigating AWAY
+            // from the auth page after a fresh signup (same auth state).
+            // ================================================================
+            eventLogger.completed('provider_onboarding', 'signup_completed', {
+                providerId: registerResult.providerId,
+                sessionId: tokenValidation.sessionId
+            });
+
+            router.push(`/provider/welcome?session_id=${tokenValidation.sessionId}&provider_id=${registerResult.providerId}`);
 
         } catch (error) {
             console.error('Signup error:', error);
-            setErrorMessage(error instanceof Error ? error.message : 'Signup failed. Please try again.');
+            const errorMsg = error instanceof Error ? error.message : 'Signup failed. Please try again.';
 
-            eventLogger.failed('provider_onboarding', 'signup_attempted',
-                error instanceof Error ? error.message : 'Signup failed', 'SIGNUP_ERROR');
+            // Check if this is an "already exists" type error - redirect to login
+            const lowerMsg = errorMsg.toLowerCase();
+            if (lowerMsg.includes('already') || lowerMsg.includes('exists') || lowerMsg.includes('log in')) {
+                setSuccessMessage('You already have an account. Please log in to continue.');
+                setActiveTab('login');
+                setLoginForm(prev => ({ ...prev, email: signupForm.email }));
+                setErrorMessage('');
+            } else {
+                setErrorMessage(errorMsg);
+            }
+
+            eventLogger.failed('provider_onboarding', 'signup_submitted',
+                errorMsg, 'SIGNUP_ERROR');
         } finally {
             setIsLoading(false);
         }
@@ -556,50 +599,141 @@ function ProviderAuthContent() {
             const user = authData.user;
             const metadata = user.user_metadata || {};
 
-            // ================================================================
-            // STEP 2: Set clarence_auth in localStorage
-            // ================================================================
-            const userInfo: LoggedInUser = {
-                userId: user.id,
-                email: user.email || '',
-                firstName: metadata.first_name || '',
-                lastName: metadata.last_name || '',
-                company: metadata.company || ''
-            };
-            setLoggedInUser(userInfo);
-
-            localStorage.setItem('clarence_auth', JSON.stringify({
-                authenticated: true,
-                userInfo: { ...userInfo, role: 'provider' },
-                loginTime: new Date().toISOString()
-            }));
-
-            // ================================================================
-            // STEP 2B: FAST-PATH REDIRECT (from QC Studio auth bounce)
-            // If sessionStorage has a redirect, the provider was trying to
-            // reach a specific studio and got bounced here to authenticate.
-            // ================================================================
-            const qcRedirect = sessionStorage.getItem('clarence_qc_redirect');
-            console.log('[Provider Login] sessionStorage check:', {
-                qcRedirect: qcRedirect,
-            });
-            if (qcRedirect) {
-                sessionStorage.removeItem('clarence_qc_redirect');
-                console.log('Provider login: redirecting to', qcRedirect);
-                window.location.replace(qcRedirect);
-                // Halt execution — never-resolving promise prevents finally block
-                return await new Promise(() => { });
-            }
-
             eventLogger.completed('provider_onboarding', 'login_successful', {
                 userId: user.id,
                 email: user.email
             });
 
             // ================================================================
-            // STEP 3: Load the dashboard with all active items
+            // STEP 2: Set clarence_auth in localStorage
             // ================================================================
-            await fetchDashboardItems(user.email || loginForm.email);
+            const clarenceAuth = {
+                authenticated: true,
+                userInfo: {
+                    userId: user.id,
+                    email: user.email,
+                    firstName: metadata.first_name || '',
+                    lastName: metadata.last_name || '',
+                    company: metadata.company || '',
+                    role: 'provider'
+                },
+                loginTime: new Date().toISOString()
+            };
+            localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
+
+            // ================================================================
+            // STEP 3: Check for QC redirect from sessionStorage
+            // (Set by QC Token Page 'Enter Studio' button - Task 2)
+            // ================================================================
+            const qcRedirectRaw = sessionStorage.getItem('clarence_qc_redirect');
+            if (qcRedirectRaw) {
+                try {
+                    const qcRedirect = JSON.parse(qcRedirectRaw);
+                    if (qcRedirect.contractId && qcRedirect.source === 'qc_token_page') {
+                        // Clear the redirect data
+                        sessionStorage.removeItem('clarence_qc_redirect');
+                        // Hard nav to QC Studio (prevents GoTrueClient render loop)
+                        window.location.href = `/auth/quick-contract/studio/${qcRedirect.contractId}`;
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Error parsing QC redirect:', e);
+                    sessionStorage.removeItem('clarence_qc_redirect');
+                }
+            }
+
+            // ================================================================
+            // STEP 4: Check for session data from token validation
+            // ================================================================
+            const storedSession = localStorage.getItem('clarence_provider_session');
+            let tokenSession: ProviderSession | null = null;
+
+            if (storedSession) {
+                try {
+                    const parsed = JSON.parse(storedSession);
+                    // Check if this came from token validation (has the flag and providerId)
+                    if (parsed.fromTokenValidation && parsed.providerId && parsed.sessionId) {
+                        tokenSession = {
+                            sessionId: parsed.sessionId,
+                            sessionNumber: parsed.sessionNumber || '',
+                            providerId: parsed.providerId,
+                            customerCompany: parsed.customerCompany || '',
+                            serviceRequired: parsed.serviceRequired || '',
+                            dealValue: parsed.dealValue || '',
+                            status: 'registered',
+                            intakeComplete: parsed.intakeComplete || false,
+                            questionnaireComplete: parsed.questionnaireComplete || false
+                        };
+                    }
+                } catch (e) {
+                    console.error('Error parsing stored session:', e);
+                }
+            }
+
+            // If we have valid session from token validation, use it directly
+            if (tokenSession) {
+                // Remove the fromTokenValidation flag and save clean session
+                localStorage.setItem('clarence_provider_session', JSON.stringify(tokenSession));
+
+                // Determine where to redirect based on completion status
+                // HARD NAV: window.location.href prevents GoTrueClient render loop
+                if (!tokenSession.intakeComplete) {
+                    window.location.href = `/provider/intake?session_id=${tokenSession.sessionId}&provider_id=${tokenSession.providerId}`;
+                } else if (!tokenSession.questionnaireComplete) {
+                    window.location.href = `/provider/questionnaire?session_id=${tokenSession.sessionId}&provider_id=${tokenSession.providerId}`;
+                } else {
+                    window.location.href = `/auth/contract-studio?session_id=${tokenSession.sessionId}&provider_id=${tokenSession.providerId}`;
+                }
+                return;
+            }
+
+            // ================================================================
+            // STEP 5: No token session - fetch active sessions for this provider
+            // ================================================================
+            const sessionsResponse = await fetch(
+                `${API_BASE}/provider-sessions-api?email=${encodeURIComponent(loginForm.email)}`
+            );
+
+            let sessions: ProviderSession[] = [];
+
+            if (sessionsResponse.ok) {
+                const sessionsData = await sessionsResponse.json();
+                sessions = sessionsData.sessions || [];
+            }
+
+            // ================================================================
+            // STEP 6: Route based on sessions
+            // HARD NAV: All post-login redirects use window.location.href
+            // to prevent GoTrueClient render loop (dual-mount issue).
+            // ================================================================
+            if (sessions.length === 0) {
+                // No active sessions — route to lobby (providerConfirmation)
+                // The lobby will show an empty state message
+                window.location.href = '/provider/providerConfirmation';
+                return;
+            }
+
+            if (sessions.length === 1) {
+                // Single session - go directly
+                const session = sessions[0];
+                localStorage.setItem('clarence_provider_session', JSON.stringify(session));
+
+                // Determine where to redirect based on completion status
+                if (!session.intakeComplete) {
+                    window.location.href = `/provider/intake?session_id=${session.sessionId}&provider_id=${session.providerId}`;
+                } else if (!session.questionnaireComplete) {
+                    window.location.href = `/provider/questionnaire?session_id=${session.sessionId}&provider_id=${session.providerId}`;
+                } else {
+                    // Route to lobby (will show contract card with 'Enter Studio')
+                    window.location.href = '/provider/providerConfirmation';
+                }
+                return;
+            }
+
+            // Multiple sessions - route to lobby (shows all contract cards)
+            const mostRecent = sessions[0];
+            localStorage.setItem('clarence_provider_session', JSON.stringify(mostRecent));
+            window.location.href = '/provider/providerConfirmation';
 
         } catch (error) {
             console.error('Login error:', error);
@@ -616,36 +750,51 @@ function ProviderAuthContent() {
     // SECTION 7E2: CHECK EXISTING PROVIDER
     // ========================================================================
 
-    async function checkExistingProvider(email: string): Promise<boolean> {
+    const checkExistingProvider = async (email: string): Promise<boolean> => {
         try {
             const response = await fetch(
-                `${API_BASE}/provider-check?email=${encodeURIComponent(email)}`
+                `${API_BASE}/provider-sessions-api?email=${encodeURIComponent(email)}`
             );
-            if (!response.ok) return false;
-            const data = await response.json();
-            return data.exists === true;
+            if (response.ok) {
+                const data = await response.json();
+                return data.sessions && data.sessions.length > 0;
+            }
+            return false;
         } catch {
             return false;
         }
-    }
+    };
 
     // ========================================================================
     // SECTION 7E3: ACTIVATE ACCOUNT HANDLER
     // ========================================================================
 
-    async function handleActivateAccount() {
+    const handleActivateAccount = async () => {
+        if (!loginForm.email) {
+            setErrorMessage('Please enter your email address.');
+            return;
+        }
+
         setIsLoading(true);
         setErrorMessage('');
 
         try {
+            // Send password reset email - this will work even if account doesn't exist in Supabase
+            // It essentially creates the account on first password set
             const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
                 redirectTo: `${window.location.origin}/reset-password?type=activation`
             });
 
-            if (error) throw new Error(error.message);
+            if (error) {
+                throw new Error(error.message);
+            }
 
             setActivationEmailSent(true);
-            setSuccessMessage('Activation email sent! Please check your inbox to set your password.');
+            setShowActivateAccount(false);
+
+            eventLogger.completed('provider_onboarding', 'activation_email_sent', {
+                email: loginForm.email
+            });
 
         } catch (error) {
             console.error('Activation error:', error);
@@ -653,76 +802,40 @@ function ProviderAuthContent() {
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     // ========================================================================
-    // SECTION 7E4: RESET PASSWORD HANDLER
+    // SECTION 7F: FORGOT PASSWORD HANDLER
     // ========================================================================
 
-    async function handleResetPassword() {
+    const handleForgotPassword = async () => {
+        if (!loginForm.email) {
+            setErrorMessage('Please enter your email address first.');
+            return;
+        }
+
         setIsLoading(true);
         setErrorMessage('');
-        setSuccessMessage('');
 
         try {
-            if (!loginForm.email) {
-                throw new Error('Please enter your email address first.');
-            }
-
             const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
                 redirectTo: `${window.location.origin}/reset-password`
             });
 
-            if (error) throw new Error(error.message);
+            if (error) {
+                throw new Error(error.message);
+            }
 
-            setResetEmailSent(true);
-            setSuccessMessage('Password reset email sent! Please check your inbox.');
-
+            setSuccessMessage('Password reset email sent. Please check your inbox.');
         } catch (error) {
             setErrorMessage(error instanceof Error ? error.message : 'Failed to send reset email.');
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     // ========================================================================
-    // SECTION 7F: LOGOUT HANDLER
-    // ========================================================================
-
-    async function handleLogout() {
-        await supabase.auth.signOut();
-        localStorage.removeItem('clarence_auth');
-        localStorage.removeItem('clarence_provider_session');
-        setShowDashboard(false);
-        setLoggedInUser(null);
-        setDashboardItems([]);
-        setLoginForm({ email: '', password: '' });
-    }
-
-    // ========================================================================
-    // SECTION 7G: NAVIGATE TO ITEM
-    // ========================================================================
-
-    function handleNavigateToItem(item: DashboardItem) {
-        console.log('[Provider Dashboard] Navigating to:', item.type, item.route);
-
-        // Store session info for Contract Studio items
-        if (item.type === 'contract_studio') {
-            localStorage.setItem('clarence_provider_session', JSON.stringify({
-                sessionId: item.id,
-                providerId: '', // Will be in the route params
-                customerCompany: item.customerCompany,
-                serviceRequired: item.name,
-                status: item.status
-            }));
-        }
-
-        // Use hard navigation to avoid GoTrueClient issues
-        window.location.href = item.route;
-    }
-
-    // ========================================================================
-    // SECTION 7H: TOKEN CHANGE HANDLER
+    // SECTION 7G: TOKEN INPUT HANDLER
     // ========================================================================
 
     const handleTokenChange = (value: string) => {
@@ -741,185 +854,6 @@ function ProviderAuthContent() {
 
     // ========================================================================
     // SECTION 8: RENDER
-    // ========================================================================
-
-    // ========================================================================
-    // SECTION 8-DASHBOARD: PROVIDER DASHBOARD VIEW
-    // ========================================================================
-
-    if (showDashboard) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex flex-col">
-                <ProviderHeader />
-
-                <main className="flex-1 py-8 px-4">
-                    <div className="max-w-3xl mx-auto">
-
-                        {/* ================================================ */}
-                        {/* DASHBOARD HEADER */}
-                        {/* ================================================ */}
-
-                        <div className="flex items-center justify-between mb-8">
-                            <div>
-                                <h1 className="text-2xl font-bold text-slate-800">
-                                    Provider Dashboard
-                                </h1>
-                                <p className="text-slate-500 text-sm mt-1">
-                                    {loggedInUser?.firstName
-                                        ? `Welcome back, ${loggedInUser.firstName}`
-                                        : `Signed in as ${loggedInUser?.email || ''}`
-                                    }
-                                    {loggedInUser?.company ? ` · ${loggedInUser.company}` : ''}
-                                </p>
-                            </div>
-                            <button
-                                onClick={handleLogout}
-                                className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2 
-                                         rounded-lg border border-slate-200 hover:border-slate-300 
-                                         transition-colors"
-                            >
-                                Sign Out
-                            </button>
-                        </div>
-
-                        {/* ================================================ */}
-                        {/* LOADING STATE */}
-                        {/* ================================================ */}
-
-                        {dashboardLoading && (
-                            <div className="text-center py-16">
-                                <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
-                                <p className="text-slate-500 text-sm">Loading your contracts...</p>
-                            </div>
-                        )}
-
-                        {/* ================================================ */}
-                        {/* EMPTY STATE */}
-                        {/* ================================================ */}
-
-                        {!dashboardLoading && dashboardItems.length === 0 && (
-                            <div className="text-center py-16 bg-white rounded-xl border border-slate-200">
-                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                </div>
-                                <h2 className="text-lg font-semibold text-slate-700 mb-2">No Active Contracts</h2>
-                                <p className="text-slate-500 text-sm max-w-sm mx-auto">
-                                    You don&apos;t have any active contract invitations yet. When a customer invites you to negotiate, their contracts will appear here.
-                                </p>
-                                <p className="text-slate-400 text-xs mt-4">
-                                    Check your email for invitation links from customers.
-                                </p>
-                            </div>
-                        )}
-
-                        {/* ================================================ */}
-                        {/* CONTRACT CARDS */}
-                        {/* ================================================ */}
-
-                        {!dashboardLoading && dashboardItems.length > 0 && (
-                            <div className="space-y-3">
-                                {dashboardItems.map((item) => (
-                                    <div
-                                        key={`${item.type}-${item.id}`}
-                                        className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 
-                                                   hover:shadow-sm transition-all p-5"
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            {/* Left: Contract info */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    {/* Type badge */}
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
-                                                        ${item.type === 'quick_create'
-                                                            ? 'bg-emerald-50 text-emerald-700'
-                                                            : 'bg-blue-50 text-blue-700'
-                                                        }`}
-                                                    >
-                                                        {item.type === 'quick_create' ? 'Quick Create' : 'Contract Studio'}
-                                                    </span>
-                                                    {/* Status badge */}
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
-                                                        ${item.status === 'accepted' ? 'bg-green-50 text-green-700' :
-                                                            item.status === 'declined' ? 'bg-red-50 text-red-700' :
-                                                                item.statusLabel === 'In Negotiation' ? 'bg-amber-50 text-amber-700' :
-                                                                    'bg-slate-100 text-slate-600'
-                                                        }`}
-                                                    >
-                                                        {item.statusLabel}
-                                                    </span>
-                                                </div>
-                                                <h3 className="font-semibold text-slate-800 truncate">
-                                                    {item.name}
-                                                </h3>
-                                                <p className="text-sm text-slate-500 mt-0.5">
-                                                    From: {item.customerCompany}
-                                                </p>
-                                                {item.description && (
-                                                    <p className="text-xs text-slate-400 mt-1 truncate">
-                                                        {item.description}
-                                                    </p>
-                                                )}
-                                                {item.lastActivity && (
-                                                    <p className="text-xs text-slate-400 mt-1">
-                                                        Last activity: {new Date(item.lastActivity).toLocaleDateString('en-GB', {
-                                                            day: 'numeric', month: 'short', year: 'numeric'
-                                                        })}
-                                                    </p>
-                                                )}
-                                            </div>
-
-                                            {/* Right: Action button */}
-                                            <button
-                                                onClick={() => handleNavigateToItem(item)}
-                                                className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium 
-                                                           transition-colors whitespace-nowrap
-                                                    ${item.type === 'quick_create'
-                                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
-                                                    }`}
-                                            >
-                                                {item.statusLabel === 'Intake Required' || item.statusLabel === 'Questionnaire Required'
-                                                    ? 'Continue Setup'
-                                                    : item.status === 'accepted' || item.status === 'declined'
-                                                        ? 'View'
-                                                        : 'Enter Studio'
-                                                }
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* ================================================ */}
-                        {/* HELP TEXT */}
-                        {/* ================================================ */}
-
-                        <div className="text-center mt-8 p-4 bg-white rounded-xl border border-slate-200">
-                            <p className="text-sm text-slate-500 mb-2">Are you a customer?</p>
-                            <Link
-                                href="/auth/login"
-                                className="text-blue-600 hover:text-blue-700 font-medium text-sm inline-flex items-center gap-1"
-                            >
-                                Go to Customer Portal
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                </svg>
-                            </Link>
-                        </div>
-
-                    </div>
-                </main>
-
-                <ProviderFooter />
-            </div>
-        );
-    }
-
-    // ========================================================================
-    // SECTION 8-AUTH: LOGIN / SIGNUP VIEW (not logged in)
     // ========================================================================
 
     return (
@@ -990,276 +924,359 @@ function ProviderAuthContent() {
                         {/* Tab Content */}
                         <div className="p-6">
 
-                            {/* Error/Success Messages */}
+                            {/* Error Message */}
                             {errorMessage && (
-                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                                    {errorMessage}
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="text-red-700 text-sm flex-1">{errorMessage}</span>
+                                    <button onClick={() => setErrorMessage('')} className="text-red-400 hover:text-red-600">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
                                 </div>
                             )}
+
+                            {/* Success Message */}
                             {successMessage && (
-                                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                                    {successMessage}
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span className="text-emerald-700 text-sm flex-1">{successMessage}</span>
+                                    <button onClick={() => setSuccessMessage('')} className="text-emerald-400 hover:text-emerald-600">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
                                 </div>
                             )}
 
                             {/* ======================================================== */}
-                            {/* SECTION 8C: SIGNUP TAB */}
+                            {/* SECTION 8C: SIGNUP TAB CONTENT */}
                             {/* ======================================================== */}
 
                             {activeTab === 'signup' && (
-                                <form onSubmit={handleSignup} className="space-y-4">
+                                <form onSubmit={handleSignup} className="space-y-5">
 
                                     {/* Token Field */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                                            Invitation Token
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Invitation Token <span className="text-red-500">*</span>
                                         </label>
                                         <div className="relative">
                                             <input
                                                 type="text"
                                                 value={signupForm.token}
                                                 onChange={(e) => handleTokenChange(e.target.value)}
-                                                placeholder="Paste your invitation token"
-                                                className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                placeholder="e.g., INV-XXXXXXXX-XXXXXX"
+                                                className={`w-full px-4 py-3 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm font-mono
+                                                    ${tokenValidated
+                                                        ? 'border-emerald-300 bg-emerald-50'
+                                                        : signupForm.token && !isValidatingToken
+                                                            ? 'border-red-300 bg-red-50'
+                                                            : 'border-slate-300'
+                                                    }`}
                                             />
-                                            {isValidatingToken && (
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                    <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-                                                </div>
-                                            )}
-                                            {tokenValidated && tokenValidation?.valid && (
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500">
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                {isValidatingToken ? (
+                                                    <div className="w-5 h-5 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
+                                                ) : tokenValidated ? (
+                                                    <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                     </svg>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Token Validation Result */}
-                                        {tokenValidation && (
-                                            <div className={`mt-2 p-3 rounded-lg text-xs ${tokenValidation.valid
-                                                ? 'bg-green-50 text-green-700'
-                                                : 'bg-red-50 text-red-700'
-                                                }`}>
-                                                {tokenValidation.valid
-                                                    ? `Valid invitation from ${tokenValidation.customerCompany}`
-                                                    : tokenValidation.error || 'Invalid token'
-                                                }
-                                                {tokenValidation.alreadyRegistered && (
-                                                    <span className="block mt-1 font-medium">
-                                                        You already have an account. Please use the Log In tab.
-                                                    </span>
-                                                )}
+                                                ) : signupForm.token ? (
+                                                    <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                ) : null}
                                             </div>
-                                        )}
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-1.5">
+                                            Your invitation token was sent via email. It&apos;s only used once to verify your invitation.
+                                        </p>
                                     </div>
 
-                                    {/* Name Field */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                                            Your Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={signupForm.contactName}
-                                            onChange={(e) => setSignupForm(prev => ({ ...prev, contactName: e.target.value }))}
-                                            placeholder="Full name"
-                                            required
-                                            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                        />
-                                    </div>
+                                    {/* Contract Details (shown when token is valid) */}
+                                    {tokenValidated && tokenValidation && (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <h4 className="text-sm font-medium text-slate-800 mb-2 flex items-center gap-2">
+                                                <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Invitation Verified
+                                            </h4>
+                                            <div className="grid grid-cols-2 gap-3 text-xs">
+                                                <div>
+                                                    <span className="text-slate-500">Customer:</span>
+                                                    <p className="font-medium text-slate-800">{tokenValidation.customerCompany}</p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-500">Contract:</span>
+                                                    <p className="font-medium text-slate-800">{tokenValidation.serviceRequired || tokenValidation.contractType || 'Service Agreement'}</p>
+                                                </div>
+                                                {tokenValidation.dealValue && (
+                                                    <div>
+                                                        <span className="text-slate-500">Value:</span>
+                                                        <p className="font-medium text-blue-600">£{parseInt(tokenValidation.dealValue).toLocaleString()}</p>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <span className="text-slate-500">Reference:</span>
+                                                    <p className="font-medium text-slate-800 font-mono text-xs">{tokenValidation.sessionNumber}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
-                                    {/* Company Field */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                                            Company Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={signupForm.companyName}
-                                            onChange={(e) => setSignupForm(prev => ({ ...prev, companyName: e.target.value }))}
-                                            placeholder="Your company"
-                                            required
-                                            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                        />
-                                    </div>
+                                    {/* Divider */}
+                                    {tokenValidated && (
+                                        <div className="relative">
+                                            <div className="absolute inset-0 flex items-center">
+                                                <div className="w-full border-t border-slate-200"></div>
+                                            </div>
+                                            <div className="relative flex justify-center text-xs">
+                                                <span className="px-2 bg-white text-slate-500">Create your account</span>
+                                            </div>
+                                        </div>
+                                    )}
 
-                                    {/* Email Field */}
+                                    {/* Email */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                                            Work Email
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Work Email Address <span className="text-red-500">*</span>
                                         </label>
                                         <input
                                             type="email"
                                             value={signupForm.email}
                                             onChange={(e) => setSignupForm(prev => ({ ...prev, email: e.target.value }))}
                                             placeholder="you@company.com"
-                                            required
-                                            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                            disabled={!tokenValidated}
+                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
                                         />
                                     </div>
 
-                                    {/* Password Field */}
+                                    {/* Password */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                                            Password
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Password <span className="text-red-500">*</span>
                                         </label>
                                         <input
                                             type="password"
                                             value={signupForm.password}
                                             onChange={(e) => setSignupForm(prev => ({ ...prev, password: e.target.value }))}
-                                            placeholder="At least 8 characters"
-                                            required
-                                            minLength={8}
-                                            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                            placeholder="Minimum 8 characters"
+                                            disabled={!tokenValidated}
+                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
                                         />
                                     </div>
 
-                                    {/* Confirm Password Field */}
+                                    {/* Confirm Password */}
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                                            Confirm Password
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Confirm Password <span className="text-red-500">*</span>
                                         </label>
                                         <input
                                             type="password"
                                             value={signupForm.confirmPassword}
                                             onChange={(e) => setSignupForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
                                             placeholder="Confirm your password"
-                                            required
-                                            minLength={8}
-                                            className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                            disabled={!tokenValidated}
+                                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed
+                                                ${signupForm.confirmPassword && signupForm.password !== signupForm.confirmPassword
+                                                    ? 'border-red-300 bg-red-50'
+                                                    : 'border-slate-300'
+                                                }`}
                                         />
+                                        {signupForm.confirmPassword && signupForm.password !== signupForm.confirmPassword && (
+                                            <p className="text-red-600 text-xs mt-1">Passwords do not match</p>
+                                        )}
+                                    </div>
+
+                                    {/* Company Name */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Company Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={signupForm.companyName}
+                                            onChange={(e) => setSignupForm(prev => ({ ...prev, companyName: e.target.value }))}
+                                            placeholder="Your company name"
+                                            disabled={!tokenValidated}
+                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                        />
+                                    </div>
+
+                                    {/* Contact Name */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Your Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={signupForm.contactName}
+                                            onChange={(e) => setSignupForm(prev => ({ ...prev, contactName: e.target.value }))}
+                                            placeholder="Your full name"
+                                            disabled={!tokenValidated}
+                                            className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                        />
+                                    </div>
+
+                                    {/* REMOVED: Phone Number field - data protection compliance */}
+
+                                    {/* Data Protection Notice */}
+                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                        <div className="flex items-start gap-2">
+                                            <svg className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                            </svg>
+                                            <p className="text-xs text-slate-600">
+                                                We only collect your name and work email. Your data is stored securely and never used to train AI models.
+                                            </p>
+                                        </div>
                                     </div>
 
                                     {/* Submit Button */}
                                     <button
                                         type="submit"
-                                        disabled={isLoading || !tokenValidated || !tokenValidation?.valid}
-                                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg
-                                                 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={isLoading || !tokenValidated}
+                                        className={`w-full py-3.5 rounded-lg text-white font-medium transition
+                                            ${isLoading || !tokenValidated
+                                                ? 'bg-slate-300 cursor-not-allowed'
+                                                : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                                            }`}
                                     >
                                         {isLoading ? (
                                             <span className="flex items-center justify-center gap-2">
-                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                                 Creating Account...
                                             </span>
                                         ) : (
-                                            'Create Account'
+                                            'Create Account & Continue'
                                         )}
                                     </button>
+
+                                    {/* Help Text */}
+                                    <p className="text-xs text-slate-500 text-center">
+                                        After creating your account, you&apos;ll use your email and password to log in.
+                                    </p>
                                 </form>
                             )}
 
                             {/* ======================================================== */}
-                            {/* SECTION 8D: LOGIN TAB */}
+                            {/* SECTION 8D: LOGIN TAB CONTENT */}
                             {/* ======================================================== */}
 
                             {activeTab === 'login' && (
                                 <>
-                                    {/* Activate Account Message */}
-                                    {showActivateAccount && !activationEmailSent && (
-                                        <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                                            <p className="text-sm text-amber-800 font-medium mb-2">
+                                    {/* Activation Email Sent Success */}
+                                    {activationEmailSent ? (
+                                        <div className="text-center py-6">
+                                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                                                Check Your Email
+                                            </h3>
+                                            <p className="text-slate-600 text-sm mb-4">
+                                                We&apos;ve sent an activation link to <strong>{loginForm.email}</strong>
+                                            </p>
+                                            <p className="text-slate-500 text-xs mb-6">
+                                                Click the link in the email to set your password and activate your account.
+                                                The link will expire in 24 hours.
+                                            </p>
+                                            <button
+                                                onClick={() => {
+                                                    setActivationEmailSent(false);
+                                                    setLoginForm({ email: '', password: '' });
+                                                }}
+                                                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                            >
+                                                ← Back to Login
+                                            </button>
+                                        </div>
+                                    ) : showActivateAccount ? (
+                                        /* Activate Account Prompt */
+                                        <div className="text-center py-4">
+                                            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-slate-800 mb-2">
                                                 Account Activation Required
+                                            </h3>
+                                            <p className="text-slate-600 text-sm mb-2">
+                                                We found your account for <strong>{loginForm.email}</strong>
                                             </p>
-                                            <p className="text-xs text-amber-700 mb-3">
-                                                We found your account but it needs to be activated with a new password.
-                                                Click below to receive an activation email.
+                                            <p className="text-slate-500 text-xs mb-6">
+                                                Your account was created before our new login system.
+                                                Click below to receive an email to set your password and activate your account.
                                             </p>
+
                                             <button
                                                 onClick={handleActivateAccount}
                                                 disabled={isLoading}
-                                                className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg
-                                                         text-sm font-medium transition-colors disabled:opacity-50"
+                                                className={`w-full py-3 rounded-lg text-white font-medium transition mb-4
+                                                    ${isLoading
+                                                        ? 'bg-slate-300 cursor-not-allowed'
+                                                        : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                                                    }`}
                                             >
-                                                {isLoading ? 'Sending...' : 'Send Activation Email'}
+                                                {isLoading ? (
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                        Sending...
+                                                    </span>
+                                                ) : (
+                                                    'Send Activation Email'
+                                                )}
                                             </button>
-                                        </div>
-                                    )}
-
-                                    {/* Reset Password */}
-                                    {showResetPassword ? (
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
-                                                    Email Address
-                                                </label>
-                                                <input
-                                                    type="email"
-                                                    value={loginForm.email}
-                                                    onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-                                                    placeholder="your@email.com"
-                                                    required
-                                                    className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                             focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                                />
-                                            </div>
-
-                                            {resetEmailSent ? (
-                                                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                                                    Check your email for a password reset link.
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    onClick={handleResetPassword}
-                                                    disabled={isLoading}
-                                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg
-                                                             font-medium text-sm transition-colors disabled:opacity-50"
-                                                >
-                                                    {isLoading ? 'Sending...' : 'Send Reset Link'}
-                                                </button>
-                                            )}
 
                                             <button
                                                 onClick={() => {
-                                                    setShowResetPassword(false);
-                                                    setResetEmailSent(false);
-                                                    setErrorMessage('');
-                                                    setSuccessMessage('');
+                                                    setShowActivateAccount(false);
+                                                    setLoginForm(prev => ({ ...prev, password: '' }));
                                                 }}
-                                                className="w-full text-sm text-slate-500 hover:text-slate-700"
+                                                className="text-slate-500 hover:text-slate-700 text-sm"
                                             >
-                                                Back to login
+                                                ← Try different credentials
                                             </button>
                                         </div>
                                     ) : (
-                                        <form onSubmit={handleLogin} className="space-y-4">
+                                        /* Standard Login Form */
+                                        <form onSubmit={handleLogin} className="space-y-5">
+
                                             {/* Email */}
                                             <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                <label className="block text-sm font-medium text-slate-700 mb-1.5">
                                                     Email Address
                                                 </label>
                                                 <input
                                                     type="email"
                                                     value={loginForm.email}
                                                     onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-                                                    placeholder="your@email.com"
-                                                    required
-                                                    className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                             focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                    placeholder="you@company.com"
+                                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
                                                 />
                                             </div>
 
                                             {/* Password */}
                                             <div>
-                                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                                <label className="block text-sm font-medium text-slate-700 mb-1.5">
                                                     Password
                                                 </label>
                                                 <input
                                                     type="password"
                                                     value={loginForm.password}
                                                     onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                                                    placeholder="Your password"
-                                                    required
-                                                    className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm
-                                                             focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                    placeholder="Enter your password"
+                                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
                                                 />
                                             </div>
 
@@ -1267,27 +1284,27 @@ function ProviderAuthContent() {
                                             <div className="text-right">
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        setShowResetPassword(true);
-                                                        setErrorMessage('');
-                                                        setSuccessMessage('');
-                                                    }}
+                                                    onClick={handleForgotPassword}
+                                                    disabled={isLoading}
                                                     className="text-sm text-blue-600 hover:text-blue-700"
                                                 >
                                                     Forgot password?
                                                 </button>
                                             </div>
 
-                                            {/* Submit */}
+                                            {/* Submit Button */}
                                             <button
                                                 type="submit"
                                                 disabled={isLoading}
-                                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg
-                                                         font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className={`w-full py-3.5 rounded-lg text-white font-medium transition
+                                                    ${isLoading
+                                                        ? 'bg-slate-300 cursor-not-allowed'
+                                                        : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                                                    }`}
                                             >
                                                 {isLoading ? (
                                                     <span className="flex items-center justify-center gap-2">
-                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                                         Signing In...
                                                     </span>
                                                 ) : (
