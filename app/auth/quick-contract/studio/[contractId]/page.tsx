@@ -67,7 +67,6 @@ import QCPartyChatPanel from '@/app/auth/quick-contract/components/qc-party-chat
 
 // ROLE MATRIX Phase 2: Dynamic position labels
 import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
-import PositionScaleIndicator from '@/app/components/PositionScaleIndicator'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -235,7 +234,7 @@ function getCategoryColor(category: string): string {
 
 // Default position options when none specified
 // SCALE: 1 = Maximum Flexibility (providing party), 10 = Maximum Protection (protected party)
-// Labels stay neutral; the PositionScaleIndicator shows which end favours whom
+// Labels stay neutral; inline orientation labels show which end favours whom
 const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
     { value: 1, label: 'Maximum Flexibility', description: 'Most flexible terms possible' },
     { value: 2, label: 'Strong Flexibility', description: 'Significantly flexible terms' },
@@ -4179,24 +4178,17 @@ INSTRUCTIONS:
                                                             </div>
                                                         )}
                                                         {/* Party role labels */}
-                                                        <div className="mt-1">
-                                                            <PositionScaleIndicator roleContext={roleContext} variant="full" />
+                                                        <div className="flex justify-between mt-1.5 text-[10px] text-slate-400">
+                                                            <span>← {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Favours Party B'}</span>
+                                                            <span>{roleContext ? `Favours ${roleContext.protectedPartyLabel}` : 'Favours Party A'} →</span>
                                                         </div>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <div className="flex justify-between mt-1 px-0">
-                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                                                <span key={n} className="text-[10px] text-slate-400 font-medium" style={{ width: '11.11%', textAlign: n === 1 ? 'left' : n === 10 ? 'right' : 'center' }}>
-                                                                    {n}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                        <div className="mt-1">
-                                                            <PositionScaleIndicator roleContext={roleContext} variant="full" />
-                                                            <div className="text-center mt-1">
-                                                                <span className="text-xs text-slate-400">Balanced</span>
-                                                            </div>
+                                                        {/* No range mappings — show simple orientation only */}
+                                                        <div className="flex justify-between mt-1.5 text-[10px] text-slate-400">
+                                                            <span>← {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Favours Party B'}</span>
+                                                            <span>{roleContext ? `Favours ${roleContext.protectedPartyLabel}` : 'Favours Party A'} →</span>
                                                         </div>
                                                     </>
                                                 )}
