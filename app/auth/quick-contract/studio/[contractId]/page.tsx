@@ -639,16 +639,11 @@ function QuickContractStudioContent() {
                 // because the URL may contain a quick_contract_id which differs from
                 // the uploaded_contracts.contract_id used in clause_range_mappings
                 const actualContractId = contractData.contract_id
-                const { data: rangeMappingData } = await supabase
-                    .from('clause_range_mappings')
-                    .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                    .eq('contract_id', actualContractId)
-                    .eq('is_displayable', true)
 
-                if (rangeMappingData && rangeMappingData.length > 0) {
-                    const mappingMap = new Map<string, RangeMapping>()
-                    for (const rm of rangeMappingData) {
-                        mappingMap.set(rm.clause_id, {
+                const buildRangeMap = (rows: any[]): Map<string, RangeMapping> => {
+                    const m = new Map<string, RangeMapping>()
+                    for (const rm of rows) {
+                        m.set(rm.clause_id, {
                             clauseId: rm.clause_id,
                             contractId: rm.contract_id,
                             isDisplayable: rm.is_displayable,
@@ -659,7 +654,47 @@ function QuickContractStudioContent() {
                             rangeData: rm.range_data as RangeMappingData
                         })
                     }
-                    setRangeMappings(mappingMap)
+                    return m
+                }
+
+                const { data: rangeMappingData, error: rangeError } = await supabase
+                    .from('clause_range_mappings')
+                    .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
+                    .eq('contract_id', actualContractId)
+                    .eq('is_displayable', true)
+
+                if (rangeError) {
+                    console.warn('[QC Studio] Initial range load error:', rangeError.message)
+                }
+
+                if (rangeMappingData && rangeMappingData.length > 0) {
+                    console.log(`[QC Studio] Initial range load: ${rangeMappingData.length} mappings for contract ${actualContractId}`)
+                    setRangeMappings(buildRangeMap(rangeMappingData))
+                } else {
+                    // Range data may not be committed yet (just inserted by QC Create).
+                    // Retry once after a short delay before falling through to catch-up.
+                    console.log(`[QC Studio] Initial range load: 0 mappings (contract ${actualContractId}) — retrying in 1.5s...`)
+                    setTimeout(async () => {
+                        try {
+                            const { data: retryData, error: retryErr } = await supabase
+                                .from('clause_range_mappings')
+                                .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
+                                .eq('contract_id', actualContractId)
+                                .eq('is_displayable', true)
+
+                            if (retryErr) {
+                                console.warn('[QC Studio] Range retry error:', retryErr.message)
+                            }
+                            if (retryData && retryData.length > 0) {
+                                console.log(`[QC Studio] Range retry success: ${retryData.length} mappings loaded`)
+                                setRangeMappings(buildRangeMap(retryData))
+                            } else {
+                                console.log('[QC Studio] Range retry: still 0 — catch-up will handle')
+                            }
+                        } catch (retryEx) {
+                            console.warn('[QC Studio] Range retry exception:', retryEx)
+                        }
+                    }, 1500)
                 }
 
                 // PERSISTENCE: Restore selected clause from LocalStorage, or default to first
@@ -2887,11 +2922,15 @@ INSTRUCTIONS:
                 const nonHeaderCount = updatedClauses.filter(c => !c.is_header).length
                 const currentMappingCount = rangeMappings.size
                 if (currentMappingCount < nonHeaderCount) {
-                    const { data: rangeMappingData } = await supabase
+                    const { data: rangeMappingData, error: rangeErr } = await supabase
                         .from('clause_range_mappings')
                         .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
                         .eq('contract_id', effectiveId)
                         .eq('is_displayable', true)
+
+                    if (rangeErr) {
+                        console.warn('[QC Studio] Polling range refresh error:', rangeErr.message)
+                    }
 
                     if (rangeMappingData && rangeMappingData.length > currentMappingCount) {
                         const mappingMap = new Map<string, RangeMapping>()
@@ -2934,6 +2973,7 @@ INSTRUCTIONS:
     }, [contractId, resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // RANGE MAPPING CATCH-UP: After certification polling stops,
+    // RANGE MAPPING CATCH-UP: After certification polling stops,
     // do a few final fetches to catch trailing range mappings
     // (range mapping fires in parallel with certification chain,
     // so the last few may still be generating when polling stops)
@@ -2948,21 +2988,29 @@ INSTRUCTIONS:
         // All mappings present — nothing to catch up
         if (currentMappingCount >= nonHeaderCount) return
 
-        console.log(`[QC Studio] Range mapping catch-up: have ${currentMappingCount} of ${nonHeaderCount}, fetching stragglers...`)
+        console.log(`[QC Studio] Range mapping catch-up: have ${currentMappingCount} of ${nonHeaderCount}, fetching stragglers... (contract: ${effectiveId})`)
 
         let attempts = 0
         const maxAttempts = 8 // Up to ~40 seconds of catch-up
+        let cancelled = false
 
         const catchUpInterval = setInterval(async () => {
+            if (cancelled) return
             attempts++
             try {
-                const { data: rangeMappingData } = await supabase
+                const { data: rangeMappingData, error: rangeErr } = await supabase
                     .from('clause_range_mappings')
                     .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
                     .eq('contract_id', effectiveId)
                     .eq('is_displayable', true)
 
-                if (rangeMappingData && rangeMappingData.length > rangeMappings.size) {
+                if (rangeErr) {
+                    console.warn(`[QC Studio] Catch-up query error (attempt ${attempts}):`, rangeErr.message)
+                }
+
+                if (rangeMappingData && rangeMappingData.length > 0) {
+                    // Always rebuild the map if we got data — avoids stale closure
+                    // comparison issues with rangeMappings.size
                     const mappingMap = new Map<string, RangeMapping>()
                     for (const rm of rangeMappingData) {
                         mappingMap.set(rm.clause_id, {
@@ -2984,21 +3032,26 @@ INSTRUCTIONS:
                         console.log('[QC Studio] All range mappings loaded')
                         clearInterval(catchUpInterval)
                     }
+                } else {
+                    console.log(`[QC Studio] Catch-up attempt ${attempts}: 0 rows returned for contract ${effectiveId}`)
                 }
 
                 // Give up after max attempts
                 if (attempts >= maxAttempts) {
-                    console.log(`[QC Studio] Catch-up complete after ${attempts} attempts (${rangeMappings.size} mappings)`)
+                    console.log(`[QC Studio] Catch-up complete after ${attempts} attempts (last fetch got ${rangeMappingData?.length || 0} mappings)`)
                     clearInterval(catchUpInterval)
                 }
 
             } catch (err) {
-                console.error('Range mapping catch-up error:', err)
+                console.error('[QC Studio] Range mapping catch-up error:', err)
                 clearInterval(catchUpInterval)
             }
         }, 5000) // Every 5 seconds
 
-        return () => clearInterval(catchUpInterval)
+        return () => {
+            cancelled = true
+            clearInterval(catchUpInterval)
+        }
     }, [contractId, resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // ========================================================================
@@ -3317,10 +3370,10 @@ INSTRUCTIONS:
                                     onClick={() => setShowSaveTemplateModal(true)}
                                     disabled={templateSaved || !isReady}
                                     className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${templateSaved
-                                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
-                                            : !isReady
-                                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                                : 'bg-teal-600 hover:bg-teal-700 text-white'
+                                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
+                                        : !isReady
+                                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                            : 'bg-teal-600 hover:bg-teal-700 text-white'
                                         }`}
                                     title={
                                         templateSaved
