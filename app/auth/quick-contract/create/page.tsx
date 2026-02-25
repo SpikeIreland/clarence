@@ -25,6 +25,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import { CONTRACT_TYPE_DEFINITIONS, getContractTypesByCategory, getCategoryDisplayName, type PartyRole } from '@/lib/role-matrix'
 import mammoth from 'mammoth'
 
 // Note: pdfjs-dist is imported dynamically in extractTextFromPDF to avoid SSR issues
@@ -93,13 +94,13 @@ interface ParsedClause {
 
 type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content' | 'parsing'
 type SourceType = 'template' | 'upload' | 'blank' | null
-type ContractType = 'nda' | 'service_agreement' | 'lease' | 'employment' | 'contractor' | 'vendor' | 'other' | null
 type ParsingStatus = 'idle' | 'parsing' | 'certifying' | 'complete' | 'error'
 
 interface CreateState {
     step: CreateStep
     sourceType: SourceType
-    contractType: ContractType
+    contractTypeKey: string | null          // Role-matrix key e.g. 'nda_mutual', 'service_agreement'
+    initiatorPartyRole: PartyRole | null    // 'protected' or 'providing'
     contractName: string
     description: string
     referenceNumber: string
@@ -127,14 +128,15 @@ interface CreateState {
 
 const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstudios.app.n8n.cloud/webhook'
 
-const CONTRACT_TYPE_OPTIONS = [
-    { value: 'nda', label: 'Non-Disclosure Agreement', description: 'Protect confidential information' },
-    { value: 'service_agreement', label: 'Service Agreement', description: 'Define service terms and deliverables' },
-    { value: 'lease', label: 'Lease Agreement', description: 'Property or equipment rental terms' },
-    { value: 'contractor', label: 'Contractor Agreement', description: 'Independent contractor terms' },
-    { value: 'vendor', label: 'Vendor Agreement', description: 'Supplier and vendor terms' },
-    { value: 'other', label: 'Other', description: 'Custom contract type' }
-]
+const CONTRACT_TYPE_OPTIONS = CONTRACT_TYPE_DEFINITIONS.map(ct => ({
+    value: ct.contractTypeKey,
+    label: ct.contractTypeName,
+    category: ct.category,
+    protectedPartyLabel: ct.protectedPartyLabel,
+    providingPartyLabel: ct.providingPartyLabel,
+    protectedPartyDescription: ct.protectedPartyDescription,
+    providingPartyDescription: ct.providingPartyDescription,
+}))
 
 const SOURCE_OPTIONS = [
     {
@@ -156,13 +158,58 @@ const STEPS_CONFIG = [
 ]
 
 // ============================================================================
+// SECTION 3B: AUTO-DETECT CONTRACT TYPE FROM NAME
+// ============================================================================
+// Pattern-match contract name / file name to suggest a contract type key.
+// Returns the best-matching key or null. The user always confirms / overrides.
+// ============================================================================
+
+const CONTRACT_NAME_PATTERNS: { pattern: RegExp; key: string }[] = [
+    // Confidentiality — order matters: mutual before one-way
+    { pattern: /\bmutual\s*(nda|non[\s-]?disclosure)\b/i, key: 'nda_mutual' },
+    { pattern: /\b(nda|non[\s-]?disclosure|confidentiality)\b/i, key: 'nda_one_way' },
+    // Services
+    { pattern: /\b(saas|software[\s-]?as[\s-]?a[\s-]?service|subscription\s*agreement)\b/i, key: 'saas_agreement' },
+    { pattern: /\b(it[\s-]?outsourc|technology[\s-]?outsourc)\b/i, key: 'it_outsourcing' },
+    { pattern: /\b(bpo|business[\s-]?process[\s-]?outsourc)\b/i, key: 'bpo_agreement' },
+    { pattern: /\b(managed[\s-]?service)\b/i, key: 'managed_services' },
+    { pattern: /\b(consult|advisory[\s-]?agreement)\b/i, key: 'consultancy_agreement' },
+    { pattern: /\b(software[\s-]?licen|licence[\s-]?agreement|licensing)\b/i, key: 'software_license' },
+    { pattern: /\b(maintenance|support[\s-]?agreement|sla)\b/i, key: 'maintenance_agreement' },
+    { pattern: /\b(master[\s-]?service|msa|service[\s-]?agreement|service[\s-]?contract)\b/i, key: 'service_agreement' },
+    // Property & Finance
+    { pattern: /\b(lease|tenancy|rental[\s-]?agreement)\b/i, key: 'lease_agreement' },
+    { pattern: /\b(loan|credit[\s-]?agreement|lending)\b/i, key: 'loan_agreement' },
+    { pattern: /\b(insurance|policy[\s-]?schedule|underwriting)\b/i, key: 'insurance_policy' },
+    // Sales & Distribution
+    { pattern: /\b(sales[\s-]?agreement|sale[\s-]?of[\s-]?goods)\b/i, key: 'sales_agreement' },
+    { pattern: /\b(purchase[\s-]?agreement|procurement|buying)\b/i, key: 'purchase_agreement' },
+    { pattern: /\b(distribut|reseller|channel[\s-]?partner)\b/i, key: 'distribution_agreement' },
+    { pattern: /\b(franchise)\b/i, key: 'franchise_agreement' },
+    // Employment & Construction
+    { pattern: /\b(employ|staff|worker|personnel[\s-]?contract)\b/i, key: 'employment_contract' },
+    { pattern: /\b(construct|building[\s-]?contract|jct)\b/i, key: 'construction_contract' },
+    { pattern: /\b(agency|agent[\s-]?agreement)\b/i, key: 'agency_agreement' },
+]
+
+function autoDetectContractType(name: string): string | null {
+    if (!name || name.trim().length < 3) return null
+    const trimmed = name.trim()
+    for (const { pattern, key } of CONTRACT_NAME_PATTERNS) {
+        if (pattern.test(trimmed)) return key
+    }
+    return null
+}
+
+// ============================================================================
 // SECTION 4: INITIAL STATE
 // ============================================================================
 
 const initialState: CreateState = {
     step: 'source',
     sourceType: null,
-    contractType: null,
+    contractTypeKey: null,
+    initiatorPartyRole: null,
     contractName: '',
     description: '',
     referenceNumber: '',
@@ -232,6 +279,10 @@ function QuickContractCreateContent() {
     const [loadingTemplate, setLoadingTemplate] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
+    // Auto-detection state
+    const [suggestedTypeKey, setSuggestedTypeKey] = useState<string | null>(null)
+    const userOverrodeType = useRef(false)
+
     // Duplicate mode
     const duplicateId = searchParams.get('duplicate')
 
@@ -247,21 +298,13 @@ function QuickContractCreateContent() {
     const loadUserInfo = useCallback(async () => {
         const auth = localStorage.getItem('clarence_auth')
         if (!auth) {
-            console.log('🔴 QC Create: No clarence_auth in localStorage, redirecting to login')
             router.push('/login')
             return null
         }
 
         try {
             const parsed = JSON.parse(auth)
-            console.log('🔵 QC Create loadUserInfo: localStorage parsed', {
-                email: parsed.email,
-                companyId: parsed.companyId || '(missing)',
-                userId: parsed.userId || '(missing)',
-                company: parsed.companyName || parsed.company || '(missing)'
-            })
-
-            let info: UserInfo = {
+            const info: UserInfo = {
                 firstName: parsed.firstName || '',
                 lastName: parsed.lastName || '',
                 email: parsed.email || '',
@@ -270,111 +313,13 @@ function QuickContractCreateContent() {
                 role: parsed.role || 'user',
                 userId: parsed.userId || ''
             }
-
-            // ============================================================
-            // ENRICHMENT: If companyId is missing from localStorage,
-            // look it up from Supabase users table.
-            // The login page stores company name but not company_id,
-            // so this fallback is essential for template filtering.
-            // ============================================================
-            if (!info.companyId) {
-                console.log('🟡 QC Create: companyId missing from localStorage, enriching from Supabase...')
-                try {
-                    // Strategy 1: Look up by auth_id (most reliable)
-                    const { data: { user: authUser } } = await supabase.auth.getUser()
-
-                    if (authUser) {
-                        const { data: dbUser, error: dbError } = await supabase
-                            .from('users')
-                            .select('user_id, company_id, email, first_name, last_name')
-                            .eq('auth_id', authUser.id)
-                            .single()
-
-                        if (dbUser && !dbError) {
-                            console.log('🟢 QC Create: Enriched from Supabase users table (auth_id match)', {
-                                companyId: dbUser.company_id,
-                                userId: dbUser.user_id,
-                                email: dbUser.email
-                            })
-                            info = {
-                                ...info,
-                                companyId: dbUser.company_id || '',
-                                userId: dbUser.user_id || info.userId,
-                                email: dbUser.email || info.email,
-                                firstName: dbUser.first_name || info.firstName,
-                                lastName: dbUser.last_name || info.lastName
-                            }
-
-                            // Persist enrichment back to localStorage so future loads are instant
-                            try {
-                                const authData = JSON.parse(localStorage.getItem('clarence_auth') || '{}')
-                                authData.companyId = info.companyId
-                                authData.userId = info.userId
-                                localStorage.setItem('clarence_auth', JSON.stringify(authData))
-                                console.log('🟢 QC Create: Persisted companyId back to localStorage')
-                            } catch (persistErr) {
-                                console.warn('Could not persist enrichment to localStorage:', persistErr)
-                            }
-                        } else {
-                            console.log('🟡 QC Create: auth_id lookup returned no match, trying email fallback...')
-
-                            // Strategy 2: Look up by email
-                            if (info.email) {
-                                const { data: emailUser } = await supabase
-                                    .from('users')
-                                    .select('user_id, company_id, first_name, last_name')
-                                    .eq('email', info.email)
-                                    .single()
-
-                                if (emailUser) {
-                                    console.log('🟢 QC Create: Enriched from Supabase users table (email match)', {
-                                        companyId: emailUser.company_id,
-                                        userId: emailUser.user_id
-                                    })
-                                    info = {
-                                        ...info,
-                                        companyId: emailUser.company_id || '',
-                                        userId: emailUser.user_id || info.userId,
-                                        firstName: emailUser.first_name || info.firstName,
-                                        lastName: emailUser.last_name || info.lastName
-                                    }
-
-                                    // Persist back
-                                    try {
-                                        const authData = JSON.parse(localStorage.getItem('clarence_auth') || '{}')
-                                        authData.companyId = info.companyId
-                                        authData.userId = info.userId
-                                        localStorage.setItem('clarence_auth', JSON.stringify(authData))
-                                        console.log('🟢 QC Create: Persisted companyId back to localStorage (email fallback)')
-                                    } catch (persistErr) {
-                                        console.warn('Could not persist enrichment to localStorage:', persistErr)
-                                    }
-                                } else {
-                                    console.log('🔴 QC Create: Email lookup also returned no match')
-                                }
-                            }
-                        }
-                    } else {
-                        console.log('🔴 QC Create: No authenticated Supabase user found')
-                    }
-                } catch (enrichErr) {
-                    console.warn('🟡 QC Create: Enrichment failed (non-fatal):', enrichErr)
-                }
-            }
-
-            console.log('🔵 QC Create loadUserInfo FINAL:', {
-                email: info.email,
-                companyId: info.companyId || '(STILL MISSING)',
-                userId: info.userId
-            })
-
             setUserInfo(info)
             return info
         } catch {
             router.push('/login')
             return null
         }
-    }, [router, supabase])
+    }, [router])
 
     const loadTemplates = useCallback(async (companyId: string, userId: string) => {
         try {
@@ -591,7 +536,10 @@ function QuickContractCreateContent() {
                         file_type: 'template',
                         file_size: 0,
                         status: 'ready',
-                        clause_count: existingClauses.length
+                        clause_count: existingClauses.length,
+                        contract_type_key: state.contractTypeKey || templateData.contract_type_key || null,
+                        initiator_party_role: state.initiatorPartyRole || templateData.initiator_party_role || null,
+                        detected_contract_type: getContractTypeLabel(state.contractTypeKey || templateData.contract_type_key)
                     })
                     .select('contract_id')
                     .single()
@@ -645,29 +593,18 @@ function QuickContractCreateContent() {
                 // =========================================================
                 // COPY RANGE MAPPINGS from source contract to new contract
                 // =========================================================
-                // =========================================================
-                // COPY RANGE MAPPINGS from source contract to new contract
-                // Use local sourceContractId if Strategy A/B set it,
-                // otherwise fall back to templateData.source_contract_id
-                // (needed when Strategy E loads from template_clauses)
-                // =========================================================
-                const rangeSourceId = sourceContractId || templateData.source_contract_id || null
-
-                if (rangeSourceId) {
+                if (sourceContractId) {
                     try {
-                        console.log(`[Range Copy] Copying range mappings from source: ${rangeSourceId} to new: ${newContractId}`)
-                        console.log(`[Range Copy] Source origin: ${sourceContractId ? 'Strategy A/B (uploaded_contract_clauses)' : 'templateData.source_contract_id (fallback)'}`)
+                        console.log(`[Range Copy] Copying range mappings from source: ${sourceContractId} to new: ${newContractId}`)
 
                         const { data: sourceRanges, error: rangeReadError } = await supabase
                             .from('clause_range_mappings')
                             .select('*')
-                            .eq('contract_id', rangeSourceId)
+                            .eq('contract_id', sourceContractId)
 
                         if (rangeReadError) {
                             console.warn('[Range Copy] Error reading source ranges:', rangeReadError)
                         } else if (sourceRanges && sourceRanges.length > 0) {
-                            console.log(`[Range Copy] Found ${sourceRanges.length} source range mappings`)
-
                             const { data: newClauses } = await supabase
                                 .from('uploaded_contract_clauses')
                                 .select('clause_id, clause_number, clause_name')
@@ -676,7 +613,7 @@ function QuickContractCreateContent() {
                             const { data: sourceClauses } = await supabase
                                 .from('uploaded_contract_clauses')
                                 .select('clause_id, clause_number, clause_name')
-                                .eq('contract_id', rangeSourceId)
+                                .eq('contract_id', sourceContractId)
 
                             if (newClauses && sourceClauses) {
                                 const sourceClauseIdToNumber = new Map<string, string>()
@@ -713,67 +650,10 @@ function QuickContractCreateContent() {
                                     if (rangeWriteError) {
                                         console.warn('[Range Copy] Error writing range mappings:', rangeWriteError)
                                     } else {
-                                        console.log(`[Range Copy] ✅ Copied ${rangeCopies.length} range mappings to new contract`)
+                                        console.log(`[Range Copy] Copied ${rangeCopies.length} range mappings to new contract`)
                                     }
                                 } else {
                                     console.log('[Range Copy] No clause_number matches found between source and new contract')
-                                    console.log(`[Range Copy] Source clauses: ${sourceClauses.length}, New clauses: ${newClauses.length}`)
-                                }
-                            } else if (!sourceClauses || sourceClauses.length === 0) {
-                                // Source contract clauses may have been deleted
-                                // Try matching by clause_name instead of clause_number
-                                console.log('[Range Copy] Source contract has no clauses, trying clause_name matching via template_clauses...')
-
-                                // Get the clause_name -> source_clause_id mapping from the range data
-                                // We can match ranges to new clauses by looking at what clause names the ranges cover
-                                if (newClauses && newClauses.length > 0) {
-                                    const newClauseByName = new Map<string, string>()
-                                    for (const nc of newClauses) {
-                                        newClauseByName.set(nc.clause_name.toLowerCase().trim(), nc.clause_id)
-                                    }
-
-                                    // Get source clause names from the source contract (even if clauses are gone,
-                                    // the range mappings still reference clause_ids we can look up)
-                                    const sourceClauseIds = [...new Set(sourceRanges.map(r => r.clause_id))]
-                                    const { data: sourceClauseNames } = await supabase
-                                        .from('uploaded_contract_clauses')
-                                        .select('clause_id, clause_name')
-                                        .in('clause_id', sourceClauseIds)
-
-                                    if (sourceClauseNames && sourceClauseNames.length > 0) {
-                                        const sourceIdToName = new Map<string, string>()
-                                        for (const sc of sourceClauseNames) {
-                                            sourceIdToName.set(sc.clause_id, sc.clause_name.toLowerCase().trim())
-                                        }
-
-                                        const nameRangeCopies = sourceRanges
-                                            .map(rm => {
-                                                const sourceName = sourceIdToName.get(rm.clause_id)
-                                                if (!sourceName) return null
-                                                const newClauseId = newClauseByName.get(sourceName)
-                                                if (!newClauseId) return null
-
-                                                const { mapping_id, ...rest } = rm
-                                                return { ...rest, contract_id: newContractId, clause_id: newClauseId }
-                                            })
-                                            .filter(Boolean)
-
-                                        if (nameRangeCopies.length > 0) {
-                                            const { error: nameRangeError } = await supabase
-                                                .from('clause_range_mappings')
-                                                .insert(nameRangeCopies)
-
-                                            if (nameRangeError) {
-                                                console.warn('[Range Copy] Error writing name-matched ranges:', nameRangeError)
-                                            } else {
-                                                console.log(`[Range Copy] ✅ Copied ${nameRangeCopies.length} range mappings via clause_name matching`)
-                                            }
-                                        } else {
-                                            console.log('[Range Copy] No clause_name matches found either')
-                                        }
-                                    } else {
-                                        console.log('[Range Copy] Could not resolve source clause names from range clause_ids')
-                                    }
                                 }
                             }
                         } else {
@@ -782,8 +662,8 @@ function QuickContractCreateContent() {
                     } catch (rangeErr) {
                         console.warn('[Range Copy] Failed to copy range mappings:', rangeErr)
                     }
-                } else {
-                    console.log('[Range Copy] Skipped: no source contract ID available')
+                } else if (clausesFromTemplateTable) {
+                    console.log('[Range Copy] Skipped: clauses from template_clauses (no source contract_id)')
                 }
 
                 // Update times_used
@@ -857,7 +737,7 @@ function QuickContractCreateContent() {
                 try {
                     const { data: dupContract } = await supabase
                         .from('uploaded_contracts')
-                        .select('contract_name, contract_type')
+                        .select('contract_name, contract_type_key, initiator_party_role')
                         .eq('contract_id', duplicateId)
                         .single()
 
@@ -865,7 +745,8 @@ function QuickContractCreateContent() {
                         setState(prev => ({
                             ...prev,
                             contractName: `Copy of ${dupContract.contract_name}`,
-                            contractType: dupContract.contract_type as ContractType,
+                            contractTypeKey: dupContract.contract_type_key || null,
+                            initiatorPartyRole: (dupContract.initiator_party_role as PartyRole) || null,
                             step: 'details'
                         }))
                     }
@@ -885,6 +766,24 @@ function QuickContractCreateContent() {
             mounted = false
         }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ==========================================================================
+    // SECTION 10B: AUTO-DETECT CONTRACT TYPE FROM NAME
+    // ==========================================================================
+    // Runs whenever contractName changes. If the user hasn't manually selected
+    // a type yet, the suggestion auto-fills contractTypeKey. Once the user
+    // explicitly picks a type, auto-detect only updates the suggestion badge.
+    // ==========================================================================
+
+    useEffect(() => {
+        const detected = autoDetectContractType(state.contractName)
+        setSuggestedTypeKey(detected)
+
+        // Auto-fill only if user hasn't manually chosen yet
+        if (detected && !userOverrodeType.current && !state.contractTypeKey) {
+            setState(prev => ({ ...prev, contractTypeKey: detected }))
+        }
+    }, [state.contractName]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // ==========================================================================
     // SECTION 11: NAVIGATION HANDLERS
@@ -1103,7 +1002,9 @@ function QuickContractCreateContent() {
                     file_type: 'text/plain',
                     file_size: state.documentContent.length,
                     raw_text: state.documentContent.replace(/<[^>]*>/g, '\n'),
-                    contract_type: state.contractType,
+                    contract_type: state.contractTypeKey,
+                    contract_type_key: state.contractTypeKey,
+                    initiator_party_role: state.initiatorPartyRole,
                     mediation_type: 'stc',
                     template_source: state.uploadedFileName ? 'uploaded' : 'manual'
                 })
@@ -1159,6 +1060,18 @@ function QuickContractCreateContent() {
 
                 if (contractData.status === 'ready') {
                     console.log(`Parsing complete! Contract ${contractId} is ready with ${contractData.clause_count} clauses`)
+
+                    // Write contract_type_key and initiator_party_role to the parsed contract
+                    if (state.contractTypeKey || state.initiatorPartyRole) {
+                        await supabase
+                            .from('uploaded_contracts')
+                            .update({
+                                contract_type_key: state.contractTypeKey,
+                                initiator_party_role: state.initiatorPartyRole,
+                                detected_contract_type: getContractTypeLabel(state.contractTypeKey)
+                            })
+                            .eq('contract_id', contractId)
+                    }
 
                     // Update state briefly (for any cleanup logic)
                     setState(prev => ({
@@ -1232,7 +1145,9 @@ function QuickContractCreateContent() {
                     .from('uploaded_contracts')
                     .update({
                         contract_name: state.contractName,
-                        contract_type: state.contractType
+                        contract_type_key: state.contractTypeKey,
+                        initiator_party_role: state.initiatorPartyRole,
+                        detected_contract_type: getContractTypeLabel(state.contractTypeKey)
                     })
                     .eq('contract_id', state.uploadedContractId)
 
@@ -1254,7 +1169,7 @@ function QuickContractCreateContent() {
                         company_id: userInfo.companyId,
                         created_by_user_id: userInfo.userId,
                         contract_name: state.contractName,
-                        contract_type: state.contractType,
+                        contract_type: state.contractTypeKey,
                         description: state.description,
                         reference_number: state.referenceNumber || null,
                         document_content: state.documentContent,
@@ -1306,9 +1221,9 @@ function QuickContractCreateContent() {
         }
     }
 
-    function getContractTypeLabel(type: ContractType): string {
-        const option = CONTRACT_TYPE_OPTIONS.find(o => o.value === type)
-        return option?.label || 'Other'
+    function getContractTypeLabel(typeKey: string | null): string {
+        const option = CONTRACT_TYPE_OPTIONS.find(o => o.value === typeKey)
+        return option?.label || 'Contract'
     }
 
     // ==========================================================================
@@ -1794,29 +1709,116 @@ function QuickContractCreateContent() {
                                 />
                             </div>
 
-                            {/* Contract Type */}
+                            {/* Contract Type — grouped by category from Role Matrix */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
                                     Contract Type
                                 </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {CONTRACT_TYPE_OPTIONS.map(option => (
-                                        <button
-                                            key={option.value}
-                                            onClick={() => setState(prev => ({ ...prev, contractType: option.value as ContractType }))}
-                                            className={`p-3 rounded-lg border-2 text-left transition-colors ${state.contractType === option.value
-                                                ? 'border-teal-500 bg-teal-50'
-                                                : 'border-slate-200 hover:border-slate-300'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${state.contractType === option.value ? 'bg-teal-500' : 'bg-slate-300'}`}></div>
-                                                <span className="font-medium text-sm text-slate-800">{option.label}</span>
+
+                                {/* Auto-detect suggestion banner */}
+                                {suggestedTypeKey && state.contractTypeKey === suggestedTypeKey && (
+                                    <div className="mb-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                                        <svg className="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <p className="text-xs text-amber-700">
+                                            Auto-detected from the contract name. You can change this if it&apos;s not correct.
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="space-y-3">
+                                    {Object.entries(getContractTypesByCategory()).map(([category, types]) => {
+                                        if (types.length === 0) return null
+                                        return (
+                                            <div key={category}>
+                                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
+                                                    {getCategoryDisplayName(category)}
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-1.5">
+                                                    {types.map(ct => {
+                                                        const isSelected = state.contractTypeKey === ct.contractTypeKey
+                                                        const isSuggested = suggestedTypeKey === ct.contractTypeKey
+                                                        return (
+                                                            <button
+                                                                key={ct.contractTypeKey}
+                                                                onClick={() => {
+                                                                    userOverrodeType.current = true
+                                                                    setState(prev => ({
+                                                                        ...prev,
+                                                                        contractTypeKey: ct.contractTypeKey,
+                                                                        // Reset party role when type changes
+                                                                        initiatorPartyRole: null
+                                                                    }))
+                                                                }}
+                                                                className={`p-2.5 rounded-lg border-2 text-left transition-colors ${isSelected
+                                                                    ? 'border-teal-500 bg-teal-50'
+                                                                    : isSuggested && !state.contractTypeKey
+                                                                        ? 'border-amber-300 bg-amber-50/50'
+                                                                        : 'border-slate-200 hover:border-slate-300'
+                                                                    }`}
+                                                            >
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? 'bg-teal-500' : 'bg-slate-300'}`}></div>
+                                                                    <span className="font-medium text-sm text-slate-800">{ct.contractTypeName}</span>
+                                                                    {isSuggested && (
+                                                                        <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">
+                                                                            Suggested
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
                                             </div>
-                                        </button>
-                                    ))}
+                                        )
+                                    })}
                                 </div>
                             </div>
+
+                            {/* Party Role — appears when contract type is selected */}
+                            {state.contractTypeKey && (() => {
+                                const selectedType = CONTRACT_TYPE_DEFINITIONS.find(ct => ct.contractTypeKey === state.contractTypeKey)
+                                if (!selectedType) return null
+                                return (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Your Role in this Contract
+                                        </label>
+                                        <p className="text-xs text-slate-500 mb-2">
+                                            Select which party you represent. This determines how the position scale is oriented for you.
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => setState(prev => ({ ...prev, initiatorPartyRole: 'protected' as PartyRole }))}
+                                                className={`p-3 rounded-lg border-2 text-left transition-colors ${state.initiatorPartyRole === 'protected'
+                                                    ? 'border-emerald-500 bg-emerald-50'
+                                                    : 'border-slate-200 hover:border-slate-300'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <div className={`w-2.5 h-2.5 rounded-full ${state.initiatorPartyRole === 'protected' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                                                    <span className="font-semibold text-sm text-slate-800">{selectedType.protectedPartyLabel}</span>
+                                                </div>
+                                                <p className="text-xs text-slate-500 pl-4.5">{selectedType.protectedPartyDescription}</p>
+                                            </button>
+                                            <button
+                                                onClick={() => setState(prev => ({ ...prev, initiatorPartyRole: 'providing' as PartyRole }))}
+                                                className={`p-3 rounded-lg border-2 text-left transition-colors ${state.initiatorPartyRole === 'providing'
+                                                    ? 'border-blue-500 bg-blue-50'
+                                                    : 'border-slate-200 hover:border-slate-300'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <div className={`w-2.5 h-2.5 rounded-full ${state.initiatorPartyRole === 'providing' ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                                    <span className="font-semibold text-sm text-slate-800">{selectedType.providingPartyLabel}</span>
+                                                </div>
+                                                <p className="text-xs text-slate-500 pl-4.5">{selectedType.providingPartyDescription}</p>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })()}
 
                             {/* Description */}
                             <div>

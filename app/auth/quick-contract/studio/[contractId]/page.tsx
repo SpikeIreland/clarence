@@ -240,7 +240,7 @@ const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
     { value: 1, label: 'Maximum Flexibility', description: 'Most flexible terms possible' },
     { value: 2, label: 'Strong Flexibility', description: 'Significantly flexible terms' },
     { value: 3, label: 'Flexible Terms', description: 'Flexibility-leaning but reasonable' },
-    { value: 4, label: 'Slightly Flexible', description: 'Marginally flexibility-favouring' },
+    { value: 4, label: 'Slightly Flexible', description: 'Marginally flexibility-favoring' },
     { value: 5, label: 'Balanced', description: 'Neutral, industry standard' },
     { value: 6, label: 'Slight Protection', description: 'Marginally protective' },
     { value: 7, label: 'Moderate Protection', description: 'Protection-leaning but reasonable' },
@@ -639,11 +639,16 @@ function QuickContractStudioContent() {
                 // because the URL may contain a quick_contract_id which differs from
                 // the uploaded_contracts.contract_id used in clause_range_mappings
                 const actualContractId = contractData.contract_id
+                const { data: rangeMappingData } = await supabase
+                    .from('clause_range_mappings')
+                    .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
+                    .eq('contract_id', actualContractId)
+                    .eq('is_displayable', true)
 
-                const buildRangeMap = (rows: any[]): Map<string, RangeMapping> => {
-                    const m = new Map<string, RangeMapping>()
-                    for (const rm of rows) {
-                        m.set(rm.clause_id, {
+                if (rangeMappingData && rangeMappingData.length > 0) {
+                    const mappingMap = new Map<string, RangeMapping>()
+                    for (const rm of rangeMappingData) {
+                        mappingMap.set(rm.clause_id, {
                             clauseId: rm.clause_id,
                             contractId: rm.contract_id,
                             isDisplayable: rm.is_displayable,
@@ -654,47 +659,7 @@ function QuickContractStudioContent() {
                             rangeData: rm.range_data as RangeMappingData
                         })
                     }
-                    return m
-                }
-
-                const { data: rangeMappingData, error: rangeError } = await supabase
-                    .from('clause_range_mappings')
-                    .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                    .eq('contract_id', actualContractId)
-                    .eq('is_displayable', true)
-
-                if (rangeError) {
-                    console.warn('[QC Studio] Initial range load error:', rangeError.message)
-                }
-
-                if (rangeMappingData && rangeMappingData.length > 0) {
-                    console.log(`[QC Studio] Initial range load: ${rangeMappingData.length} mappings for contract ${actualContractId}`)
-                    setRangeMappings(buildRangeMap(rangeMappingData))
-                } else {
-                    // Range data may not be committed yet (just inserted by QC Create).
-                    // Retry once after a short delay before falling through to catch-up.
-                    console.log(`[QC Studio] Initial range load: 0 mappings (contract ${actualContractId}) — retrying in 1.5s...`)
-                    setTimeout(async () => {
-                        try {
-                            const { data: retryData, error: retryErr } = await supabase
-                                .from('clause_range_mappings')
-                                .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
-                                .eq('contract_id', actualContractId)
-                                .eq('is_displayable', true)
-
-                            if (retryErr) {
-                                console.warn('[QC Studio] Range retry error:', retryErr.message)
-                            }
-                            if (retryData && retryData.length > 0) {
-                                console.log(`[QC Studio] Range retry success: ${retryData.length} mappings loaded`)
-                                setRangeMappings(buildRangeMap(retryData))
-                            } else {
-                                console.log('[QC Studio] Range retry: still 0 — catch-up will handle')
-                            }
-                        } catch (retryEx) {
-                            console.warn('[QC Studio] Range retry exception:', retryEx)
-                        }
-                    }, 1500)
+                    setRangeMappings(mappingMap)
                 }
 
                 // PERSISTENCE: Restore selected clause from LocalStorage, or default to first
@@ -797,7 +762,7 @@ function QuickContractStudioContent() {
                 setChatMessages([{
                     id: 'welcome',
                     role: 'assistant',
-                    content: `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and analysed ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
+                    content: `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
                     timestamp: new Date()
                 }])
 
@@ -922,7 +887,7 @@ function QuickContractStudioContent() {
                     id: `assistant-${Date.now()}`,
                     role: 'assistant',
                     content: selectedClause
-                        ? `Regarding "${selectedClause.clauseName}": ${selectedClause.clarenceAssessment || selectedClause.clarenceSummary || 'This clause has been reviewed and assessed. The recommended position balances both parties\' interests based on industry standards.'}`
+                        ? `Regarding "${selectedClause.clauseName}": ${selectedClause.clarenceAssessment || selectedClause.clarenceSummary || 'This clause has been reviewed and certified. The recommended position balances both parties\' interests based on industry standards.'}`
                         : "I'm here to help you understand this contract. Please select a clause or ask me a specific question.",
                     timestamp: new Date()
                 }
@@ -1676,7 +1641,7 @@ function QuickContractStudioContent() {
                 .insert({
                     template_code: templateCode,
                     template_name: templateName.trim(),
-                    description: `Created from uploaded contract: ${contract?.contractName || 'Unknown'}`,
+                    description: `Certified from uploaded contract: ${contract?.contractName || 'Unknown'}`,
                     contract_type: contract?.contractType || 'custom',
                     industry: null,
                     is_system: false,
@@ -2922,15 +2887,11 @@ INSTRUCTIONS:
                 const nonHeaderCount = updatedClauses.filter(c => !c.is_header).length
                 const currentMappingCount = rangeMappings.size
                 if (currentMappingCount < nonHeaderCount) {
-                    const { data: rangeMappingData, error: rangeErr } = await supabase
+                    const { data: rangeMappingData } = await supabase
                         .from('clause_range_mappings')
                         .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
                         .eq('contract_id', effectiveId)
                         .eq('is_displayable', true)
-
-                    if (rangeErr) {
-                        console.warn('[QC Studio] Polling range refresh error:', rangeErr.message)
-                    }
 
                     if (rangeMappingData && rangeMappingData.length > currentMappingCount) {
                         const mappingMap = new Map<string, RangeMapping>()
@@ -2973,7 +2934,6 @@ INSTRUCTIONS:
     }, [contractId, resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // RANGE MAPPING CATCH-UP: After certification polling stops,
-    // RANGE MAPPING CATCH-UP: After certification polling stops,
     // do a few final fetches to catch trailing range mappings
     // (range mapping fires in parallel with certification chain,
     // so the last few may still be generating when polling stops)
@@ -2988,29 +2948,21 @@ INSTRUCTIONS:
         // All mappings present — nothing to catch up
         if (currentMappingCount >= nonHeaderCount) return
 
-        console.log(`[QC Studio] Range mapping catch-up: have ${currentMappingCount} of ${nonHeaderCount}, fetching stragglers... (contract: ${effectiveId})`)
+        console.log(`[QC Studio] Range mapping catch-up: have ${currentMappingCount} of ${nonHeaderCount}, fetching stragglers...`)
 
         let attempts = 0
         const maxAttempts = 8 // Up to ~40 seconds of catch-up
-        let cancelled = false
 
         const catchUpInterval = setInterval(async () => {
-            if (cancelled) return
             attempts++
             try {
-                const { data: rangeMappingData, error: rangeErr } = await supabase
+                const { data: rangeMappingData } = await supabase
                     .from('clause_range_mappings')
                     .select('clause_id, contract_id, is_displayable, value_type, range_unit, industry_standard_min, industry_standard_max, range_data')
                     .eq('contract_id', effectiveId)
                     .eq('is_displayable', true)
 
-                if (rangeErr) {
-                    console.warn(`[QC Studio] Catch-up query error (attempt ${attempts}):`, rangeErr.message)
-                }
-
-                if (rangeMappingData && rangeMappingData.length > 0) {
-                    // Always rebuild the map if we got data — avoids stale closure
-                    // comparison issues with rangeMappings.size
+                if (rangeMappingData && rangeMappingData.length > rangeMappings.size) {
                     const mappingMap = new Map<string, RangeMapping>()
                     for (const rm of rangeMappingData) {
                         mappingMap.set(rm.clause_id, {
@@ -3032,26 +2984,21 @@ INSTRUCTIONS:
                         console.log('[QC Studio] All range mappings loaded')
                         clearInterval(catchUpInterval)
                     }
-                } else {
-                    console.log(`[QC Studio] Catch-up attempt ${attempts}: 0 rows returned for contract ${effectiveId}`)
                 }
 
                 // Give up after max attempts
                 if (attempts >= maxAttempts) {
-                    console.log(`[QC Studio] Catch-up complete after ${attempts} attempts (last fetch got ${rangeMappingData?.length || 0} mappings)`)
+                    console.log(`[QC Studio] Catch-up complete after ${attempts} attempts (${rangeMappings.size} mappings)`)
                     clearInterval(catchUpInterval)
                 }
 
             } catch (err) {
-                console.error('[QC Studio] Range mapping catch-up error:', err)
+                console.error('Range mapping catch-up error:', err)
                 clearInterval(catchUpInterval)
             }
         }, 5000) // Every 5 seconds
 
-        return () => {
-            cancelled = true
-            clearInterval(catchUpInterval)
-        }
+        return () => clearInterval(catchUpInterval)
     }, [contractId, resolvedContractId, clauses.length, isPolling, rangeMappings.size])
 
     // ========================================================================
@@ -3199,8 +3146,8 @@ INSTRUCTIONS:
                                 <h1 className="font-semibold text-slate-800">Quick Create Studio</h1>
                                 <p className="text-xs text-slate-500">
                                     {isTemplateMode
-                                        ? (isCompanyTemplate ? 'Company Template Review' : 'Template Review')
-                                        : 'CLARENCE Contract Review'}
+                                        ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
+                                        : 'CLARENCE Certified Review'}
                                 </p>
                             </div>
                         </div>
@@ -3229,7 +3176,7 @@ INSTRUCTIONS:
                                                 ? roleContext.userRoleLabel
                                                 : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
                                                     ? roleContext.counterpartyRoleLabel
-                                                    : 'Customer'}
+                                                    : 'Party A'}
                                         </span>
                                         {getPartyRole() === 'initiator' && (
                                             <span className="text-emerald-500 ml-1">(You)</span>
@@ -3252,7 +3199,7 @@ INSTRUCTIONS:
                                                     ? roleContext.counterpartyRoleLabel
                                                     : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
                                                         ? roleContext.userRoleLabel
-                                                        : 'Provider'}
+                                                        : 'Party B'}
                                             </span>
                                         )}
                                         {getPartyRole() === 'respondent' && (
@@ -3379,9 +3326,9 @@ INSTRUCTIONS:
                                         templateSaved
                                             ? 'Template saved'
                                             : isPolling
-                                                ? `Analysing... ${certifiedCount}/${leafClauses.length}`
+                                                ? `Certifying... ${certifiedCount}/${leafClauses.length}`
                                                 : !allCertified
-                                                    ? `${certifiedCount}/${leafClauses.length} clauses analysed — waiting for all`
+                                                    ? `${certifiedCount}/${leafClauses.length} clauses certified — waiting for all`
                                                     : 'Save this contract as a reusable template'
                                     }
                                 >
@@ -3433,12 +3380,12 @@ INSTRUCTIONS:
                 {/* ======================================================== */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-hidden min-h-0">
 
-                    {/* ==================== ANALYSIS PROGRESS ==================== */}
+                    {/* ==================== CERTIFICATION PROGRESS ==================== */}
                     {isPolling && (
                         <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-emerald-50 flex-shrink-0">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium text-teal-700">
-                                    Analysing clauses...
+                                    Certifying clauses...
                                 </span>
                                 <span className="text-xs text-teal-600">
                                     {certificationProgress.certified}/{certificationProgress.total}
@@ -3951,7 +3898,7 @@ INSTRUCTIONS:
                                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                                     </svg>
-                                                    Reviewed
+                                                    Certified
                                                 </span>
                                             )}
                                         </div>
@@ -4135,7 +4082,7 @@ INSTRUCTIONS:
                                                     ))}
 
                                                     {/* CLARENCE Badge - Only marker shown */}
-                                                    {/* POSITION BAR: Left = Providing-Party-Favouring (1), Right = Protected-Party-Favouring (10) */}
+                                                    {/* POSITION BAR: Left = Provider-Favouring (1), Right = Customer-Favouring (10) */}
                                                     {/* PERSISTENCE: Display user's adjusted position if set, otherwise CLARENCE's */}
                                                     {getUserDisplayPosition(selectedClause) !== null && (
                                                         <div
@@ -4231,16 +4178,25 @@ INSTRUCTIONS:
                                                                 </span>
                                                             </div>
                                                         )}
-                                                        {/* Provider/Customer labels */}
+                                                        {/* Party role labels */}
                                                         <div className="mt-1">
                                                             <PositionScaleIndicator roleContext={roleContext} variant="full" />
                                                         </div>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        {/* No range mapping — show only Provider/Customer scale indicator, no numeric labels */}
+                                                        <div className="flex justify-between mt-1 px-0">
+                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                                                <span key={n} className="text-[10px] text-slate-400 font-medium" style={{ width: '11.11%', textAlign: n === 1 ? 'left' : n === 10 ? 'right' : 'center' }}>
+                                                                    {n}
+                                                                </span>
+                                                            ))}
+                                                        </div>
                                                         <div className="mt-1">
                                                             <PositionScaleIndicator roleContext={roleContext} variant="full" />
+                                                            <div className="text-center mt-1">
+                                                                <span className="text-xs text-slate-400">Balanced</span>
+                                                            </div>
                                                         </div>
                                                     </>
                                                 )}
@@ -4369,7 +4325,7 @@ INSTRUCTIONS:
                                                                 </div>
                                                                 <div>
                                                                     <div className="text-sm font-medium text-blue-800">
-                                                                        {roleContext ? `Favours ${roleContext.protectedPartyLabel}` : 'Customer-Protective'}
+                                                                        {roleContext ? `Favours ${roleContext.protectedPartyLabel}` : 'Favours Party A'}
                                                                     </div>
                                                                     <div className="text-xs text-blue-600">
                                                                         {roleContext?.positionFavorEnd === 10
@@ -4387,7 +4343,7 @@ INSTRUCTIONS:
                                                                 </div>
                                                                 <div>
                                                                     <div className="text-sm font-medium text-amber-800">
-                                                                        {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Provider-Favouring'}
+                                                                        {roleContext ? `Favours ${roleContext.providingPartyLabel}` : 'Favours Party B'}
                                                                     </div>
                                                                     <div className="text-xs text-amber-600">
                                                                         {roleContext?.positionFavorEnd === 1
@@ -4786,7 +4742,7 @@ INSTRUCTIONS:
                                                                     onClick={handleCreateBalancedDraft}
                                                                     disabled={generatingBalancedDraft || !selectedClause.clarenceCertified}
                                                                     className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                    title={!selectedClause.clarenceCertified ? 'Clause must be reviewed before generating a balanced draft' : 'Generate a more balanced version of this clause'}
+                                                                    title={!selectedClause.clarenceCertified ? 'Clause must be certified before generating a balanced draft' : 'Generate a more balanced version of this clause'}
                                                                 >
                                                                     {generatingBalancedDraft ? (
                                                                         <>
