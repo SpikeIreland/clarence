@@ -645,18 +645,29 @@ function QuickContractCreateContent() {
                 // =========================================================
                 // COPY RANGE MAPPINGS from source contract to new contract
                 // =========================================================
-                if (sourceContractId) {
+                // =========================================================
+                // COPY RANGE MAPPINGS from source contract to new contract
+                // Use local sourceContractId if Strategy A/B set it,
+                // otherwise fall back to templateData.source_contract_id
+                // (needed when Strategy E loads from template_clauses)
+                // =========================================================
+                const rangeSourceId = sourceContractId || templateData.source_contract_id || null
+
+                if (rangeSourceId) {
                     try {
-                        console.log(`[Range Copy] Copying range mappings from source: ${sourceContractId} to new: ${newContractId}`)
+                        console.log(`[Range Copy] Copying range mappings from source: ${rangeSourceId} to new: ${newContractId}`)
+                        console.log(`[Range Copy] Source origin: ${sourceContractId ? 'Strategy A/B (uploaded_contract_clauses)' : 'templateData.source_contract_id (fallback)'}`)
 
                         const { data: sourceRanges, error: rangeReadError } = await supabase
                             .from('clause_range_mappings')
                             .select('*')
-                            .eq('contract_id', sourceContractId)
+                            .eq('contract_id', rangeSourceId)
 
                         if (rangeReadError) {
                             console.warn('[Range Copy] Error reading source ranges:', rangeReadError)
                         } else if (sourceRanges && sourceRanges.length > 0) {
+                            console.log(`[Range Copy] Found ${sourceRanges.length} source range mappings`)
+
                             const { data: newClauses } = await supabase
                                 .from('uploaded_contract_clauses')
                                 .select('clause_id, clause_number, clause_name')
@@ -665,7 +676,7 @@ function QuickContractCreateContent() {
                             const { data: sourceClauses } = await supabase
                                 .from('uploaded_contract_clauses')
                                 .select('clause_id, clause_number, clause_name')
-                                .eq('contract_id', sourceContractId)
+                                .eq('contract_id', rangeSourceId)
 
                             if (newClauses && sourceClauses) {
                                 const sourceClauseIdToNumber = new Map<string, string>()
@@ -702,10 +713,67 @@ function QuickContractCreateContent() {
                                     if (rangeWriteError) {
                                         console.warn('[Range Copy] Error writing range mappings:', rangeWriteError)
                                     } else {
-                                        console.log(`[Range Copy] Copied ${rangeCopies.length} range mappings to new contract`)
+                                        console.log(`[Range Copy] ✅ Copied ${rangeCopies.length} range mappings to new contract`)
                                     }
                                 } else {
                                     console.log('[Range Copy] No clause_number matches found between source and new contract')
+                                    console.log(`[Range Copy] Source clauses: ${sourceClauses.length}, New clauses: ${newClauses.length}`)
+                                }
+                            } else if (!sourceClauses || sourceClauses.length === 0) {
+                                // Source contract clauses may have been deleted
+                                // Try matching by clause_name instead of clause_number
+                                console.log('[Range Copy] Source contract has no clauses, trying clause_name matching via template_clauses...')
+
+                                // Get the clause_name -> source_clause_id mapping from the range data
+                                // We can match ranges to new clauses by looking at what clause names the ranges cover
+                                if (newClauses && newClauses.length > 0) {
+                                    const newClauseByName = new Map<string, string>()
+                                    for (const nc of newClauses) {
+                                        newClauseByName.set(nc.clause_name.toLowerCase().trim(), nc.clause_id)
+                                    }
+
+                                    // Get source clause names from the source contract (even if clauses are gone,
+                                    // the range mappings still reference clause_ids we can look up)
+                                    const sourceClauseIds = [...new Set(sourceRanges.map(r => r.clause_id))]
+                                    const { data: sourceClauseNames } = await supabase
+                                        .from('uploaded_contract_clauses')
+                                        .select('clause_id, clause_name')
+                                        .in('clause_id', sourceClauseIds)
+
+                                    if (sourceClauseNames && sourceClauseNames.length > 0) {
+                                        const sourceIdToName = new Map<string, string>()
+                                        for (const sc of sourceClauseNames) {
+                                            sourceIdToName.set(sc.clause_id, sc.clause_name.toLowerCase().trim())
+                                        }
+
+                                        const nameRangeCopies = sourceRanges
+                                            .map(rm => {
+                                                const sourceName = sourceIdToName.get(rm.clause_id)
+                                                if (!sourceName) return null
+                                                const newClauseId = newClauseByName.get(sourceName)
+                                                if (!newClauseId) return null
+
+                                                const { mapping_id, ...rest } = rm
+                                                return { ...rest, contract_id: newContractId, clause_id: newClauseId }
+                                            })
+                                            .filter(Boolean)
+
+                                        if (nameRangeCopies.length > 0) {
+                                            const { error: nameRangeError } = await supabase
+                                                .from('clause_range_mappings')
+                                                .insert(nameRangeCopies)
+
+                                            if (nameRangeError) {
+                                                console.warn('[Range Copy] Error writing name-matched ranges:', nameRangeError)
+                                            } else {
+                                                console.log(`[Range Copy] ✅ Copied ${nameRangeCopies.length} range mappings via clause_name matching`)
+                                            }
+                                        } else {
+                                            console.log('[Range Copy] No clause_name matches found either')
+                                        }
+                                    } else {
+                                        console.log('[Range Copy] Could not resolve source clause names from range clause_ids')
+                                    }
                                 }
                             }
                         } else {
@@ -714,8 +782,8 @@ function QuickContractCreateContent() {
                     } catch (rangeErr) {
                         console.warn('[Range Copy] Failed to copy range mappings:', rangeErr)
                     }
-                } else if (clausesFromTemplateTable) {
-                    console.log('[Range Copy] Skipped: clauses from template_clauses (no source contract_id)')
+                } else {
+                    console.log('[Range Copy] Skipped: no source contract ID available')
                 }
 
                 // Update times_used
