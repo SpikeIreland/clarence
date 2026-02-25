@@ -240,7 +240,7 @@ const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
     { value: 1, label: 'Maximum Flexibility', description: 'Most flexible terms possible' },
     { value: 2, label: 'Strong Flexibility', description: 'Significantly flexible terms' },
     { value: 3, label: 'Flexible Terms', description: 'Flexibility-leaning but reasonable' },
-    { value: 4, label: 'Slightly Flexible', description: 'Marginally flexibility-favoring' },
+    { value: 4, label: 'Slightly Flexible', description: 'Marginally flexibility-favouring' },
     { value: 5, label: 'Balanced', description: 'Neutral, industry standard' },
     { value: 6, label: 'Slight Protection', description: 'Marginally protective' },
     { value: 7, label: 'Moderate Protection', description: 'Protection-leaning but reasonable' },
@@ -797,7 +797,7 @@ function QuickContractStudioContent() {
                 setChatMessages([{
                     id: 'welcome',
                     role: 'assistant',
-                    content: `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and certified ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
+                    content: `Welcome to the Quick Create Studio! I'm CLARENCE, your contract analysis assistant.\n\nI've reviewed "${displayName}" and analysed ${mappedClauses.filter(c => c.clarenceCertified).length} of ${mappedClauses.length} clauses.\n\nSelect any clause to see my recommended position and analysis. Feel free to ask me questions about specific clauses or the contract as a whole.`,
                     timestamp: new Date()
                 }])
 
@@ -922,7 +922,7 @@ function QuickContractStudioContent() {
                     id: `assistant-${Date.now()}`,
                     role: 'assistant',
                     content: selectedClause
-                        ? `Regarding "${selectedClause.clauseName}": ${selectedClause.clarenceAssessment || selectedClause.clarenceSummary || 'This clause has been reviewed and certified. The recommended position balances both parties\' interests based on industry standards.'}`
+                        ? `Regarding "${selectedClause.clauseName}": ${selectedClause.clarenceAssessment || selectedClause.clarenceSummary || 'This clause has been reviewed and assessed. The recommended position balances both parties\' interests based on industry standards.'}`
                         : "I'm here to help you understand this contract. Please select a clause or ask me a specific question.",
                     timestamp: new Date()
                 }
@@ -1676,7 +1676,7 @@ function QuickContractStudioContent() {
                 .insert({
                     template_code: templateCode,
                     template_name: templateName.trim(),
-                    description: `Certified from uploaded contract: ${contract?.contractName || 'Unknown'}`,
+                    description: `Created from uploaded contract: ${contract?.contractName || 'Unknown'}`,
                     contract_type: contract?.contractType || 'custom',
                     industry: null,
                     is_system: false,
@@ -3199,8 +3199,8 @@ INSTRUCTIONS:
                                 <h1 className="font-semibold text-slate-800">Quick Create Studio</h1>
                                 <p className="text-xs text-slate-500">
                                     {isTemplateMode
-                                        ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
-                                        : 'CLARENCE Certified Review'}
+                                        ? (isCompanyTemplate ? 'Company Template Review' : 'Template Review')
+                                        : 'CLARENCE Contract Review'}
                                 </p>
                             </div>
                         </div>
@@ -3217,7 +3217,7 @@ INSTRUCTIONS:
                         {/* ==================== PARTY IDENTIFICATION ==================== */}
                         {!isTemplateMode && (
                             <div className="flex items-center gap-3 flex-shrink-0">
-                                {/* Initiator (Customer) */}
+                                {/* Initiator (Protected Party) */}
                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
                                     <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
                                     <div className="text-xs">
@@ -3239,7 +3239,7 @@ INSTRUCTIONS:
 
                                 <span className="text-slate-300 text-xs">vs</span>
 
-                                {/* Respondent (Provider) */}
+                                {/* Respondent (Providing Party) */}
                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
                                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
                                     <div className="text-xs">
@@ -3379,9 +3379,9 @@ INSTRUCTIONS:
                                         templateSaved
                                             ? 'Template saved'
                                             : isPolling
-                                                ? `Certifying... ${certifiedCount}/${leafClauses.length}`
+                                                ? `Analysing... ${certifiedCount}/${leafClauses.length}`
                                                 : !allCertified
-                                                    ? `${certifiedCount}/${leafClauses.length} clauses certified — waiting for all`
+                                                    ? `${certifiedCount}/${leafClauses.length} clauses analysed — waiting for all`
                                                     : 'Save this contract as a reusable template'
                                     }
                                 >
@@ -3433,12 +3433,12 @@ INSTRUCTIONS:
                 {/* ======================================================== */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-hidden min-h-0">
 
-                    {/* ==================== CERTIFICATION PROGRESS ==================== */}
+                    {/* ==================== ANALYSIS PROGRESS ==================== */}
                     {isPolling && (
                         <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-emerald-50 flex-shrink-0">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium text-teal-700">
-                                    Certifying clauses...
+                                    Analysing clauses...
                                 </span>
                                 <span className="text-xs text-teal-600">
                                     {certificationProgress.certified}/{certificationProgress.total}
@@ -3951,7 +3951,7 @@ INSTRUCTIONS:
                                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                                     </svg>
-                                                    Certified
+                                                    Reviewed
                                                 </span>
                                             )}
                                         </div>
@@ -4135,7 +4135,7 @@ INSTRUCTIONS:
                                                     ))}
 
                                                     {/* CLARENCE Badge - Only marker shown */}
-                                                    {/* POSITION BAR: Left = Provider-Favouring (1), Right = Customer-Favouring (10) */}
+                                                    {/* POSITION BAR: Left = Providing-Party-Favouring (1), Right = Protected-Party-Favouring (10) */}
                                                     {/* PERSISTENCE: Display user's adjusted position if set, otherwise CLARENCE's */}
                                                     {getUserDisplayPosition(selectedClause) !== null && (
                                                         <div
@@ -4238,18 +4238,9 @@ INSTRUCTIONS:
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <div className="flex justify-between mt-1 px-0">
-                                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                                                <span key={n} className="text-[10px] text-slate-400 font-medium" style={{ width: '11.11%', textAlign: n === 1 ? 'left' : n === 10 ? 'right' : 'center' }}>
-                                                                    {n}
-                                                                </span>
-                                                            ))}
-                                                        </div>
+                                                        {/* No range mapping — show only Provider/Customer scale indicator, no numeric labels */}
                                                         <div className="mt-1">
                                                             <PositionScaleIndicator roleContext={roleContext} variant="full" />
-                                                            <div className="text-center mt-1">
-                                                                <span className="text-xs text-slate-400">Balanced</span>
-                                                            </div>
                                                         </div>
                                                     </>
                                                 )}
@@ -4795,7 +4786,7 @@ INSTRUCTIONS:
                                                                     onClick={handleCreateBalancedDraft}
                                                                     disabled={generatingBalancedDraft || !selectedClause.clarenceCertified}
                                                                     className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                    title={!selectedClause.clarenceCertified ? 'Clause must be certified before generating a balanced draft' : 'Generate a more balanced version of this clause'}
+                                                                    title={!selectedClause.clarenceCertified ? 'Clause must be reviewed before generating a balanced draft' : 'Generate a more balanced version of this clause'}
                                                                 >
                                                                     {generatingBalancedDraft ? (
                                                                         <>
