@@ -3281,27 +3281,88 @@ INSTRUCTIONS:
                             </button>
                         )}
 
-                        {/* Invite Provider Button / Pending State (non-template mode, initiator only) */}
-                        {!isTemplateMode && isInitiator && (
-                            inviteSent || respondentInfo ? (
-                                <div className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Pending
-                                </div>
-                            ) : (
+                        {/* Invite / Progress / Commit Button (non-template mode, initiator only) */}
+                        {!isTemplateMode && isInitiator && (() => {
+                            // State 1: No invite sent and no respondent → show Invite button
+                            if (!inviteSent && !respondentInfo) {
+                                return (
+                                    <button
+                                        onClick={() => setShowInviteModal(true)}
+                                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                        </svg>
+                                        Invite
+                                    </button>
+                                )
+                            }
+
+                            // State 2: Invite sent but respondent hasn't joined yet
+                            if (inviteSent && !respondentInfo) {
+                                return (
+                                    <div className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
+                                        <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Awaiting Respondent
+                                    </div>
+                                )
+                            }
+
+                            // Respondent has joined — calculate agreement progress
+                            const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+                            const bothAgreedCount = leafClauses.filter(c => isBothPartiesAgreed(c.clauseId)).length
+                            const allBothAgreed = leafClauses.length > 0 && bothAgreedCount === leafClauses.length
+                            const contractCommitted = contract?.status === 'committed'
+
+                            // State 5: Contract fully committed → go to Document Centre
+                            if (contractCommitted) {
+                                return (
+                                    <button
+                                        onClick={() => router.push('/auth/document-centre?contract_id=' + contract?.contractId + '&committed=true')}
+                                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Document Centre
+                                    </button>
+                                )
+                            }
+
+                            // State 4: All clauses agreed by both parties → Commit button
+                            if (allBothAgreed) {
+                                return (
+                                    <button
+                                        onClick={() => setCommitModalState('confirm')}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-pulse"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Commit Contract
+                                    </button>
+                                )
+                            }
+
+                            // State 3: Respondent joined, negotiation in progress → show progress + commit option
+                            const myAgreedCount = leafClauses.filter(c => hasCurrentUserAgreed(c.clauseId)).length
+                            const allMyAgreed = leafClauses.length > 0 && myAgreedCount === leafClauses.length
+
+                            return (
                                 <button
-                                    onClick={() => setShowInviteModal(true)}
+                                    onClick={() => setCommitModalState('confirm')}
                                     className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                    title={`${bothAgreedCount}/${leafClauses.length} clauses agreed by both parties`}
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    Invite
+                                    {allMyAgreed ? 'Commit Contract' : `Agree & Commit (${bothAgreedCount}/${leafClauses.length})`}
                                 </button>
                             )
-                        )}
+                        })()}
 
                         {/* Save as Template Button (template mode only) */}
                         {/* Only enabled when polling is finished AND all non-header clauses are certified */}
@@ -3348,6 +3409,61 @@ INSTRUCTIONS:
                                     )}
                                 </button>
                             )
+                        })()}
+
+                        {/* Commit / Progress Button (non-template mode, respondent only) */}
+                        {!isTemplateMode && !isInitiator && (() => {
+                            const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+                            const bothAgreedCount = leafClauses.filter(c => isBothPartiesAgreed(c.clauseId)).length
+                            const allBothAgreed = leafClauses.length > 0 && bothAgreedCount === leafClauses.length
+                            const contractCommitted = contract?.status === 'committed'
+                            const myAgreedCount = leafClauses.filter(c => hasCurrentUserAgreed(c.clauseId)).length
+                            const allMyAgreed = leafClauses.length > 0 && myAgreedCount === leafClauses.length
+
+                            if (contractCommitted) {
+                                return (
+                                    <button
+                                        onClick={() => router.push('/auth/document-centre?contract_id=' + contract?.contractId + '&committed=true')}
+                                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Document Centre
+                                    </button>
+                                )
+                            }
+
+                            if (allBothAgreed) {
+                                return (
+                                    <button
+                                        onClick={() => setCommitModalState('confirm')}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-pulse"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Commit Contract
+                                    </button>
+                                )
+                            }
+
+                            if (leafClauses.length > 0) {
+                                return (
+                                    <button
+                                        onClick={() => setCommitModalState('confirm')}
+                                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                        title={`${bothAgreedCount}/${leafClauses.length} clauses agreed by both parties`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        {allMyAgreed ? 'Commit Contract' : `Agree & Commit (${bothAgreedCount}/${leafClauses.length})`}
+                                    </button>
+                                )
+                            }
+
+                            return null
                         })()}
 
                         <button
