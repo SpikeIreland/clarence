@@ -304,14 +304,54 @@ function QuickContractCreateContent() {
 
         try {
             const parsed = JSON.parse(auth)
+
+            // Resolve companyId — localStorage may not have it
+            let companyId = parsed.companyId || parsed.userInfo?.companyId || ''
+            const userId = parsed.userId || parsed.userInfo?.userId || ''
+            const email = parsed.email || parsed.userInfo?.email || ''
+
+            if (!companyId && email) {
+                // Fallback 1: Look up from company_users table
+                const { data: cuData } = await supabase
+                    .from('company_users')
+                    .select('company_id')
+                    .eq('email', email)
+                    .eq('status', 'active')
+                    .single()
+                if (cuData?.company_id) companyId = cuData.company_id
+            }
+
+            if (!companyId && userId) {
+                // Fallback 2: Look up from users table
+                const { data: uData } = await supabase
+                    .from('users')
+                    .select('company_id')
+                    .eq('user_id', userId)
+                    .single()
+                if (uData?.company_id) companyId = uData.company_id
+            }
+
+            if (!companyId) {
+                console.error('[QC Create] No company_id found for user:', email)
+                setError('Your account is not linked to a company. Please contact your administrator.')
+                return null
+            }
+
+            // Write companyId back to localStorage so future pages don't need the lookup
+            if (!parsed.companyId) {
+                const updated = { ...parsed, companyId }
+                localStorage.setItem('clarence_auth', JSON.stringify(updated))
+                console.log('[QC Create] Patched clarence_auth with companyId:', companyId)
+            }
+
             const info: UserInfo = {
-                firstName: parsed.firstName || '',
-                lastName: parsed.lastName || '',
-                email: parsed.email || '',
-                company: parsed.companyName || parsed.company || '',
-                companyId: parsed.companyId || '',
-                role: parsed.role || 'user',
-                userId: parsed.userId || ''
+                firstName: parsed.firstName || parsed.userInfo?.firstName || '',
+                lastName: parsed.lastName || parsed.userInfo?.lastName || '',
+                email,
+                company: parsed.companyName || parsed.company || parsed.userInfo?.company || '',
+                companyId,
+                role: parsed.role || parsed.userInfo?.role || 'user',
+                userId
             }
             setUserInfo(info)
             return info
