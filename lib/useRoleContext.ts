@@ -4,20 +4,20 @@
 // DEPLOY TO: /lib/useRoleContext.ts
 // ============================================================================
 // Usage in QC Studio:
-//   const roleContext = useRoleContext({ contractId, userId })
+//   const { roleContext } = useRoleContext({ contractId, userId })
 //
 // Usage in Contract Studio:
-//   const roleContext = useRoleContext({ sessionId, userId })
+//   const { roleContext } = useRoleContext({ sessionId, userId })
 //
-// Returns RoleContext with "Favours You" / "Favours Them" labels,
-// or falls back to generic Customer/Provider when role data not available.
+// Returns RoleContext with dynamic party labels from the Role Matrix,
+// or falls back gracefully when role data is incomplete or missing.
 // ============================================================================
 
 'use client'
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { getRoleContext, type RoleContext, type PartyRole } from '@/lib/role-matrix'
+import { getRoleContext, getContractType, type RoleContext, type PartyRole } from '@/lib/role-matrix'
 
 
 // ============================================================================
@@ -33,33 +33,24 @@ interface UseRoleContextParams {
 interface UseRoleContextResult {
     roleContext: RoleContext | null
     isLoading: boolean
-    hasRoleData: boolean           // Whether role data exists in DB
+    hasRoleData: boolean           // Whether full role data exists in DB
 }
 
 
 // ============================================================================
-// SECTION 2: DEFAULT FALLBACK CONTEXT
+// SECTION 2: DEFAULT FALLBACK CONTEXTS
 // ============================================================================
-// Used when no role data exists (pre-Phase 1 contracts)
+// Used when no role data at all exists (pre-Phase 1 contracts with no
+// contract_type_key). Uses neutral Party A / Party B labels.
 
-const DEFAULT_CUSTOMER_CONTEXT: RoleContext = {
+const DEFAULT_NEUTRAL_CONTEXT: RoleContext = {
     userPartyRole: 'protected',
-    userRoleLabel: 'Customer',
-    counterpartyRoleLabel: 'Provider',
+    userRoleLabel: 'Party A',
+    counterpartyRoleLabel: 'Party B',
     positionFavorEnd: 10,
-    contractTypeName: 'Service Agreement',
-    protectedPartyLabel: 'Customer',
-    providingPartyLabel: 'Provider',
-}
-
-const DEFAULT_PROVIDER_CONTEXT: RoleContext = {
-    userPartyRole: 'providing',
-    userRoleLabel: 'Provider',
-    counterpartyRoleLabel: 'Customer',
-    positionFavorEnd: 1,
-    contractTypeName: 'Service Agreement',
-    protectedPartyLabel: 'Customer',
-    providingPartyLabel: 'Provider',
+    contractTypeName: 'Contract',
+    protectedPartyLabel: 'Party A',
+    providingPartyLabel: 'Party B',
 }
 
 
@@ -77,22 +68,21 @@ export function useRoleContext({
     const [hasRoleData, setHasRoleData] = useState(false)
 
     useEffect(() => {
-        if (!userId) {
+        if (!contractId && !sessionId) {
             setIsLoading(false)
             return
         }
 
-        const fetchRoleData = async () => {
-            setIsLoading(true)
-            const supabase = createClient()
+        const supabase = createClient()
 
+        async function fetchRoleData() {
             try {
                 let contractTypeKey: string | null = null
                 let initiatorPartyRole: PartyRole | null = null
-                let isInitiator = false
+                let isInitiator = true // Default assumption
 
                 // ============================================================
-                // PATH A: QC Studio - fetch from uploaded_contracts
+                // PATH A: QC Studio — fetch from uploaded_contracts
                 // ============================================================
                 if (contractId) {
                     const { data, error } = await supabase
@@ -109,7 +99,7 @@ export function useRoleContext({
                 }
 
                 // ============================================================
-                // PATH B: Contract Studio - fetch from sessions
+                // PATH B: Contract Studio — fetch from sessions
                 // ============================================================
                 if (sessionId && !contractTypeKey) {
                     const { data, error } = await supabase
@@ -126,10 +116,11 @@ export function useRoleContext({
                 }
 
                 // ============================================================
-                // DERIVE CONTEXT
+                // DERIVE CONTEXT — Three-tier fallback
                 // ============================================================
+
                 if (contractTypeKey && initiatorPartyRole) {
-                    // Role Matrix data exists - derive full context
+                    // TIER 1: Full role data — derive complete context with orientation
                     const context = getRoleContext(
                         contractTypeKey,
                         initiatorPartyRole,
@@ -137,16 +128,38 @@ export function useRoleContext({
                     )
                     setRoleContext(context)
                     setHasRoleData(true)
+
+                } else if (contractTypeKey) {
+                    // TIER 2: Contract type known but party role not set
+                    // Use the correct party LABELS from the type definition
+                    // but without user orientation (we don't know which side they're on)
+                    const typeDef = getContractType(contractTypeKey)
+                    if (typeDef) {
+                        setRoleContext({
+                            userPartyRole: 'protected',              // Assumed — no orientation
+                            userRoleLabel: typeDef.protectedPartyLabel,
+                            counterpartyRoleLabel: typeDef.providingPartyLabel,
+                            positionFavorEnd: 10,                    // Default orientation
+                            contractTypeName: typeDef.contractTypeName,
+                            protectedPartyLabel: typeDef.protectedPartyLabel,
+                            providingPartyLabel: typeDef.providingPartyLabel,
+                        })
+                        setHasRoleData(false) // Partial — labels correct, orientation assumed
+                    } else {
+                        // Type key exists but not in our definitions
+                        setRoleContext(DEFAULT_NEUTRAL_CONTEXT)
+                        setHasRoleData(false)
+                    }
+
                 } else {
-                    // No role data - use fallback based on initiator status
-                    // Pre-Phase 1 contracts assumed initiator = customer
-                    setRoleContext(isInitiator ? DEFAULT_CUSTOMER_CONTEXT : DEFAULT_PROVIDER_CONTEXT)
+                    // TIER 3: No role data at all — use neutral Party A / Party B
+                    setRoleContext(DEFAULT_NEUTRAL_CONTEXT)
                     setHasRoleData(false)
                 }
             } catch (err) {
                 console.error('[useRoleContext] Error fetching role data:', err)
                 // Safe fallback
-                setRoleContext(DEFAULT_CUSTOMER_CONTEXT)
+                setRoleContext(DEFAULT_NEUTRAL_CONTEXT)
                 setHasRoleData(false)
             } finally {
                 setIsLoading(false)
@@ -161,35 +174,32 @@ export function useRoleContext({
 
 
 // ============================================================================
-// SECTION 4: HELPER - GET SCALE LABELS
+// SECTION 4: HELPER — GET SCALE LABELS
 // ============================================================================
 // Convenience function to get the correct labels for position scale ends.
 // Always returns { leftLabel, rightLabel } where left=1, right=10.
 
-export interface ScaleLabels {
-    leftLabel: string       // Position 1 end (providing party favoured)
-    rightLabel: string      // Position 10 end (protected party favoured)
-    leftYouThem: string     // "Favours You" or "Favours Them"
-    rightYouThem: string    // "Favours You" or "Favours Them"
-}
-
-export function getScaleLabels(roleContext: RoleContext | null): ScaleLabels {
+export function getScaleLabels(roleContext: RoleContext | null): {
+    leftLabel: string
+    rightLabel: string
+    leftYouThem: string
+    rightYouThem: string
+} {
     if (!roleContext) {
         return {
-            leftLabel: 'Provider-Favoring',
-            rightLabel: 'Customer-Favoring',
+            leftLabel: 'Party B',
+            rightLabel: 'Party A',
             leftYouThem: '',
             rightYouThem: '',
         }
     }
 
-    const leftParty = roleContext.providingPartyLabel    // Position 1
-    const rightParty = roleContext.protectedPartyLabel   // Position 10
-
+    // Determine "Favours You" / "Favours Them" based on which end favours the user
+    const leftIsYou = roleContext.positionFavorEnd === 1
     return {
-        leftLabel: `${leftParty}-Favoring`,
-        rightLabel: `${rightParty}-Favoring`,
-        leftYouThem: roleContext.positionFavorEnd === 1 ? 'Favours You' : 'Favours Them',
-        rightYouThem: roleContext.positionFavorEnd === 10 ? 'Favours You' : 'Favours Them',
+        leftLabel: roleContext.providingPartyLabel,    // Position 1 favours providing party
+        rightLabel: roleContext.protectedPartyLabel,   // Position 10 favours protected party
+        leftYouThem: leftIsYou ? 'Favours You' : 'Favours Them',
+        rightYouThem: leftIsYou ? 'Favours Them' : 'Favours You',
     }
 }
