@@ -30,7 +30,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
 import { getRoleContext } from '@/lib/role-matrix'
-import FeedbackButton from '@/app/components/FeedbackButton'
+import AuthenticatedHeader from '@/components/AuthenticatedHeader'
 
 
 // ============================================================================
@@ -205,7 +205,6 @@ function HomePageInner() {
     const [error, setError] = useState<string | null>(null)
     const [activeFilter, setActiveFilter] = useState<'all' | 'quick_create' | 'contract_create' | 'training'>('all')
     const [showWelcome, setShowWelcome] = useState(false)
-    const [profileMenuOpen, setProfileMenuOpen] = useState(false)
 
     // ========================================================================
     // SECTION 5B: LOAD USER INFO
@@ -856,108 +855,11 @@ function HomePageInner() {
             {/* ============================================================ */}
             {/* SECTION 8A: HEADER / NAVIGATION                              */}
             {/* ============================================================ */}
-            <header className="h-14 bg-slate-800 flex items-center justify-between px-6 sticky top-0 z-40">
-                {/* Left: CLARENCE branding */}
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">C</span>
-                    </div>
-                    <div>
-                        <span className="text-white font-semibold">CLARENCE</span>
-                        <span className="text-slate-400 text-sm ml-2">Home</span>
-                    </div>
-                </div>
-
-                {/* Centre: Navigation links */}
-                <nav className="hidden md:flex items-center gap-1">
-                    <Link
-                        href="/auth/home"
-                        className="px-3 py-1.5 text-sm font-medium text-white bg-slate-700 rounded-md"
-                    >
-                        Home
-                    </Link>
-                    <Link
-                        href="/auth/quick-contract/create"
-                        className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
-                    >
-                        Quick Create
-                    </Link>
-                    <Link
-                        href="/auth/contracts-dashboard"
-                        className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
-                    >
-                        Contract Create
-                    </Link>
-                    <Link
-                        href="/auth/training"
-                        className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
-                    >
-                        Training
-                    </Link>
-                </nav>
-
-                {/* Right: Profile menu */}
-                <div className="relative">
-                    <button
-                        onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                        className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors"
-                    >
-                        <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center">
-                            <span className="text-sm font-medium text-slate-200">
-                                {userInfo?.firstName?.[0] || 'U'}{userInfo?.lastName?.[0] || ''}
-                            </span>
-                        </div>
-                        <span className="hidden sm:inline text-sm">{userInfo?.firstName || 'User'}</span>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </button>
-
-                    {profileMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
-                            <div className="px-4 py-2 border-b border-slate-100">
-                                <p className="text-sm font-medium text-slate-800">
-                                    {userInfo?.firstName} {userInfo?.lastName}
-                                </p>
-                                <p className="text-xs text-slate-500">{userInfo?.email}</p>
-                                {userInfo?.company && (
-                                    <p className="text-xs text-slate-400 mt-0.5">{userInfo.company}</p>
-                                )}
-                            </div>
-                            <Link
-                                href="/auth/company-admin"
-                                className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                                onClick={() => setProfileMenuOpen(false)}
-                            >
-                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                Company Admin
-                            </Link>
-                            <div className="border-t border-slate-100 mt-1 pt-1">
-                                <button
-                                    onClick={handleSignOut}
-                                    className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                    </svg>
-                                    Sign Out
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </header>
-
-            {/* Close profile menu when clicking outside */}
-            {profileMenuOpen && (
-                <div
-                    className="fixed inset-0 z-30"
-                    onClick={() => setProfileMenuOpen(false)}
-                />
-            )}
+            <AuthenticatedHeader
+                activePage="home"
+                userInfo={userInfo}
+                onSignOut={handleSignOut}
+            />
 
             {/* ============================================================ */}
             {/* SECTION 8B: MAIN CONTENT AREA                                */}
@@ -1070,8 +972,8 @@ function HomePageInner() {
                             key={filter.key}
                             onClick={() => setActiveFilter(filter.key as typeof activeFilter)}
                             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeFilter === filter.key
-                                    ? 'bg-slate-800 text-white font-medium'
-                                    : 'text-slate-600 hover:bg-slate-200 bg-slate-100'
+                                ? 'bg-slate-800 text-white font-medium'
+                                : 'text-slate-600 hover:bg-slate-200 bg-slate-100'
                                 }`}
                         >
                             {filter.label}
@@ -1124,8 +1026,8 @@ function HomePageInner() {
                                 <div
                                     key={`${contract.pathway}-${contract.id}`}
                                     className={`bg-white rounded-xl border shadow-sm p-5 transition-all hover:shadow-md ${contract.isInviteHighlight
-                                            ? 'border-emerald-400 ring-2 ring-emerald-100'
-                                            : 'border-slate-200'
+                                        ? 'border-emerald-400 ring-2 ring-emerald-100'
+                                        : 'border-slate-200'
                                         }`}
                                 >
                                     {/* ---- Invite highlight banner ---- */}
@@ -1160,9 +1062,9 @@ function HomePageInner() {
                                             {/* Row 2: Progress summary */}
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${contract.statusLabel === 'Active' ? STATUS_COLOURS.active
-                                                        : contract.statusLabel === 'Awaiting Response' || contract.statusLabel === 'Invited' ? STATUS_COLOURS.awaiting
-                                                            : contract.statusLabel === 'Completed' ? STATUS_COLOURS.completed
-                                                                : STATUS_COLOURS.draft
+                                                    : contract.statusLabel === 'Awaiting Response' || contract.statusLabel === 'Invited' ? STATUS_COLOURS.awaiting
+                                                        : contract.statusLabel === 'Completed' ? STATUS_COLOURS.completed
+                                                            : STATUS_COLOURS.draft
                                                     }`} />
                                                 <span className="text-sm text-slate-600">
                                                     {contract.progressSummary}
@@ -1267,11 +1169,6 @@ function HomePageInner() {
                 )}
 
             </div>
-
-            {/* ============================================================ */}
-            {/* SECTION 8I: FEEDBACK BUTTON                                   */}
-            {/* ============================================================ */}
-            <FeedbackButton position="bottom-left" />
         </div>
     )
 }
