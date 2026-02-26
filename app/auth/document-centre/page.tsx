@@ -89,6 +89,23 @@ interface UserInfo {
     userId?: string
 }
 
+interface GeneratedDocumentRecord {
+    document_id: string
+    contract_id?: string | null
+    session_id?: string | null
+    document_type: string
+    document_name?: string
+    storage_path?: string | null
+    pdf_public_url?: string | null
+    public_url?: string | null
+    file_size?: number | null
+    mime_type?: string | null
+    status: string  // 'generating', 'generated', 'failed'
+    created_at: string
+    updated_at?: string | null
+    generation_params?: Record<string, unknown> | null
+}
+
 // ============================================================================
 // SECTION 2: CONSTANTS & CONFIGURATION
 // ============================================================================
@@ -504,9 +521,10 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
             </div>
 
             {/* Document Content / Preview */}
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-                <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                    {document.status === 'generating' && (
+            <div className="flex-1 overflow-y-auto bg-slate-50">
+                {/* Generating State */}
+                {document.status === 'generating' && (
+                    <div className="flex items-center justify-center h-full">
                         <div className="text-center py-12">
                             <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                             <p className="text-slate-600 font-medium">Generating {document.name}...</p>
@@ -523,12 +541,69 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
                                 </div>
                             )}
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {document.status !== 'generating' && (
-                        <DocumentContentPreview document={document} session={session} />
-                    )}
-                </div>
+                {/* Ready State with PDF URL — show real PDF in iframe */}
+                {document.status === 'ready' && document.downloadUrl && (
+                    <div className="h-full flex flex-col">
+                        <div className="flex-shrink-0 px-4 py-2 bg-white border-b border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm text-slate-500">
+                                <span>{'\u2705'}</span>
+                                <span>Generated {document.generatedAt
+                                    ? new Date(document.generatedAt).toLocaleString([], {
+                                        day: 'numeric', month: 'short', year: 'numeric',
+                                        hour: '2-digit', minute: '2-digit'
+                                    })
+                                    : ''
+                                }</span>
+                            </div>
+                            <a
+                                href={document.downloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+                            >
+                                {'\u{1F517}'} Open in new tab
+                            </a>
+                        </div>
+                        <iframe
+                            src={document.downloadUrl}
+                            className="flex-1 w-full border-0"
+                            title={`${document.name} Preview`}
+                        />
+                    </div>
+                )}
+
+                {/* Ready State without PDF URL — show placeholder */}
+                {document.status === 'ready' && !document.downloadUrl && (
+                    <div className="p-6">
+                        <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                            <div className="text-center py-8">
+                                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-2xl">{'\u2705'}</span>
+                                </div>
+                                <h3 className="font-semibold text-slate-700 mb-2">{document.name} is Ready</h3>
+                                <p className="text-sm text-slate-500 mb-4">
+                                    Document generated successfully. Click Download PDF to get your copy.
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                    PDF preview unavailable — the download URL could not be resolved.
+                                    Try regenerating the document.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Not Ready States — show static preview placeholders */}
+                {document.status !== 'generating' && document.status !== 'ready' && (
+                    <div className="p-6">
+                        <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                            <DocumentContentPreview document={document} session={session} />
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )
@@ -1088,58 +1163,152 @@ function DocumentCentreContent() {
         }
     }, [supabase])
 
-    // SECTION 11B-3: INITIALIZE DOCUMENTS (mode-aware)
+    // ============================================================================
+    // SECTION 11B-2.5: LOAD GENERATED DOCUMENTS FROM DB
+    // ============================================================================
+    // Queries the generated_documents table to get real statuses and PDF URLs
+    // for any documents that have already been generated for this contract/session.
+    // Returns a Map keyed by document_type for fast lookup during initialisation.
+
+    const loadGeneratedDocuments = useCallback(async (
+        currentMode: DocumentCentreMode,
+        contextId: string
+    ): Promise<Map<string, GeneratedDocumentRecord>> => {
+        const docMap = new Map<string, GeneratedDocumentRecord>()
+
+        try {
+            // Build query based on mode
+            const filterColumn = currentMode === 'quick_contract' ? 'contract_id' : 'session_id'
+
+            const { data, error } = await supabase
+                .from('generated_documents')
+                .select('*')
+                .eq(filterColumn, contextId)
+                .order('created_at', { ascending: false })
+
+            if (error) {
+                console.error('Error loading generated documents:', error)
+                return docMap
+            }
+
+            if (!data || data.length === 0) {
+                console.log('No previously generated documents found')
+                return docMap
+            }
+
+            // Build map — if multiple records exist for the same type,
+            // the first one wins (newest, due to order by desc)
+            for (const row of data) {
+                const docType = row.document_type as string
+                if (docType && !docMap.has(docType)) {
+                    docMap.set(docType, row as GeneratedDocumentRecord)
+                }
+            }
+
+            console.log(`Loaded ${docMap.size} generated document records from DB:`,
+                Array.from(docMap.keys()))
+
+        } catch (err) {
+            console.error('Exception loading generated documents:', err)
+        }
+
+        return docMap
+    }, [supabase])
+
+    // SECTION 11B-3: INITIALIZE DOCUMENTS (mode-aware, DB-merged)
+    // Merges document definitions with real status from generated_documents table.
+    // DB record status mapping:
+    //   'generated' → ready (has PDF URL)
+    //   'generating' → generating (workflow in progress)
+    //   'failed' → in_progress (can retry)
+    //   no record → in_progress (not yet generated)
+
     const initializeDocuments = useCallback((
         currentMode: DocumentCentreMode,
+        dbRecords: Map<string, GeneratedDocumentRecord>,
         sessionData?: Session | null,
         qcData?: QuickContractData | null
     ): DocumentItem[] => {
         const availableDefs = getDocumentsForMode(currentMode)
 
         return availableDefs.map(def => {
-            let status: DocumentStatus = 'locked'
-            let progress = 0
+            // Check if we have a DB record for this document type
+            const dbRecord = dbRecords.get(def.id)
 
-            // For QC mode: all docs start as in_progress (no prerequisites blocking)
-            if (currentMode === 'quick_contract') {
-                if (def.prerequisites.length === 0) {
-                    status = 'in_progress'
-                } else {
-                    // For contract-draft, require executive-summary
-                    // But for initial load, unlock everything
-                    status = 'in_progress'
-                }
-            } else {
-                // Mediation mode: existing logic
-                const prerequisitesMet = def.prerequisites.every(prereqId => {
-                    return false
-                })
+            // If a DB record exists, use its real status
+            if (dbRecord) {
+                const dbStatus = dbRecord.status
 
-                if (def.prerequisites.length === 0) {
-                    status = 'in_progress'
-                    progress = 0
-                } else if (prerequisitesMet) {
-                    status = 'in_progress'
-                    progress = 0
-                } else {
-                    status = 'locked'
-                }
+                if (dbStatus === 'generated') {
+                    // Document is ready — extract PDF URL from whichever column has it
+                    const downloadUrl = dbRecord.storage_path
+                        || dbRecord.pdf_public_url
+                        || dbRecord.public_url
+                        || undefined
 
-                // If alignment is high, some docs might be ready
-                if (sessionData && sessionData.alignmentPercentage >= 50) {
-                    if (def.id === 'executive-summary' || def.id === 'leverage-report') {
-                        status = 'ready'
-                        progress = 100
+                    return {
+                        ...def,
+                        status: 'ready' as DocumentStatus,
+                        progress: 100,
+                        generatedAt: dbRecord.updated_at || dbRecord.created_at,
+                        downloadUrl: downloadUrl || undefined,
+                        documentDbId: dbRecord.document_id,
+                        canGenerate: true
                     }
+                }
+
+                if (dbStatus === 'generating') {
+                    // Workflow is currently running
+                    return {
+                        ...def,
+                        status: 'generating' as DocumentStatus,
+                        progress: 50,
+                        generatedAt: undefined,
+                        downloadUrl: undefined,
+                        documentDbId: dbRecord.document_id,
+                        canGenerate: false
+                    }
+                }
+
+                // 'failed' or any other status — allow retry
+                return {
+                    ...def,
+                    status: 'in_progress' as DocumentStatus,
+                    progress: 0,
+                    generatedAt: undefined,
+                    downloadUrl: undefined,
+                    documentDbId: dbRecord.document_id,
+                    canGenerate: true
+                }
+            }
+
+            // No DB record — determine initial status from prerequisites
+            let status: DocumentStatus = 'in_progress'
+
+            if (currentMode === 'quick_contract') {
+                // QC mode: all docs start as in_progress (no prerequisites blocking)
+                status = 'in_progress'
+            } else {
+                // Mediation mode: check prerequisites
+                if (def.prerequisites.length === 0) {
+                    status = 'in_progress'
+                } else {
+                    // Check if prerequisite docs are ready in DB
+                    const prerequisitesMet = def.prerequisites.every(prereqId =>
+                        dbRecords.has(prereqId) && dbRecords.get(prereqId)?.status === 'generated'
+                    )
+                    status = prerequisitesMet ? 'in_progress' : 'locked'
                 }
             }
 
             return {
                 ...def,
                 status,
-                progress,
-                generatedAt: status === 'ready' ? new Date().toISOString() : undefined,
-                downloadUrl: undefined
+                progress: 0,
+                generatedAt: undefined,
+                downloadUrl: undefined,
+                documentDbId: undefined,
+                canGenerate: status === 'in_progress'
             }
         })
     }, [])
@@ -1167,7 +1336,11 @@ function DocumentCentreContent() {
                 const qcData = await loadQuickContractData(contractId)
                 if (qcData) {
                     setQuickContract(qcData)
-                    const docs = initializeDocuments('quick_contract', null, qcData)
+
+                    // Load real document statuses from DB
+                    const dbRecords = await loadGeneratedDocuments('quick_contract', contractId)
+
+                    const docs = initializeDocuments('quick_contract', dbRecords, null, qcData)
                     setDocuments(docs)
 
                     // Auto-select first available document
@@ -1176,16 +1349,28 @@ function DocumentCentreContent() {
                         setSelectedDocument(firstAvailable)
                     }
 
-                    // Welcome message
+                    // Build welcome message showing which docs are already ready
+                    const readyDocs = docs.filter(d => d.status === 'ready')
+                    const pendingDocs = docs.filter(d => d.status === 'in_progress')
                     const statusNote = isCommitted
                         ? 'Your contract has been committed and is ready for documentation.'
                         : 'Your contract is in progress.'
+
+                    let readySummary = ''
+                    if (readyDocs.length > 0) {
+                        readySummary = `\n\n${readyDocs.length} document${readyDocs.length > 1 ? 's are' : ' is'} already generated and ready to download:\n${readyDocs.map(d => `\u2705 ${d.name}`).join('\n')}`
+                    }
+
+                    let pendingSummary = ''
+                    if (pendingDocs.length > 0) {
+                        pendingSummary = `\n\n${pendingDocs.length} document${pendingDocs.length > 1 ? 's' : ''} can be generated:\n${pendingDocs.map(d => `\u25CB ${d.name}`).join('\n')}`
+                    }
 
                     setChatMessages([{
                         messageId: 'welcome-1',
                         sessionId: contractId,
                         sender: 'clarence',
-                        message: `Welcome to the Document Centre for "${qcData.contractName}".\n\n${statusNote}\n\nI can generate the following documents for you:\n\u2022 Executive Summary - overview for leadership sign-off\n\u2022 Position History - how each clause was assessed\n\u2022 Chat Transcript - all communications\n\u2022 Timeline & Audit Log - chronological event record\n\u2022 Contract Draft - final clause-by-clause agreement\n\nSelect a document from the list and click Generate to begin.`,
+                        message: `Welcome to the Document Centre for "${qcData.contractName}".\n\n${statusNote}${readySummary}${pendingSummary}\n\nSelect a document from the list to preview, generate, or download.`,
                         createdAt: new Date().toISOString()
                     }])
 
@@ -1212,7 +1397,11 @@ function DocumentCentreContent() {
                 const sessionData = await loadSessionData(sessionId)
                 if (sessionData) {
                     setSession(sessionData)
-                    const docs = initializeDocuments('mediation', sessionData, null)
+
+                    // Load real document statuses from DB
+                    const dbRecords = await loadGeneratedDocuments('mediation', sessionId)
+
+                    const docs = initializeDocuments('mediation', dbRecords, sessionData, null)
                     setDocuments(docs)
 
                     // Auto-select first available document
@@ -1221,12 +1410,18 @@ function DocumentCentreContent() {
                         setSelectedDocument(firstAvailable)
                     }
 
-                    // Add welcome message
+                    // Build welcome message showing real status
+                    const readyDocs = docs.filter(d => d.status === 'ready')
+                    let readySummary = ''
+                    if (readyDocs.length > 0) {
+                        readySummary = `\n\n${readyDocs.length} document${readyDocs.length > 1 ? 's are' : ' is'} already generated:\n${readyDocs.map(d => `\u2705 ${d.name}`).join('\n')}`
+                    }
+
                     setChatMessages([{
                         messageId: 'welcome-1',
                         sessionId: sessionId,
                         sender: 'clarence',
-                        message: `Welcome to the Document Centre. I'm here to help you prepare all documentation for the ${sessionData.customerCompany} and ${sessionData.providerCompany} negotiation.\n\nYou can generate individual documents or ask me questions about any of them. When all documents are ready, you'll be able to download the complete Evidence Package.`,
+                        message: `Welcome to the Document Centre. I'm here to help you prepare all documentation for the ${sessionData.customerCompany} and ${sessionData.providerCompany} negotiation.${readySummary}\n\nYou can generate individual documents or ask me questions about any of them. When all documents are ready, you'll be able to download the complete Evidence Package.`,
                         createdAt: new Date().toISOString()
                     }])
 
@@ -1250,7 +1445,7 @@ function DocumentCentreContent() {
         }
 
         init()
-    }, [loadUserInfo, loadSessionData, loadQuickContractData, initializeDocuments, searchParams, router])
+    }, [loadUserInfo, loadSessionData, loadQuickContractData, loadGeneratedDocuments, initializeDocuments, searchParams, router])
 
     // ============================================================================
     // SECTION 11C: EVENT HANDLERS
@@ -1288,6 +1483,10 @@ function DocumentCentreContent() {
             return;
         }
 
+        // Detect if this is a regeneration (document already has a URL or was previously ready)
+        const existingDoc = documents.find(d => d.id === documentId)
+        const isRegeneration = existingDoc?.status === 'ready' || !!existingDoc?.downloadUrl
+
         // Update document status to generating
         setDocuments(prev => prev.map(doc =>
             doc.id === documentId
@@ -1296,12 +1495,23 @@ function DocumentCentreContent() {
         ));
         setIsGeneratingDocument(true);
 
+        // Update selected document to show generating state
+        if (selectedDocument?.id === documentId) {
+            setSelectedDocument(prev => prev ? {
+                ...prev,
+                status: 'generating' as DocumentStatus,
+                progress: 0
+            } : null);
+        }
+
         // Add CLARENCE message
         const generatingMessage: ClarenceChatMessage = {
             messageId: `msg-${Date.now()}`,
             sessionId: contextId,
             sender: 'clarence',
-            message: `I'm generating the ${documentId.replace(/-/g, ' ')} now. This typically takes 15-30 seconds...`,
+            message: isRegeneration
+                ? `I'm regenerating the ${documentId.replace(/-/g, ' ')} with the latest data. This typically takes 15-30 seconds...`
+                : `I'm generating the ${documentId.replace(/-/g, ' ')} now. This typically takes 15-30 seconds...`,
             createdAt: new Date().toISOString()
         };
         setChatMessages(prev => [...prev, generatingMessage]);
@@ -1323,7 +1533,7 @@ function DocumentCentreContent() {
                     user_id: userInfo.userId,
                     mode: 'quick_contract',
                     format: 'pdf',
-                    regenerate: false
+                    regenerate: isRegeneration
                 }
                 : {
                     session_id: session?.sessionId,
@@ -1331,7 +1541,7 @@ function DocumentCentreContent() {
                     provider_id: session?.providerId,
                     mode: 'mediation',
                     format: 'pdf',
-                    regenerate: false
+                    regenerate: isRegeneration
                 }
 
             const response = await fetch(endpoint, {
@@ -1351,38 +1561,47 @@ function DocumentCentreContent() {
             const result = await response.json();
 
             if (result.success) {
-                // Update document with result
+                const newDownloadUrl = result.downloads?.pdf || result.pdf_public_url
+                const newGeneratedAt = result.generated_at || new Date().toISOString()
+                const newDocDbId = result.document_id
+
+                // Update document in list
                 setDocuments(prev => prev.map(doc =>
                     doc.id === documentId
                         ? {
                             ...doc,
                             status: 'ready' as DocumentStatus,
                             progress: 100,
-                            downloadUrl: result.downloads?.pdf || result.pdf_public_url,
-                            generatedAt: result.generated_at,
-                            documentDbId: result.document_id
+                            downloadUrl: newDownloadUrl,
+                            generatedAt: newGeneratedAt,
+                            documentDbId: newDocDbId
                         }
                         : doc
                 ));
-
-                // Success message from CLARENCE
-                const successMessage: ClarenceChatMessage = {
-                    messageId: `msg-${Date.now()}`,
-                    sessionId: contextId,
-                    sender: 'clarence',
-                    message: `\u2705 Your ${documentId.replace(/-/g, ' ')} is ready! Click the download button to get your PDF.`,
-                    createdAt: new Date().toISOString()
-                };
-                setChatMessages(prev => [...prev, successMessage]);
 
                 // Update selected document if it's the one we just generated
                 if (selectedDocument?.id === documentId) {
                     setSelectedDocument(prev => prev ? {
                         ...prev,
                         status: 'ready' as DocumentStatus,
-                        downloadUrl: result.downloads?.pdf || result.pdf_public_url
+                        progress: 100,
+                        downloadUrl: newDownloadUrl,
+                        generatedAt: newGeneratedAt,
+                        documentDbId: newDocDbId
                     } : null);
                 }
+
+                // Success message from CLARENCE
+                const successMessage: ClarenceChatMessage = {
+                    messageId: `msg-${Date.now()}`,
+                    sessionId: contextId,
+                    sender: 'clarence',
+                    message: isRegeneration
+                        ? `\u2705 Your ${documentId.replace(/-/g, ' ')} has been regenerated with the latest data. The preview is now updated.`
+                        : `\u2705 Your ${documentId.replace(/-/g, ' ')} is ready! You can preview it in the centre panel or click Download PDF.`,
+                    createdAt: new Date().toISOString()
+                };
+                setChatMessages(prev => [...prev, successMessage]);
 
             } else {
                 throw new Error(result.error || 'Generation failed');
@@ -1392,12 +1611,21 @@ function DocumentCentreContent() {
             clearInterval(progressInterval);
             console.error('Document generation error:', error);
 
-            // Update document status to show error
+            // Update document status to show error — revert to in_progress for retry
             setDocuments(prev => prev.map(doc =>
                 doc.id === documentId
                     ? { ...doc, status: 'in_progress' as DocumentStatus, progress: 0 }
                     : doc
             ));
+
+            // Update selected document too
+            if (selectedDocument?.id === documentId) {
+                setSelectedDocument(prev => prev ? {
+                    ...prev,
+                    status: 'in_progress' as DocumentStatus,
+                    progress: 0
+                } : null);
+            }
 
             // Error message from CLARENCE
             const errorMessage: ClarenceChatMessage = {
