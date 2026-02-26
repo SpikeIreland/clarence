@@ -741,15 +741,12 @@ function HomePageInner() {
     // SECTION 5H: COMPUTED VALUES
     // ========================================================================
 
-    /** All contracts — completed ones sort to the bottom, invite highlights to the top */
+    /** All contracts — sorted by most recent activity, invite highlights pinned to top */
     const sortedContracts = [...contracts].sort((a, b) => {
         // Invite highlights always first
         if (a.isInviteHighlight && !b.isInviteHighlight) return -1
         if (!a.isInviteHighlight && b.isInviteHighlight) return 1
-        // Completed contracts sort to the bottom
-        if (a.statusLabel === 'Completed' && b.statusLabel !== 'Completed') return 1
-        if (a.statusLabel !== 'Completed' && b.statusLabel === 'Completed') return -1
-        // Then sort by last activity
+        // Then sort by last activity (most recent first)
         return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
     })
 
