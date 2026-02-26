@@ -1973,6 +1973,40 @@ function DocumentCentreContent() {
                 const newGeneratedAt = result.generated_at || new Date().toISOString()
                 const newDocDbId = result.document_id
 
+                // PERSIST the PDF URL back to the generated_documents row
+                // so it's available on next page load (N8N workflows may not
+                // always populate storage_path_pdf or generation_params)
+                if (newDocDbId && newDownloadUrl) {
+                    // Extract relative path from full URL for storage_path_pdf
+                    const storageBase = 'https://wlrlkvqiakaiydfqqdmu.supabase.co/storage/v1/object/public/documents/'
+                    const relativePath = newDownloadUrl.startsWith(storageBase)
+                        ? newDownloadUrl.replace(storageBase, '')
+                        : null
+
+                    const updateData: Record<string, unknown> = {
+                        generation_params: JSON.stringify({
+                            public_url: newDownloadUrl,
+                            persisted_by: 'document_centre_frontend'
+                        }),
+                        updated_at: new Date().toISOString()
+                    }
+                    if (relativePath) {
+                        updateData.storage_path_pdf = relativePath
+                    }
+
+                    supabase
+                        .from('generated_documents')
+                        .update(updateData)
+                        .eq('document_id', newDocDbId)
+                        .then(({ error: updateError }) => {
+                            if (updateError) {
+                                console.warn('[DocCentre] Could not persist PDF URL to DB:', updateError)
+                            } else {
+                                console.log(`[DocCentre] Persisted PDF URL for "${documentId}" to generated_documents`)
+                            }
+                        })
+                }
+
                 // Update document in list
                 setDocuments(prev => prev.map(doc =>
                     doc.id === documentId
