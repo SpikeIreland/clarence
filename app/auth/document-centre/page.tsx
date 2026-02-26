@@ -66,6 +66,7 @@ interface QuickContractData {
     certifiedClauses: number
     agreedClauses: number
     modifiedClauses: number
+    alignmentPercentage: number
     committedAt: string | null
     uploadedByUserId: string | null
     companyId: string | null
@@ -480,12 +481,13 @@ function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePa
 interface DocumentPreviewProps {
     document: DocumentItem | null
     session: Session | null
+    quickContract: QuickContractData | null
     onGenerate: (docId: DocumentId) => void
     onDownload: (docId: DocumentId, format: 'pdf' | 'docx') => void
     isGenerating: boolean
 }
 
-function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGenerating }: DocumentPreviewProps) {
+function DocumentPreviewPanel({ document, session, quickContract, onGenerate, onDownload, isGenerating }: DocumentPreviewProps) {
     if (!document) {
         return (
             <div className="flex-1 flex items-center justify-center bg-slate-50 p-8">
@@ -635,7 +637,7 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
                 {document.status !== 'generating' && document.status !== 'ready' && (
                     <div className="p-6">
                         <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                            <DocumentContentPreview document={document} session={session} />
+                            <DocumentContentPreview document={document} session={session} quickContract={quickContract} />
                         </div>
                     </div>
                 )}
@@ -648,28 +650,62 @@ function DocumentPreviewPanel({ document, session, onGenerate, onDownload, isGen
 // SECTION 8: DOCUMENT VIEW SUB-COMPONENTS
 // ============================================================================
 
-function DocumentContentPreview({ document, session }: { document: DocumentItem; session: Session | null }) {
+function DocumentContentPreview({ document, session, quickContract }: { document: DocumentItem; session: Session | null; quickContract: QuickContractData | null }) {
+    // Derive display values — prefer session (mediation) data, fall back to quickContract (QC) data
+    const alignmentPct = session?.alignmentPercentage ?? quickContract?.alignmentPercentage ?? 0
+    const partyALabel = session ? 'Customer' : 'Initiator'
+    const partyBLabel = session ? 'Provider' : 'Respondent'
+    const partyAName = session?.customerCompany || quickContract?.contractName || 'Party A'
+    const partyBName = session?.providerCompany || 'Party B'
+
     switch (document.id) {
         case 'executive-summary':
             return (
                 <div className="prose prose-sm max-w-none">
                     <div className="text-center mb-6">
                         <h1 className="text-2xl font-bold text-slate-800 mb-2">{'\u{1F4CB}'} EXECUTIVE SUMMARY</h1>
-                        <p className="text-slate-500">Negotiation Outcome for {session?.customerCompany} & {session?.providerCompany}</p>
+                        <p className="text-slate-500">
+                            {session
+                                ? `Negotiation Outcome for ${partyAName} & ${partyBName}`
+                                : `Contract Review: ${quickContract?.contractName || 'Untitled'}`
+                            }
+                        </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="p-4 bg-emerald-50 rounded-lg">
-                            <div className="text-xs text-emerald-600 mb-1">Customer</div>
-                            <div className="font-semibold text-emerald-800">{session?.customerCompany}</div>
+                    {session && (
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="p-4 bg-emerald-50 rounded-lg">
+                                <div className="text-xs text-emerald-600 mb-1">{partyALabel}</div>
+                                <div className="font-semibold text-emerald-800">{partyAName}</div>
+                            </div>
+                            <div className="p-4 bg-blue-50 rounded-lg">
+                                <div className="text-xs text-blue-600 mb-1">{partyBLabel}</div>
+                                <div className="font-semibold text-blue-800">{partyBName}</div>
+                            </div>
                         </div>
-                        <div className="p-4 bg-blue-50 rounded-lg">
-                            <div className="text-xs text-blue-600 mb-1">Provider</div>
-                            <div className="font-semibold text-blue-800">{session?.providerCompany}</div>
+                    )}
+                    {quickContract && !session && (
+                        <div className="grid grid-cols-3 gap-4 mb-6">
+                            <div className="p-4 bg-emerald-50 rounded-lg text-center">
+                                <div className="text-2xl font-bold text-emerald-600">{quickContract.agreedClauses}</div>
+                                <div className="text-xs text-emerald-600 mt-1">Agreed</div>
+                            </div>
+                            <div className="p-4 bg-amber-50 rounded-lg text-center">
+                                <div className="text-2xl font-bold text-amber-600">{quickContract.totalClauses - quickContract.agreedClauses}</div>
+                                <div className="text-xs text-amber-600 mt-1">Pending</div>
+                            </div>
+                            <div className="p-4 bg-slate-50 rounded-lg text-center">
+                                <div className="text-2xl font-bold text-slate-600">{quickContract.totalClauses}</div>
+                                <div className="text-xs text-slate-500 mt-1">Total Clauses</div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                     <div className="text-center p-6 bg-slate-50 rounded-lg">
-                        <div className="text-4xl font-bold text-emerald-600">{session?.alignmentPercentage || 0}%</div>
-                        <div className="text-sm text-slate-500 mt-1">Overall Alignment</div>
+                        <div className={`text-4xl font-bold ${alignmentPct >= 80 ? 'text-emerald-600' : alignmentPct >= 50 ? 'text-amber-600' : 'text-slate-400'}`}>
+                            {alignmentPct}%
+                        </div>
+                        <div className="text-sm text-slate-500 mt-1">
+                            {session ? 'Overall Alignment' : 'Clause Agreement'}
+                        </div>
                     </div>
                     <p className="text-xs text-slate-400 text-center mt-6">
                         Generated by CLARENCE - The Honest Broker
@@ -1432,32 +1468,52 @@ function DocumentCentreContent() {
             const certifiedCount = leafClauses.filter((c: Record<string, unknown>) => c.clarence_certified).length
             const modifiedCount = leafClauses.filter((c: Record<string, unknown>) => !!c.draft_text).length
 
-            // Load agreement events
+            // Load agreement events from qc_clause_events (matches QC Studio table)
             const { data: eventsData } = await supabase
-                .from('clause_events')
-                .select('event_type, clause_id')
+                .from('qc_clause_events')
+                .select('event_type, clause_id, party_role')
                 .eq('contract_id', contractId)
+                .order('created_at', { ascending: true })
 
-            // Count agreed clauses (latest state per clause)
-            const agreedSet = new Set<string>()
-            const withdrawnSet = new Set<string>()
+            // Dual-party agreement tracking (matches QC Studio logic)
+            // Both initiator AND respondent must agree for a clause to be "fully agreed"
+            const initiatorAgreed = new Set<string>()
+            const respondentAgreed = new Set<string>()
             let committedAt: string | null = null
 
             if (eventsData) {
                 for (const evt of eventsData) {
                     if (evt.event_type === 'agreed' && evt.clause_id) {
-                        agreedSet.add(evt.clause_id)
-                        withdrawnSet.delete(evt.clause_id)
+                        if (evt.party_role === 'initiator') {
+                            initiatorAgreed.add(evt.clause_id)
+                        } else if (evt.party_role === 'respondent') {
+                            respondentAgreed.add(evt.clause_id)
+                        }
                     }
                     if (evt.event_type === 'agreement_withdrawn' && evt.clause_id) {
-                        withdrawnSet.add(evt.clause_id)
-                        agreedSet.delete(evt.clause_id)
+                        if (evt.party_role === 'initiator') {
+                            initiatorAgreed.delete(evt.clause_id)
+                        } else if (evt.party_role === 'respondent') {
+                            respondentAgreed.delete(evt.clause_id)
+                        }
                     }
                     if (evt.event_type === 'committed') {
                         committedAt = new Date().toISOString()
                     }
                 }
             }
+
+            // Fully agreed = both parties agreed on the clause
+            const fullyAgreedCount = leafClauses.filter((c: Record<string, unknown>) =>
+                c.clarence_certified &&
+                initiatorAgreed.has(c.clause_id as string) &&
+                respondentAgreed.has(c.clause_id as string)
+            ).length
+
+            // Calculate alignment percentage from agreement ratio
+            const alignmentPercentage = leafClauses.length > 0
+                ? Math.round((fullyAgreedCount / leafClauses.length) * 100)
+                : 0
 
             return {
                 contractId: contractData.contract_id,
@@ -1467,8 +1523,9 @@ function DocumentCentreContent() {
                 clauseCount: contractData.clause_count || leafClauses.length,
                 totalClauses: leafClauses.length,
                 certifiedClauses: certifiedCount,
-                agreedClauses: agreedSet.size,
+                agreedClauses: fullyAgreedCount,
                 modifiedClauses: modifiedCount,
+                alignmentPercentage,
                 committedAt,
                 uploadedByUserId: contractData.uploaded_by_user_id,
                 companyId: contractData.company_id,
@@ -3012,6 +3069,7 @@ function DocumentCentreContent() {
                     <DocumentPreviewPanel
                         document={selectedDocument}
                         session={session}
+                        quickContract={quickContract}
                         onGenerate={handleGenerateDocument}
                         onDownload={handleDownloadDocument}
                         isGenerating={isGeneratingDocument}
