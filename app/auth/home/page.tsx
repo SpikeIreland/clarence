@@ -86,8 +86,10 @@ const PATHWAY_BADGES: Record<string, { label: string; bg: string; text: string }
     quick_create: { label: 'Quick Create', bg: 'bg-emerald-100', text: 'text-emerald-700' },
     contract_create: { label: 'Contract Create', bg: 'bg-blue-100', text: 'text-blue-700' },
     co_create: { label: 'Co-Create', bg: 'bg-violet-100', text: 'text-violet-700' },
+    tendering: { label: 'Tendering', bg: 'bg-orange-100', text: 'text-orange-700' },
     training: { label: 'Training', bg: 'bg-amber-100', text: 'text-amber-700' },
 }
+
 
 /** Status colours for progress indicators */
 const STATUS_COLOURS: Record<string, string> = {
@@ -203,7 +205,7 @@ function HomePageInner() {
     })
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [activeFilter, setActiveFilter] = useState<'all' | 'quick_create' | 'contract_create' | 'training'>('all')
+    const [activeFilter, setActiveFilter] = useState<'all' | 'quick_create' | 'contract_create' | 'co_create' | 'tendering' | 'training'>('all')
     const [showWelcome, setShowWelcome] = useState(false)
 
     // ========================================================================
@@ -963,18 +965,20 @@ function HomePageInner() {
                 {/* ======================================================== */}
                 {/* SECTION 8F: PATHWAY FILTER TABS                           */}
                 {/* ======================================================== */}
-                <div className="flex items-center gap-2 mb-6">
-                    <span className="text-sm font-medium text-slate-500 mr-2">Filter:</span>
+                <div className="flex items-center gap-2 mb-6 overflow-x-auto">
+                    <span className="text-sm font-medium text-slate-500 mr-2 flex-shrink-0">Filter:</span>
                     {[
                         { key: 'all', label: 'All' },
                         { key: 'quick_create', label: 'Quick Create' },
                         { key: 'contract_create', label: 'Contract Create' },
+                        { key: 'co_create', label: 'Co-Create' },
+                        { key: 'tendering', label: 'Tendering' },
                         { key: 'training', label: 'Training' },
                     ].map(filter => (
                         <button
                             key={filter.key}
                             onClick={() => setActiveFilter(filter.key as typeof activeFilter)}
-                            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeFilter === filter.key
+                            className={`px-3 py-1.5 text-sm rounded-md transition-colors flex-shrink-0 ${activeFilter === filter.key
                                 ? 'bg-slate-800 text-white font-medium'
                                 : 'text-slate-600 hover:bg-slate-200 bg-slate-100'
                                 }`}
