@@ -397,26 +397,31 @@ interface EvidencePackageProps {
 function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePackageProps) {
     const readyCount = documents.filter(d => d.status === 'ready' || d.status === 'final').length
     const totalCount = documents.length
-    const isUnlocked = readyCount === totalCount
+    const allReady = readyCount === totalCount
+    const hasAnyReady = readyCount > 0
 
     return (
-        <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${isUnlocked
+        <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${allReady
             ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300'
-            : 'bg-slate-50 border-slate-200'
+            : hasAnyReady
+                ? 'bg-gradient-to-br from-blue-50 to-slate-50 border-blue-200'
+                : 'bg-slate-50 border-slate-200'
             }`}>
             <div className="flex items-center gap-3 mb-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${isUnlocked ? 'bg-emerald-100' : 'bg-slate-200'
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${allReady ? 'bg-emerald-100' : hasAnyReady ? 'bg-blue-100' : 'bg-slate-200'
                     }`}>
                     {'\u{1F4E6}'}
                 </div>
                 <div className="flex-1">
-                    <h3 className={`font-semibold ${isUnlocked ? 'text-emerald-800' : 'text-slate-600'}`}>
+                    <h3 className={`font-semibold ${allReady ? 'text-emerald-800' : hasAnyReady ? 'text-blue-800' : 'text-slate-600'}`}>
                         Evidence Package
                     </h3>
                     <p className="text-xs text-slate-500">
-                        {isUnlocked
-                            ? 'All documents ready - download complete package'
-                            : `${readyCount}/${totalCount} documents ready`
+                        {allReady
+                            ? 'All documents ready \u2014 download complete package'
+                            : hasAnyReady
+                                ? `${readyCount}/${totalCount} ready \u2014 download available documents`
+                                : `${readyCount}/${totalCount} documents ready`
                         }
                     </p>
                 </div>
@@ -425,35 +430,42 @@ function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePa
             {/* Progress Bar */}
             <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-3">
                 <div
-                    className={`h-full transition-all duration-500 ${isUnlocked ? 'bg-emerald-500' : 'bg-blue-500'
+                    className={`h-full transition-all duration-500 ${allReady ? 'bg-emerald-500' : 'bg-blue-500'
                         }`}
-                    style={{ width: `${(readyCount / totalCount) * 100}%` }}
+                    style={{ width: `${totalCount > 0 ? (readyCount / totalCount) * 100 : 0}%` }}
                 />
             </div>
 
             {/* Download Button */}
             <button
                 onClick={onDownload}
-                disabled={!isUnlocked || isGenerating}
-                className={`w-full py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 ${isUnlocked && !isGenerating
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                disabled={!hasAnyReady || isGenerating}
+                className={`w-full py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 ${hasAnyReady && !isGenerating
+                    ? allReady
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                     }`}
             >
                 {isGenerating ? (
                     <>
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Generating Package...
+                        Assembling Package...
                     </>
-                ) : isUnlocked ? (
+                ) : allReady ? (
                     <>
                         <span>{'\u2B07\uFE0F'}</span>
                         Download ZIP Package
                     </>
+                ) : hasAnyReady ? (
+                    <>
+                        <span>{'\u2B07\uFE0F'}</span>
+                        Download {readyCount} Ready
+                    </>
                 ) : (
                     <>
                         <span>{'\u{1F512}'}</span>
-                        Complete All Documents First
+                        Generate Documents First
                     </>
                 )}
             </button>
@@ -2045,14 +2057,145 @@ function DocumentCentreContent() {
         const contextId = mode === 'quick_contract' ? quickContract?.contractId : session?.sessionId
         if (!contextId) return
 
+        // Collect all ready documents with download URLs
+        const readyDocs = documents.filter(d => d.status === 'ready' && d.downloadUrl)
+        if (readyDocs.length === 0) {
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: 'No documents are ready for download yet. Generate all documents first, then download the Evidence Package.',
+                createdAt: new Date().toISOString()
+            }])
+            return
+        }
+
         setIsGeneratingPackage(true)
 
+        // CLARENCE progress message
+        setChatMessages(prev => [...prev, {
+            messageId: `msg-${Date.now()}`,
+            sessionId: contextId,
+            sender: 'clarence',
+            message: `Assembling Evidence Package with ${readyDocs.length} document${readyDocs.length > 1 ? 's' : ''}. This may take a moment...`,
+            createdAt: new Date().toISOString()
+        }])
+
         try {
-            // TODO: Call API to generate and download package
-            await new Promise(resolve => setTimeout(resolve, 2000))
-            alert('Evidence Package download - Coming soon!')
+            // Dynamic import of JSZip (keeps bundle size down for non-ZIP pages)
+            const JSZip = (await import('jszip')).default
+            const zip = new JSZip()
+
+            // Build a contract name for the ZIP filename
+            const contractName = mode === 'quick_contract'
+                ? (quickContract?.contractName || 'Contract')
+                : `${session?.customerCompany || 'Customer'}_${session?.providerCompany || 'Provider'}`
+            const safeName = contractName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50)
+
+            // Fetch each PDF and add to ZIP
+            let successCount = 0
+            let failCount = 0
+
+            for (const doc of readyDocs) {
+                try {
+                    const response = await fetch(doc.downloadUrl!)
+                    if (!response.ok) {
+                        console.error(`Failed to fetch ${doc.name}: HTTP ${response.status}`)
+                        failCount++
+                        continue
+                    }
+
+                    const blob = await response.blob()
+                    // Create a clean filename: "01_Executive_Summary.pdf"
+                    const index = String(successCount + failCount + 1).padStart(2, '0')
+                    const cleanName = doc.name.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, '_')
+                    const filename = `${index}_${cleanName}.pdf`
+
+                    zip.file(filename, blob)
+                    successCount++
+                } catch (err) {
+                    console.error(`Error fetching document ${doc.name}:`, err)
+                    failCount++
+                }
+            }
+
+            if (successCount === 0) {
+                throw new Error('Could not fetch any documents for the package')
+            }
+
+            // Add a manifest text file
+            const manifestDate = new Date().toLocaleString('en-GB', {
+                day: 'numeric', month: 'long', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            })
+            const manifestLines = [
+                'CLARENCE EVIDENCE PACKAGE',
+                '========================',
+                '',
+                `Generated: ${manifestDate}`,
+                `Contract: ${contractName}`,
+                `Mode: ${mode === 'quick_contract' ? 'Quick Contract' : 'Contract Mediation'}`,
+                `Documents: ${successCount} of ${readyDocs.length}`,
+                '',
+                'Contents:',
+                ...readyDocs.map((doc, i) => {
+                    const index = String(i + 1).padStart(2, '0')
+                    const cleanName = doc.name.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, '_')
+                    return `  ${index}. ${cleanName}.pdf — ${doc.name}`
+                }),
+                '',
+                '---',
+                'CLARENCE · The Honest Broker',
+                'Clarence Legal Limited · Confidential'
+            ]
+            zip.file('_MANIFEST.txt', manifestLines.join('\n'))
+
+            // Generate and download the ZIP
+            const zipBlob = await zip.generateAsync({ type: 'blob' })
+            const dateStr = new Date().toISOString().split('T')[0]
+            const zipFilename = `CLARENCE_Evidence_Package_${safeName}_${dateStr}.zip`
+
+            // Trigger browser download
+            const url = URL.createObjectURL(zipBlob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = zipFilename
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+
+            // Success message
+            let resultMessage = `\u2705 Evidence Package downloaded successfully — ${successCount} document${successCount > 1 ? 's' : ''} bundled.`
+            if (failCount > 0) {
+                resultMessage += ` (${failCount} document${failCount > 1 ? 's' : ''} could not be included — try regenerating them.)`
+            }
+
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: resultMessage,
+                createdAt: new Date().toISOString()
+            }])
+
+            // Log the event
+            eventLogger.completed('documentation', 'evidence_package_downloaded', {
+                contextId,
+                mode,
+                documentCount: successCount,
+                failedCount: failCount
+            })
+
         } catch (error) {
-            console.error('Error downloading package:', error)
+            console.error('Error generating evidence package:', error)
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: `\u274C Sorry, I couldn't assemble the Evidence Package: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+                createdAt: new Date().toISOString()
+            }])
         } finally {
             setIsGeneratingPackage(false)
         }
