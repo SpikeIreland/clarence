@@ -1,0 +1,1297 @@
+'use client'
+
+// ============================================================================
+// CLARENCE HOME PAGE - Unified Contract Landing
+// Version: 1.0
+// Date: 26 February 2026
+// Path: /app/auth/home/page.tsx
+//
+// PURPOSE:
+// Universal landing page after login. Shows ALL contracts a user is involved
+// in — regardless of pathway (Quick Create / Contract Create / Co-Create)
+// and regardless of whether they initiated or were invited.
+//
+// Replaces the old role-based routing where customers went to
+// contracts-dashboard and providers went to providerConfirmation.
+//
+// PRINCIPLE: One sign-in. One home. Role derived per contract.
+//
+// DEPLOY: Copy this file to /app/auth/home/page.tsx
+// ============================================================================
+
+
+// ============================================================================
+// SECTION 1: IMPORTS
+// ============================================================================
+
+import React, { useState, useEffect, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { createClient } from '@/lib/supabase'
+import { eventLogger } from '@/lib/eventLogger'
+import { getRoleContext } from '@/lib/role-matrix'
+import FeedbackButton from '@/app/components/FeedbackButton'
+
+
+// ============================================================================
+// SECTION 2: INTERFACES & TYPES
+// ============================================================================
+
+interface UserInfo {
+    userId: string
+    email: string
+    firstName: string
+    lastName: string
+    company: string
+    companyId: string
+    role: string
+}
+
+/** Unified contract card — aggregated across all pathways */
+interface UnifiedContract {
+    id: string
+    name: string
+    contractType: string
+    contractTypeKey: string | null
+    initiatorPartyRole: string | null
+    pathway: 'quick_create' | 'contract_create' | 'co_create' | 'training'
+    relationship: 'initiator' | 'respondent'
+    status: string
+    statusLabel: string
+    progressSummary: string
+    userRoleLabel: string
+    counterpartyName: string
+    counterpartyCompany: string
+    lastActivity: string
+    createdAt: string
+    clauseStats?: { agreed: number; total: number }
+    isInviteHighlight: boolean
+    studioUrl: string
+}
+
+interface HomeStats {
+    activeNegotiations: number
+    completed: number
+    awaitingResponse: number
+    averageResolutionDays: number | null
+}
+
+
+// ============================================================================
+// SECTION 3: CONSTANTS
+// ============================================================================
+
+/** Pathway badge colours matching CLARENCE branding */
+const PATHWAY_BADGES: Record<string, { label: string; bg: string; text: string }> = {
+    quick_create: { label: 'Quick Create', bg: 'bg-emerald-100', text: 'text-emerald-700' },
+    contract_create: { label: 'Contract Create', bg: 'bg-blue-100', text: 'text-blue-700' },
+    co_create: { label: 'Co-Create', bg: 'bg-violet-100', text: 'text-violet-700' },
+    training: { label: 'Training', bg: 'bg-amber-100', text: 'text-amber-700' },
+}
+
+/** Status colours for progress indicators */
+const STATUS_COLOURS: Record<string, string> = {
+    active: 'bg-emerald-500',
+    awaiting: 'bg-amber-500',
+    calculating: 'bg-blue-500',
+    completed: 'bg-slate-400',
+    draft: 'bg-slate-300',
+}
+
+
+// ============================================================================
+// SECTION 4: HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Derive the user's role label for a contract using the role-matrix system.
+ * Falls back to "Initiator" / "Respondent" for older contracts without role data.
+ */
+function deriveRoleLabel(
+    contractTypeKey: string | null,
+    initiatorPartyRole: string | null,
+    isInitiator: boolean
+): string {
+    if (contractTypeKey && initiatorPartyRole) {
+        try {
+            const ctx = getRoleContext(
+                contractTypeKey,
+                initiatorPartyRole as 'protected' | 'providing',
+                isInitiator
+            )
+            return ctx.userRoleLabel
+        } catch {
+            // Fallback for unknown contract types
+        }
+    }
+    return isInitiator ? 'Initiator' : 'Respondent'
+}
+
+/**
+ * Format a date string into a human-readable relative time.
+ * e.g. "2 hours ago", "Yesterday", "3 days ago"
+ */
+function formatRelativeTime(dateString: string): string {
+    if (!dateString) return ''
+    const now = new Date()
+    const date = new Date(dateString)
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays} days ago`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+/**
+ * Format a date string as a readable date.
+ */
+function formatDate(dateString: string): string {
+    if (!dateString) return ''
+    return new Date(dateString).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    })
+}
+
+/**
+ * Build the studio URL for a contract based on its pathway.
+ */
+function buildStudioUrl(pathway: string, id: string, isTraining?: boolean): string {
+    switch (pathway) {
+        case 'quick_create':
+            return `/auth/quick-contract/studio/${id}`
+        case 'contract_create':
+            return `/auth/contract-studio?session_id=${id}`
+        case 'training':
+            return `/auth/contract-studio?session_id=${id}`
+        case 'co_create':
+            return `/auth/co-create/studio/${id}`
+        default:
+            return `/auth/home`
+    }
+}
+
+
+// ============================================================================
+// SECTION 5: INNER COMPONENT (Wrapped in Suspense)
+// ============================================================================
+
+function HomePageInner() {
+    const router = useRouter()
+    const searchParams = useSearchParams()
+    const supabase = createClient()
+
+    // ========================================================================
+    // SECTION 5A: STATE
+    // ========================================================================
+
+    const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+    const [contracts, setContracts] = useState<UnifiedContract[]>([])
+    const [stats, setStats] = useState<HomeStats>({
+        activeNegotiations: 0,
+        completed: 0,
+        awaitingResponse: 0,
+        averageResolutionDays: null,
+    })
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [activeFilter, setActiveFilter] = useState<'all' | 'quick_create' | 'contract_create' | 'training'>('all')
+    const [showWelcome, setShowWelcome] = useState(false)
+    const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+
+    // ========================================================================
+    // SECTION 5B: LOAD USER INFO
+    // ========================================================================
+
+    const loadUserInfo = useCallback(async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
+                router.push('/auth/login')
+                return null
+            }
+
+            const { data: profile } = await supabase
+                .from('users')
+                .select('first_name, last_name, company, company_id, role')
+                .eq('user_id', user.id)
+                .single()
+
+            const info: UserInfo = {
+                userId: user.id,
+                email: user.email || '',
+                firstName: profile?.first_name || '',
+                lastName: profile?.last_name || '',
+                company: profile?.company || '',
+                companyId: profile?.company_id || '',
+                role: profile?.role || '',
+            }
+
+            setUserInfo(info)
+
+            // Check if this is first login (show welcome state)
+            const hasVisitedHome = localStorage.getItem('clarence_home_visited')
+            if (!hasVisitedHome) {
+                setShowWelcome(true)
+                localStorage.setItem('clarence_home_visited', 'true')
+            }
+
+            return info
+        } catch (err) {
+            console.error('Error loading user info:', err)
+            setError('Failed to load user information')
+            return null
+        }
+    }, [supabase, router])
+
+    // ========================================================================
+    // SECTION 5C: FETCH QUICK CREATE CONTRACTS (Initiator)
+    // ========================================================================
+
+    const fetchQuickCreateInitiated = useCallback(async (userId: string): Promise<UnifiedContract[]> => {
+        try {
+            const { data, error } = await supabase
+                .from('uploaded_contracts')
+                .select(`
+                    contract_id,
+                    contract_name,
+                    contract_type,
+                    contract_type_key,
+                    initiator_party_role,
+                    status,
+                    created_at,
+                    updated_at,
+                    uploaded_by_user_id,
+                    clause_count
+                `)
+                .eq('uploaded_by_user_id', userId)
+                .order('updated_at', { ascending: false })
+
+            if (error) {
+                console.error('Error fetching QC initiated:', error)
+                return []
+            }
+
+            if (!data) return []
+
+            // For each contract, fetch recipient info for counterparty display
+            const contractsWithRecipients = await Promise.all(
+                data.map(async (contract) => {
+                    const { data: recipients } = await supabase
+                        .from('qc_recipients')
+                        .select('recipient_name, recipient_company, status, recipient_email')
+                        .eq('quick_contract_id', contract.contract_id)
+                        .limit(1)
+
+                    const recipient = recipients?.[0]
+
+                    // Fetch clause agreement stats
+                    let clauseStats = undefined
+                    if (contract.clause_count && contract.clause_count > 0) {
+                        const { data: events } = await supabase
+                            .from('qc_clause_events')
+                            .select('clause_id, event_type, party_role')
+                            .eq('contract_id', contract.contract_id)
+                            .in('event_type', ['agreed', 'agreement_withdrawn'])
+
+                        if (events) {
+                            const initiatorAgreed = new Set<string>()
+                            const respondentAgreed = new Set<string>()
+                            events.forEach(e => {
+                                if (e.event_type === 'agreed') {
+                                    if (e.party_role === 'initiator') initiatorAgreed.add(e.clause_id)
+                                    else respondentAgreed.add(e.clause_id)
+                                } else if (e.event_type === 'agreement_withdrawn') {
+                                    if (e.party_role === 'initiator') initiatorAgreed.delete(e.clause_id)
+                                    else respondentAgreed.delete(e.clause_id)
+                                }
+                            })
+                            // "Agreed" means both parties agreed
+                            let bothAgreed = 0
+                            initiatorAgreed.forEach(id => {
+                                if (respondentAgreed.has(id)) bothAgreed++
+                            })
+                            clauseStats = { agreed: bothAgreed, total: contract.clause_count }
+                        }
+                    }
+
+                    // Determine status label
+                    let statusLabel = 'Draft'
+                    let progressSummary = 'Setting up contract'
+                    if (contract.status === 'completed' || contract.status === 'committed') {
+                        statusLabel = 'Completed'
+                        progressSummary = 'Contract agreed'
+                    } else if (recipient && recipient.status === 'accepted') {
+                        statusLabel = 'Active'
+                        progressSummary = clauseStats
+                            ? `${clauseStats.agreed} of ${clauseStats.total} clauses agreed`
+                            : 'Negotiation in progress'
+                    } else if (recipient && recipient.status === 'invited') {
+                        statusLabel = 'Awaiting Response'
+                        progressSummary = `Waiting for ${recipient.recipient_name || recipient.recipient_email || 'provider'} to respond`
+                    } else if (!recipient) {
+                        statusLabel = 'Draft'
+                        progressSummary = 'No provider invited yet'
+                    }
+
+                    return {
+                        id: contract.contract_id,
+                        name: contract.contract_name,
+                        contractType: contract.contract_type || '',
+                        contractTypeKey: contract.contract_type_key || null,
+                        initiatorPartyRole: contract.initiator_party_role || null,
+                        pathway: 'quick_create' as const,
+                        relationship: 'initiator' as const,
+                        status: contract.status || 'draft',
+                        statusLabel,
+                        progressSummary,
+                        userRoleLabel: deriveRoleLabel(
+                            contract.contract_type_key,
+                            contract.initiator_party_role,
+                            true
+                        ),
+                        counterpartyName: recipient?.recipient_name || '',
+                        counterpartyCompany: recipient?.recipient_company || '',
+                        lastActivity: contract.updated_at || contract.created_at,
+                        createdAt: contract.created_at,
+                        clauseStats,
+                        isInviteHighlight: false,
+                        studioUrl: buildStudioUrl('quick_create', contract.contract_id),
+                    }
+                })
+            )
+
+            return contractsWithRecipients
+        } catch (err) {
+            console.error('Error in fetchQuickCreateInitiated:', err)
+            return []
+        }
+    }, [supabase])
+
+    // ========================================================================
+    // SECTION 5D: FETCH QUICK CREATE CONTRACTS (Respondent / Invited)
+    // ========================================================================
+
+    const fetchQuickCreateInvited = useCallback(async (userId: string, email: string): Promise<UnifiedContract[]> => {
+        try {
+            // Find contracts where this user is a recipient (by user_id or email)
+            let recipientData: any[] = []
+
+            // First try by user_id (if linked)
+            const { data: byUserId } = await supabase
+                .from('qc_recipients')
+                .select(`
+                    recipient_id,
+                    quick_contract_id,
+                    recipient_name,
+                    recipient_company,
+                    status,
+                    responded_at,
+                    created_at
+                `)
+                .eq('user_id', userId)
+
+            if (byUserId) recipientData = [...byUserId]
+
+            // Also try by email (for recipients not yet linked)
+            const { data: byEmail } = await supabase
+                .from('qc_recipients')
+                .select(`
+                    recipient_id,
+                    quick_contract_id,
+                    recipient_name,
+                    recipient_company,
+                    status,
+                    responded_at,
+                    created_at
+                `)
+                .eq('recipient_email', email)
+
+            if (byEmail) {
+                // Deduplicate by quick_contract_id
+                const existingIds = new Set(recipientData.map(r => r.quick_contract_id))
+                byEmail.forEach(r => {
+                    if (!existingIds.has(r.quick_contract_id)) {
+                        recipientData.push(r)
+                    }
+                })
+            }
+
+            if (recipientData.length === 0) return []
+
+            // Fetch the contract details for each
+            const contracts = await Promise.all(
+                recipientData.map(async (recipient) => {
+                    const { data: contract } = await supabase
+                        .from('uploaded_contracts')
+                        .select(`
+                            contract_id,
+                            contract_name,
+                            contract_type,
+                            contract_type_key,
+                            initiator_party_role,
+                            status,
+                            created_at,
+                            updated_at,
+                            uploaded_by_user_id,
+                            clause_count
+                        `)
+                        .eq('contract_id', recipient.quick_contract_id)
+                        .single()
+
+                    if (!contract) return null
+
+                    // Don't show contracts the user also initiated (avoid duplicates)
+                    if (contract.uploaded_by_user_id === userId) return null
+
+                    // Get initiator info for counterparty display
+                    const { data: initiator } = await supabase
+                        .from('users')
+                        .select('first_name, last_name, company')
+                        .eq('user_id', contract.uploaded_by_user_id)
+                        .single()
+
+                    // Clause stats (same logic as initiator)
+                    let clauseStats = undefined
+                    if (contract.clause_count && contract.clause_count > 0) {
+                        const { data: events } = await supabase
+                            .from('qc_clause_events')
+                            .select('clause_id, event_type, party_role')
+                            .eq('contract_id', contract.contract_id)
+                            .in('event_type', ['agreed', 'agreement_withdrawn'])
+
+                        if (events) {
+                            const initiatorAgreed = new Set<string>()
+                            const respondentAgreed = new Set<string>()
+                            events.forEach(e => {
+                                if (e.event_type === 'agreed') {
+                                    if (e.party_role === 'initiator') initiatorAgreed.add(e.clause_id)
+                                    else respondentAgreed.add(e.clause_id)
+                                } else if (e.event_type === 'agreement_withdrawn') {
+                                    if (e.party_role === 'initiator') initiatorAgreed.delete(e.clause_id)
+                                    else respondentAgreed.delete(e.clause_id)
+                                }
+                            })
+                            let bothAgreed = 0
+                            initiatorAgreed.forEach(id => {
+                                if (respondentAgreed.has(id)) bothAgreed++
+                            })
+                            clauseStats = { agreed: bothAgreed, total: contract.clause_count }
+                        }
+                    }
+
+                    // Determine status
+                    let statusLabel = 'Invited'
+                    let progressSummary = 'You have been invited to negotiate'
+                    if (contract.status === 'completed' || contract.status === 'committed') {
+                        statusLabel = 'Completed'
+                        progressSummary = 'Contract agreed'
+                    } else if (recipient.status === 'accepted') {
+                        statusLabel = 'Active'
+                        progressSummary = clauseStats
+                            ? `${clauseStats.agreed} of ${clauseStats.total} clauses agreed`
+                            : 'Negotiation in progress'
+                    }
+
+                    // Check if this contract should be highlighted (from invite flow)
+                    const pendingInvite = typeof window !== 'undefined'
+                        ? sessionStorage.getItem('pending_invite_contract')
+                        : null
+
+                    return {
+                        id: contract.contract_id,
+                        name: contract.contract_name,
+                        contractType: contract.contract_type || '',
+                        contractTypeKey: contract.contract_type_key || null,
+                        initiatorPartyRole: contract.initiator_party_role || null,
+                        pathway: 'quick_create' as const,
+                        relationship: 'respondent' as const,
+                        status: contract.status || 'draft',
+                        statusLabel,
+                        progressSummary,
+                        userRoleLabel: deriveRoleLabel(
+                            contract.contract_type_key,
+                            contract.initiator_party_role,
+                            false
+                        ),
+                        counterpartyName: initiator
+                            ? `${initiator.first_name || ''} ${initiator.last_name || ''}`.trim()
+                            : '',
+                        counterpartyCompany: initiator?.company || '',
+                        lastActivity: contract.updated_at || contract.created_at,
+                        createdAt: contract.created_at,
+                        clauseStats,
+                        isInviteHighlight: pendingInvite === contract.contract_id,
+                        studioUrl: buildStudioUrl('quick_create', contract.contract_id),
+                    }
+                })
+            )
+
+            return contracts.filter(Boolean) as UnifiedContract[]
+        } catch (err) {
+            console.error('Error in fetchQuickCreateInvited:', err)
+            return []
+        }
+    }, [supabase])
+
+    // ========================================================================
+    // SECTION 5E: FETCH CONTRACT CREATE / CO-CREATE SESSIONS
+    // ========================================================================
+
+    const fetchContractCreateSessions = useCallback(async (userId: string, companyId: string): Promise<UnifiedContract[]> => {
+        try {
+            // Fetch sessions where user is a party
+            const { data: parties } = await supabase
+                .from('session_parties')
+                .select('session_id, party_type, user_id, company_id')
+                .or(`user_id.eq.${userId},company_id.eq.${companyId}`)
+
+            if (!parties || parties.length === 0) return []
+
+            const sessionIds = [...new Set(parties.map(p => p.session_id))]
+
+            const { data: sessions } = await supabase
+                .from('sessions')
+                .select(`
+                    session_id,
+                    session_number,
+                    customer_company,
+                    provider_company,
+                    customer_contact_name,
+                    provider_contact_name,
+                    service_type,
+                    deal_value,
+                    contract_type,
+                    contract_type_key,
+                    initiator_party_role,
+                    phase,
+                    status,
+                    alignment_percentage,
+                    is_training,
+                    created_at,
+                    updated_at,
+                    customer_id,
+                    provider_id
+                `)
+                .in('session_id', sessionIds)
+                .order('updated_at', { ascending: false })
+
+            if (!sessions) return []
+
+            return sessions.map(session => {
+                const isTraining = session.is_training === true
+                const isInitiator = session.customer_id === userId
+
+                // Determine counterparty
+                const counterpartyName = isInitiator
+                    ? session.provider_contact_name || ''
+                    : session.customer_contact_name || ''
+                const counterpartyCompany = isInitiator
+                    ? session.provider_company || ''
+                    : session.customer_company || ''
+
+                // Determine status
+                let statusLabel = 'Draft'
+                let progressSummary = 'Setting up contract'
+                const phase = session.phase || 1
+
+                if (session.status === 'completed' || session.status === 'agreed') {
+                    statusLabel = 'Completed'
+                    progressSummary = 'Contract agreed'
+                } else if (session.status === 'active' || phase >= 3) {
+                    statusLabel = 'Active'
+                    const alignment = session.alignment_percentage
+                    progressSummary = alignment
+                        ? `Phase ${phase} · ${alignment}% aligned`
+                        : `Phase ${phase} · Negotiation in progress`
+                } else if (session.status === 'providers_invited' || session.status === 'provider_invited') {
+                    statusLabel = 'Awaiting Response'
+                    progressSummary = 'Waiting for provider to complete onboarding'
+                } else if (phase <= 2) {
+                    statusLabel = 'Setup'
+                    progressSummary = 'Completing contract preparation'
+                }
+
+                const pathway = isTraining ? 'training' : 'contract_create'
+
+                return {
+                    id: session.session_id,
+                    name: `${session.service_type || 'Contract'} — ${session.session_number || ''}`,
+                    contractType: session.contract_type || session.service_type || '',
+                    contractTypeKey: session.contract_type_key || null,
+                    initiatorPartyRole: session.initiator_party_role || null,
+                    pathway: pathway as 'contract_create' | 'training',
+                    relationship: isInitiator ? 'initiator' as const : 'respondent' as const,
+                    status: session.status || 'draft',
+                    statusLabel,
+                    progressSummary,
+                    userRoleLabel: deriveRoleLabel(
+                        session.contract_type_key,
+                        session.initiator_party_role,
+                        isInitiator
+                    ),
+                    counterpartyName,
+                    counterpartyCompany,
+                    lastActivity: session.updated_at || session.created_at,
+                    createdAt: session.created_at,
+                    clauseStats: undefined,
+                    isInviteHighlight: false,
+                    studioUrl: buildStudioUrl(pathway, session.session_id, isTraining),
+                }
+            })
+        } catch (err) {
+            console.error('Error in fetchContractCreateSessions:', err)
+            return []
+        }
+    }, [supabase])
+
+    // ========================================================================
+    // SECTION 5F: MAIN DATA LOADER (Aggregates all pathways)
+    // ========================================================================
+
+    const loadAllContracts = useCallback(async () => {
+        setLoading(true)
+        setError(null)
+
+        const info = await loadUserInfo()
+        if (!info) {
+            setLoading(false)
+            return
+        }
+
+        try {
+            // Fetch from all pathways in parallel
+            const [qcInitiated, qcInvited, ccSessions] = await Promise.all([
+                fetchQuickCreateInitiated(info.userId),
+                fetchQuickCreateInvited(info.userId, info.email),
+                fetchContractCreateSessions(info.userId, info.companyId),
+            ])
+
+            // Merge and sort by last activity (most recent first)
+            const allContracts = [...qcInitiated, ...qcInvited, ...ccSessions]
+                .sort((a, b) => {
+                    // Invite highlights always go first
+                    if (a.isInviteHighlight && !b.isInviteHighlight) return -1
+                    if (!a.isInviteHighlight && b.isInviteHighlight) return 1
+                    // Then sort by last activity
+                    return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+                })
+
+            setContracts(allContracts)
+
+            // Calculate stats
+            const active = allContracts.filter(c =>
+                c.statusLabel === 'Active' || c.statusLabel === 'Setup'
+            ).length
+            const completed = allContracts.filter(c =>
+                c.statusLabel === 'Completed'
+            ).length
+            const awaiting = allContracts.filter(c =>
+                c.statusLabel === 'Awaiting Response' || c.statusLabel === 'Invited'
+            ).length
+
+            setStats({
+                activeNegotiations: active,
+                completed,
+                awaitingResponse: awaiting,
+                averageResolutionDays: null, // Future: calculate from completed contracts
+            })
+
+            // Clear invite highlight from sessionStorage after loading
+            if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('pending_invite_contract')
+            }
+
+            // Log page view
+            eventLogger.completed('home', 'home_page_loaded', {
+                totalContracts: allContracts.length,
+                activeCount: active,
+                completedCount: completed,
+            })
+
+        } catch (err) {
+            console.error('Error loading contracts:', err)
+            setError('Failed to load contracts. Please try refreshing the page.')
+        } finally {
+            setLoading(false)
+        }
+    }, [loadUserInfo, fetchQuickCreateInitiated, fetchQuickCreateInvited, fetchContractCreateSessions])
+
+    // ========================================================================
+    // SECTION 5G: USE EFFECTS
+    // ========================================================================
+
+    useEffect(() => {
+        loadAllContracts()
+    }, [loadAllContracts])
+
+    // ========================================================================
+    // SECTION 5H: COMPUTED VALUES
+    // ========================================================================
+
+    /** Active negotiations (filtered) */
+    const activeContracts = contracts.filter(c =>
+        c.statusLabel !== 'Completed'
+    )
+
+    /** Completed in last 30 days */
+    const recentCompletions = contracts.filter(c => {
+        if (c.statusLabel !== 'Completed') return false
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        return new Date(c.lastActivity) >= thirtyDaysAgo
+    })
+
+    /** Apply pathway filter */
+    const filteredContracts = activeFilter === 'all'
+        ? activeContracts
+        : activeContracts.filter(c => c.pathway === activeFilter)
+
+    // ========================================================================
+    // SECTION 5I: EVENT HANDLERS
+    // ========================================================================
+
+    const handleSignOut = async () => {
+        await supabase.auth.signOut()
+        router.push('/')
+    }
+
+    const handleEnterContract = (contract: UnifiedContract) => {
+        eventLogger.completed('home', 'enter_contract_clicked', {
+            contractId: contract.id,
+            pathway: contract.pathway,
+            relationship: contract.relationship,
+        })
+        router.push(contract.studioUrl)
+    }
+
+    const dismissWelcome = () => {
+        setShowWelcome(false)
+    }
+
+    // ========================================================================
+    // SECTION 6: LOADING STATE RENDER
+    // ========================================================================
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+                {/* Header skeleton */}
+                <header className="h-14 bg-slate-800" />
+                {/* Content skeleton */}
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    {/* Stats skeleton */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        {[1, 2, 3, 4].map(i => (
+                            <div key={i} className="bg-white rounded-xl border border-slate-200 p-5 animate-pulse">
+                                <div className="h-3 bg-slate-200 rounded w-24 mb-3" />
+                                <div className="h-8 bg-slate-200 rounded w-12" />
+                            </div>
+                        ))}
+                    </div>
+                    {/* Cards skeleton */}
+                    <div className="space-y-4">
+                        {[1, 2, 3].map(i => (
+                            <div key={i} className="bg-white rounded-xl border border-slate-200 p-6 animate-pulse">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                        <div className="h-4 bg-slate-200 rounded w-48 mb-3" />
+                                        <div className="h-3 bg-slate-200 rounded w-64 mb-2" />
+                                        <div className="h-3 bg-slate-200 rounded w-32" />
+                                    </div>
+                                    <div className="h-9 bg-slate-200 rounded w-20" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 7: ERROR STATE RENDER
+    // ========================================================================
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+                <header className="h-14 bg-slate-800" />
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+                    <div className="text-center">
+                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                        </div>
+                        <h2 className="text-xl font-semibold text-slate-800 mb-2">Something went wrong</h2>
+                        <p className="text-slate-500 mb-6">{error}</p>
+                        <button
+                            onClick={loadAllContracts}
+                            className="px-6 py-2.5 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors text-sm font-medium"
+                        >
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 8: MAIN RENDER
+    // ========================================================================
+
+    return (
+        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+
+            {/* ============================================================ */}
+            {/* SECTION 8A: HEADER / NAVIGATION                              */}
+            {/* ============================================================ */}
+            <header className="h-14 bg-slate-800 flex items-center justify-between px-6 sticky top-0 z-40">
+                {/* Left: CLARENCE branding */}
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">C</span>
+                    </div>
+                    <div>
+                        <span className="text-white font-semibold">CLARENCE</span>
+                        <span className="text-slate-400 text-sm ml-2">Home</span>
+                    </div>
+                </div>
+
+                {/* Centre: Navigation links */}
+                <nav className="hidden md:flex items-center gap-1">
+                    <Link
+                        href="/auth/home"
+                        className="px-3 py-1.5 text-sm font-medium text-white bg-slate-700 rounded-md"
+                    >
+                        Home
+                    </Link>
+                    <Link
+                        href="/auth/quick-contract/create"
+                        className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                    >
+                        Quick Create
+                    </Link>
+                    <Link
+                        href="/auth/contracts-dashboard"
+                        className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                    >
+                        Contract Create
+                    </Link>
+                    <Link
+                        href="/auth/training"
+                        className="px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
+                    >
+                        Training
+                    </Link>
+                </nav>
+
+                {/* Right: Profile menu */}
+                <div className="relative">
+                    <button
+                        onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                        className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors"
+                    >
+                        <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-slate-200">
+                                {userInfo?.firstName?.[0] || 'U'}{userInfo?.lastName?.[0] || ''}
+                            </span>
+                        </div>
+                        <span className="hidden sm:inline text-sm">{userInfo?.firstName || 'User'}</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+
+                    {profileMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
+                            <div className="px-4 py-2 border-b border-slate-100">
+                                <p className="text-sm font-medium text-slate-800">
+                                    {userInfo?.firstName} {userInfo?.lastName}
+                                </p>
+                                <p className="text-xs text-slate-500">{userInfo?.email}</p>
+                                {userInfo?.company && (
+                                    <p className="text-xs text-slate-400 mt-0.5">{userInfo.company}</p>
+                                )}
+                            </div>
+                            <Link
+                                href="/auth/company-admin"
+                                className="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                onClick={() => setProfileMenuOpen(false)}
+                            >
+                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                Company Admin
+                            </Link>
+                            <div className="border-t border-slate-100 mt-1 pt-1">
+                                <button
+                                    onClick={handleSignOut}
+                                    className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                    </svg>
+                                    Sign Out
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </header>
+
+            {/* Close profile menu when clicking outside */}
+            {profileMenuOpen && (
+                <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setProfileMenuOpen(false)}
+                />
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 8B: MAIN CONTENT AREA                                */}
+            {/* ============================================================ */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+                {/* ======================================================== */}
+                {/* SECTION 8C: WELCOME BANNER (First visit or invite)        */}
+                {/* ======================================================== */}
+                {showWelcome && (
+                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-xl p-6 mb-8 text-white relative">
+                        <button
+                            onClick={dismissWelcome}
+                            className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                        <h2 className="text-xl font-bold mb-2">
+                            Welcome to CLARENCE, {userInfo?.firstName || 'there'}
+                        </h2>
+                        <p className="text-emerald-100 text-sm max-w-2xl">
+                            This is your Home page — a single view of every contract you&apos;re involved in,
+                            whether you started it or were invited. Your role on each contract is shown on the card.
+                            Click &ldquo;Enter&rdquo; to go directly to the negotiation studio.
+                        </p>
+                    </div>
+                )}
+
+                {/* ======================================================== */}
+                {/* SECTION 8D: STATS BAR                                     */}
+                {/* ======================================================== */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    {/* Active Negotiations */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                            Active Negotiations
+                        </p>
+                        <p className="text-2xl font-bold text-slate-800">{stats.activeNegotiations}</p>
+                    </div>
+                    {/* Completed */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                            Completed
+                        </p>
+                        <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
+                    </div>
+                    {/* Awaiting Response */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                            Awaiting Response
+                        </p>
+                        <p className="text-2xl font-bold text-amber-600">{stats.awaitingResponse}</p>
+                    </div>
+                    {/* Total Contracts */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                            Total Contracts
+                        </p>
+                        <p className="text-2xl font-bold text-slate-800">{contracts.length}</p>
+                    </div>
+                </div>
+
+                {/* ======================================================== */}
+                {/* SECTION 8E: QUICK ACTIONS BAR                             */}
+                {/* ======================================================== */}
+                <div className="flex flex-wrap items-center gap-3 mb-8">
+                    <Link
+                        href="/auth/quick-contract/create"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        New Quick Create
+                    </Link>
+                    <Link
+                        href="/auth/contracts-dashboard"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        New Contract Create
+                    </Link>
+                    <Link
+                        href="/auth/training"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Practice (Training)
+                    </Link>
+                </div>
+
+                {/* ======================================================== */}
+                {/* SECTION 8F: PATHWAY FILTER TABS                           */}
+                {/* ======================================================== */}
+                <div className="flex items-center gap-2 mb-6">
+                    <span className="text-sm font-medium text-slate-500 mr-2">Filter:</span>
+                    {[
+                        { key: 'all', label: 'All' },
+                        { key: 'quick_create', label: 'Quick Create' },
+                        { key: 'contract_create', label: 'Contract Create' },
+                        { key: 'training', label: 'Training' },
+                    ].map(filter => (
+                        <button
+                            key={filter.key}
+                            onClick={() => setActiveFilter(filter.key as typeof activeFilter)}
+                            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${activeFilter === filter.key
+                                    ? 'bg-slate-800 text-white font-medium'
+                                    : 'text-slate-600 hover:bg-slate-200 bg-slate-100'
+                                }`}
+                        >
+                            {filter.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* ======================================================== */}
+                {/* SECTION 8G: ACTIVE NEGOTIATIONS                           */}
+                {/* ======================================================== */}
+                <div className="mb-12">
+                    <h2 className="text-lg font-semibold text-slate-800 mb-4">
+                        Active Negotiations
+                        {filteredContracts.length > 0 && (
+                            <span className="text-sm font-normal text-slate-400 ml-2">
+                                ({filteredContracts.length})
+                            </span>
+                        )}
+                    </h2>
+
+                    {filteredContracts.length === 0 ? (
+                        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-base font-medium text-slate-700 mb-1">
+                                {activeFilter === 'all'
+                                    ? 'No active negotiations'
+                                    : `No active ${PATHWAY_BADGES[activeFilter]?.label || ''} negotiations`
+                                }
+                            </h3>
+                            <p className="text-sm text-slate-500 mb-6">
+                                Start a new negotiation to get going.
+                            </p>
+                            <Link
+                                href="/auth/quick-contract/create"
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Create Your First Contract
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {filteredContracts.map(contract => (
+                                <div
+                                    key={`${contract.pathway}-${contract.id}`}
+                                    className={`bg-white rounded-xl border shadow-sm p-5 transition-all hover:shadow-md ${contract.isInviteHighlight
+                                            ? 'border-emerald-400 ring-2 ring-emerald-100'
+                                            : 'border-slate-200'
+                                        }`}
+                                >
+                                    {/* ---- Invite highlight banner ---- */}
+                                    {contract.isInviteHighlight && (
+                                        <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 rounded-lg px-3 py-1.5 text-xs font-medium mb-3 -mt-1">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                            </svg>
+                                            You&apos;ve been invited to this negotiation
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-start justify-between gap-4">
+                                        {/* ---- Left: Contract info ---- */}
+                                        <div className="flex-1 min-w-0">
+                                            {/* Row 1: Name + badges */}
+                                            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                                <h3 className="text-base font-semibold text-slate-800 truncate">
+                                                    {contract.name}
+                                                </h3>
+                                                {/* Pathway badge */}
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${PATHWAY_BADGES[contract.pathway]?.bg || 'bg-slate-100'
+                                                    } ${PATHWAY_BADGES[contract.pathway]?.text || 'text-slate-700'}`}>
+                                                    {PATHWAY_BADGES[contract.pathway]?.label || contract.pathway}
+                                                </span>
+                                                {/* Role badge */}
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                                                    {contract.userRoleLabel}
+                                                </span>
+                                            </div>
+
+                                            {/* Row 2: Progress summary */}
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${contract.statusLabel === 'Active' ? STATUS_COLOURS.active
+                                                        : contract.statusLabel === 'Awaiting Response' || contract.statusLabel === 'Invited' ? STATUS_COLOURS.awaiting
+                                                            : contract.statusLabel === 'Completed' ? STATUS_COLOURS.completed
+                                                                : STATUS_COLOURS.draft
+                                                    }`} />
+                                                <span className="text-sm text-slate-600">
+                                                    {contract.progressSummary}
+                                                </span>
+                                            </div>
+
+                                            {/* Row 3: Counterparty + last activity */}
+                                            <div className="flex items-center gap-4 text-xs text-slate-400">
+                                                {(contract.counterpartyName || contract.counterpartyCompany) && (
+                                                    <span>
+                                                        {contract.relationship === 'initiator' ? 'With' : 'From'}:{' '}
+                                                        <span className="text-slate-500">
+                                                            {contract.counterpartyName}
+                                                            {contract.counterpartyCompany && ` (${contract.counterpartyCompany})`}
+                                                        </span>
+                                                    </span>
+                                                )}
+                                                <span>{formatRelativeTime(contract.lastActivity)}</span>
+                                            </div>
+
+                                            {/* Row 4: Clause progress bar (if available) */}
+                                            {contract.clauseStats && contract.clauseStats.total > 0 && (
+                                                <div className="mt-3 flex items-center gap-3">
+                                                    <div className="flex-1 bg-slate-100 rounded-full h-1.5 max-w-xs">
+                                                        <div
+                                                            className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                                                            style={{
+                                                                width: `${Math.round((contract.clauseStats.agreed / contract.clauseStats.total) * 100)}%`
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-xs text-slate-400">
+                                                        {contract.clauseStats.agreed}/{contract.clauseStats.total} agreed
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* ---- Right: Enter button ---- */}
+                                        <button
+                                            onClick={() => handleEnterContract(contract)}
+                                            className="flex-shrink-0 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+                                        >
+                                            Enter
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* ======================================================== */}
+                {/* SECTION 8H: RECENT COMPLETIONS                            */}
+                {/* ======================================================== */}
+                {recentCompletions.length > 0 && (
+                    <div className="mb-12">
+                        <h2 className="text-lg font-semibold text-slate-800 mb-4">
+                            Recent Completions
+                            <span className="text-sm font-normal text-slate-400 ml-2">
+                                (Last 30 days)
+                            </span>
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {recentCompletions.map(contract => (
+                                <div
+                                    key={`completed-${contract.pathway}-${contract.id}`}
+                                    className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-all"
+                                >
+                                    <div className="flex items-start justify-between gap-2 mb-3">
+                                        <h3 className="text-sm font-semibold text-slate-700 truncate flex-1">
+                                            {contract.name}
+                                        </h3>
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
+                                            Completed
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs text-slate-400 mb-3">
+                                        <span className={`px-1.5 py-0.5 rounded text-xs ${PATHWAY_BADGES[contract.pathway]?.bg || 'bg-slate-100'
+                                            } ${PATHWAY_BADGES[contract.pathway]?.text || 'text-slate-600'}`}>
+                                            {PATHWAY_BADGES[contract.pathway]?.label}
+                                        </span>
+                                        <span>·</span>
+                                        <span>{formatDate(contract.lastActivity)}</span>
+                                    </div>
+                                    {(contract.counterpartyName || contract.counterpartyCompany) && (
+                                        <p className="text-xs text-slate-400 mb-3">
+                                            With {contract.counterpartyName}
+                                            {contract.counterpartyCompany && ` (${contract.counterpartyCompany})`}
+                                        </p>
+                                    )}
+                                    <button
+                                        onClick={() => handleEnterContract(contract)}
+                                        className="w-full px-3 py-1.5 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors font-medium"
+                                    >
+                                        View in Document Centre
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+            </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 8I: FEEDBACK BUTTON                                   */}
+            {/* ============================================================ */}
+            <FeedbackButton position="bottom-left" />
+        </div>
+    )
+}
+
+
+// ============================================================================
+// SECTION 9: PAGE EXPORT (Suspense wrapper for useSearchParams)
+// ============================================================================
+
+export default function HomePage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+                <header className="h-14 bg-slate-800" />
+                <div className="flex items-center justify-center h-64">
+                    <div className="w-8 h-8 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                </div>
+            </div>
+        }>
+            <HomePageInner />
+        </Suspense>
+    )
+}
