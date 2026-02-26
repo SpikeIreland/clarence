@@ -1778,7 +1778,24 @@ function QuickContractStudioContent() {
         } catch (err) {
             console.log('Could not load respondent info:', err)
         }
-    }, [resolvedContractId])
+        // --- SELF-FILL: If current user IS the respondent, ensure respondentInfo is set ---
+        // Covers cases where qc_recipients lookup fails but the user IS here
+        try {
+            if (contract?.uploadedByUserId !== userInfo?.userId && userInfo) {
+                setRespondentInfo(prev => {
+                    if (prev) return prev  // Already loaded from DB, keep it
+                    return {
+                        name: userInfo.fullName || 'Respondent',
+                        company: userInfo.companyName || null,
+                        isOnline: true
+                    }
+                })
+            }
+        } catch (err) {
+            console.log('[loadPartyInfo] Self-fill failed:', err)
+        }
+
+    }, [resolvedContractId, contract?.uploadedByUserId, userInfo?.userId])
 
     useEffect(() => {
         loadPartyInfo()
@@ -3199,7 +3216,7 @@ INSTRUCTIONS:
                                     <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
                                     <div className="text-xs">
                                         <span className="font-medium text-emerald-800">
-                                            {initiatorInfo?.company || initiatorInfo?.name || userInfo?.companyName || 'Initiator'}
+                                            {initiatorInfo?.company || initiatorInfo?.name || (getPartyRole() === 'initiator' ? userInfo?.companyName || userInfo?.fullName : null) || 'Initiator'}
                                         </span>
                                         <span className="text-emerald-600 ml-1">
                                             · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
