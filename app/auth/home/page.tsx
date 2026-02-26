@@ -262,14 +262,12 @@ function HomePageInner() {
                 .select(`
                     contract_id,
                     contract_name,
-                    contract_type,
                     contract_type_key,
                     initiator_party_role,
                     status,
                     created_at,
                     updated_at,
-                    uploaded_by_user_id,
-                    clause_count
+                    uploaded_by_user_id
                 `)
                 .eq('uploaded_by_user_id', userId)
                 .order('updated_at', { ascending: false })
@@ -281,7 +279,7 @@ function HomePageInner() {
 
             if (!data) return []
 
-            // For each contract, fetch recipient info for counterparty display
+            // For each contract, fetch recipient info and clause count
             const contractsWithRecipients = await Promise.all(
                 data.map(async (contract) => {
                     const { data: recipients } = await supabase
@@ -292,9 +290,17 @@ function HomePageInner() {
 
                     const recipient = recipients?.[0]
 
+                    // Get clause count from uploaded_contract_clauses
+                    const { count: clauseCount } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('clause_id', { count: 'exact', head: true })
+                        .eq('contract_id', contract.contract_id)
+
+                    const totalClauses = clauseCount || 0
+
                     // Fetch clause agreement stats
                     let clauseStats = undefined
-                    if (contract.clause_count && contract.clause_count > 0) {
+                    if (totalClauses > 0) {
                         const { data: events } = await supabase
                             .from('qc_clause_events')
                             .select('clause_id, event_type, party_role')
@@ -313,12 +319,11 @@ function HomePageInner() {
                                     else respondentAgreed.delete(e.clause_id)
                                 }
                             })
-                            // "Agreed" means both parties agreed
                             let bothAgreed = 0
                             initiatorAgreed.forEach(id => {
                                 if (respondentAgreed.has(id)) bothAgreed++
                             })
-                            clauseStats = { agreed: bothAgreed, total: contract.clause_count }
+                            clauseStats = { agreed: bothAgreed, total: totalClauses }
                         }
                     }
 
@@ -333,7 +338,7 @@ function HomePageInner() {
                         progressSummary = clauseStats
                             ? `${clauseStats.agreed} of ${clauseStats.total} clauses agreed`
                             : 'Negotiation in progress'
-                    } else if (recipient && recipient.status === 'invited') {
+                    } else if (recipient && (recipient.status === 'invited' || recipient.status === 'sent' || recipient.status === 'pending')) {
                         statusLabel = 'Awaiting Response'
                         progressSummary = `Waiting for ${recipient.recipient_name || recipient.recipient_email || 'provider'} to respond`
                     } else if (!recipient) {
@@ -344,7 +349,7 @@ function HomePageInner() {
                     return {
                         id: contract.contract_id,
                         name: contract.contract_name,
-                        contractType: contract.contract_type || '',
+                        contractType: '',
                         contractTypeKey: contract.contract_type_key || null,
                         initiatorPartyRole: contract.initiator_party_role || null,
                         pathway: 'quick_create' as const,
@@ -415,7 +420,6 @@ function HomePageInner() {
                 .eq('recipient_email', email)
 
             if (byEmail) {
-                // Deduplicate by quick_contract_id
                 const existingIds = new Set(recipientData.map(r => r.quick_contract_id))
                 byEmail.forEach(r => {
                     if (!existingIds.has(r.quick_contract_id)) {
@@ -434,14 +438,12 @@ function HomePageInner() {
                         .select(`
                             contract_id,
                             contract_name,
-                            contract_type,
                             contract_type_key,
                             initiator_party_role,
                             status,
                             created_at,
                             updated_at,
-                            uploaded_by_user_id,
-                            clause_count
+                            uploaded_by_user_id
                         `)
                         .eq('contract_id', recipient.quick_contract_id)
                         .single()
@@ -454,13 +456,21 @@ function HomePageInner() {
                     // Get initiator info for counterparty display
                     const { data: initiator } = await supabase
                         .from('users')
-                        .select('first_name, last_name, company')
+                        .select('first_name, last_name, company_name')
                         .eq('user_id', contract.uploaded_by_user_id)
                         .single()
 
-                    // Clause stats (same logic as initiator)
+                    // Get clause count
+                    const { count: clauseCount } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('clause_id', { count: 'exact', head: true })
+                        .eq('contract_id', contract.contract_id)
+
+                    const totalClauses = clauseCount || 0
+
+                    // Clause stats
                     let clauseStats = undefined
-                    if (contract.clause_count && contract.clause_count > 0) {
+                    if (totalClauses > 0) {
                         const { data: events } = await supabase
                             .from('qc_clause_events')
                             .select('clause_id, event_type, party_role')
@@ -483,7 +493,7 @@ function HomePageInner() {
                             initiatorAgreed.forEach(id => {
                                 if (respondentAgreed.has(id)) bothAgreed++
                             })
-                            clauseStats = { agreed: bothAgreed, total: contract.clause_count }
+                            clauseStats = { agreed: bothAgreed, total: totalClauses }
                         }
                     }
 
@@ -500,7 +510,7 @@ function HomePageInner() {
                             : 'Negotiation in progress'
                     }
 
-                    // Check if this contract should be highlighted (from invite flow)
+                    // Check if this contract should be highlighted
                     const pendingInvite = typeof window !== 'undefined'
                         ? sessionStorage.getItem('pending_invite_contract')
                         : null
@@ -508,7 +518,7 @@ function HomePageInner() {
                     return {
                         id: contract.contract_id,
                         name: contract.contract_name,
-                        contractType: contract.contract_type || '',
+                        contractType: '',
                         contractTypeKey: contract.contract_type_key || null,
                         initiatorPartyRole: contract.initiator_party_role || null,
                         pathway: 'quick_create' as const,
@@ -524,7 +534,7 @@ function HomePageInner() {
                         counterpartyName: initiator
                             ? `${initiator.first_name || ''} ${initiator.last_name || ''}`.trim()
                             : '',
-                        counterpartyCompany: initiator?.company || '',
+                        counterpartyCompany: initiator?.company_name || '',
                         lastActivity: contract.updated_at || contract.created_at,
                         createdAt: contract.created_at,
                         clauseStats,
@@ -547,17 +557,8 @@ function HomePageInner() {
 
     const fetchContractCreateSessions = useCallback(async (userId: string, companyId: string): Promise<UnifiedContract[]> => {
         try {
-            // Fetch sessions where user is a party
-            const { data: parties } = await supabase
-                .from('session_parties')
-                .select('session_id, party_type, user_id, company_id')
-                .or(`user_id.eq.${userId},company_id.eq.${companyId}`)
-
-            if (!parties || parties.length === 0) return []
-
-            const sessionIds = [...new Set(parties.map(p => p.session_id))]
-
-            const { data: sessions } = await supabase
+            // Fetch sessions where user is customer (initiator) or provider (respondent)
+            const { data: sessions, error: sessionsError } = await supabase
                 .from('sessions')
                 .select(`
                     session_id,
@@ -566,9 +567,6 @@ function HomePageInner() {
                     provider_company,
                     customer_contact_name,
                     provider_contact_name,
-                    service_type,
-                    deal_value,
-                    contract_type,
                     contract_type_key,
                     initiator_party_role,
                     phase,
@@ -580,10 +578,15 @@ function HomePageInner() {
                     customer_id,
                     provider_id
                 `)
-                .in('session_id', sessionIds)
+                .or(`customer_id.eq.${userId},provider_id.eq.${userId}`)
                 .order('updated_at', { ascending: false })
 
-            if (!sessions) return []
+            if (sessionsError) {
+                console.error('Error fetching sessions:', sessionsError)
+                return []
+            }
+
+            if (!sessions || sessions.length === 0) return []
 
             return sessions.map(session => {
                 const isTraining = session.is_training === true
@@ -623,8 +626,8 @@ function HomePageInner() {
 
                 return {
                     id: session.session_id,
-                    name: `${session.service_type || 'Contract'} — ${session.session_number || ''}`,
-                    contractType: session.contract_type || session.service_type || '',
+                    name: `${session.customer_company || 'Contract'} — ${session.session_number || ''}`,
+                    contractType: '',
                     contractTypeKey: session.contract_type_key || null,
                     initiatorPartyRole: session.initiator_party_role || null,
                     pathway: pathway as 'contract_create' | 'training',
