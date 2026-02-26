@@ -1702,100 +1702,159 @@ function QuickContractStudioContent() {
     }
 
     // ========================================================================
-    // SECTION 4D-1A: PARTY CHAT FUNCTIONS
+    // SECTION 4D-1A: LOAD PARTY INFO
+    // 
+    // Strategy:
+    //   - INITIATOR viewing: load respondent from qc_recipients (own data, no RLS issue)
+    //                        load own info from userInfo (already in state)
+    //   - RESPONDENT viewing: load EVERYTHING from qc_recipients row
+    //                         (initiator_name/company denormalised there, zero cross-table RLS)
+    //
+    // This eliminates the old 4-table chain (uploaded_contracts → users → companies → quick_contracts)
+    // that was RLS-blocked for the respondent.
     // ========================================================================
-
-    // Note: getPartyRole() is defined in SECTION 4D above
-    // Note: getOtherPartyName() is defined in SECTION 4D above with the agreement helpers
-
     const loadPartyInfo = useCallback(async () => {
-        if (!resolvedContractId) return
+        if (!resolvedContractId || !userInfo) return
 
-        // --- Load INITIATOR info (always runs) ---
-        try {
-            const { data: contractData } = await supabase
-                .from('uploaded_contracts')
-                .select('uploaded_by_user_id, company_id')
-                .eq('contract_id', resolvedContractId)
-                .single()
+        const currentRole = getPartyRole()
+        console.log(`[loadPartyInfo] Role: ${currentRole}, resolvedContractId: ${resolvedContractId}`)
 
-            if (contractData?.uploaded_by_user_id) {
-                const { data: initiatorUser } = await supabase
-                    .from('users')
-                    .select('first_name, last_name, contact_person, email, company_id, companies(company_name)')
-                    .eq('user_id', contractData.uploaded_by_user_id)
-                    .single()
+        // ── Step 1: Find the quick_contract_id from the source contract ──
+        let quickContractId: string | null = null
 
-                if (initiatorUser) {
-                    const name = `${initiatorUser.first_name || ''} ${initiatorUser.last_name || ''}`.trim()
-                        || initiatorUser.contact_person
-                        || initiatorUser.email
-                        || 'Initiator'
-                    setInitiatorInfo({
-                        name,
-                        company: (initiatorUser.companies as any)?.company_name || null
-                    })
-                }
-            }
-        } catch (err) {
-            console.log('Could not load initiator info:', err)
-        }
+        // Try: resolvedContractId is a source_contract_id
+        const { data: qcFromSource } = await supabase
+            .from('quick_contracts')
+            .select('quick_contract_id')
+            .eq('source_contract_id', resolvedContractId)
+            .maybeSingle()
 
-        // --- Load RESPONDENT info + invite status ---
-        try {
-            const { data: qcData } = await supabase
+        if (qcFromSource) {
+            quickContractId = qcFromSource.quick_contract_id
+        } else {
+            // Try: resolvedContractId might itself be a quick_contract_id
+            const { data: qcDirect } = await supabase
                 .from('quick_contracts')
                 .select('quick_contract_id')
-                .eq('source_contract_id', resolvedContractId)
+                .eq('quick_contract_id', resolvedContractId)
                 .maybeSingle()
 
-            if (qcData) {
-                const { data: recipientData } = await supabase
-                    .from('qc_recipients')
-                    .select('recipient_name, recipient_company, recipient_email, status')
-                    .eq('quick_contract_id', qcData.quick_contract_id)
-                    .limit(1)
-                    .maybeSingle()
+            if (qcDirect) {
+                quickContractId = qcDirect.quick_contract_id
+            }
+        }
 
-                if (recipientData) {
-                    // Set respondent info
-                    setRespondentInfo({
-                        name: recipientData.recipient_name || recipientData.recipient_email || 'Respondent',
-                        company: recipientData.recipient_company || null,
-                        isOnline: false
-                    })
+        // ── Step 2: Load qc_recipients row (single query, both roles need this) ──
+        let recipientRow: {
+            recipient_name: string | null
+            recipient_email: string | null
+            recipient_company: string | null
+            initiator_name: string | null
+            initiator_company: string | null
+            initiator_email: string | null
+            status: string | null
+        } | null = null
 
-                    // Set invite/respondent status from database
-                    setInviteSent(true)
-                    const dbStatus = recipientData.status || 'pending'
-                    if (['pending', 'viewed', 'accepted', 'declined'].includes(dbStatus)) {
-                        setRespondentStatus(dbStatus as any)
-                    } else {
-                        setRespondentStatus('pending')
-                    }
+        if (quickContractId) {
+            const { data: recipientData } = await supabase
+                .from('qc_recipients')
+                .select('recipient_name, recipient_email, recipient_company, initiator_name, initiator_company, initiator_email, status')
+                .eq('quick_contract_id', quickContractId)
+                .limit(1)
+                .maybeSingle()
+
+            recipientRow = recipientData
+            console.log('[loadPartyInfo] qc_recipients row:', recipientRow)
+        }
+
+        // ── Step 3: Populate initiatorInfo and respondentInfo based on role ──
+
+        if (currentRole === 'initiator') {
+            // INITIATOR: own info comes from userInfo (already loaded)
+            setInitiatorInfo({
+                name: userInfo.fullName || userInfo.email || 'Initiator',
+                company: userInfo.companyName || null
+            })
+
+            // Respondent info from qc_recipients
+            if (recipientRow) {
+                setRespondentInfo({
+                    name: recipientRow.recipient_name || recipientRow.recipient_email || 'Respondent',
+                    company: recipientRow.recipient_company || null,
+                    isOnline: false
+                })
+                setInviteSent(true)
+                const dbStatus = recipientRow.status || 'pending'
+                if (['pending', 'invited', 'viewed', 'accepted', 'declined'].includes(dbStatus)) {
+                    setRespondentStatus(dbStatus as typeof respondentStatus)
+                } else {
+                    setRespondentStatus('pending')
                 }
             }
-        } catch (err) {
-            console.log('Could not load respondent info:', err)
-        }
-        // --- SELF-FILL: If current user IS the respondent, ensure respondentInfo is set ---
-        // Covers cases where qc_recipients lookup fails but the user IS here
-        try {
-            if (contract?.uploadedByUserId !== userInfo?.userId && userInfo) {
-                setRespondentInfo(prev => {
-                    if (prev) return prev  // Already loaded from DB, keep it
-                    return {
-                        name: userInfo.fullName || 'Respondent',
-                        company: userInfo.companyName || null,
-                        isOnline: true
+
+        } else {
+            // RESPONDENT: read BOTH parties from the single qc_recipients row
+            // This avoids the RLS-blocked chain through uploaded_contracts → users → companies
+
+            if (recipientRow) {
+                // Initiator info from denormalised columns
+                setInitiatorInfo({
+                    name: recipientRow.initiator_name || 'Initiator',
+                    company: recipientRow.initiator_company || null
+                })
+
+                // Respondent info — prefer DB row, fall back to own userInfo
+                setRespondentInfo({
+                    name: recipientRow.recipient_name || userInfo.fullName || 'Respondent',
+                    company: recipientRow.recipient_company || userInfo.companyName || null,
+                    isOnline: true
+                })
+
+                setInviteSent(true)
+                setRespondentStatus('accepted')
+            } else {
+                // No qc_recipients row found — fallback
+                // Still try to set initiator from contract data if available
+                console.warn('[loadPartyInfo] No qc_recipients row found for respondent — using fallbacks')
+
+                // Attempt direct lookup (may be RLS-blocked, wrapped in try/catch)
+                try {
+                    const { data: contractData } = await supabase
+                        .from('uploaded_contracts')
+                        .select('uploaded_by_user_id')
+                        .eq('contract_id', resolvedContractId)
+                        .single()
+
+                    if (contractData?.uploaded_by_user_id) {
+                        const { data: initiatorUser } = await supabase
+                            .from('users')
+                            .select('first_name, last_name, email, companies(company_name)')
+                            .eq('user_id', contractData.uploaded_by_user_id)
+                            .single()
+
+                        if (initiatorUser) {
+                            const name = `${initiatorUser.first_name || ''} ${initiatorUser.last_name || ''}`.trim()
+                                || initiatorUser.email || 'Initiator'
+                            setInitiatorInfo({
+                                name,
+                                company: (initiatorUser.companies as any)?.company_name || null
+                            })
+                        }
                     }
+                } catch (err) {
+                    console.log('[loadPartyInfo] Fallback initiator lookup failed (expected if RLS blocks):', err)
+                }
+
+                // Self-fill respondent info from userInfo
+                setRespondentInfo({
+                    name: userInfo.fullName || 'Respondent',
+                    company: userInfo.companyName || null,
+                    isOnline: true
                 })
             }
-        } catch (err) {
-            console.log('[loadPartyInfo] Self-fill failed:', err)
         }
 
-    }, [resolvedContractId, contract?.uploadedByUserId, userInfo?.userId])
+    }, [resolvedContractId, contract?.uploadedByUserId, userInfo?.userId, userInfo?.fullName, userInfo?.companyName])
 
     useEffect(() => {
         loadPartyInfo()
