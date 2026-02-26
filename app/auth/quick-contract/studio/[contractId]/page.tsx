@@ -3395,8 +3395,8 @@ INSTRUCTIONS:
                             Back
                         </button>
 
-                        {/* Commit / Progress Button (non-template mode, respondent only) */}
-                        {!isTemplateMode && !isInitiator && (() => {
+                        {/* Commit / Document Centre / Progress Button (non-template mode) */}
+                        {!isTemplateMode && (() => {
                             const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
                             const bothAgreedCount = leafClauses.filter(c => isBothPartiesAgreed(c.clauseId)).length
                             const allBothAgreed = leafClauses.length > 0 && bothAgreedCount === leafClauses.length
@@ -3404,6 +3404,7 @@ INSTRUCTIONS:
                             const myAgreedCount = leafClauses.filter(c => hasCurrentUserAgreed(c.clauseId)).length
                             const allMyAgreed = leafClauses.length > 0 && myAgreedCount === leafClauses.length
 
+                            // Both initiator and respondent see Document Centre when committed
                             if (contractCommitted) {
                                 return (
                                     <button
@@ -3417,6 +3418,9 @@ INSTRUCTIONS:
                                     </button>
                                 )
                             }
+
+                            // Only respondent sees commit/progress buttons
+                            if (isInitiator) return null
 
                             if (allBothAgreed) {
                                 return (
@@ -3450,20 +3454,6 @@ INSTRUCTIONS:
                             return null
                         })()}
 
-                        <button
-                            onClick={() => {
-                                if (isTemplateMode) {
-                                    router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
-                                } else if (getPartyRole() === 'respondent') {
-                                    window.location.href = '/provider'
-                                } else {
-                                    router.push('/auth/quick-contract')
-                                }
-                            }}
-                            className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
-                        >
-                            Back
-                        </button>
                     </div>
                 </div>
             </header>
