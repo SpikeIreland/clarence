@@ -398,7 +398,7 @@ function QuickContractStudioContent() {
     const [sendingInvite, setSendingInvite] = useState(false)
     const [inviteSuccess, setInviteSuccess] = useState(false)
     const [inviteSent, setInviteSent] = useState(false)
-    const [respondentStatus, setRespondentStatus] = useState<'none' | 'pending' | 'viewed' | 'accepted' | 'declined' | 'in_studio'>('none')
+    const [respondentStatus, setRespondentStatus] = useState<'none' | 'pending' | 'invited' | 'viewed' | 'accepted' | 'declined' | 'in_studio'>('none')
 
     // Derived state
     const selectedClause = selectedClauseIndex !== null ? clauses[selectedClauseIndex] : null
@@ -3432,7 +3432,7 @@ INSTRUCTIONS:
                                     </svg>
                                     Invite
                                 </button>
-                            ) : respondentStatus === 'accepted' || respondentStatus === 'in_studio' || respondentStatus === 'viewed' ? (
+                            ) : respondentStatus === 'accepted' || respondentStatus === 'in_studio' || respondentStatus === 'viewed' || respondentStatus === 'invited' ? (
                                 <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
                                     <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                                     {respondentInfo?.name || 'Respondent'} Active
