@@ -2,13 +2,20 @@
 
 // ============================================================================
 // QUICK CONTRACT - PUBLIC RECIPIENT PAGE
-// Version: 1.1
-// Date: 25 February 2026
+// Version: 1.2
+// Date: 26 February 2026
 // Path: /app/qc/[token]/page.tsx
 // Description: Public page for recipients to view and respond to contracts
 // Note: This page does NOT require authentication
 //
 // CHANGELOG:
+// 26 Feb 2026 - v1.2: TWO-BUTTON FIX + CONTENT FALLBACK
+//   - Removed duplicate Section 23 "Review Contract" button
+//   - Section 22B is now the single CTA ("Enter CLARENCE Studio")
+//   - Added content fallback: if quick_contracts.document_content is null,
+//     loads from uploaded_contracts.extracted_text via source_contract_id
+//   - Also loads clause count from uploaded_contract_clauses for display
+//
 // 25 Feb 2026 - v1.1: ENTER STUDIO SUPPORT (Task 2)
 //   - Added handleEnterStudio (Section 8B) - stores contract context in
 //     sessionStorage (clarence_qc_redirect) and hard-navs to /provider
@@ -46,6 +53,8 @@ interface ContractData {
     senderName: string | null
     senderEmail: string | null
     senderCompany: string | null
+    sourceContractId: string | null
+    clauseCount: number
 }
 
 interface RecipientData {
@@ -141,7 +150,7 @@ export default function PublicRecipientPage() {
                 return
             }
 
-            // Load contract
+            // Load contract from quick_contracts
             const { data: contractData, error: contractError } = await supabase
                 .from('quick_contracts')
                 .select(`
@@ -175,41 +184,50 @@ export default function PublicRecipientPage() {
                 return
             }
 
-            // Check if already responded
-            if (['accepted', 'declined'].includes(recipientData.status)) {
-                setRecipient({
-                    recipientId: recipientData.recipient_id,
-                    recipientName: recipientData.recipient_name,
-                    recipientEmail: recipientData.recipient_email,
-                    recipientCompany: recipientData.recipient_company,
-                    status: recipientData.status,
-                    responseType: recipientData.response_type,
-                    responseMessage: recipientData.response_message,
-                    declineReason: recipientData.decline_reason,
-                    respondedAt: recipientData.responded_at,
-                    personalMessage: recipientData.personal_message
-                })
-                setContract({
-                    quickContractId: contractData.quick_contract_id,
-                    contractName: contractData.contract_name,
-                    contractType: contractData.contract_type,
-                    description: contractData.description,
-                    referenceNumber: contractData.reference_number,
-                    documentContent: contractData.document_content,
-                    status: contractData.status,
-                    expiresAt: contractData.expires_at,
-                    allowRecipientComments: contractData.allow_recipient_comments,
-                    requireFullScroll: contractData.require_full_scroll,
-                    senderName: contractData.users?.contact_person,
-                    senderEmail: contractData.users?.email,
-                    senderCompany: contractData.companies?.company_name
-                })
-                setPageState('already_responded')
-                return
+            // ================================================================
+            // CONTENT FALLBACK: If quick_contracts has no document_content,
+            // load from uploaded_contracts via source_contract_id.
+            // This is the normal case for QC pathway contracts where the
+            // document lives in uploaded_contracts.extracted_text
+            // ================================================================
+            let documentContent = contractData.document_content
+            let clauseCount = 0
+            const sourceContractId = contractData.source_contract_id || null
+
+            if (sourceContractId) {
+                // Try to load content from the source uploaded contract
+                if (!documentContent) {
+                    try {
+                        const { data: sourceContract } = await supabase
+                            .from('uploaded_contracts')
+                            .select('extracted_text, contract_name, description')
+                            .eq('contract_id', sourceContractId)
+                            .single()
+
+                        if (sourceContract?.extracted_text) {
+                            documentContent = sourceContract.extracted_text
+                        }
+                    } catch (err) {
+                        console.log('Could not load source contract content:', err)
+                    }
+                }
+
+                // Load clause count for display
+                try {
+                    const { count } = await supabase
+                        .from('uploaded_contract_clauses')
+                        .select('clause_id', { count: 'exact', head: true })
+                        .eq('contract_id', sourceContractId)
+                        .eq('is_header', false)
+
+                    clauseCount = count || 0
+                } catch (err) {
+                    console.log('Could not load clause count:', err)
+                }
             }
 
-            // Set data
-            setRecipient({
+            // Build recipient info object
+            const recipientInfo: RecipientData = {
                 recipientId: recipientData.recipient_id,
                 recipientName: recipientData.recipient_name,
                 recipientEmail: recipientData.recipient_email,
@@ -220,23 +238,38 @@ export default function PublicRecipientPage() {
                 declineReason: recipientData.decline_reason,
                 respondedAt: recipientData.responded_at,
                 personalMessage: recipientData.personal_message
-            })
+            }
 
-            setContract({
+            // Build contract info object
+            const contractInfo: ContractData = {
                 quickContractId: contractData.quick_contract_id,
                 contractName: contractData.contract_name,
                 contractType: contractData.contract_type,
                 description: contractData.description,
                 referenceNumber: contractData.reference_number,
-                documentContent: contractData.document_content,
+                documentContent: documentContent,
                 status: contractData.status,
                 expiresAt: contractData.expires_at,
                 allowRecipientComments: contractData.allow_recipient_comments ?? true,
                 requireFullScroll: contractData.require_full_scroll ?? false,
                 senderName: contractData.users?.contact_person,
                 senderEmail: contractData.users?.email,
-                senderCompany: contractData.companies?.company_name
-            })
+                senderCompany: contractData.companies?.company_name,
+                sourceContractId: sourceContractId,
+                clauseCount: clauseCount
+            }
+
+            // Check if already responded
+            if (['accepted', 'declined'].includes(recipientData.status)) {
+                setRecipient(recipientInfo)
+                setContract(contractInfo)
+                setPageState('already_responded')
+                return
+            }
+
+            // Set data for normal view
+            setRecipient(recipientInfo)
+            setContract(contractInfo)
 
             // Record view
             await recordView(recipientData.recipient_id, recipientData.view_count || 0)
@@ -433,10 +466,26 @@ export default function PublicRecipientPage() {
     async function handleEnterStudio() {
         if (!contract) return
 
+        // Auto-accept in background (entering studio = engaging)
+        try {
+            if (recipient?.recipientId) {
+                await supabase
+                    .from('qc_recipients')
+                    .update({
+                        status: 'accepted',
+                        response_type: 'accepted',
+                        responded_at: new Date().toISOString()
+                    })
+                    .eq('recipient_id', recipient.recipientId)
+            }
+        } catch (err) {
+            console.warn('Auto-accept failed (non-blocking):', err)
+        }
+
         // Store QC redirect context in sessionStorage
-        // The Provider Landing Page (Section 7E, Step 3) reads this after login
+        // The Provider Landing Page reads this after login
         const qcRedirect = {
-            contractId: contract.quickContractId,
+            contractId: contract.sourceContractId || contract.quickContractId,
             contractName: contract.contractName,
             contractType: contract.contractType,
             senderCompany: contract.senderCompany,
@@ -686,15 +735,14 @@ export default function PublicRecipientPage() {
                         <div className="mt-4 p-4 bg-slate-50 rounded-lg text-left">
                             <p className="font-medium text-slate-800">{contract.contractName}</p>
                             <p className="text-sm text-slate-500">{getContractTypeLabel(contract.contractType)}</p>
+                            {contract.clauseCount > 0 && (
+                                <p className="text-sm text-slate-400 mt-1">{contract.clauseCount} clauses</p>
+                            )}
                         </div>
                     )}
-                    {isAccepted && contract?.quickContractId && (
+                    {isAccepted && contract && (
                         <button
-                            onClick={() => {
-                                const studioUrl = `/auth/quick-contract/studio/${contract.quickContractId}`
-                                sessionStorage.setItem('clarence_qc_redirect', studioUrl)
-                                window.location.href = '/provider'
-                            }}
+                            onClick={handleEnterStudio}
                             className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors text-sm"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -759,13 +807,13 @@ export default function PublicRecipientPage() {
                     {/* Enter Studio CTA for accepted contracts */}
                     {isAccepted && contract && (
                         <div className="mb-6">
-                            <div className="border border-blue-200 bg-blue-50 rounded-lg p-4">
-                                <p className="text-sm text-blue-800 mb-3">
+                            <div className="border border-teal-200 bg-teal-50 rounded-lg p-4">
+                                <p className="text-sm text-teal-800 mb-3">
                                     Ready to negotiate the details? Enter the CLARENCE Studio to discuss terms with the sender.
                                 </p>
                                 <button
                                     onClick={handleEnterStudio}
-                                    className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                                    className="w-full px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -842,7 +890,15 @@ export default function PublicRecipientPage() {
                         <div>
                             <p className="text-sm text-slate-500 mb-1">Contract for Review</p>
                             <h1 className="text-2xl font-bold text-slate-800 mb-1">{contract?.contractName}</h1>
-                            <p className="text-slate-500">{getContractTypeLabel(contract?.contractType || null)}</p>
+                            <div className="flex items-center gap-3 text-slate-500">
+                                <span>{getContractTypeLabel(contract?.contractType || null)}</span>
+                                {contract && contract.clauseCount > 0 && (
+                                    <>
+                                        <span className="text-slate-300">&middot;</span>
+                                        <span>{contract.clauseCount} clauses</span>
+                                    </>
+                                )}
+                            </div>
                         </div>
                         {contract?.senderCompany && (
                             <div className="text-right">
@@ -889,7 +945,20 @@ export default function PublicRecipientPage() {
                                 dangerouslySetInnerHTML={{ __html: contract.documentContent }}
                             />
                         ) : (
-                            <p className="text-slate-400 text-center py-8">No content available</p>
+                            <div className="text-center py-12">
+                                <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <p className="text-slate-500 font-medium">Contract document is being processed</p>
+                                <p className="text-slate-400 text-sm mt-1">
+                                    {contract && contract.clauseCount > 0
+                                        ? `${contract.clauseCount} clauses have been identified and are ready for review in the Studio.`
+                                        : 'Enter the CLARENCE Studio below to review the full contract and its clauses.'
+                                    }
+                                </p>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -947,16 +1016,12 @@ export default function PublicRecipientPage() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 22B: ENTER STUDIO (CONSOLIDATED)                       */}
-                {/* Replaces the previous Section 22B + Section 23 which had two   */}
-                {/* duplicate buttons ("Enter Studio" and "Review Contract") that   */}
-                {/* both routed to the same destination.                            */}
-                {/*                                                                */}
-                {/* This single CTA:                                               */}
-                {/*  1. Auto-accepts the contract (entering = engaging)            */}
-                {/*  2. Stores redirect context in sessionStorage                  */}
-                {/*  3. Routes to /provider for authentication                     */}
-                {/*  4. Provider Landing Page reads context and routes to Studio   */}
+                {/* SECTION 22B: ENTER STUDIO (SINGLE CTA)                         */}
+                {/* This is the ONLY action button for the recipient.               */}
+                {/*  1. Auto-accepts the contract (entering = engaging)             */}
+                {/*  2. Stores redirect context in sessionStorage                   */}
+                {/*  3. Routes to /provider for authentication                      */}
+                {/*  4. Provider Landing Page reads context and routes to Studio    */}
                 {/* ============================================================== */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
                     <div className="bg-gradient-to-r from-teal-600 to-emerald-600 px-6 py-4">
@@ -984,55 +1049,7 @@ export default function PublicRecipientPage() {
                             </div>
                             <div className="flex-shrink-0">
                                 <button
-                                    onClick={async () => {
-                                        if (!contract) return
-
-                                        // Auto-accept in background (entering studio = engaging)
-                                        try {
-                                            if (recipient?.recipientId) {
-                                                await supabase
-                                                    .from('qc_recipients')
-                                                    .update({
-                                                        status: 'accepted',
-                                                        response_type: 'accepted',
-                                                        responded_at: new Date().toISOString()
-                                                    })
-                                                    .eq('recipient_id', recipient.recipientId)
-                                            }
-                                        } catch (err) {
-                                            console.warn('Auto-accept failed (non-blocking):', err)
-                                        }
-
-                                        // Store redirect context for post-auth routing
-                                        const qcRedirect = {
-                                            contractId: contract.quickContractId,
-                                            contractName: contract.contractName,
-                                            contractType: contract.contractType,
-                                            senderCompany: contract.senderCompany,
-                                            source: 'qc_token_page'
-                                        }
-                                        sessionStorage.setItem('clarence_qc_redirect', JSON.stringify(qcRedirect))
-
-                                        // Log audit event (fire-and-forget)
-                                        if (recipient) {
-                                            try {
-                                                await supabase
-                                                    .from('qc_audit_log')
-                                                    .insert({
-                                                        quick_contract_id: contract.quickContractId,
-                                                        recipient_id: recipient.recipientId,
-                                                        event_type: 'enter_studio_clicked',
-                                                        event_description: 'Recipient clicked Enter Studio — routing to authentication',
-                                                        event_data: { source: 'qc_token_page' }
-                                                    })
-                                            } catch {
-                                                // Audit log failure is non-blocking
-                                            }
-                                        }
-
-                                        // Hard nav to provider auth page
-                                        window.location.href = '/provider'
-                                    }}
+                                    onClick={handleEnterStudio}
                                     disabled={!contract?.quickContractId}
                                     className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                                 >
@@ -1046,57 +1063,9 @@ export default function PublicRecipientPage() {
                     </div>
                 </div>
 
-                {/* ============================================================== */}
-                {/* SECTION 23: REVIEW CONTRACT BUTTON */}
-                {/* ============================================================== */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                    <h2 className="font-semibold text-slate-800 mb-2 text-center">Ready to Review?</h2>
-                    <p className="text-sm text-slate-500 text-center mb-6">
-                        Open the contract in the CLARENCE Studio to review clauses, discuss terms, and collaborate with {contract?.senderCompany || 'the sender'}.
-                    </p>
+                {/* NOTE: Section 23 (duplicate "Review Contract" button) has been  */}
+                {/* removed in v1.2. Section 22B above is the single CTA.           */}
 
-                    <div className="flex justify-center">
-                        <button
-                            onClick={async () => {
-                                // Auto-accept in background (reviewing = engaging)
-                                try {
-                                    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-                                    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-                                    if (supabaseUrl && supabaseKey) {
-                                        const { createClient } = await import('@supabase/supabase-js')
-                                        const sb = createClient(supabaseUrl, supabaseKey)
-                                        await sb
-                                            .from('qc_recipients')
-                                            .update({
-                                                status: 'accepted',
-                                                response_type: 'accepted',
-                                                responded_at: new Date().toISOString()
-                                            })
-                                            .eq('recipient_id', recipient?.recipientId)
-                                    }
-                                } catch (err) {
-                                    console.warn('Auto-accept failed (non-blocking):', err)
-                                }
-
-                                // Set redirect and navigate to provider auth
-                                const studioUrl = `/auth/quick-contract/studio/${contract?.quickContractId}`
-                                sessionStorage.setItem('clarence_qc_redirect', studioUrl)
-                                window.location.href = '/provider'
-                            }}
-                            disabled={!contract?.quickContractId}
-                            className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Review Contract
-                        </button>
-                    </div>
-
-                    <p className="text-center text-xs text-slate-400 mt-4">
-                        You will be asked to sign in or create an account to access the review studio.
-                    </p>
-                </div>
             </main>
 
             {/* ================================================================== */}
