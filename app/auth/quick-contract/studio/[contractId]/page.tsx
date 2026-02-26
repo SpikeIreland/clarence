@@ -1709,30 +1709,9 @@ function QuickContractStudioContent() {
 
     const loadPartyInfo = useCallback(async () => {
         if (!resolvedContractId) return
+
+        // --- Load INITIATOR info (always runs) ---
         try {
-            const { data: qcData } = await supabase
-                .from('quick_contracts')
-                .select('quick_contract_id')
-                .eq('source_contract_id', resolvedContractId)
-                .single()
-
-            if (qcData) {
-                const { data: recipientData } = await supabase
-                    .from('qc_recipients')
-                    .select('recipient_name, recipient_company')
-                    .eq('quick_contract_id', qcData.quick_contract_id)
-                    .limit(1)
-                    .single()
-
-                if (recipientData) {
-                    setRespondentInfo({
-                        name: recipientData.recipient_name || 'Respondent',
-                        company: recipientData.recipient_company || null,
-                        isOnline: false
-                    })
-                }
-            }
-
             const { data: contractData } = await supabase
                 .from('uploaded_contracts')
                 .select('uploaded_by_user_id, company_id')
@@ -1742,20 +1721,52 @@ function QuickContractStudioContent() {
             if (contractData?.uploaded_by_user_id) {
                 const { data: initiatorUser } = await supabase
                     .from('users')
-                    .select('first_name, last_name, company_id, companies(company_name)')
+                    .select('first_name, last_name, contact_person, email, company_id, companies(company_name)')
                     .eq('user_id', contractData.uploaded_by_user_id)
                     .single()
 
                 if (initiatorUser) {
                     const name = `${initiatorUser.first_name || ''} ${initiatorUser.last_name || ''}`.trim()
+                        || initiatorUser.contact_person
+                        || initiatorUser.email
+                        || 'Initiator'
                     setInitiatorInfo({
-                        name: name || 'Initiator',
+                        name,
                         company: (initiatorUser.companies as any)?.company_name || null
                     })
                 }
             }
         } catch (err) {
-            console.log('Could not load party info:', err)
+            console.log('Could not load initiator info:', err)
+        }
+
+        // --- Load RESPONDENT info (separate try/catch so initiator still loads if this fails) ---
+        try {
+            // Use maybeSingle() instead of single() — returns null instead of throwing when 0 rows
+            const { data: qcData } = await supabase
+                .from('quick_contracts')
+                .select('quick_contract_id')
+                .eq('source_contract_id', resolvedContractId)
+                .maybeSingle()
+
+            if (qcData) {
+                const { data: recipientData } = await supabase
+                    .from('qc_recipients')
+                    .select('recipient_name, recipient_company, recipient_email')
+                    .eq('quick_contract_id', qcData.quick_contract_id)
+                    .limit(1)
+                    .maybeSingle()
+
+                if (recipientData) {
+                    setRespondentInfo({
+                        name: recipientData.recipient_name || recipientData.recipient_email || 'Respondent',
+                        company: recipientData.recipient_company || null,
+                        isOnline: false
+                    })
+                }
+            }
+        } catch (err) {
+            console.log('Could not load respondent info:', err)
         }
     }, [resolvedContractId])
 

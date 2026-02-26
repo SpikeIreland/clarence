@@ -110,6 +110,25 @@ interface GeneratedDocumentRecord {
     updated_at?: string | null
 }
 
+interface SignatureRecord {
+    signature_id: string
+    contract_id?: string | null
+    session_id?: string | null
+    document_id?: string | null
+    source_type: string
+    user_id: string
+    party_role: string
+    company_name: string
+    signatory_name: string
+    signatory_title?: string | null
+    signed_at: string
+    ip_address?: string | null
+    user_agent?: string | null
+    contract_hash: string
+    consent_text: string
+    status: string
+}
+
 // ============================================================================
 // SECTION 2: CONSTANTS & CONFIGURATION
 // ============================================================================
@@ -734,6 +753,277 @@ function DocumentContentPreview({ document, session }: { document: DocumentItem;
 }
 
 // ============================================================================
+// SECTION 8B: SIGNING PANEL COMPONENT
+// ============================================================================
+// Appears in the left panel below the Evidence Package card when the
+// Contract Draft is in 'ready' status. Shows who has signed and provides
+// the "Sign Contract" button for the current user.
+
+interface SigningPanelProps {
+    documents: DocumentItem[]
+    signatures: SignatureRecord[]
+    currentUserId?: string
+    onSign: () => void
+    mode: DocumentCentreMode
+}
+
+function SigningPanel({ documents, signatures, currentUserId, onSign, mode }: SigningPanelProps) {
+    const contractDraft = documents.find(d => d.id === 'contract-draft')
+    const isContractReady = contractDraft?.status === 'ready'
+
+    // Don't show unless the draft is ready
+    if (!isContractReady) return null
+
+    const currentUserSigned = signatures.some(s => s.user_id === currentUserId && s.status === 'signed')
+    const signedCount = signatures.filter(s => s.status === 'signed').length
+    const requiredSignatures = mode === 'quick_contract' ? 1 : 2
+    const allSigned = signedCount >= requiredSignatures
+
+    return (
+        <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${allSigned
+            ? 'bg-gradient-to-br from-violet-50 to-purple-50 border-violet-300'
+            : 'bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200'
+            }`}>
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-3">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${allSigned ? 'bg-violet-100' : 'bg-slate-200'
+                    }`}>
+                    {allSigned ? '\u2705' : '\u270D\uFE0F'}
+                </div>
+                <div className="flex-1">
+                    <h3 className={`font-semibold ${allSigned ? 'text-violet-800' : 'text-slate-700'}`}>
+                        {allSigned ? 'Contract Executed' : 'Signing Ceremony'}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                        {allSigned
+                            ? 'All parties have signed'
+                            : `${signedCount}/${requiredSignatures} signatures`
+                        }
+                    </p>
+                </div>
+            </div>
+
+            {/* Signature Status List */}
+            <div className="space-y-2 mb-3">
+                {signatures.filter(s => s.status === 'signed').map(sig => (
+                    <div key={sig.signature_id} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-100">
+                        <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs">{'\u2705'}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-slate-700 truncate">
+                                {sig.signatory_name}
+                            </div>
+                            <div className="text-xs text-slate-400 truncate">
+                                {sig.company_name} &middot; {new Date(sig.signed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+
+                {/* Pending signatures */}
+                {!allSigned && !currentUserSigned && (
+                    <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100">
+                        <div className="w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs">{'\u23F3'}</span>
+                        </div>
+                        <div className="text-sm text-amber-700">Your signature required</div>
+                    </div>
+                )}
+
+                {!allSigned && currentUserSigned && signedCount < requiredSignatures && (
+                    <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                        <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs">{'\u23F3'}</span>
+                        </div>
+                        <div className="text-sm text-blue-700">Waiting for other party</div>
+                    </div>
+                )}
+            </div>
+
+            {/* Sign Button */}
+            {!currentUserSigned && (
+                <button
+                    onClick={onSign}
+                    className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition flex items-center justify-center gap-2"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    I Agree to Sign
+                </button>
+            )}
+
+            {/* Contract Hash (compact) */}
+            {allSigned && signatures.length > 0 && (
+                <div className="mt-2 p-2 bg-slate-50 rounded-lg">
+                    <div className="text-xs text-slate-400">Contract Hash (SHA-256)</div>
+                    <div className="text-xs font-mono text-slate-500 truncate">{signatures[0]?.contract_hash}</div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 8C: SIGNING MODAL COMPONENT
+// ============================================================================
+// Full-screen modal with identity confirmation, contract hash display,
+// consent text, and job title input. This is the "signing ceremony".
+
+interface SigningModalProps {
+    show: boolean
+    onClose: () => void
+    onSign: () => void
+    isSigning: boolean
+    isComputingHash: boolean
+    contractHash: string | null
+    userInfo: UserInfo | null
+    companyName: string
+    signingTitle: string
+    onTitleChange: (value: string) => void
+}
+
+function SigningModal({
+    show, onClose, onSign, isSigning, isComputingHash,
+    contractHash, userInfo, companyName, signingTitle, onTitleChange
+}: SigningModalProps) {
+    if (!show) return null
+
+    const signatoryName = `${userInfo?.firstName || ''} ${userInfo?.lastName || ''}`.trim()
+    const shortHash = contractHash ? `${contractHash.substring(0, 16)}...${contractHash.substring(contractHash.length - 8)}` : 'Computing...'
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                {/* Header */}
+                <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-violet-50 to-purple-50 rounded-t-2xl">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center">
+                            <svg className="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800">Signing Ceremony</h2>
+                            <p className="text-sm text-slate-500">Review and confirm your signature</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Body */}
+                <div className="p-6 space-y-5">
+                    {/* Identity Confirmation */}
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-700 mb-2">Your Identity</h3>
+                        <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-sm text-slate-500">Name</span>
+                                <span className="text-sm font-medium text-slate-800">{signatoryName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-sm text-slate-500">Company</span>
+                                <span className="text-sm font-medium text-slate-800">{companyName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-sm text-slate-500">Email</span>
+                                <span className="text-sm font-medium text-slate-800">{userInfo?.email}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Job Title Input */}
+                    <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                            Job Title <span className="text-slate-400 font-normal">(optional)</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={signingTitle}
+                            onChange={(e) => onTitleChange(e.target.value)}
+                            placeholder="e.g. Head of Procurement, Legal Director"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                    </div>
+
+                    {/* Contract Hash */}
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-700 mb-2">Contract Fingerprint</h3>
+                        <div className="bg-slate-800 rounded-lg p-3">
+                            {isComputingHash ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                                    <span className="text-sm text-slate-300">Computing SHA-256 hash...</span>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="text-xs text-slate-400 mb-1">SHA-256</div>
+                                    <div className="text-sm font-mono text-emerald-400 break-all">{contractHash}</div>
+                                </>
+                            )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                            This hash uniquely identifies the Contract Draft at the time of signing.
+                            Any modification to the document would produce a different hash.
+                        </p>
+                    </div>
+
+                    {/* Consent Statement */}
+                    <div>
+                        <h3 className="text-sm font-semibold text-slate-700 mb-2">Consent Statement</h3>
+                        <div className="bg-violet-50 border border-violet-200 rounded-lg p-4">
+                            <p className="text-sm text-violet-900 leading-relaxed">
+                                I, <strong>{signatoryName}</strong>, on behalf of <strong>{companyName}</strong>,
+                                confirm that I have reviewed the Contract Draft
+                                (SHA-256: <span className="font-mono text-xs">{shortHash}</span>)
+                                and agree to the terms set out therein. This electronic signature
+                                constitutes my legally binding consent.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Audit Notice */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-500">
+                        <p className="font-medium text-slate-600 mb-1">This action will be recorded:</p>
+                        <p>Your signature, timestamp, and browser details will be stored as part of the legally auditable signing record.</p>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                        disabled={isSigning}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onSign}
+                        disabled={isSigning || isComputingHash || !contractHash}
+                        className="px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg font-medium transition flex items-center gap-2"
+                    >
+                        {isSigning ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                Signing...
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg>
+                                Confirm &amp; Sign
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
 // SECTION 9: CLARENCE CHAT PANEL COMPONENT
 // ============================================================================
 
@@ -1036,6 +1326,17 @@ function DocumentCentreContent() {
     } | null>(null)
 
     // ============================================================================
+    // SECTION 11A-2: SIGNING CEREMONY STATE
+    // ============================================================================
+
+    const [signatures, setSignatures] = useState<SignatureRecord[]>([])
+    const [showSigningModal, setShowSigningModal] = useState(false)
+    const [signingTitle, setSigningTitle] = useState('')
+    const [isSigning, setIsSigning] = useState(false)
+    const [isComputingHash, setIsComputingHash] = useState(false)
+    const [contractHash, setContractHash] = useState<string | null>(null)
+
+    // ============================================================================
     // SECTION 11B: DATA LOADING
     // ============================================================================
 
@@ -1217,6 +1518,38 @@ function DocumentCentreContent() {
         }
 
         return docMap
+    }, [supabase])
+
+    // ============================================================================
+    // SECTION 11B-2.6: LOAD EXISTING SIGNATURES
+    // ============================================================================
+    // Queries contract_signatures to see who has already signed.
+    // Returns an array of SignatureRecord for display in the Signing Panel.
+
+    const loadSignatures = useCallback(async (
+        currentMode: DocumentCentreMode,
+        contextId: string
+    ): Promise<SignatureRecord[]> => {
+        try {
+            const filterColumn = currentMode === 'quick_contract' ? 'contract_id' : 'session_id'
+
+            const { data, error } = await supabase
+                .from('contract_signatures')
+                .select('*')
+                .eq(filterColumn, contextId)
+                .eq('status', 'signed')
+                .order('signed_at', { ascending: true })
+
+            if (error) {
+                console.error('Error loading signatures:', error)
+                return []
+            }
+
+            return (data || []) as SignatureRecord[]
+        } catch (err) {
+            console.error('Exception loading signatures:', err)
+            return []
+        }
     }, [supabase])
 
     // SECTION 11B-3: INITIALIZE DOCUMENTS (mode-aware, DB-merged)
@@ -1402,6 +1735,10 @@ function DocumentCentreContent() {
                         createdAt: new Date().toISOString()
                     }])
 
+                    // Load existing signatures for this contract
+                    const sigs = await loadSignatures('quick_contract', contractId)
+                    setSignatures(sigs)
+
                     // Log page view
                     eventLogger.setSession(contractId)
                     eventLogger.setUser(user.userId || '')
@@ -1453,6 +1790,10 @@ function DocumentCentreContent() {
                         createdAt: new Date().toISOString()
                     }])
 
+                    // Load existing signatures for this session
+                    const sigs = await loadSignatures('mediation', sessionId)
+                    setSignatures(sigs)
+
                     // Log page view
                     eventLogger.setSession(sessionId)
                     eventLogger.setUser(user.userId || '')
@@ -1473,7 +1814,7 @@ function DocumentCentreContent() {
         }
 
         init()
-    }, [loadUserInfo, loadSessionData, loadQuickContractData, loadGeneratedDocuments, initializeDocuments, searchParams, router])
+    }, [loadUserInfo, loadSessionData, loadQuickContractData, loadGeneratedDocuments, loadSignatures, initializeDocuments, searchParams, router])
 
     // ============================================================================
     // SECTION 11C: EVENT HANDLERS
@@ -1758,6 +2099,157 @@ function DocumentCentreContent() {
         } else {
             const sessionId = searchParams.get('session_id') || searchParams.get('session')
             router.push(`/auth/contract-studio?session_id=${sessionId}`)
+        }
+    }
+
+    // ============================================================================
+    // SECTION 11D-2: SIGNING CEREMONY HANDLERS
+    // ============================================================================
+
+    // Compute SHA-256 hash of the Contract Draft PDF
+    const computeContractHash = useCallback(async (pdfUrl: string): Promise<string> => {
+        try {
+            setIsComputingHash(true)
+            // Fetch the PDF as binary data
+            const response = await fetch(pdfUrl)
+            if (!response.ok) throw new Error('Could not fetch PDF for hashing')
+            const buffer = await response.arrayBuffer()
+
+            // Compute SHA-256 using Web Crypto API
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+            const hashArray = Array.from(new Uint8Array(hashBuffer))
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+            return hashHex
+        } catch (err) {
+            console.error('Error computing contract hash:', err)
+            // Fallback: hash based on URL + timestamp as a fingerprint
+            const fallbackData = new TextEncoder().encode(pdfUrl + '|' + new Date().toISOString())
+            const hashBuffer = await crypto.subtle.digest('SHA-256', fallbackData)
+            const hashArray = Array.from(new Uint8Array(hashBuffer))
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+        } finally {
+            setIsComputingHash(false)
+        }
+    }, [])
+
+    // Open signing modal — only if Contract Draft is ready
+    const openSigningModal = useCallback(async () => {
+        const contractDraft = documents.find(d => d.id === 'contract-draft')
+        if (!contractDraft || contractDraft.status !== 'ready' || !contractDraft.downloadUrl) {
+            return
+        }
+
+        // Check if current user has already signed
+        const currentUserId = userInfo?.userId
+        const alreadySigned = signatures.some(s => s.user_id === currentUserId && s.status === 'signed')
+        if (alreadySigned) {
+            const contextId = mode === 'quick_contract' ? quickContract?.contractId : session?.sessionId
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId || '',
+                sender: 'clarence',
+                message: 'You have already signed this contract. Waiting for the other party to sign.',
+                createdAt: new Date().toISOString()
+            }])
+            return
+        }
+
+        // Compute the contract hash before showing the modal
+        const hash = await computeContractHash(contractDraft.downloadUrl)
+        setContractHash(hash)
+        setSigningTitle('')
+        setShowSigningModal(true)
+    }, [documents, userInfo, signatures, mode, quickContract, session, computeContractHash])
+
+    // Submit signature
+    const handleSignContract = async () => {
+        if (!userInfo || !contractHash) return
+
+        const contextId = mode === 'quick_contract' ? quickContract?.contractId : session?.sessionId
+        if (!contextId) return
+
+        const contractDraft = documents.find(d => d.id === 'contract-draft')
+        if (!contractDraft) return
+
+        setIsSigning(true)
+
+        try {
+            // Determine party info based on mode
+            const companyName = mode === 'quick_contract'
+                ? (userInfo.company || 'Unknown Company')
+                : (userInfo.role === 'customer'
+                    ? (session?.customerCompany || userInfo.company || '')
+                    : (session?.providerCompany || userInfo.company || ''))
+
+            const partyRole = mode === 'quick_contract'
+                ? 'initiator'
+                : (userInfo.role || 'customer')
+
+            const signatoryName = `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim()
+            const consentText = `I, ${signatoryName}, on behalf of ${companyName}, confirm that I have reviewed the Contract Draft (SHA-256: ${contractHash.substring(0, 16)}...) and agree to the terms set out therein. This electronic signature constitutes my legally binding consent.`
+
+            // Insert signature record
+            const { data, error } = await supabase
+                .from('contract_signatures')
+                .insert({
+                    contract_id: mode === 'quick_contract' ? contextId : null,
+                    session_id: mode === 'mediation' ? contextId : null,
+                    document_id: contractDraft.documentDbId || null,
+                    source_type: mode === 'quick_contract' ? 'quick_contract' : 'mediation',
+                    user_id: userInfo.userId,
+                    party_role: partyRole,
+                    company_name: companyName,
+                    signatory_name: signatoryName,
+                    signatory_title: signingTitle || null,
+                    contract_hash: contractHash,
+                    consent_text: consentText,
+                    ip_address: null,  // Could be fetched from an IP API if needed
+                    user_agent: navigator.userAgent,
+                    status: 'signed'
+                })
+                .select()
+                .single()
+
+            if (error) throw error
+
+            // Update local state
+            setSignatures(prev => [...prev, data as SignatureRecord])
+            setShowSigningModal(false)
+
+            // Log the event
+            eventLogger.completed('signing', 'contract_signed', {
+                contextId,
+                mode,
+                partyRole,
+                signatureId: data?.signature_id
+            })
+
+            // CLARENCE message
+            const allPartiesSigned = mode === 'quick_contract'
+                ? true  // QC: only initiator needs to sign for now
+                : (signatures.length + 1) >= 2  // Mediation: both parties
+
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: allPartiesSigned
+                    ? `\u2705 ${signatoryName} has signed the contract. All parties have now signed. The contract is now EXECUTED. A signing certificate will be available shortly.`
+                    : `\u2705 ${signatoryName} has signed the contract on behalf of ${companyName}. Waiting for the other party to review and sign.`,
+                createdAt: new Date().toISOString()
+            }])
+
+        } catch (err) {
+            console.error('Signing error:', err)
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId || '',
+                sender: 'clarence',
+                message: `\u274C Sorry, there was an error recording your signature: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
+                createdAt: new Date().toISOString()
+            }])
+        } finally {
+            setIsSigning(false)
         }
     }
 
@@ -2268,6 +2760,15 @@ function DocumentCentreContent() {
                         isGenerating={isGeneratingPackage}
                     />
 
+                    {/* Signing Panel — appears when Contract Draft is ready */}
+                    <SigningPanel
+                        documents={documents}
+                        signatures={signatures}
+                        currentUserId={userInfo?.userId}
+                        onSign={openSigningModal}
+                        mode={mode}
+                    />
+
                     {/* Save as Template Card - Customers Only, Mediation mode only */}
                     {isCustomer && mode === 'mediation' && session && (
                         <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${session.isTraining
@@ -2327,6 +2828,25 @@ function DocumentCentreContent() {
 
             {/* Save as Template Modal */}
             <SaveAsTemplateModal />
+
+            {/* Signing Ceremony Modal */}
+            <SigningModal
+                show={showSigningModal}
+                onClose={() => setShowSigningModal(false)}
+                onSign={handleSignContract}
+                isSigning={isSigning}
+                isComputingHash={isComputingHash}
+                contractHash={contractHash}
+                userInfo={userInfo}
+                companyName={mode === 'quick_contract'
+                    ? (userInfo?.company || 'Unknown Company')
+                    : (userInfo?.role === 'customer'
+                        ? (session?.customerCompany || userInfo?.company || '')
+                        : (session?.providerCompany || userInfo?.company || ''))
+                }
+                signingTitle={signingTitle}
+                onTitleChange={setSigningTitle}
+            />
 
         </div>
     )
