@@ -94,16 +94,20 @@ interface GeneratedDocumentRecord {
     contract_id?: string | null
     session_id?: string | null
     document_type: string
+    source_type?: string | null
     document_name?: string
-    storage_path?: string | null
-    pdf_public_url?: string | null
-    public_url?: string | null
+    storage_path_pdf?: string | null      // Actual column: "contract-drafts/{id}_qc_contract_draft.pdf"
+    storage_path?: string | null           // Fallback if naming varies
+    pdf_public_url?: string | null         // Fallback
+    public_url?: string | null             // Fallback
     file_size?: number | null
     mime_type?: string | null
-    status: string  // 'generating', 'generated', 'failed'
+    status: string                         // 'generating', 'generated', 'failed'
+    generation_params?: Record<string, unknown> | null  // JSONB: { bucket, filename, public_url }
+    preview_data?: Record<string, unknown> | null
+    ai_model_used?: string | null
     created_at: string
     updated_at?: string | null
-    generation_params?: Record<string, unknown> | null
 }
 
 // ============================================================================
@@ -1240,11 +1244,35 @@ function DocumentCentreContent() {
                 const dbStatus = dbRecord.status
 
                 if (dbStatus === 'generated') {
-                    // Document is ready — extract PDF URL from whichever column has it
-                    const downloadUrl = dbRecord.storage_path
-                        || dbRecord.pdf_public_url
-                        || dbRecord.public_url
-                        || undefined
+                    // Document is ready — reconstruct public URL from storage_path_pdf
+                    // N8N workflows store: storage_path_pdf = "contract-drafts/{id}_qc_contract_draft.pdf"
+                    // The public URL must be reconstructed as the full Supabase Storage public URL
+                    const SUPABASE_STORAGE_BASE = 'https://wlrlkvqiakaiydfqqdmu.supabase.co/storage/v1/object/public/documents'
+
+                    let downloadUrl: string | undefined
+
+                    // Priority 1: Check generation_params.public_url (N8N stores the full URL here)
+                    const genParams = dbRecord.generation_params as Record<string, unknown> | null
+                    if (genParams && typeof genParams === 'object' && genParams.public_url) {
+                        downloadUrl = genParams.public_url as string
+                    }
+                    // Priority 2: Reconstruct from storage_path_pdf column
+                    else if (dbRecord.storage_path_pdf) {
+                        const relativePath = dbRecord.storage_path_pdf
+                        downloadUrl = `${SUPABASE_STORAGE_BASE}/${relativePath}`
+                    }
+                    // Priority 3: Fallbacks for any other column naming patterns
+                    else if (dbRecord.storage_path) {
+                        downloadUrl = dbRecord.storage_path.startsWith('http')
+                            ? dbRecord.storage_path
+                            : `${SUPABASE_STORAGE_BASE}/${dbRecord.storage_path}`
+                    }
+                    else if (dbRecord.pdf_public_url) {
+                        downloadUrl = dbRecord.pdf_public_url
+                    }
+                    else if (dbRecord.public_url) {
+                        downloadUrl = dbRecord.public_url
+                    }
 
                     return {
                         ...def,
