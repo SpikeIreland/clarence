@@ -1719,10 +1719,13 @@ function QuickContractStudioContent() {
         const currentRole = getPartyRole()
         console.log(`[loadPartyInfo] Role: ${currentRole}, resolvedContractId: ${resolvedContractId}`)
 
-        // ── Step 1: Find the quick_contract_id from the source contract ──
+        // ── Step 1: Find the quick_contract_id ──
+        // Strategy: Try multiple paths because quick_contracts may be RLS-blocked
+        // for the respondent. The URL contractId itself may BE the quick_contract_id.
         let quickContractId: string | null = null
 
-        // Try: resolvedContractId is a source_contract_id
+        // Path A: resolvedContractId is a source_contract_id → look up quick_contracts
+        // (Works for initiator who owns the quick_contracts row)
         const { data: qcFromSource } = await supabase
             .from('quick_contracts')
             .select('quick_contract_id')
@@ -1731,16 +1734,40 @@ function QuickContractStudioContent() {
 
         if (qcFromSource) {
             quickContractId = qcFromSource.quick_contract_id
-        } else {
-            // Try: resolvedContractId might itself be a quick_contract_id
-            const { data: qcDirect } = await supabase
-                .from('quick_contracts')
+            console.log('[loadPartyInfo] Path A: found via source_contract_id →', quickContractId)
+        }
+
+        // Path B: URL contractId might directly be a quick_contract_id
+        // (Respondent's URL often uses the quick_contract_id)
+        if (!quickContractId && contractId !== resolvedContractId) {
+            // contractId (from URL) differs from resolvedContractId (uploaded_contracts)
+            // so contractId is likely the quick_contract_id — verify via qc_recipients
+            const { data: recipientCheck } = await supabase
+                .from('qc_recipients')
                 .select('quick_contract_id')
-                .eq('quick_contract_id', resolvedContractId)
+                .eq('quick_contract_id', contractId)
+                .limit(1)
                 .maybeSingle()
 
-            if (qcDirect) {
-                quickContractId = qcDirect.quick_contract_id
+            if (recipientCheck) {
+                quickContractId = recipientCheck.quick_contract_id
+                console.log('[loadPartyInfo] Path B: URL contractId is quick_contract_id →', quickContractId)
+            }
+        }
+
+        // Path C: Last resort — find by recipient email (no RLS dependency)
+        if (!quickContractId && userInfo.email) {
+            const { data: recipientByEmail } = await supabase
+                .from('qc_recipients')
+                .select('quick_contract_id')
+                .eq('recipient_email', userInfo.email)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+
+            if (recipientByEmail) {
+                quickContractId = recipientByEmail.quick_contract_id
+                console.log('[loadPartyInfo] Path C: found via recipient email →', quickContractId)
             }
         }
 
@@ -1770,10 +1797,10 @@ function QuickContractStudioContent() {
         // ── Step 3: Populate initiatorInfo and respondentInfo based on role ──
 
         if (currentRole === 'initiator') {
-            // INITIATOR: own info comes from userInfo (already loaded)
+            // INITIATOR: own info — prefer contract-specific snapshot from qc_recipients
             setInitiatorInfo({
                 name: userInfo.fullName || userInfo.email || 'Initiator',
-                company: userInfo.companyName || null
+                company: recipientRow?.initiator_company || userInfo.companyName || null
             })
 
             // Respondent info from qc_recipients
@@ -3270,7 +3297,7 @@ INSTRUCTIONS:
                         {/* ==================== PARTY IDENTIFICATION ==================== */}
                         {!isTemplateMode && (
                             <div className="flex items-center gap-3 flex-shrink-0">
-                                {/* Initiator (Protected Party) */}
+                                {/* Initiator (Party A) */}
                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
                                     <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
                                     <div className="text-xs">
@@ -3278,11 +3305,13 @@ INSTRUCTIONS:
                                             {initiatorInfo?.company || initiatorInfo?.name || (getPartyRole() === 'initiator' ? userInfo?.companyName || userInfo?.fullName : null) || 'Initiator'}
                                         </span>
                                         <span className="text-emerald-600 ml-1">
-                                            · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
-                                                ? roleContext.userRoleLabel
-                                                : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
-                                                    ? roleContext.counterpartyRoleLabel
-                                                    : 'Party A'}
+                                            · {(() => {
+                                                // Absolute role label for initiator badge — always Party A / protected party
+                                                if (!roleContext) return 'Party A'
+                                                if (getPartyRole() === 'initiator') return roleContext.userRoleLabel || 'Party A'
+                                                // Viewer is respondent — counterparty = initiator
+                                                return roleContext.counterpartyRoleLabel || 'Party A'
+                                            })()}
                                         </span>
                                         {getPartyRole() === 'initiator' && (
                                             <span className="text-emerald-500 ml-1">(You)</span>
@@ -3292,7 +3321,7 @@ INSTRUCTIONS:
 
                                 <span className="text-slate-300 text-xs">vs</span>
 
-                                {/* Respondent (Providing Party) */}
+                                {/* Respondent (Party B) */}
                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
                                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
                                     <div className="text-xs">
@@ -3301,11 +3330,13 @@ INSTRUCTIONS:
                                         </span>
                                         {respondentInfo && (
                                             <span className="text-blue-600 ml-1">
-                                                · {roleContext?.counterpartyRoleLabel && getPartyRole() === 'initiator'
-                                                    ? roleContext.counterpartyRoleLabel
-                                                    : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
-                                                        ? roleContext.userRoleLabel
-                                                        : 'Party B'}
+                                                · {(() => {
+                                                    // Absolute role label for respondent badge — always Party B / providing party
+                                                    if (!roleContext) return 'Party B'
+                                                    if (getPartyRole() === 'initiator') return roleContext.counterpartyRoleLabel || 'Party B'
+                                                    // Viewer is respondent — user = respondent
+                                                    return roleContext.userRoleLabel || 'Party B'
+                                                })()}
                                             </span>
                                         )}
                                         {getPartyRole() === 'respondent' && (
