@@ -2,10 +2,17 @@
 
 // ============================================================================
 // QUICK CREATE - CREATE PAGE
-// Version: 2.0
-// Date: 25 February 2026
+// Version: 2.1
+// Date: 26 February 2026
 // Path: /app/auth/quick-contract/create/page.tsx
 // Description: Create a new Quick Create contract from template or upload
+// Changes v2.1:
+//   - NEW: Role selection modal appears when user selects a template
+//   - Template flow: Select Template → Role Modal → load into Studio
+//   - Modal auto-detects contract type from template name
+//   - User picks their party role (e.g. Customer/Provider) before proceeding
+//   - "Skip for now" allows proceeding without role (fallback to Party A/B)
+//   - Also triggers for URL-param template loads (from Contract Library)
 // Changes v2.0:
 //   - Removed Invite step (invite now lives in QC Studio)
 //   - Removed Review Clauses panel (duplicate of Studio's 3-panel view)
@@ -869,6 +876,9 @@ function QuickContractCreateContent() {
     function handleTemplateSelect(template: QCTemplate) {
         if (!userInfo) return
 
+        console.log('=== handleTemplateSelect v2 (with role modal) ===')
+        console.log('Template:', template.templateName)
+
         eventLogger.completed('quick_contract_create', 'template_selected', {
             templateId: template.templateId,
             templateName: template.templateName
@@ -876,6 +886,7 @@ function QuickContractCreateContent() {
 
         // Auto-detect contract type from the template name or stored type
         const detectedKey = autoDetectContractType(template.templateName) || template.contractType || null
+        console.log('Auto-detected contract type key:', detectedKey)
 
         // Open the role selection modal instead of loading immediately
         setPendingTemplate({
@@ -885,6 +896,7 @@ function QuickContractCreateContent() {
         })
         setModalContractTypeKey(detectedKey)
         setModalPartyRole(null)
+        console.log('pendingTemplate set — modal should now be visible')
     }
 
     function handleConfirmTemplateRole() {
