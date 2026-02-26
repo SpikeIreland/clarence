@@ -1,12 +1,33 @@
 'use client'
+
+// ============================================================================
+// LOGIN / SIGNUP PAGE — Unified Authentication
+// Version: 2.0
+// Date: 26 February 2026
+// Path: /app/auth/login/page.tsx
+//
+// CHANGES in v2.0 (Unified Auth Migration - Phase 3):
+//   - Accepts ?invite=TOKEN parameter for respondent invite flow
+//   - Shows invite banner when token is present
+//   - Resolves invite token after login/signup:
+//     * Looks up qc_recipients by access_token
+//     * Verifies email match
+//     * Updates status to 'accepted' and writes user_id
+//     * Stores pending_invite_contract in sessionStorage for Home page
+//   - All post-login redirects now go to /auth/home (not /auth/create)
+//   - Provider rejection removed — all users use unified login
+//   - "Respondent Portal" link removed from footer area
+//   - "Contract Respondent" button removed from header
+//   - Signup also accepts ?invite=TOKEN passthrough
+// ============================================================================
+
 import { useState, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 
 // ============================================================================
 // SECTION 1: LOADING COMPONENT
-// Location: app/auth/login/page.tsx
 // ============================================================================
 
 function LoginLoading() {
@@ -26,11 +47,12 @@ function LoginLoading() {
 
 function LoginSignupContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
-  // ==========================================================================
+  // ========================================================================
   // SECTION 3: STATE
-  // ==========================================================================
+  // ========================================================================
 
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login')
   const [loading, setLoading] = useState(false)
@@ -49,11 +71,13 @@ function LoginSignupContent() {
   const [signupFirstName, setSignupFirstName] = useState('')
   const [signupLastName, setSignupLastName] = useState('')
   const [signupCompany, setSignupCompany] = useState('')
-  const signupRole = 'customer' // Customers only - providers have separate portal
 
-  // ==========================================================================
+  // Invite token from URL (?invite=TOKEN)
+  const inviteToken = searchParams.get('invite') || null
+
+  // ========================================================================
   // SECTION 4: VALIDATION
-  // ==========================================================================
+  // ========================================================================
 
   function validateEmail(email: string): boolean {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -98,9 +122,65 @@ function LoginSignupContent() {
     return null
   }
 
-  // ==========================================================================
+  // ========================================================================
+  // SECTION 4B: INVITE TOKEN RESOLUTION
+  // Called after successful login or signup to link the user to the contract
+  // ========================================================================
+
+  async function resolveInviteToken(userId: string, userEmail: string): Promise<void> {
+    if (!inviteToken) return
+
+    try {
+      // Step 1: Look up the recipient by access_token
+      const { data: recipient, error: lookupError } = await supabase
+        .from('qc_recipients')
+        .select('recipient_id, quick_contract_id, recipient_email, status')
+        .eq('access_token', inviteToken)
+        .single()
+
+      if (lookupError || !recipient) {
+        console.warn('Invite token not found or invalid:', inviteToken)
+        return
+      }
+
+      // Step 2: Verify the email matches
+      if (recipient.recipient_email.toLowerCase() !== userEmail.toLowerCase()) {
+        setError('This invite was sent to a different email address. Please log in with the email the invitation was sent to.')
+        return
+      }
+
+      // Step 3: Update the recipient record — link user and mark accepted
+      const { error: updateError } = await supabase
+        .from('qc_recipients')
+        .update({
+          user_id: userId,
+          status: 'accepted',
+          responded_at: new Date().toISOString(),
+        })
+        .eq('recipient_id', recipient.recipient_id)
+
+      if (updateError) {
+        console.error('Failed to update recipient record:', updateError)
+        return
+      }
+
+      // Step 4: Store the contract ID so the Home page can highlight it
+      sessionStorage.setItem('pending_invite_contract', recipient.quick_contract_id)
+
+      console.log('Invite token resolved:', {
+        recipientId: recipient.recipient_id,
+        contractId: recipient.quick_contract_id,
+      })
+
+    } catch (err) {
+      // Don't block login if invite resolution fails
+      console.error('Error resolving invite token:', err)
+    }
+  }
+
+  // ========================================================================
   // SECTION 5: LOGIN HANDLER
-  // ==========================================================================
+  // ========================================================================
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -127,7 +207,6 @@ function LoginSignupContent() {
 
       if (data.user) {
         // Get user profile from public.users table
-        // NOTE: Supabase Auth UID matches user_id in public.users
         const { data: userData, error: userError } = await supabase
           .from('users')
           .select('*')
@@ -136,22 +215,12 @@ function LoginSignupContent() {
 
         if (userError) throw userError
 
-        // Check role and redirect accordingly
-        if (userData.role === 'provider') {
-          // Provider logged in via customer portal - sign them out and redirect to provider portal
-          await supabase.auth.signOut()
-          setError('This is a provider account. Please use the Provider Portal to sign in.')
-          setLoading(false)
-          return
-        }
-
-        // Customer - store auth and redirect to dashboard
-        // CRITICAL: Include both userId and companyId for sessions-api
+        // Store auth data in localStorage
         const authData = {
           userInfo: {
             userId: userData.user_id,
             companyId: userData.company_id,
-            customerId: userData.user_id,  // Alias for workflows that use customer_id
+            customerId: userData.user_id,
             email: userData.email,
             firstName: userData.first_name,
             lastName: userData.last_name,
@@ -161,7 +230,12 @@ function LoginSignupContent() {
           timestamp: new Date().toISOString()
         }
         localStorage.setItem('clarence_auth', JSON.stringify(authData))
-        router.push('/auth/create')
+
+        // Resolve invite token if present (links user to contract)
+        await resolveInviteToken(userData.user_id, userData.email)
+
+        // Redirect to unified Home page
+        router.push('/auth/home')
       }
     } catch (err: unknown) {
       console.error('Login error:', err)
@@ -172,9 +246,9 @@ function LoginSignupContent() {
     }
   }
 
-  // ==========================================================================
+  // ========================================================================
   // SECTION 6: SIGNUP HANDLER
-  // ==========================================================================
+  // ========================================================================
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -201,7 +275,7 @@ function LoginSignupContent() {
             first_name: signupFirstName,
             last_name: signupLastName,
             company_name: signupCompany,
-            role: signupRole
+            role: 'customer'
           }
         }
       })
@@ -213,12 +287,12 @@ function LoginSignupContent() {
         if (data.user.identities && data.user.identities.length === 0) {
           setError('An account with this email already exists. Please sign in instead.')
           setActiveTab('login')
-          setLoginEmail(signupEmail) // Pre-fill login email
+          setLoginEmail(signupEmail)
           setLoading(false)
           return
         }
 
-        // Check if email is confirmed (session exists only if confirmed or confirmation disabled)
+        // Check if email is confirmed
         const emailConfirmed = data.user.email_confirmed_at !== null
 
         if (emailConfirmed && data.session) {
@@ -232,17 +306,20 @@ function LoginSignupContent() {
               firstName: signupFirstName,
               lastName: signupLastName,
               company: signupCompany,
-              role: signupRole
+              role: 'customer'
             },
             timestamp: new Date().toISOString()
           }
           localStorage.setItem('clarence_auth', JSON.stringify(authData))
 
+          // Resolve invite token if present
+          await resolveInviteToken(data.user.id, signupEmail)
+
           setTimeout(() => {
-            router.push('/auth/create')
+            router.push('/auth/home')
           }, 1500)
         } else {
-          // Email confirmation required - show confirmation message
+          // Email confirmation required
           setShowEmailConfirmation(true)
         }
       }
@@ -255,9 +332,9 @@ function LoginSignupContent() {
     }
   }
 
-  // ==========================================================================
+  // ========================================================================
   // SECTION 7: EMAIL CONFIRMATION SCREEN
-  // ==========================================================================
+  // ========================================================================
 
   if (showEmailConfirmation) {
     return (
@@ -352,15 +429,16 @@ function LoginSignupContent() {
     )
   }
 
-  // ==========================================================================
+  // ========================================================================
   // SECTION 8: MAIN RENDER
-  // ==========================================================================
+  // ========================================================================
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* ================================================================== */}
-      {/* SECTION 9: NAVIGATION HEADER - LIGHT THEME */}
-      {/* ================================================================== */}
+
+      {/* ============================================================ */}
+      {/* SECTION 9: NAVIGATION HEADER                                 */}
+      {/* ============================================================ */}
       <header className="bg-white border-b border-slate-200">
         <div className="container mx-auto px-6">
           <nav className="flex justify-between items-center h-16">
@@ -375,7 +453,7 @@ function LoginSignupContent() {
               </div>
             </Link>
 
-            {/* Navigation Links - UPDATED: Removed 6 Phases */}
+            {/* Navigation Links */}
             <div className="flex items-center gap-6">
               <Link
                 href="/how-it-works"
@@ -389,29 +467,44 @@ function LoginSignupContent() {
               >
                 Pricing
               </Link>
-
-              {/* Sign In Indicator */}
-              <div className="flex items-center gap-3 ml-2">
-                <span className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg">
-                  Contract Initiator
-                </span>
-                <a
-                  href="https://www.clarencelegal.ai/provider"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Contract Respondent
-                </a>
-              </div>
+              <span className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg">
+                Sign In
+              </span>
             </div>
           </nav>
         </div>
       </header>
 
-      {/* ================================================================== */}
-      {/* SECTION 10: MAIN CONTENT */}
-      {/* ================================================================== */}
+      {/* ============================================================ */}
+      {/* SECTION 10: MAIN CONTENT                                     */}
+      {/* ============================================================ */}
       <main className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
+
+          {/* ================================================== */}
+          {/* SECTION 10A: INVITE BANNER                          */}
+          {/* Shown when ?invite=TOKEN is in the URL              */}
+          {/* ================================================== */}
+          {inviteToken && (
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-emerald-800">
+                    You&apos;ve been invited to negotiate a contract
+                  </p>
+                  <p className="text-xs text-emerald-600 mt-1">
+                    Sign in or create an account to view and respond to the invitation.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Header Text */}
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-slate-800 mb-2">
@@ -475,9 +568,9 @@ function LoginSignupContent() {
               </div>
             )}
 
-            {/* ============================================================ */}
-            {/* SECTION 11: LOGIN FORM */}
-            {/* ============================================================ */}
+            {/* ================================================ */}
+            {/* SECTION 11: LOGIN FORM                           */}
+            {/* ================================================ */}
             {activeTab === 'login' && (
               <form onSubmit={handleLogin} className="p-6 space-y-4">
                 <div>
@@ -532,9 +625,9 @@ function LoginSignupContent() {
               </form>
             )}
 
-            {/* ============================================================ */}
-            {/* SECTION 12: SIGNUP FORM */}
-            {/* ============================================================ */}
+            {/* ================================================ */}
+            {/* SECTION 12: SIGNUP FORM                          */}
+            {/* ================================================ */}
             {activeTab === 'signup' && (
               <form onSubmit={handleSignup} className="p-6 space-y-4">
                 {/* Name Fields */}
@@ -652,25 +745,12 @@ function LoginSignupContent() {
               </form>
             )}
           </div>
-
-          {/* Provider Portal Link */}
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
-            <p className="text-sm text-slate-700">
-              Are you a Contract Respondent (service provider)?{' '}
-              <a
-                href="https://www.clarencelegal.ai/provider"
-                className="text-blue-600 font-medium hover:underline"
-              >
-                Access the Respondent Portal →
-              </a>
-            </p>
-          </div>
         </div>
       </main>
 
-      {/* ================================================================== */}
-      {/* SECTION 13: FOOTER */}
-      {/* ================================================================== */}
+      {/* ============================================================ */}
+      {/* SECTION 13: FOOTER                                           */}
+      {/* ============================================================ */}
       <footer className="bg-slate-900 text-slate-400 py-8">
         <div className="container mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
@@ -682,7 +762,7 @@ function LoginSignupContent() {
               <span className="text-white font-medium">CLARENCE</span>
             </div>
 
-            {/* Links - UPDATED: Removed 6 Phases */}
+            {/* Links */}
             <div className="flex gap-8 text-sm">
               <Link href="/" className="hover:text-white transition-colors">Home</Link>
               <Link href="/how-it-works" className="hover:text-white transition-colors">How It Works</Link>
