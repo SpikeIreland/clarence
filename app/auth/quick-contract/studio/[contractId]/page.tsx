@@ -1839,6 +1839,19 @@ function QuickContractStudioContent() {
 
                 setInviteSent(true)
                 setRespondentStatus('accepted')
+
+                // Update DB status — respondent is now in the studio
+                if (quickContractId && recipientRow.status !== 'accepted') {
+                    supabase
+                        .from('qc_recipients')
+                        .update({ status: 'accepted', viewed_at: new Date().toISOString() })
+                        .eq('quick_contract_id', quickContractId)
+                        .then(({ error }) => {
+                            if (error) console.warn('[loadPartyInfo] Failed to update recipient status:', error)
+                            else console.log('[loadPartyInfo] Updated recipient status to accepted')
+                        })
+                }
+
             } else {
                 // No qc_recipients row found — fallback
                 // Still try to set initiator from contract data if available
@@ -3407,16 +3420,9 @@ INSTRUCTIONS:
                             </button>
                         )}
 
-                        {/* Invite Provider Button / Pending State (non-template mode, initiator only, not committed) */}
+                        {/* Invite Provider Button / Status Indicator (non-template mode, initiator only, not committed) */}
                         {!isTemplateMode && isInitiator && contract?.status !== 'committed' && (
-                            inviteSent || respondentInfo ? (
-                                <div className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Pending
-                                </div>
-                            ) : (
+                            !(inviteSent || respondentInfo) ? (
                                 <button
                                     onClick={() => setShowInviteModal(true)}
                                     className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
@@ -3426,6 +3432,25 @@ INSTRUCTIONS:
                                     </svg>
                                     Invite
                                 </button>
+                            ) : respondentStatus === 'accepted' || respondentStatus === 'in_studio' || respondentStatus === 'viewed' ? (
+                                <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
+                                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                                    {respondentInfo?.name || 'Respondent'} Active
+                                </div>
+                            ) : respondentStatus === 'declined' ? (
+                                <div className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                    Declined
+                                </div>
+                            ) : (
+                                <div className="px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Invite Pending
+                                </div>
                             )
                         )}
 
