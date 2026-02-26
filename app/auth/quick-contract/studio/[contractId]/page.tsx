@@ -3305,13 +3305,7 @@ INSTRUCTIONS:
                                             {initiatorInfo?.company || initiatorInfo?.name || (getPartyRole() === 'initiator' ? userInfo?.companyName || userInfo?.fullName : null) || 'Initiator'}
                                         </span>
                                         <span className="text-emerald-600 ml-1">
-                                            · {(() => {
-                                                // Absolute role label for initiator badge — always Party A / protected party
-                                                if (!roleContext) return 'Party A'
-                                                if (getPartyRole() === 'initiator') return roleContext.userRoleLabel || 'Party A'
-                                                // Viewer is respondent — counterparty = initiator
-                                                return roleContext.counterpartyRoleLabel || 'Party A'
-                                            })()}
+                                            · {roleContext?.protectedPartyLabel || 'Party A'}
                                         </span>
                                         {getPartyRole() === 'initiator' && (
                                             <span className="text-emerald-500 ml-1">(You)</span>
@@ -3330,13 +3324,7 @@ INSTRUCTIONS:
                                         </span>
                                         {respondentInfo && (
                                             <span className="text-blue-600 ml-1">
-                                                · {(() => {
-                                                    // Absolute role label for respondent badge — always Party B / providing party
-                                                    if (!roleContext) return 'Party B'
-                                                    if (getPartyRole() === 'initiator') return roleContext.counterpartyRoleLabel || 'Party B'
-                                                    // Viewer is respondent — user = respondent
-                                                    return roleContext.userRoleLabel || 'Party B'
-                                                })()}
+                                                · {roleContext?.providingPartyLabel || 'Party B'}
                                             </span>
                                         )}
                                         {getPartyRole() === 'respondent' && (
