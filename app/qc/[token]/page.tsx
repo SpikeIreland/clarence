@@ -947,37 +947,101 @@ export default function PublicRecipientPage() {
                 )}
 
                 {/* ============================================================== */}
-                {/* SECTION 22B: ENTER STUDIO CALL-TO-ACTION */}
-                {/* This is the primary action for mediation-type QC contracts.    */}
-                {/* Routes provider through authentication into the QC Studio.     */}
+                {/* SECTION 22B: ENTER STUDIO (CONSOLIDATED)                       */}
+                {/* Replaces the previous Section 22B + Section 23 which had two   */}
+                {/* duplicate buttons ("Enter Studio" and "Review Contract") that   */}
+                {/* both routed to the same destination.                            */}
+                {/*                                                                */}
+                {/* This single CTA:                                               */}
+                {/*  1. Auto-accepts the contract (entering = engaging)            */}
+                {/*  2. Stores redirect context in sessionStorage                  */}
+                {/*  3. Routes to /provider for authentication                     */}
+                {/*  4. Provider Landing Page reads context and routes to Studio   */}
                 {/* ============================================================== */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6 mb-6">
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <div className="flex-shrink-0">
-                            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+                    <div className="bg-gradient-to-r from-teal-600 to-emerald-600 px-6 py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                 </svg>
                             </div>
+                            <div>
+                                <h2 className="font-semibold text-white text-lg">Ready to Review This Contract?</h2>
+                                <p className="text-teal-100 text-sm">
+                                    Enter the CLARENCE Studio to review clauses, discuss terms, and negotiate with {contract?.senderCompany || 'the sender'}
+                                </p>
+                            </div>
                         </div>
-                        <div className="flex-1 text-center sm:text-left">
-                            <h2 className="font-semibold text-slate-800 mb-1">
-                                Want to negotiate the terms?
-                            </h2>
-                            <p className="text-sm text-slate-600">
-                                Enter the CLARENCE Studio to review each clause, discuss changes, and reach agreement with {contract?.senderCompany || 'the sender'} — powered by CLARENCE, The Honest Broker.
-                            </p>
-                        </div>
-                        <div className="flex-shrink-0">
-                            <button
-                                onClick={handleEnterStudio}
-                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
-                            >
-                                Enter Studio
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                </svg>
-                            </button>
+                    </div>
+
+                    <div className="px-6 py-5">
+                        <div className="flex flex-col sm:flex-row items-center gap-4">
+                            <div className="flex-1 text-center sm:text-left">
+                                <p className="text-sm text-slate-600">
+                                    CLARENCE, The Honest Broker, will guide both parties through each clause to help you reach a fair agreement. You will be asked to sign in or create an account.
+                                </p>
+                            </div>
+                            <div className="flex-shrink-0">
+                                <button
+                                    onClick={async () => {
+                                        if (!contract) return
+
+                                        // Auto-accept in background (entering studio = engaging)
+                                        try {
+                                            if (recipient?.recipientId) {
+                                                await supabase
+                                                    .from('qc_recipients')
+                                                    .update({
+                                                        status: 'accepted',
+                                                        response_type: 'accepted',
+                                                        responded_at: new Date().toISOString()
+                                                    })
+                                                    .eq('recipient_id', recipient.recipientId)
+                                            }
+                                        } catch (err) {
+                                            console.warn('Auto-accept failed (non-blocking):', err)
+                                        }
+
+                                        // Store redirect context for post-auth routing
+                                        const qcRedirect = {
+                                            contractId: contract.quickContractId,
+                                            contractName: contract.contractName,
+                                            contractType: contract.contractType,
+                                            senderCompany: contract.senderCompany,
+                                            source: 'qc_token_page'
+                                        }
+                                        sessionStorage.setItem('clarence_qc_redirect', JSON.stringify(qcRedirect))
+
+                                        // Log audit event (fire-and-forget)
+                                        if (recipient) {
+                                            try {
+                                                await supabase
+                                                    .from('qc_audit_log')
+                                                    .insert({
+                                                        quick_contract_id: contract.quickContractId,
+                                                        recipient_id: recipient.recipientId,
+                                                        event_type: 'enter_studio_clicked',
+                                                        event_description: 'Recipient clicked Enter Studio — routing to authentication',
+                                                        event_data: { source: 'qc_token_page' }
+                                                    })
+                                            } catch {
+                                                // Audit log failure is non-blocking
+                                            }
+                                        }
+
+                                        // Hard nav to provider auth page
+                                        window.location.href = '/provider'
+                                    }}
+                                    disabled={!contract?.quickContractId}
+                                    className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                >
+                                    Enter CLARENCE Studio
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
