@@ -220,7 +220,7 @@ function HomePageInner() {
 
             const { data: profile } = await supabase
                 .from('users')
-                .select('first_name, last_name, company, company_id, role')
+                .select('first_name, last_name, company_name, company_id, role')
                 .eq('user_id', user.id)
                 .single()
 
@@ -229,7 +229,7 @@ function HomePageInner() {
                 email: user.email || '',
                 firstName: profile?.first_name || '',
                 lastName: profile?.last_name || '',
-                company: profile?.company || '',
+                company: profile?.company_name || '',
                 companyId: profile?.company_id || '',
                 role: profile?.role || '',
             }
