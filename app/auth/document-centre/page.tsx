@@ -103,7 +103,7 @@ interface GeneratedDocumentRecord {
     file_size?: number | null
     mime_type?: string | null
     status: string                         // 'generating', 'generated', 'failed'
-    generation_params?: Record<string, unknown> | null  // JSONB: { bucket, filename, public_url }
+    generation_params?: Record<string, unknown> | string | null  // JSONB: { bucket, filename, public_url } — may arrive as string
     preview_data?: Record<string, unknown> | null
     ai_model_used?: string | null
     created_at: string
@@ -1596,27 +1596,54 @@ function DocumentCentreContent() {
 
                     let downloadUrl: string | undefined
 
+                    // DEBUG: Log the raw DB record so we can trace URL issues
+                    console.log(`[DocCentre] DB record for "${def.id}":`, {
+                        storage_path_pdf: dbRecord.storage_path_pdf,
+                        generation_params: dbRecord.generation_params,
+                        generation_params_type: typeof dbRecord.generation_params,
+                    })
+
                     // Priority 1: Check generation_params.public_url (N8N stores the full URL here)
-                    const genParams = dbRecord.generation_params as Record<string, unknown> | null
-                    if (genParams && typeof genParams === 'object' && genParams.public_url) {
-                        downloadUrl = genParams.public_url as string
+                    // Handle both parsed JSONB (object) and double-stringified (string) cases
+                    let parsedParams: Record<string, unknown> | null = null
+                    const rawParams = dbRecord.generation_params
+                    if (rawParams && typeof rawParams === 'object') {
+                        parsedParams = rawParams as Record<string, unknown>
+                    } else if (rawParams && typeof rawParams === 'string') {
+                        try {
+                            parsedParams = JSON.parse(rawParams) as Record<string, unknown>
+                        } catch {
+                            parsedParams = null
+                        }
+                    }
+
+                    if (parsedParams && parsedParams.public_url && typeof parsedParams.public_url === 'string') {
+                        downloadUrl = parsedParams.public_url
+                        console.log(`[DocCentre] "${def.id}" URL from generation_params.public_url:`, downloadUrl)
                     }
                     // Priority 2: Reconstruct from storage_path_pdf column
                     else if (dbRecord.storage_path_pdf) {
                         const relativePath = dbRecord.storage_path_pdf
                         downloadUrl = `${SUPABASE_STORAGE_BASE}/${relativePath}`
+                        console.log(`[DocCentre] "${def.id}" URL reconstructed from storage_path_pdf:`, downloadUrl)
                     }
                     // Priority 3: Fallbacks for any other column naming patterns
                     else if (dbRecord.storage_path) {
                         downloadUrl = dbRecord.storage_path.startsWith('http')
                             ? dbRecord.storage_path
                             : `${SUPABASE_STORAGE_BASE}/${dbRecord.storage_path}`
+                        console.log(`[DocCentre] "${def.id}" URL from storage_path fallback:`, downloadUrl)
                     }
                     else if (dbRecord.pdf_public_url) {
                         downloadUrl = dbRecord.pdf_public_url
+                        console.log(`[DocCentre] "${def.id}" URL from pdf_public_url fallback:`, downloadUrl)
                     }
                     else if (dbRecord.public_url) {
                         downloadUrl = dbRecord.public_url
+                        console.log(`[DocCentre] "${def.id}" URL from public_url fallback:`, downloadUrl)
+                    }
+                    else {
+                        console.warn(`[DocCentre] "${def.id}" — no URL found in any column!`, dbRecord)
                     }
 
                     return {
