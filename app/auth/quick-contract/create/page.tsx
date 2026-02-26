@@ -2,10 +2,17 @@
 
 // ============================================================================
 // QUICK CREATE - CREATE PAGE
-// Version: 2.0
-// Date: 25 February 2026
+// Version: 2.1
+// Date: 26 February 2026
 // Path: /app/auth/quick-contract/create/page.tsx
 // Description: Create a new Quick Create contract from template or upload
+// Changes v2.1:
+//   - NEW: Role selection modal appears when user selects a template
+//   - Template flow: Select Template → Role Modal → load into Studio
+//   - Modal auto-detects contract type from template name
+//   - User picks their party role (e.g. Customer/Provider) before proceeding
+//   - "Skip for now" allows proceeding without role (fallback to Party A/B)
+//   - Also triggers for URL-param template loads (from Contract Library)
 // Changes v2.0:
 //   - Removed Invite step (invite now lives in QC Studio)
 //   - Removed Review Clauses panel (duplicate of Studio's 3-panel view)
@@ -90,6 +97,13 @@ interface ParsedClause {
     clarenceAssessment?: string | null
     clarenceFlags?: string[]
     clarenceCertifiedAt?: string | null
+}
+
+// Used by the role-selection modal that appears before a template is loaded
+interface PendingTemplateInfo {
+    templateId: string
+    templateName: string
+    contractType: string | null
 }
 
 type CreateStep = 'source' | 'details' | 'template_select' | 'variables' | 'content' | 'parsing'
@@ -283,6 +297,11 @@ function QuickContractCreateContent() {
     const [suggestedTypeKey, setSuggestedTypeKey] = useState<string | null>(null)
     const userOverrodeType = useRef(false)
 
+    // Role selection modal state (template flow)
+    const [pendingTemplate, setPendingTemplate] = useState<PendingTemplateInfo | null>(null)
+    const [modalContractTypeKey, setModalContractTypeKey] = useState<string | null>(null)
+    const [modalPartyRole, setModalPartyRole] = useState<PartyRole | null>(null)
+
     // Duplicate mode
     const duplicateId = searchParams.get('duplicate')
 
@@ -418,7 +437,14 @@ function QuickContractCreateContent() {
     // SECTION 9B: LOAD FROM TEMPLATE (Contracts page "Use Template")
     // ==========================================================================
 
-    const loadFromTemplate = useCallback(async (templateId: string, templateName: string | null, contractType: string | null, user: UserInfo) => {
+    const loadFromTemplate = useCallback(async (
+        templateId: string,
+        templateName: string | null,
+        contractType: string | null,
+        user: UserInfo,
+        overrideTypeKey?: string | null,
+        overridePartyRole?: PartyRole | null
+    ) => {
         setLoadingTemplate(true)
         setError(null)
 
@@ -577,9 +603,9 @@ function QuickContractCreateContent() {
                         file_size: 0,
                         status: 'ready',
                         clause_count: existingClauses.length,
-                        contract_type_key: state.contractTypeKey || templateData.contract_type_key || null,
-                        initiator_party_role: state.initiatorPartyRole || templateData.initiator_party_role || null,
-                        detected_contract_type: getContractTypeLabel(state.contractTypeKey || templateData.contract_type_key)
+                        contract_type_key: overrideTypeKey || state.contractTypeKey || templateData.contract_type_key || null,
+                        initiator_party_role: overridePartyRole || state.initiatorPartyRole || templateData.initiator_party_role || null,
+                        detected_contract_type: getContractTypeLabel(overrideTypeKey || state.contractTypeKey || templateData.contract_type_key)
                     })
                     .select('contract_id')
                     .single()
@@ -761,15 +787,17 @@ function QuickContractCreateContent() {
 
             await loadTemplates(user.companyId, user.userId)
 
-            // Auto-load template if source_template_id is in URL
+            // Auto-load template if source_template_id is in URL — show role modal first
             if (sourceTemplateId) {
-                console.log('Auto-loading template from URL params:', sourceTemplateId)
-                loadFromTemplate(
-                    sourceTemplateId,
-                    sourceTemplateName,
-                    sourceContractType,
-                    user
-                )
+                console.log('Template from URL params — showing role selection modal:', sourceTemplateId)
+                const detectedKey = autoDetectContractType(sourceTemplateName || '') || sourceContractType || null
+                setPendingTemplate({
+                    templateId: sourceTemplateId,
+                    templateName: sourceTemplateName || 'Template',
+                    contractType: sourceContractType
+                })
+                setModalContractTypeKey(detectedKey)
+                setModalPartyRole(null)
             }
 
             // Load duplicate if specified
@@ -848,17 +876,54 @@ function QuickContractCreateContent() {
     function handleTemplateSelect(template: QCTemplate) {
         if (!userInfo) return
 
+        console.log('=== handleTemplateSelect v2 (with role modal) ===')
+        console.log('Template:', template.templateName)
+
         eventLogger.completed('quick_contract_create', 'template_selected', {
             templateId: template.templateId,
             templateName: template.templateName
         })
 
+        // Auto-detect contract type from the template name or stored type
+        const detectedKey = autoDetectContractType(template.templateName) || template.contractType || null
+        console.log('Auto-detected contract type key:', detectedKey)
+
+        // Open the role selection modal instead of loading immediately
+        setPendingTemplate({
+            templateId: template.templateId,
+            templateName: template.templateName,
+            contractType: template.contractType
+        })
+        setModalContractTypeKey(detectedKey)
+        setModalPartyRole(null)
+        console.log('pendingTemplate set — modal should now be visible')
+    }
+
+    function handleConfirmTemplateRole() {
+        if (!pendingTemplate || !userInfo) return
+
+        // Close modal
+        const typeKey = modalContractTypeKey
+        const partyRole = modalPartyRole
+        setPendingTemplate(null)
+        setModalContractTypeKey(null)
+        setModalPartyRole(null)
+
+        // Load the template with the chosen role
         loadFromTemplate(
-            template.templateId,
-            template.templateName,
-            template.contractType,
-            userInfo
+            pendingTemplate.templateId,
+            pendingTemplate.templateName,
+            pendingTemplate.contractType,
+            userInfo,
+            typeKey,
+            partyRole
         )
+    }
+
+    function handleCancelTemplateRole() {
+        setPendingTemplate(null)
+        setModalContractTypeKey(null)
+        setModalPartyRole(null)
     }
 
     function handleVariablesComplete() {
@@ -2047,6 +2112,176 @@ function QuickContractCreateContent() {
                 )}
 
             </main>
+
+            {/* ================================================================ */}
+            {/* SECTION 20: TEMPLATE ROLE SELECTION MODAL                        */}
+            {/* ================================================================ */}
+            {/* Appears when user selects a template, BEFORE loading into Studio */}
+            {/* Allows contract type confirmation and party role selection        */}
+            {/* ================================================================ */}
+            {pendingTemplate && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                        onClick={handleCancelTemplateRole}
+                    ></div>
+
+                    {/* Modal */}
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4">
+                            <h3 className="text-lg font-bold text-white">Set Up Your Negotiation</h3>
+                            <p className="text-teal-100 text-sm mt-0.5">
+                                {pendingTemplate.templateName}
+                            </p>
+                        </div>
+
+                        {/* Body */}
+                        <div className="px-6 py-5 space-y-5">
+                            {/* Contract Type Selector */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                    Contract Type
+                                </label>
+                                <p className="text-xs text-slate-500 mb-2">
+                                    {modalContractTypeKey
+                                        ? 'Auto-detected from the template name. Change if needed.'
+                                        : 'Select the type of contract this template represents.'}
+                                </p>
+                                <select
+                                    value={modalContractTypeKey || ''}
+                                    onChange={(e) => {
+                                        setModalContractTypeKey(e.target.value || null)
+                                        setModalPartyRole(null) // Reset role when type changes
+                                    }}
+                                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm bg-white"
+                                >
+                                    <option value="">Select contract type...</option>
+                                    {Object.entries(getContractTypesByCategory()).map(([category, types]) => (
+                                        <optgroup key={category} label={getCategoryDisplayName(category)}>
+                                            {types.map(ct => (
+                                                <option key={ct.contractTypeKey} value={ct.contractTypeKey}>
+                                                    {ct.contractTypeName}
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Party Role Selector — only shows when type is selected */}
+                            {modalContractTypeKey && (() => {
+                                const selectedType = CONTRACT_TYPE_DEFINITIONS.find(ct => ct.contractTypeKey === modalContractTypeKey)
+                                if (!selectedType) return null
+                                return (
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                                            Your Role in this Contract
+                                        </label>
+                                        <p className="text-xs text-slate-500 mb-2">
+                                            Which party do you represent? This determines how the position scale is oriented.
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {/* Protected Party (e.g. Customer) */}
+                                            <button
+                                                onClick={() => setModalPartyRole('protected' as PartyRole)}
+                                                className={`p-4 rounded-xl border-2 text-left transition-all ${modalPartyRole === 'protected'
+                                                    ? 'border-emerald-500 bg-emerald-50 shadow-sm'
+                                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2.5 mb-1.5">
+                                                    <div className={`w-3 h-3 rounded-full transition-colors ${modalPartyRole === 'protected' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                                                    <span className="font-semibold text-sm text-slate-800">{selectedType.protectedPartyLabel}</span>
+                                                </div>
+                                                <p className="text-xs text-slate-500 pl-5.5">{selectedType.protectedPartyDescription}</p>
+                                            </button>
+
+                                            {/* Providing Party (e.g. Provider) */}
+                                            <button
+                                                onClick={() => setModalPartyRole('providing' as PartyRole)}
+                                                className={`p-4 rounded-xl border-2 text-left transition-all ${modalPartyRole === 'providing'
+                                                    ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2.5 mb-1.5">
+                                                    <div className={`w-3 h-3 rounded-full transition-colors ${modalPartyRole === 'providing' ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                                    <span className="font-semibold text-sm text-slate-800">{selectedType.providingPartyLabel}</span>
+                                                </div>
+                                                <p className="text-xs text-slate-500 pl-5.5">{selectedType.providingPartyDescription}</p>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })()}
+
+                            {/* Guidance note */}
+                            {!modalContractTypeKey && (
+                                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                    <svg className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <p className="text-xs text-amber-700">
+                                        Selecting a contract type ensures CLARENCE uses the correct party labels and position orientation throughout the negotiation.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                            <button
+                                onClick={handleCancelTemplateRole}
+                                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <div className="flex items-center gap-3">
+                                {(!modalContractTypeKey || !modalPartyRole) && (
+                                    <button
+                                        onClick={() => {
+                                            // Allow proceeding without full type/role (graceful fallback)
+                                            const info = pendingTemplate
+                                            const typeKey = modalContractTypeKey
+                                            setPendingTemplate(null)
+                                            setModalContractTypeKey(null)
+                                            setModalPartyRole(null)
+                                            if (userInfo && info) {
+                                                loadFromTemplate(
+                                                    info.templateId,
+                                                    info.templateName,
+                                                    info.contractType,
+                                                    userInfo,
+                                                    typeKey,
+                                                    null
+                                                )
+                                            }
+                                        }}
+                                        className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors"
+                                    >
+                                        Skip for now
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleConfirmTemplateRole}
+                                    disabled={!modalContractTypeKey || !modalPartyRole}
+                                    className={`px-5 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${modalContractTypeKey && modalPartyRole
+                                            ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-sm'
+                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                        }`}
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                    </svg>
+                                    Start Negotiation
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
