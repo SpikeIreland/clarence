@@ -284,7 +284,7 @@ function getDocumentsForMode(mode: DocumentCentreMode): typeof DOCUMENT_DEFINITI
 
 function DocumentCentreLoading() {
     return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="h-screen bg-slate-50 flex items-center justify-center">
             <div className="text-center">
                 <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                 <p className="text-slate-600">Loading Document Centre...</p>
@@ -1939,7 +1939,7 @@ function DocumentCentreContent() {
     const hasContext = mode === 'quick_contract' ? !!quickContract : !!session
     if (!hasContext || !userInfo) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="h-screen bg-slate-50 flex items-center justify-center">
                 <div className="text-center">
                     <p className="text-red-600 mb-4">
                         {mode === 'quick_contract' ? 'Failed to load contract data' : 'Failed to load session data'}
@@ -1961,7 +1961,7 @@ function DocumentCentreContent() {
     const contextId = mode === 'quick_contract' ? (quickContract?.contractId || '') : (session?.sessionId || '')
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
+        <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
             {/* Header */}
             <DocumentCentreHeader
                 session={session}
@@ -1971,10 +1971,10 @@ function DocumentCentreContent() {
                 onBackToStudio={handleBackToStudio}
             />
 
-            {/* Main Layout */}
-            <div className="flex-1 flex overflow-hidden">
+            {/* Main Layout - three independent panels */}
+            <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* LEFT PANEL: Document List */}
-                <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+                <div className="w-80 bg-white border-r border-slate-200 flex flex-col min-h-0">
                     {/* Progress Header */}
                     <div className="flex-shrink-0 p-4 border-b border-slate-200">
                         <div className="flex items-center justify-between mb-3">
@@ -2047,7 +2047,7 @@ function DocumentCentreContent() {
                 </div>
 
                 {/* CENTER PANEL: Document Preview */}
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                     <DocumentPreviewPanel
                         document={selectedDocument}
                         session={session}
@@ -2058,7 +2058,7 @@ function DocumentCentreContent() {
                 </div>
 
                 {/* RIGHT PANEL: CLARENCE Chat */}
-                <div className="w-96 border-l border-slate-200">
+                <div className="w-96 border-l border-slate-200 flex flex-col overflow-hidden min-h-0">
                     <ClarenceChatPanel
                         sessionId={contextId}
                         selectedDocument={selectedDocument}
