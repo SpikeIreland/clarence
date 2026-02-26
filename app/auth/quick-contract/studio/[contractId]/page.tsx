@@ -3312,77 +3312,27 @@ INSTRUCTIONS:
                             </button>
                         )}
 
-                        {/* Invite Provider Button / Status Indicator (non-template mode, initiator only) */}
-                        {!isTemplateMode && isInitiator && (() => {
-                            // No invite sent yet — show Invite button
-                            if (!inviteSent && !respondentInfo) {
-                                return (
-                                    <button
-                                        onClick={() => setShowInviteModal(true)}
-                                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                                        </svg>
-                                        Invite Respondent
-                                    </button>
-                                )
-                            }
-
-                            // Respondent declined
-                            if (respondentStatus === 'declined') {
-                                return (
-                                    <div className="flex items-center gap-2">
-                                        <div className="px-3 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            Declined
-                                        </div>
-                                        <button
-                                            onClick={() => setShowInviteModal(true)}
-                                            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors text-xs font-medium"
-                                            title="Send a new invite"
-                                        >
-                                            Re-invite
-                                        </button>
-                                    </div>
-                                )
-                            }
-
-                            // Respondent accepted / in studio
-                            if (respondentStatus === 'accepted' || respondentStatus === 'in_studio') {
-                                return (
-                                    <div className="px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                        {respondentInfo?.name || 'Respondent'} joined
-                                    </div>
-                                )
-                            }
-
-                            // Respondent has viewed the invite
-                            if (respondentStatus === 'viewed') {
-                                return (
-                                    <div className="px-3 py-2 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                        Viewed
-                                    </div>
-                                )
-                            }
-
-                            // Default: Invite sent, pending response
-                            return (
-                                <div className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {/* Invite Provider Button / Pending State (non-template mode, initiator only, not committed) */}
+                        {!isTemplateMode && isInitiator && contract?.status !== 'committed' && (
+                            inviteSent || respondentInfo ? (
+                                <div className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
+                                    <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    Invite Pending
+                                    Pending
                                 </div>
+                            ) : (
+                                <button
+                                    onClick={() => setShowInviteModal(true)}
+                                    className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                    Invite
+                                </button>
                             )
-                        })()}
+                        )}
 
 
                         {/* Save as Template Button (template mode only) */}
@@ -3431,6 +3381,19 @@ INSTRUCTIONS:
                                 </button>
                             )
                         })()}
+
+                        <button
+                            onClick={() => {
+                                if (isTemplateMode) {
+                                    router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
+                                } else {
+                                    router.push('/auth/home')
+                                }
+                            }}
+                            className="px-4 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors text-sm font-medium"
+                        >
+                            Back
+                        </button>
 
                         {/* Commit / Progress Button (non-template mode, respondent only) */}
                         {!isTemplateMode && !isInitiator && (() => {
