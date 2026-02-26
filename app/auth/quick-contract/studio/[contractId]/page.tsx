@@ -355,6 +355,9 @@ function QuickContractStudioContent() {
         company: string | null
     } | null>(null)
 
+    // Online presence tracking
+    const [otherPartyOnline, setOtherPartyOnline] = useState(false)
+
 
     // Progressive loading / certification polling state (must be before any early returns)
     const [isPolling, setIsPolling] = useState(false)
@@ -2653,6 +2656,57 @@ INSTRUCTIONS:
     }, [activeTab, unreadActivityCount, markActivityAsRead])
 
     // ========================================================================
+    // SECTION 4F-3: REALTIME PRESENCE — ONLINE STATUS
+    // ========================================================================
+
+    useEffect(() => {
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId || !userInfo) return
+
+        const presenceChannel = supabase.channel(`qc-presence-${effectiveId}`, {
+            config: { presence: { key: userInfo.userId } }
+        })
+
+        presenceChannel
+            .on('presence', { event: 'sync' }, () => {
+                const state = presenceChannel.presenceState()
+                // Check if any user OTHER than current user is present
+                const otherUsers = Object.keys(state).filter(key => key !== userInfo.userId)
+                setOtherPartyOnline(otherUsers.length > 0)
+            })
+            .on('presence', { event: 'join' }, ({ key }) => {
+                if (key !== userInfo.userId) {
+                    setOtherPartyOnline(true)
+                    console.log('[Presence] Other party came online')
+                }
+            })
+            .on('presence', { event: 'leave' }, ({ key }) => {
+                if (key !== userInfo.userId) {
+                    // Check remaining presences before marking offline
+                    const state = presenceChannel.presenceState()
+                    const otherUsers = Object.keys(state).filter(k => k !== userInfo.userId)
+                    setOtherPartyOnline(otherUsers.length > 0)
+                    console.log('[Presence] Other party went offline')
+                }
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await presenceChannel.track({
+                        userId: userInfo.userId,
+                        role: getPartyRole(),
+                        joinedAt: new Date().toISOString()
+                    })
+                    console.log('[Presence] Tracking started for', getPartyRole())
+                }
+            })
+
+        return () => {
+            presenceChannel.untrack()
+            supabase.removeChannel(presenceChannel)
+        }
+    }, [contractId, resolvedContractId, userInfo?.userId])
+
+    // ========================================================================
     // SECTION 4G: AUTO-SAVE TIMER & LOCALSTORAGE PERSISTENCE
     // ========================================================================
 
@@ -3312,7 +3366,14 @@ INSTRUCTIONS:
                             <div className="flex items-center gap-3 flex-shrink-0">
                                 {/* Initiator (Party A) */}
                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                                    <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
+                                    <div className="relative flex-shrink-0">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                                        {/* Online indicator — only show for the OTHER party */}
+                                        {getPartyRole() === 'respondent' && (
+                                            <div className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-white ${otherPartyOnline ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}
+                                                title={otherPartyOnline ? 'Online' : 'Offline'} />
+                                        )}
+                                    </div>
                                     <div className="text-xs">
                                         <span className="font-medium text-emerald-800">
                                             {initiatorInfo?.company || initiatorInfo?.name || (getPartyRole() === 'initiator' ? userInfo?.companyName || userInfo?.fullName : null) || 'Initiator'}
@@ -3323,28 +3384,59 @@ INSTRUCTIONS:
                                         {getPartyRole() === 'initiator' && (
                                             <span className="text-emerald-500 ml-1">(You)</span>
                                         )}
+                                        {/* Online label for respondent's view */}
+                                        {getPartyRole() === 'respondent' && (
+                                            <div className={`text-[10px] mt-0.5 ${otherPartyOnline ? 'text-green-600' : 'text-slate-400'}`}>
+                                                {otherPartyOnline ? 'Online' : 'Offline'}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
                                 <span className="text-slate-300 text-xs">vs</span>
 
-                                {/* Respondent (Party B) */}
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
-                                    <div className="text-xs">
-                                        <span className="font-medium text-blue-800">
-                                            {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
-                                        </span>
-                                        {respondentInfo && (
-                                            <span className="text-blue-600 ml-1">
-                                                · {roleContext?.providingPartyLabel || 'Party B'}
+                                {/* Respondent (Party B) — or Invite button if no respondent yet */}
+                                {!(inviteSent || respondentInfo) && isInitiator ? (
+                                    <button
+                                        onClick={() => setShowInviteModal(true)}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                        </svg>
+                                        Invite Counterparty
+                                    </button>
+                                ) : (
+                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="relative flex-shrink-0">
+                                            <div className={`w-2 h-2 rounded-full ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                                            {/* Online indicator — only show for the OTHER party */}
+                                            {getPartyRole() === 'initiator' && respondentInfo && (
+                                                <div className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-white ${otherPartyOnline ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}
+                                                    title={otherPartyOnline ? 'Online' : 'Offline'} />
+                                            )}
+                                        </div>
+                                        <div className="text-xs">
+                                            <span className="font-medium text-blue-800">
+                                                {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
                                             </span>
-                                        )}
-                                        {getPartyRole() === 'respondent' && (
-                                            <span className="text-blue-500 ml-1">(You)</span>
-                                        )}
+                                            {respondentInfo && (
+                                                <span className="text-blue-600 ml-1">
+                                                    · {roleContext?.providingPartyLabel || 'Party B'}
+                                                </span>
+                                            )}
+                                            {getPartyRole() === 'respondent' && (
+                                                <span className="text-blue-500 ml-1">(You)</span>
+                                            )}
+                                            {/* Online label for initiator's view */}
+                                            {getPartyRole() === 'initiator' && respondentInfo && (
+                                                <div className={`text-[10px] mt-0.5 ${otherPartyOnline ? 'text-green-600' : 'text-slate-400'}`}>
+                                                    {otherPartyOnline ? 'Online' : 'Offline'}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         )}
 
@@ -3419,41 +3511,6 @@ INSTRUCTIONS:
                                 )}
                             </button>
                         )}
-
-                        {/* Invite Provider Button / Status Indicator (non-template mode, initiator only, not committed) */}
-                        {!isTemplateMode && isInitiator && contract?.status !== 'committed' && (
-                            !(inviteSent || respondentInfo) ? (
-                                <button
-                                    onClick={() => setShowInviteModal(true)}
-                                    className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                    </svg>
-                                    Invite
-                                </button>
-                            ) : respondentStatus === 'accepted' || respondentStatus === 'in_studio' || respondentStatus === 'viewed' || respondentStatus === 'invited' ? (
-                                <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                                    {respondentInfo?.name || 'Respondent'} Active
-                                </div>
-                            ) : respondentStatus === 'declined' ? (
-                                <div className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                    Declined
-                                </div>
-                            ) : (
-                                <div className="px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-2 cursor-default">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Invite Pending
-                                </div>
-                            )
-                        )}
-
 
                         {/* Save as Template Button (template mode only) */}
                         {/* Only enabled when polling is finished AND all non-header clauses are certified */}
@@ -3539,14 +3596,19 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // Only respondent sees commit/progress buttons
-                            if (isInitiator) return null
+                            // Both parties can commit — greyed out until respondent has arrived
+                            const respondentHasArrived = respondentStatus === 'accepted' || respondentStatus === 'invited' || respondentStatus === 'viewed' || respondentStatus === 'in_studio'
 
                             if (allBothAgreed) {
                                 return (
                                     <button
                                         onClick={() => setCommitModalState('confirm')}
-                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2 animate-pulse"
+                                        disabled={!respondentHasArrived}
+                                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${respondentHasArrived
+                                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse'
+                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                            }`}
+                                        title={!respondentHasArrived ? 'Waiting for respondent to join' : 'All clauses agreed — commit contract'}
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -3560,7 +3622,11 @@ INSTRUCTIONS:
                                 return (
                                     <button
                                         onClick={() => setCommitModalState('confirm')}
-                                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                                        disabled={!respondentHasArrived}
+                                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-2 ${respondentHasArrived
+                                            ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                            }`}
                                         title={`${bothAgreedCount}/${leafClauses.length} clauses agreed by both parties`}
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
