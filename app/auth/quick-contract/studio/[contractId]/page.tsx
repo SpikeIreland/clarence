@@ -4163,31 +4163,33 @@ INSTRUCTIONS:
                                             )}
                                         </div>
 
-                                        {/* Right: Query input */}
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                value={queryText}
-                                                onChange={(e) => setQueryText(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && queryText.trim()) {
-                                                        handleQueryClause(selectedClause.clauseId, queryText)
-                                                    }
-                                                }}
-                                                placeholder="Raise a query on this clause..."
-                                                className="w-64 px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
-                                            />
-                                            <button
-                                                onClick={() => handleQueryClause(selectedClause.clauseId, queryText)}
-                                                disabled={!queryText.trim()}
-                                                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-sm font-medium transition-colors"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                Query
-                                            </button>
-                                        </div>
+                                        {/* Right: Query input (respondent only) */}
+                                        {getPartyRole() === 'respondent' && (
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={queryText}
+                                                    onChange={(e) => setQueryText(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && queryText.trim()) {
+                                                            handleQueryClause(selectedClause.clauseId, queryText)
+                                                        }
+                                                    }}
+                                                    placeholder="Raise a query on this clause..."
+                                                    className="w-64 px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                />
+                                                <button
+                                                    onClick={() => handleQueryClause(selectedClause.clauseId, queryText)}
+                                                    disabled={!queryText.trim()}
+                                                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-sm font-medium transition-colors"
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    Query
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
