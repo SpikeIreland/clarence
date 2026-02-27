@@ -3144,7 +3144,7 @@ function DocumentCentreContent() {
     const contextId = mode === 'quick_contract' ? (quickContract?.contractId || '') : (session?.sessionId || '')
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
+        <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
             {/* Header */}
             <DocumentCentreHeader
                 session={session}
