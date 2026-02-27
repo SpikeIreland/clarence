@@ -92,6 +92,7 @@ export interface FlexibilityResult {
 
 export interface ComplianceResult {
     overallScore: number
+    totalPlaybookRules: number
     rulesChecked: number
     rulesPassed: number
     rulesFailed: number
@@ -100,7 +101,7 @@ export interface ComplianceResult {
     categories: CategoryResult[]
     redLines: RedLineResult[]
     flexibility: FlexibilityResult[]
-    unmatchedCategories: string[]  // Playbook categories with no contract clauses
+    unmatchedCategories: string[]
 }
 
 // ============================================================================
@@ -530,6 +531,7 @@ export function calculatePlaybookCompliance(
 
     return {
         overallScore,
+        totalPlaybookRules: rules.length,
         rulesChecked: scorableRules.length,
         rulesPassed: scorableRules.filter(sr => sr.status === 'pass').length,
         rulesFailed: scorableRules.filter(sr =>

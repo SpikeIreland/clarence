@@ -491,9 +491,18 @@ export default function PlaybookComplianceIndicator({
                         )}
                     </div>
                     <div className="text-[11px] text-slate-500 truncate">
-                        {compliance.rulesPassed} of {compliance.rulesChecked} rules satisfied
-                        {' · '}
-                        {playbookName}
+                        {compliance.rulesChecked < compliance.totalPlaybookRules ? (
+                            <>
+                                {compliance.rulesChecked} of {compliance.totalPlaybookRules} playbook rules assessed
+                                {' · '}{compliance.totalPlaybookRules - compliance.rulesChecked} rules have no matching clauses
+                                {' · '}{compliance.rulesPassed} compliant
+                            </>
+                        ) : (
+                            <>
+                                {compliance.rulesPassed} of {compliance.rulesChecked} rules satisfied
+                                {' · '}{playbookName}
+                            </>
+                        )}
                     </div>
                 </div>
 
