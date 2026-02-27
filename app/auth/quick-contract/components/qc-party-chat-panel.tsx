@@ -658,11 +658,26 @@ export function QCPartyChatPanel({
         : null
 
     // ========================================================================
+    // SECTION 6J-0: GUARD — Return nothing when chat is closed
+    // Without this, an unstyled div enters the flex flow and splits the page
+    // ========================================================================
+
+    if (!isOpen) {
+        return (
+            <ToastContainer
+                toasts={toasts}
+                onDismiss={dismissToast}
+                onOpenChat={switchToExpanded}
+            />
+        )
+    }
+
+    // ========================================================================
     // SECTION 6J: RENDER — COMPACT MODE
     // Small floating bar: header strip, last message, input field
     // ========================================================================
 
-    if (isOpen && chatMode === 'compact') {
+    if (chatMode === 'compact') {
         return (
             <>
                 {/* Toast Notifications */}
@@ -791,18 +806,6 @@ export function QCPartyChatPanel({
     // SECTION 6K: RENDER — EXPANDED (DOCKED) & DETACHED MODES
     // Full chat panel with messages, same as original but with mode controls
     // ========================================================================
-
-    // If chat is closed and we're not in detached mode, render nothing
-    // (prevents an unstyled static div from breaking page layout)
-    if (!isOpen && chatMode !== 'detached') {
-        return (
-            <ToastContainer
-                toasts={toasts}
-                onDismiss={dismissToast}
-                onOpenChat={switchToExpanded}
-            />
-        )
-    }
 
     // Style computation
     const detachedStyles = chatMode === 'detached' ? {
