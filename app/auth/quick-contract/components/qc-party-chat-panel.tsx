@@ -792,6 +792,18 @@ export function QCPartyChatPanel({
     // Full chat panel with messages, same as original but with mode controls
     // ========================================================================
 
+    // If chat is closed and we're not in detached mode, render nothing
+    // (prevents an unstyled static div from breaking page layout)
+    if (!isOpen && chatMode !== 'detached') {
+        return (
+            <ToastContainer
+                toasts={toasts}
+                onDismiss={dismissToast}
+                onOpenChat={switchToExpanded}
+            />
+        )
+    }
+
     // Style computation
     const detachedStyles = chatMode === 'detached' ? {
         position: 'fixed' as const,
