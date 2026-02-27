@@ -52,6 +52,9 @@ interface ToastNotification {
     timestamp: Date
 }
 
+// Chat display modes
+type ChatMode = 'compact' | 'expanded' | 'detached'
+
 // ============================================================================
 // SECTION 2: TOAST NOTIFICATION COMPONENT
 // ============================================================================
@@ -78,14 +81,13 @@ function ChatToast({ notification, onDismiss, onOpen }: ToastProps) {
         >
             <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-semibold text-sm">
+                    <span className="text-white font-bold text-sm">
                         {notification.senderName.charAt(0).toUpperCase()}
                     </span>
                 </div>
-
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-white text-sm truncate">
+                    <div className="flex items-center justify-between">
+                        <span className="text-white font-medium text-sm truncate">
                             {notification.senderName}
                         </span>
                         <button
@@ -93,7 +95,7 @@ function ChatToast({ notification, onDismiss, onOpen }: ToastProps) {
                                 e.stopPropagation()
                                 onDismiss(notification.id)
                             }}
-                            className="text-slate-400 hover:text-white transition"
+                            className="text-slate-500 hover:text-white ml-2 flex-shrink-0"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -250,11 +252,11 @@ export function QCPartyChatPanel({
     const [lastMessageCount, setLastMessageCount] = useState(0)
 
     // ========================================================================
-    // SECTION 6B: DETACHABLE/DRAGGABLE STATE
+    // SECTION 6B: CHAT MODE STATE (compact / expanded / detached)
     // ========================================================================
 
-    const [isDetached, setIsDetached] = useState(false)
-    const [position, setPosition] = useState({ x: 100, y: 100 })
+    const [chatMode, setChatMode] = useState<ChatMode>('compact')
+    const [detachedPosition, setDetachedPosition] = useState({ x: 100, y: 100 })
     const [isDragging, setIsDragging] = useState(false)
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
 
@@ -264,16 +266,16 @@ export function QCPartyChatPanel({
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+    const compactInputRef = useRef<HTMLInputElement>(null)
     const panelRef = useRef<HTMLDivElement>(null)
 
     // ========================================================================
-    // SECTION 6D: DRAG HANDLERS
+    // SECTION 6D: DRAG HANDLERS (detached mode only)
     // ========================================================================
 
     const handleMouseDown = useCallback((e: React.MouseEvent) => {
-        if (!isDetached) return
+        if (chatMode !== 'detached') return
 
-        // Only start drag from the header area
         const target = e.target as HTMLElement
         if (!target.closest('[data-drag-handle]')) return
 
@@ -287,7 +289,7 @@ export function QCPartyChatPanel({
                 y: e.clientY - rect.top
             })
         }
-    }, [isDetached])
+    }, [chatMode])
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!isDragging) return
@@ -295,11 +297,10 @@ export function QCPartyChatPanel({
         const newX = e.clientX - dragOffset.x
         const newY = e.clientY - dragOffset.y
 
-        // Keep window within viewport bounds
-        const maxX = window.innerWidth - 360 // panel width
-        const maxY = window.innerHeight - 500 // panel height
+        const maxX = window.innerWidth - 360
+        const maxY = window.innerHeight - 500
 
-        setPosition({
+        setDetachedPosition({
             x: Math.max(0, Math.min(newX, maxX)),
             y: Math.max(0, Math.min(newY, maxY))
         })
@@ -331,16 +332,31 @@ export function QCPartyChatPanel({
         }
     }, [isDragging, handleMouseMove, handleMouseUp])
 
-    // Reset position when switching to detached mode
-    const handleDetach = () => {
-        if (!isDetached) {
-            // Calculate a good starting position (center-left of screen)
-            setPosition({
+    // ========================================================================
+    // SECTION 6D-2: MODE SWITCHING HELPERS
+    // ========================================================================
+
+    const switchToExpanded = () => {
+        setChatMode('expanded')
+    }
+
+    const switchToCompact = () => {
+        setChatMode('compact')
+    }
+
+    const switchToDetached = () => {
+        if (chatMode !== 'detached') {
+            setDetachedPosition({
                 x: Math.max(20, (window.innerWidth - 360) / 3),
                 y: Math.max(80, (window.innerHeight - 500) / 4)
             })
         }
-        setIsDetached(!isDetached)
+        setChatMode('detached')
+    }
+
+    const handleClose = () => {
+        setChatMode('compact')
+        onClose()
     }
 
     // ========================================================================
@@ -423,11 +439,10 @@ export function QCPartyChatPanel({
 
             if (error) {
                 console.error('[QCPartyChat] Failed to send message:', error)
-                setInputText(messageText) // Restore on error
+                setInputText(messageText)
                 return
             }
 
-            // Refetch messages
             await fetchMessages()
 
         } catch (err) {
@@ -522,17 +537,14 @@ export function QCPartyChatPanel({
                         createdAt: newMsg.created_at as string
                     }
 
-                    // Only add if not from current user (avoid duplicates)
                     if (mappedMsg.senderUserId !== currentUserId) {
                         setMessages(prev => {
-                            // Check for duplicates
                             if (prev.some(m => m.messageId === mappedMsg.messageId)) {
                                 return prev
                             }
                             return [...prev, mappedMsg]
                         })
 
-                        // Show toast if panel is closed
                         if (!isOpen) {
                             addToast(mappedMsg)
                             setUnreadCount(prev => {
@@ -558,19 +570,21 @@ export function QCPartyChatPanel({
         }
     }, [messages, isOpen])
 
-    // Mark as read when opening chat
+    // Mark as read when opening chat (expanded or detached)
     useEffect(() => {
-        if (isOpen && unreadCount > 0) {
+        if (isOpen && unreadCount > 0 && chatMode !== 'compact') {
             markAsRead()
         }
-    }, [isOpen, unreadCount, markAsRead])
+    }, [isOpen, unreadCount, markAsRead, chatMode])
 
     // Focus input when opening
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && chatMode === 'compact') {
+            setTimeout(() => compactInputRef.current?.focus(), 300)
+        } else if (isOpen && chatMode !== 'compact') {
             setTimeout(() => inputRef.current?.focus(), 300)
         }
-    }, [isOpen])
+    }, [isOpen, chatMode])
 
     // Consume external messages (from clause queries)
     useEffect(() => {
@@ -591,7 +605,6 @@ export function QCPartyChatPanel({
 
             setMessages(prev => [...prev, ...newMessages])
 
-            // Update unread count if panel is closed
             if (!isOpen) {
                 const newUnread = unreadCount + newMessages.length
                 setUnreadCount(newUnread)
@@ -626,14 +639,164 @@ export function QCPartyChatPanel({
     }
 
     // ========================================================================
-    // SECTION 6I: STYLES
+    // SECTION 6I: HELPER — Get last message for compact preview
     // ========================================================================
 
-    // Detached (floating) mode styles
-    const detachedStyles = isDetached ? {
+    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null
+    const lastMessagePreview = lastMessage
+        ? (lastMessage.senderUserId === currentUserId ? 'You: ' : `${lastMessage.senderName}: `) +
+        (lastMessage.messageText.length > 60
+            ? lastMessage.messageText.substring(0, 60) + '...'
+            : lastMessage.messageText)
+        : null
+
+    const lastMessageTime = lastMessage
+        ? new Date(lastMessage.createdAt).toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+        : null
+
+    // ========================================================================
+    // SECTION 6J: RENDER — COMPACT MODE
+    // Small floating bar: header strip, last message, input field
+    // ========================================================================
+
+    if (isOpen && chatMode === 'compact') {
+        return (
+            <>
+                {/* Toast Notifications */}
+                <ToastContainer
+                    toasts={toasts}
+                    onDismiss={dismissToast}
+                    onOpenChat={switchToExpanded}
+                />
+
+                {/* Compact Chat Bar */}
+                <div className="fixed bottom-4 right-4 z-50 w-[340px] bg-slate-900 rounded-xl border border-slate-700 shadow-2xl overflow-hidden">
+
+                    {/* ── Compact Header ── */}
+                    <div
+                        className="px-3 py-2 bg-slate-800 border-b border-slate-700 cursor-pointer hover:bg-slate-750 transition-colors"
+                        onClick={switchToExpanded}
+                    >
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                                {/* Small avatar */}
+                                <div className="w-7 h-7 bg-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span className="text-white font-bold text-xs">
+                                        {otherPartyName.charAt(0).toUpperCase()}
+                                    </span>
+                                </div>
+                                <div className="min-w-0">
+                                    <span className="text-white text-sm font-medium truncate block">
+                                        {otherPartyName}
+                                    </span>
+                                </div>
+                                {/* Unread badge */}
+                                {unreadCount > 0 && (
+                                    <span className="w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse flex-shrink-0">
+                                        {unreadCount > 9 ? '9+' : unreadCount}
+                                    </span>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                                {/* Expand button */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        switchToExpanded()
+                                    }}
+                                    className="p-1 hover:bg-slate-700 rounded transition"
+                                    title="Expand chat"
+                                >
+                                    <svg className="w-4 h-4 text-slate-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                    </svg>
+                                </button>
+                                {/* Close button */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleClose()
+                                    }}
+                                    className="p-1 hover:bg-slate-700 rounded transition"
+                                    title="Close chat"
+                                >
+                                    <svg className="w-4 h-4 text-slate-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Last Message Preview ── */}
+                    {lastMessagePreview && (
+                        <div
+                            className="px-3 py-2 border-b border-slate-800 cursor-pointer hover:bg-slate-850 transition-colors"
+                            onClick={switchToExpanded}
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <p className="text-slate-400 text-xs truncate flex-1">
+                                    {lastMessagePreview}
+                                </p>
+                                {lastMessageTime && (
+                                    <span className="text-slate-600 text-[10px] flex-shrink-0">
+                                        {lastMessageTime}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Compact Input ── */}
+                    <div className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                            <input
+                                ref={compactInputRef}
+                                type="text"
+                                value={inputText}
+                                onChange={(e) => setInputText(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                                placeholder={`Message ${otherPartyName}...`}
+                                className="flex-1 bg-slate-800 text-white placeholder-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 border border-slate-700"
+                                disabled={isSending}
+                            />
+                            <button
+                                onClick={sendMessage}
+                                disabled={!inputText.trim() || isSending}
+                                className={`p-2 rounded-lg transition-all flex-shrink-0 ${inputText.trim() && !isSending
+                                        ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                                        : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+                                    }`}
+                            >
+                                {isSending ? (
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </>
+        )
+    }
+
+    // ========================================================================
+    // SECTION 6K: RENDER — EXPANDED (DOCKED) & DETACHED MODES
+    // Full chat panel with messages, same as original but with mode controls
+    // ========================================================================
+
+    // Style computation
+    const detachedStyles = chatMode === 'detached' ? {
         position: 'fixed' as const,
-        top: position.y,
-        left: position.x,
+        top: detachedPosition.y,
+        left: detachedPosition.x,
         right: 'auto',
         width: '360px',
         height: '500px',
@@ -645,8 +808,7 @@ export function QCPartyChatPanel({
             : '0 20px 40px -12px rgba(0, 0, 0, 0.4)'
     } : {}
 
-    // Docked (slide-out) mode styles
-    const dockedStyles = !isDetached ? {
+    const dockedStyles = chatMode === 'expanded' ? {
         position: 'fixed' as const,
         top: 0,
         right: 0,
@@ -657,9 +819,7 @@ export function QCPartyChatPanel({
         transition: 'transform 300ms ease-out'
     } : {}
 
-    // ========================================================================
-    // SECTION 6J: RENDER
-    // ========================================================================
+    const isFullPanel = chatMode === 'expanded' || chatMode === 'detached'
 
     return (
         <>
@@ -668,46 +828,44 @@ export function QCPartyChatPanel({
                 toasts={toasts}
                 onDismiss={dismissToast}
                 onOpenChat={() => {
-                    if (isDetached) {
-                        // Already detached, just make sure it's visible
+                    if (chatMode === 'detached') {
+                        // Already visible
                     } else {
-                        onClose() // This will toggle - parent should handle opening
+                        switchToExpanded()
                     }
                 }}
             />
 
-            {/* Backdrop removed - users can work while chatting */}
-
-            {/* Chat Panel - Docked or Detached */}
+            {/* Chat Panel — Expanded (Docked) or Detached */}
             <div
                 ref={panelRef}
                 className={`
                     bg-slate-900 z-50 flex flex-col overflow-hidden
-                    ${isDetached ? 'rounded-xl border border-slate-600' : 'shadow-[-8px_0_30px_rgba(0,0,0,0.3)]'}
-                    ${!isOpen && !isDetached ? 'pointer-events-none' : ''}
+                    ${chatMode === 'detached' ? 'rounded-xl border border-slate-600' : 'shadow-[-8px_0_30px_rgba(0,0,0,0.3)]'}
+                    ${!isOpen && chatMode !== 'detached' ? 'pointer-events-none' : ''}
                 `}
                 style={{
                     ...dockedStyles,
                     ...detachedStyles,
-                    display: isOpen || isDetached ? 'flex' : undefined,
-                    visibility: isOpen ? 'visible' : (isDetached ? 'visible' : 'hidden')
+                    display: isOpen || chatMode === 'detached' ? 'flex' : undefined,
+                    visibility: isOpen ? 'visible' : (chatMode === 'detached' ? 'visible' : 'hidden')
                 }}
                 onMouseDown={handleMouseDown}
             >
                 {/* ============================================================ */}
-                {/* PANEL HEADER - Drag Handle when detached */}
+                {/* PANEL HEADER */}
                 {/* ============================================================ */}
                 <div
                     className={`
                         px-4 py-3 border-b border-slate-700 flex-shrink-0 bg-slate-900
-                        ${isDetached ? 'cursor-grab active:cursor-grabbing rounded-t-xl' : ''}
+                        ${chatMode === 'detached' ? 'cursor-grab active:cursor-grabbing rounded-t-xl' : ''}
                     `}
                     data-drag-handle
                 >
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             {/* Drag indicator when detached */}
-                            {isDetached && (
+                            {chatMode === 'detached' && (
                                 <div className="flex flex-col gap-0.5 mr-1" data-drag-handle>
                                     <div className="w-4 h-0.5 bg-slate-600 rounded" />
                                     <div className="w-4 h-0.5 bg-slate-600 rounded" />
@@ -733,19 +891,28 @@ export function QCPartyChatPanel({
 
                         {/* Action Buttons */}
                         <div className="flex items-center gap-1">
+                            {/* Minimise to compact */}
+                            <button
+                                onClick={switchToCompact}
+                                className="p-2 hover:bg-slate-700 rounded-lg transition group"
+                                title="Minimise to compact"
+                            >
+                                <svg className="w-5 h-5 text-slate-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
                             {/* Detach/Dock Button */}
                             <button
-                                onClick={handleDetach}
+                                onClick={() => chatMode === 'detached' ? switchToExpanded() : switchToDetached()}
                                 className="p-2 hover:bg-slate-700 rounded-lg transition group"
-                                title={isDetached ? 'Dock to side' : 'Detach window'}
+                                title={chatMode === 'detached' ? 'Dock to side' : 'Detach window'}
                             >
-                                {isDetached ? (
-                                    // Dock icon (arrow pointing right to edge)
+                                {chatMode === 'detached' ? (
                                     <svg className="w-5 h-5 text-slate-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                                     </svg>
                                 ) : (
-                                    // Detach icon (window with arrow)
                                     <svg className="w-5 h-5 text-slate-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                     </svg>
@@ -754,7 +921,7 @@ export function QCPartyChatPanel({
 
                             {/* Close Button */}
                             <button
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="p-2 hover:bg-slate-700 rounded-lg transition"
                             >
                                 <svg className="w-5 h-5 text-slate-400 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -771,7 +938,7 @@ export function QCPartyChatPanel({
                 <div
                     className="flex-1 overflow-y-auto p-4 chat-scrollbar"
                     style={{
-                        height: isDetached ? 'calc(100% - 130px)' : 'calc(100vh - 160px)'
+                        height: chatMode === 'detached' ? 'calc(100% - 130px)' : 'calc(100vh - 160px)'
                     }}
                 >
                     {isLoading ? (
@@ -806,7 +973,6 @@ export function QCPartyChatPanel({
 
                             {/* Messages */}
                             {messages.map((message, index) => {
-                                // Check if we need a date divider before this message
                                 const showDateDivider = index > 0 &&
                                     new Date(message.createdAt).toDateString() !==
                                     new Date(messages[index - 1].createdAt).toDateString()
@@ -845,7 +1011,7 @@ export function QCPartyChatPanel({
                 {/* ============================================================ */}
                 <div className={`
                     border-t border-slate-700 p-4 flex-shrink-0 bg-slate-900
-                    ${isDetached ? 'rounded-b-xl' : ''}
+                    ${chatMode === 'detached' ? 'rounded-b-xl' : ''}
                 `}>
                     <div className="flex items-center gap-2">
                         <input
