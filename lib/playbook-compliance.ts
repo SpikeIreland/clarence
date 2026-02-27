@@ -228,7 +228,11 @@ function getCategoryAveragePosition(
 
 /**
  * Score a single playbook rule against an effective position.
- * Returns status and percentage score (0-100).
+ * Uses a TOP-DOWN compliance model:
+ *   - At or above ideal     = 100% (fully compliant)
+ *   - Between minimum-ideal = 85%  (compliant, within acceptable range)
+ *   - Below minimum         = 30%  (non-compliant)
+ *   - Deal breaker breach   = 0%   (critical breach)
  */
 export function scoreRule(rule: PlaybookRule, effectivePosition: number | null): {
     status: RuleStatus
@@ -243,7 +247,7 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
         }
     }
 
-    // Deal breaker below minimum = BREACH (most critical check)
+    // Deal breaker below minimum = BREACH (most critical — 0%)
     if (rule.is_deal_breaker && effectivePosition < rule.minimum_position) {
         return {
             status: 'breach',
@@ -252,16 +256,16 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
         }
     }
 
-    // Non-negotiable below ideal = FAIL
+    // Non-negotiable below ideal = FAIL (30%)
     if (rule.is_non_negotiable && effectivePosition < rule.ideal_position) {
         return {
             status: 'fail',
-            score: 0,
+            score: 30,
             detail: `Position ${effectivePosition} is below required ${rule.ideal_position} — NON-NEGOTIABLE`
         }
     }
 
-    // At or above ideal = PASS
+    // At or above ideal = PASS (100%)
     if (effectivePosition >= rule.ideal_position) {
         return {
             status: 'pass',
@@ -270,43 +274,37 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
         }
     }
 
-    // Within acceptable range (minimum to ideal)
+    // Within acceptable range — minimum to ideal (85%)
     if (effectivePosition >= rule.minimum_position) {
-        const range = rule.ideal_position - rule.minimum_position
-        const achieved = effectivePosition - rule.minimum_position
-        // Floor of 25% — being AT minimum is acceptable, not zero
-        const proportional = range > 0 ? (achieved / range) : 1
-        const score = Math.round(25 + (proportional * 75))
-
         // Check if below escalation threshold
         if (rule.requires_approval_below != null && effectivePosition < rule.requires_approval_below) {
             return {
                 status: 'warning',
-                score,
+                score: 85,
                 detail: `Position ${effectivePosition} is within range but below escalation threshold (${rule.requires_approval_below}) — requires approval`
             }
         }
 
         return {
-            status: score >= 70 ? 'acceptable' : 'warning',
-            score,
+            status: 'acceptable',
+            score: 85,
             detail: `Position ${effectivePosition} is within acceptable range (${rule.minimum_position}-${rule.ideal_position})`
         }
     }
 
-    // Below minimum — escalation territory
+    // Below minimum — escalation territory (30%)
     if (rule.requires_approval_below != null && effectivePosition < rule.requires_approval_below) {
         return {
             status: 'escalation',
-            score: 0,
+            score: 30,
             detail: `Position ${effectivePosition} is below minimum (${rule.minimum_position}) and escalation threshold (${rule.requires_approval_below})`
         }
     }
 
-    // Below minimum but not a deal breaker
+    // Below minimum but not a deal breaker (30%)
     return {
         status: 'fail',
-        score: 0,
+        score: 30,
         detail: `Position ${effectivePosition} is below minimum acceptable (${rule.minimum_position})`
     }
 }
