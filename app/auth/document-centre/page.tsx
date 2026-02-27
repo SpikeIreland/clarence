@@ -536,7 +536,7 @@ function DocumentPreviewPanel({ document, session, quickContract, onGenerate, on
 
                     <div className="flex items-center gap-2">
                         {/* Status Badge */}
-                        <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${getStatusColor(document.status)}`}>
+                        <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
                             {getStatusIcon(document.status)} {getStatusLabel(document.status)}
                         </span>
 
@@ -545,26 +545,47 @@ function DocumentPreviewPanel({ document, session, quickContract, onGenerate, on
                             <button
                                 onClick={() => onGenerate(document.id)}
                                 disabled={isGenerating}
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50"
+                                className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-full transition disabled:opacity-50 flex items-center gap-1.5"
                             >
-                                {isGenerating ? 'Generating...' : '\u26A1 Generate'}
+                                {isGenerating ? (
+                                    <>
+                                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                        Generating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                        Generate
+                                    </>
+                                )}
                             </button>
                         )}
 
                         {document.status === 'ready' && (
-                            <div className="flex gap-2">
+                            <div className="flex gap-1.5">
                                 <button
                                     onClick={() => onGenerate(document.id)}
                                     disabled={isGenerating}
-                                    className="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-sm transition"
+                                    className="h-8 px-3.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-full transition disabled:opacity-50 flex items-center gap-1.5"
                                 >
-                                    {'\u{1F504}'} Regenerate
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    Regenerate
                                 </button>
                                 <button
                                     onClick={() => onDownload(document.id, 'pdf')}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition"
+                                    className="h-8 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-full transition flex items-center gap-1.5"
                                 >
-                                    {'\u2B07\uFE0F'} Download PDF
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Download PDF
                                 </button>
                             </div>
                         )}
