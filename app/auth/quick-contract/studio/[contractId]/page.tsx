@@ -2620,6 +2620,79 @@ INSTRUCTIONS:
         }
     }, [contractId, resolvedContractId, userInfo, supabase])
 
+    // ========================================================================
+    // SECTION 4F-2B: REALTIME SUBSCRIPTION FOR CLAUSE DATA CHANGES
+    // When the other party saves a redraft, adjusts position, etc.,
+    // this pushes the updated clause data to the other browser in real-time.
+    // ========================================================================
+    useEffect(() => {
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId || !userInfo) return
+
+        const clauseChannel = supabase
+            .channel(`qc-clauses-${effectiveId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'uploaded_contract_clauses',
+                    filter: `contract_id=eq.${effectiveId}`
+                },
+                (payload) => {
+                    const updated = payload.new as Record<string, unknown>
+                    const clauseId = updated.clause_id as string
+                    if (!clauseId) return
+
+                    console.log('[Realtime] Clause updated:', clauseId, {
+                        position: updated.clarence_position,
+                        hasDraft: !!updated.draft_text,
+                        status: updated.status
+                    })
+
+                    // Update the local clause state with fresh data
+                    setClauses(prev => prev.map(clause => {
+                        if (clause.clauseId !== clauseId) return clause
+
+                        return {
+                            ...clause,
+                            // Core certification fields
+                            clarenceCertified: (updated.clarence_certified as boolean) || clause.clarenceCertified,
+                            clarencePosition: (updated.clarence_position as number) ?? clause.clarencePosition,
+                            clarenceFairness: (updated.clarence_fairness as string) || clause.clarenceFairness,
+                            clarenceSummary: (updated.clarence_summary as string) || clause.clarenceSummary,
+                            clarenceAssessment: (updated.clarence_assessment as string) || clause.clarenceAssessment,
+                            clarenceFlags: (updated.clarence_flags as string[]) || clause.clarenceFlags,
+                            // Draft fields
+                            draftText: (updated.draft_text as string) || null,
+                            draftModified: !!(updated.draft_text),
+                            // Party positions
+                            initiatorPosition: (updated.initiator_position as number) ?? clause.initiatorPosition,
+                            respondentPosition: (updated.respondent_position as number) ?? clause.respondentPosition,
+                            // Value extraction (may update during recertification)
+                            extractedValue: (updated.extracted_value as string) ?? clause.extractedValue,
+                            extractedUnit: (updated.extracted_unit as string) ?? clause.extractedUnit,
+                            valueType: (updated.value_type as string) ?? clause.valueType,
+                            // Content
+                            clauseText: (updated.content as string) || clause.clauseText,
+                            originalText: (updated.original_text as string) || clause.originalText,
+                            // Status
+                            processingStatus: (updated.status as ContractClause['processingStatus']) || clause.processingStatus,
+                        }
+                    }))
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[Realtime] Clause update channel subscribed for', effectiveId)
+                }
+            })
+
+        return () => {
+            supabase.removeChannel(clauseChannel)
+        }
+    }, [contractId, resolvedContractId, userInfo?.userId])
+
     // Mark all unread events as read for current user
     const markActivityAsRead = useCallback(async () => {
         const effectiveId = resolvedContractId || contractId
@@ -4207,11 +4280,13 @@ INSTRUCTIONS:
                             {!isTemplateMode && selectedClause.clarenceCertified && (
                                 <div className="flex-shrink-0 px-6 py-3 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
                                     <div className="flex items-center justify-between">
-                                        {/* Left: Agreement status - Dual party tracking */}
+                                        {/* Left: Agreement status - Dual party tracking with query awareness */}
                                         <div className="flex items-center gap-3">
                                             {(() => {
                                                 const status = getAgreementStatus(selectedClause.clauseId)
                                                 const otherPartyName = getOtherPartyName()
+                                                const hasActiveQuery = queriedClauseIds.has(selectedClause.clauseId)
+                                                const currentRole = getPartyRole()
 
                                                 // BOTH AGREED - Fully locked
                                                 if (status === 'both') {
@@ -4278,7 +4353,27 @@ INSTRUCTIONS:
                                                     )
                                                 }
 
-                                                // NEITHER AGREED
+                                                // NEITHER AGREED — query-aware logic
+                                                // If there's an active query:
+                                                //   - Initiator: CANNOT agree (must address the query first by redrafting)
+                                                //   - Respondent: CAN agree (they raised the query, agreeing resolves it)
+                                                if (hasActiveQuery && currentRole === 'initiator') {
+                                                    return (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full text-sm font-medium border border-amber-200">
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                                Query Pending
+                                                            </span>
+                                                            <span className="text-xs text-slate-500">
+                                                                Address the query before agreeing — consider redrafting this clause
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                }
+
+                                                // Default: show Agree button (respondent can always agree, or no query pending)
                                                 return (
                                                     <button
                                                         onClick={() => handleAgreeClause(selectedClause.clauseId)}
@@ -4292,7 +4387,8 @@ INSTRUCTIONS:
                                                 )
                                             })()}
 
-                                            {queriedClauseIds.has(selectedClause.clauseId) && (
+                                            {/* Query badge — shown alongside any state except the initiator-blocked state (which already shows it) */}
+                                            {queriedClauseIds.has(selectedClause.clauseId) && getPartyRole() !== 'initiator' && (
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium border border-amber-200">
                                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -4302,8 +4398,8 @@ INSTRUCTIONS:
                                             )}
                                         </div>
 
-                                        {/* Right: Query input (respondent only) */}
-                                        {getPartyRole() === 'respondent' && (
+                                        {/* Right: Query input (respondent only, and only when no active query on this clause) */}
+                                        {getPartyRole() === 'respondent' && !queriedClauseIds.has(selectedClause.clauseId) && (
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     type="text"
@@ -4328,6 +4424,13 @@ INSTRUCTIONS:
                                                     Query
                                                 </button>
                                             </div>
+                                        )}
+
+                                        {/* Right: Waiting message for respondent when query is active */}
+                                        {getPartyRole() === 'respondent' && queriedClauseIds.has(selectedClause.clauseId) && (
+                                            <span className="text-xs text-slate-500 italic">
+                                                Awaiting response to your query
+                                            </span>
                                         )}
                                     </div>
                                 </div>
