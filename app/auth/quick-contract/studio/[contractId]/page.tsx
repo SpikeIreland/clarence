@@ -3480,9 +3480,9 @@ INSTRUCTIONS:
                             </button>
                         )}
 
-                        {/* Invite / Status / Document Centre (non-template mode, initiator only) */}
+                        {/* Contract Lifecycle Button (non-template mode, initiator only) */}
                         {!isTemplateMode && isInitiator && (() => {
-                            // Contract fully committed → Document Centre link
+                            // 1. Contract fully committed → Document Centre link
                             if (contract?.status === 'committed') {
                                 return (
                                     <button
@@ -3497,7 +3497,24 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // Respondent is active in studio → show Active badge
+                            // 2. All clauses agreed by both parties → Commit Contract button
+                            const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+                            const allBothAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
+                            if (allBothAgreed) {
+                                return (
+                                    <button
+                                        onClick={() => setCommitModalState('confirm')}
+                                        className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5 animate-pulse"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        Commit Contract
+                                    </button>
+                                )
+                            }
+
+                            // 3. Respondent is active in studio → Active badge
                             if (respondentInfo) {
                                 return (
                                     <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-default">
@@ -3507,7 +3524,7 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // Invite sent but respondent hasn't joined yet
+                            // 4. Invite sent but respondent hasn't joined
                             if (inviteSent) {
                                 return (
                                     <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-default">
@@ -3519,7 +3536,7 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // No invite sent yet → show Invite button
+                            // 5. No invite sent → Invite button
                             return (
                                 <button
                                     onClick={() => setShowInviteModal(true)}
@@ -3531,6 +3548,44 @@ INSTRUCTIONS:
                                     Invite
                                 </button>
                             )
+                        })()}
+
+                        {/* Contract Lifecycle Button (non-template mode, respondent) */}
+                        {!isTemplateMode && !isInitiator && (() => {
+                            // 1. Contract fully committed → Document Centre link
+                            if (contract?.status === 'committed') {
+                                return (
+                                    <button
+                                        onClick={() => router.push('/auth/document-centre?contract_id=' + contract.contractId)}
+                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Document Centre
+                                    </button>
+                                )
+                            }
+
+                            // 2. All clauses agreed by both parties → Commit Contract
+                            const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+                            const allBothAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
+                            if (allBothAgreed) {
+                                return (
+                                    <button
+                                        onClick={() => setCommitModalState('confirm')}
+                                        className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5 animate-pulse"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        Commit Contract
+                                    </button>
+                                )
+                            }
+
+                            // 3. Negotiation ongoing — no button needed for respondent
+                            return null
                         })()}
 
                         {/* Save as Template Button (template mode only) */}
