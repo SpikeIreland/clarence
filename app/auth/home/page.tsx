@@ -2,8 +2,8 @@
 
 // ============================================================================
 // CLARENCE HOME PAGE - Unified Contract Landing
-// Version: 1.0
-// Date: 26 February 2026
+// Version: 1.1
+// Date: 27 February 2026
 // Path: /app/auth/home/page.tsx
 //
 // PURPOSE:
@@ -15,6 +15,12 @@
 // contracts-dashboard and providers went to providerConfirmation.
 //
 // PRINCIPLE: One sign-in. One home. Role derived per contract.
+//
+// CHANGES v1.1:
+// - Fixed: Pathway filter tabs now show contract counts
+// - Fixed: Stats bar dynamically responds to active filter
+// - Added: Delete contract functionality with database cascade
+// - Added: Delete confirmation modal with pathway-aware cleanup
 //
 // DEPLOY: Copy this file to /app/auth/home/page.tsx
 // ============================================================================
@@ -76,6 +82,14 @@ interface HomeStats {
     averageResolutionDays: number | null
 }
 
+/** Delete modal state */
+interface DeleteModalState {
+    isOpen: boolean
+    contract: UnifiedContract | null
+    isDeleting: boolean
+    error: string | null
+}
+
 
 // ============================================================================
 // SECTION 3: CONSTANTS
@@ -99,6 +113,16 @@ const STATUS_COLOURS: Record<string, string> = {
     completed: 'bg-slate-400',
     draft: 'bg-slate-300',
 }
+
+/** Filter tab definitions with keys */
+const FILTER_TABS = [
+    { key: 'all', label: 'All' },
+    { key: 'quick_create', label: 'Quick Create' },
+    { key: 'contract_create', label: 'Contract Create' },
+    { key: 'co_create', label: 'Co-Create' },
+    { key: 'tendering', label: 'Tendering' },
+    { key: 'training', label: 'Training' },
+] as const
 
 
 // ============================================================================
@@ -181,6 +205,49 @@ function buildStudioUrl(pathway: string, id: string, isTraining?: boolean): stri
     }
 }
 
+/**
+ * Calculate stats from a given set of contracts.
+ * Used by both initial load and dynamic filter updates.
+ */
+function calculateStats(contractList: UnifiedContract[]): HomeStats {
+    const active = contractList.filter(c =>
+        c.statusLabel === 'Active' || c.statusLabel === 'Setup'
+    ).length
+    const completed = contractList.filter(c =>
+        c.statusLabel === 'Completed'
+    ).length
+    const awaiting = contractList.filter(c =>
+        c.statusLabel === 'Awaiting Response' || c.statusLabel === 'Invited'
+    ).length
+
+    return {
+        activeNegotiations: active,
+        completed,
+        awaitingResponse: awaiting,
+        averageResolutionDays: null,
+    }
+}
+
+/**
+ * Count contracts per pathway for filter tab badges.
+ */
+function countByPathway(contractList: UnifiedContract[]): Record<string, number> {
+    const counts: Record<string, number> = {
+        all: contractList.length,
+        quick_create: 0,
+        contract_create: 0,
+        co_create: 0,
+        tendering: 0,
+        training: 0,
+    }
+    contractList.forEach(c => {
+        if (counts[c.pathway] !== undefined) {
+            counts[c.pathway]++
+        }
+    })
+    return counts
+}
+
 
 // ============================================================================
 // SECTION 5: INNER COMPONENT (Wrapped in Suspense)
@@ -207,6 +274,14 @@ function HomePageInner() {
     const [error, setError] = useState<string | null>(null)
     const [activeFilter, setActiveFilter] = useState<'all' | 'quick_create' | 'contract_create' | 'co_create' | 'tendering' | 'training'>('all')
     const [showWelcome, setShowWelcome] = useState(false)
+
+    /** Delete modal state */
+    const [deleteModal, setDeleteModal] = useState<DeleteModalState>({
+        isOpen: false,
+        contract: null,
+        isDeleting: false,
+        error: null,
+    })
 
     // ========================================================================
     // SECTION 5B: LOAD USER INFO
@@ -691,23 +766,8 @@ function HomePageInner() {
 
             setContracts(allContracts)
 
-            // Calculate stats
-            const active = allContracts.filter(c =>
-                c.statusLabel === 'Active' || c.statusLabel === 'Setup'
-            ).length
-            const completed = allContracts.filter(c =>
-                c.statusLabel === 'Completed'
-            ).length
-            const awaiting = allContracts.filter(c =>
-                c.statusLabel === 'Awaiting Response' || c.statusLabel === 'Invited'
-            ).length
-
-            setStats({
-                activeNegotiations: active,
-                completed,
-                awaitingResponse: awaiting,
-                averageResolutionDays: null, // Future: calculate from completed contracts
-            })
+            // Calculate stats from full dataset (will be recalculated on filter change)
+            setStats(calculateStats(allContracts))
 
             // Clear invite highlight from sessionStorage after loading
             if (typeof window !== 'undefined') {
@@ -717,8 +777,8 @@ function HomePageInner() {
             // Log page view
             eventLogger.completed('home', 'home_page_loaded', {
                 totalContracts: allContracts.length,
-                activeCount: active,
-                completedCount: completed,
+                activeCount: calculateStats(allContracts).activeNegotiations,
+                completedCount: calculateStats(allContracts).completed,
             })
 
         } catch (err) {
@@ -755,6 +815,12 @@ function HomePageInner() {
         ? sortedContracts
         : sortedContracts.filter(c => c.pathway === activeFilter)
 
+    /** Dynamic stats that respond to the active filter */
+    const filteredStats = calculateStats(filteredContracts)
+
+    /** Count of contracts per pathway (for filter tab badges) */
+    const pathwayCounts = countByPathway(contracts)
+
     // ========================================================================
     // SECTION 5I: EVENT HANDLERS
     // ========================================================================
@@ -775,6 +841,230 @@ function HomePageInner() {
 
     const dismissWelcome = () => {
         setShowWelcome(false)
+    }
+
+    // ========================================================================
+    // SECTION 5J: DELETE CONTRACT HANDLER
+    // ========================================================================
+
+    /**
+     * Open the delete confirmation modal for a contract.
+     * Only the initiator should be able to delete.
+     */
+    const handleDeleteRequest = (contract: UnifiedContract) => {
+        setDeleteModal({
+            isOpen: true,
+            contract,
+            isDeleting: false,
+            error: null,
+        })
+    }
+
+    /**
+     * Close the delete modal without deleting.
+     */
+    const handleDeleteCancel = () => {
+        setDeleteModal({
+            isOpen: false,
+            contract: null,
+            isDeleting: false,
+            error: null,
+        })
+    }
+
+    /**
+     * Execute the delete with proper database cascade.
+     * Different pathways require different table cleanup.
+     */
+    const handleDeleteConfirm = async () => {
+        const contract = deleteModal.contract
+        if (!contract) return
+
+        setDeleteModal(prev => ({ ...prev, isDeleting: true, error: null }))
+
+        try {
+            if (contract.pathway === 'quick_create') {
+                // ============================================================
+                // Quick Create pathway: cascade delete across QC tables
+                // Order: child tables first, then parent
+                // ============================================================
+
+                // 1. Delete generated documents from storage (if any)
+                const { data: docs } = await supabase
+                    .from('generated_documents')
+                    .select('storage_path')
+                    .eq('contract_id', contract.id)
+
+                if (docs && docs.length > 0) {
+                    const paths = docs.map(d => d.storage_path).filter(Boolean)
+                    if (paths.length > 0) {
+                        await supabase.storage.from('documents').remove(paths)
+                    }
+                }
+
+                // 2. Delete generated documents records
+                await supabase
+                    .from('generated_documents')
+                    .delete()
+                    .eq('contract_id', contract.id)
+
+                // 3. Delete party messages
+                await supabase
+                    .from('qc_party_messages')
+                    .delete()
+                    .eq('contract_id', contract.id)
+
+                // 4. Delete clause events
+                await supabase
+                    .from('qc_clause_events')
+                    .delete()
+                    .eq('contract_id', contract.id)
+
+                // 5. Delete clause chat messages
+                await supabase
+                    .from('clause_chat_messages')
+                    .delete()
+                    .eq('contract_id', contract.id)
+
+                // 6. Delete clause range mappings
+                await supabase
+                    .from('clause_range_mappings')
+                    .delete()
+                    .eq('contract_id', contract.id)
+
+                // 7. Delete uploaded contract clauses
+                await supabase
+                    .from('uploaded_contract_clauses')
+                    .delete()
+                    .eq('contract_id', contract.id)
+
+                // 8. Delete recipients
+                await supabase
+                    .from('qc_recipients')
+                    .delete()
+                    .eq('quick_contract_id', contract.id)
+
+                // 9. Delete the parent contract record
+                const { error: deleteError } = await supabase
+                    .from('uploaded_contracts')
+                    .delete()
+                    .eq('contract_id', contract.id)
+
+                if (deleteError) {
+                    throw new Error(`Failed to delete contract: ${deleteError.message}`)
+                }
+
+            } else if (contract.pathway === 'contract_create' || contract.pathway === 'training') {
+                // ============================================================
+                // Contract Create / Training pathway: cascade delete session
+                // Order: child tables first, then parent
+                // ============================================================
+
+                // 1. Delete generated documents
+                await supabase
+                    .from('generated_documents')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 2. Delete party messages
+                await supabase
+                    .from('party_messages')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 3. Delete clause chat messages
+                await supabase
+                    .from('clause_chat_messages')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 4. Delete session clause positions
+                await supabase
+                    .from('session_clause_positions')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 5. Delete leverage calculations
+                await supabase
+                    .from('leverage_calculations')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 6. Delete negotiation actions / interactions
+                await supabase
+                    .from('negotiation_actions')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 7. Delete phase inputs
+                await supabase
+                    .from('phase_inputs')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 8. Delete uploaded contract clauses (linked via session)
+                const { data: linkedContracts } = await supabase
+                    .from('uploaded_contracts')
+                    .select('contract_id')
+                    .eq('session_id', contract.id)
+
+                if (linkedContracts) {
+                    for (const lc of linkedContracts) {
+                        await supabase
+                            .from('uploaded_contract_clauses')
+                            .delete()
+                            .eq('contract_id', lc.contract_id)
+                    }
+                    // Delete the uploaded_contracts records themselves
+                    await supabase
+                        .from('uploaded_contracts')
+                        .delete()
+                        .eq('session_id', contract.id)
+                }
+
+                // 9. Delete audit log entries
+                await supabase
+                    .from('audit_log')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                // 10. Delete the session itself
+                const { error: deleteError } = await supabase
+                    .from('sessions')
+                    .delete()
+                    .eq('session_id', contract.id)
+
+                if (deleteError) {
+                    throw new Error(`Failed to delete session: ${deleteError.message}`)
+                }
+            }
+
+            // Log the deletion
+            eventLogger.completed('home', 'contract_deleted', {
+                contractId: contract.id,
+                pathway: contract.pathway,
+                contractName: contract.name,
+            })
+
+            // Remove from local state (no need to refetch)
+            setContracts(prev => prev.filter(c => c.id !== contract.id))
+
+            // Close the modal
+            setDeleteModal({
+                isOpen: false,
+                contract: null,
+                isDeleting: false,
+                error: null,
+            })
+
+        } catch (err: any) {
+            console.error('Error deleting contract:', err)
+            setDeleteModal(prev => ({
+                ...prev,
+                isDeleting: false,
+                error: err.message || 'Failed to delete contract. Please try again.',
+            }))
+        }
     }
 
     // ========================================================================
@@ -892,7 +1182,7 @@ function HomePageInner() {
                 )}
 
                 {/* ======================================================== */}
-                {/* SECTION 8D: STATS BAR                                     */}
+                {/* SECTION 8D: STATS BAR (Responds to active filter)         */}
                 {/* ======================================================== */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                     {/* Active Negotiations */}
@@ -900,28 +1190,28 @@ function HomePageInner() {
                         <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                             Active Negotiations
                         </p>
-                        <p className="text-2xl font-bold text-slate-800">{stats.activeNegotiations}</p>
+                        <p className="text-2xl font-bold text-slate-800">{filteredStats.activeNegotiations}</p>
                     </div>
                     {/* Completed */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                         <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                             Completed
                         </p>
-                        <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
+                        <p className="text-2xl font-bold text-emerald-600">{filteredStats.completed}</p>
                     </div>
                     {/* Awaiting Response */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                         <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                             Awaiting Response
                         </p>
-                        <p className="text-2xl font-bold text-amber-600">{stats.awaitingResponse}</p>
+                        <p className="text-2xl font-bold text-amber-600">{filteredStats.awaitingResponse}</p>
                     </div>
-                    {/* Total Contracts */}
+                    {/* Total Contracts (filtered count) */}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
                         <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
-                            Total Contracts
+                            {activeFilter === 'all' ? 'Total Contracts' : `${PATHWAY_BADGES[activeFilter]?.label || ''} Contracts`}
                         </p>
-                        <p className="text-2xl font-bold text-slate-800">{contracts.length}</p>
+                        <p className="text-2xl font-bold text-slate-800">{filteredContracts.length}</p>
                     </div>
                 </div>
 
@@ -959,33 +1249,38 @@ function HomePageInner() {
                 </div>
 
                 {/* ======================================================== */}
-                {/* SECTION 8F: PATHWAY FILTER TABS                           */}
+                {/* SECTION 8F: PATHWAY FILTER TABS (with counts)             */}
                 {/* ======================================================== */}
                 <div className="flex items-center gap-2 mb-6 overflow-x-auto">
                     <span className="text-sm font-medium text-slate-500 mr-2 flex-shrink-0">Filter:</span>
-                    {[
-                        { key: 'all', label: 'All' },
-                        { key: 'quick_create', label: 'Quick Create' },
-                        { key: 'contract_create', label: 'Contract Create' },
-                        { key: 'co_create', label: 'Co-Create' },
-                        { key: 'tendering', label: 'Tendering' },
-                        { key: 'training', label: 'Training' },
-                    ].map(filter => (
-                        <button
-                            key={filter.key}
-                            onClick={() => setActiveFilter(filter.key as typeof activeFilter)}
-                            className={`px-3 py-1.5 text-sm rounded-md transition-colors flex-shrink-0 ${activeFilter === filter.key
-                                ? 'bg-slate-800 text-white font-medium'
-                                : 'text-slate-600 hover:bg-slate-200 bg-slate-100'
-                                }`}
-                        >
-                            {filter.label}
-                        </button>
-                    ))}
+                    {FILTER_TABS.map(filter => {
+                        const count = pathwayCounts[filter.key] ?? 0
+                        // Hide tabs with zero contracts (except 'All')
+                        if (filter.key !== 'all' && count === 0) return null
+
+                        return (
+                            <button
+                                key={filter.key}
+                                onClick={() => setActiveFilter(filter.key as typeof activeFilter)}
+                                className={`px-3 py-1.5 text-sm rounded-md transition-colors flex-shrink-0 flex items-center gap-1.5 ${activeFilter === filter.key
+                                    ? 'bg-slate-800 text-white font-medium'
+                                    : 'text-slate-600 hover:bg-slate-200 bg-slate-100'
+                                    }`}
+                            >
+                                {filter.label}
+                                <span className={`text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center ${activeFilter === filter.key
+                                    ? 'bg-white/20 text-white'
+                                    : 'bg-slate-200 text-slate-500'
+                                    }`}>
+                                    {count}
+                                </span>
+                            </button>
+                        )
+                    })}
                 </div>
 
                 {/* ======================================================== */}
-                {/* SECTION 8G: ALL NEGOTIATIONS                              */}
+                {/* SECTION 8G: CONTRACT CARDS LIST                           */}
                 {/* ======================================================== */}
                 <div className="mb-12">
                     <h2 className="text-lg font-semibold text-slate-800 mb-4">
@@ -1028,7 +1323,7 @@ function HomePageInner() {
                             {filteredContracts.map(contract => (
                                 <div
                                     key={`${contract.pathway}-${contract.id}`}
-                                    className={`bg-white rounded-xl border shadow-sm p-5 transition-all hover:shadow-md ${contract.isInviteHighlight
+                                    className={`bg-white rounded-xl border shadow-sm p-5 transition-all hover:shadow-md group ${contract.isInviteHighlight
                                         ? 'border-emerald-400 ring-2 ring-emerald-100'
                                         : contract.statusLabel === 'Completed'
                                             ? 'border-slate-200 bg-slate-50/50'
@@ -1124,16 +1419,34 @@ function HomePageInner() {
                                             )}
                                         </div>
 
-                                        {/* ---- Right: Enter button ---- */}
-                                        <button
-                                            onClick={() => handleEnterContract(contract)}
-                                            className={`flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${contract.statusLabel === 'Completed'
-                                                ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                                                : 'bg-slate-800 hover:bg-slate-700 text-white'
-                                                }`}
-                                        >
-                                            {contract.statusLabel === 'Completed' ? 'View' : 'Enter'}
-                                        </button>
+                                        {/* ---- Right: Action buttons ---- */}
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            {/* Delete button — only for initiators */}
+                                            {contract.relationship === 'initiator' && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        handleDeleteRequest(contract)
+                                                    }}
+                                                    className="p-2 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                                                    title="Delete contract"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            {/* Enter / View button */}
+                                            <button
+                                                onClick={() => handleEnterContract(contract)}
+                                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${contract.statusLabel === 'Completed'
+                                                    ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                                                    : 'bg-slate-800 hover:bg-slate-700 text-white'
+                                                    }`}
+                                            >
+                                                {contract.statusLabel === 'Completed' ? 'View' : 'Enter'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -1141,6 +1454,83 @@ function HomePageInner() {
                     )}
                 </div>
             </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 8H: DELETE CONFIRMATION MODAL                         */}
+            {/* ============================================================ */}
+            {deleteModal.isOpen && deleteModal.contract && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full">
+                        {/* Modal header */}
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 bg-red-50 rounded-full flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-800">Delete Contract</h3>
+                                <p className="text-sm text-slate-500">This action cannot be undone</p>
+                            </div>
+                        </div>
+
+                        {/* Contract details */}
+                        <div className="bg-slate-50 rounded-lg p-3 mb-4">
+                            <p className="text-sm font-medium text-slate-800 mb-1">
+                                {deleteModal.contract.name}
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${PATHWAY_BADGES[deleteModal.contract.pathway]?.bg || 'bg-slate-100'
+                                    } ${PATHWAY_BADGES[deleteModal.contract.pathway]?.text || 'text-slate-700'}`}>
+                                    {PATHWAY_BADGES[deleteModal.contract.pathway]?.label}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                    Created {formatDate(deleteModal.contract.createdAt)}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Warning text */}
+                        <p className="text-sm text-slate-600 mb-4">
+                            This will permanently remove this contract and all associated data including
+                            clauses, messages, events, and any generated documents. Any invited parties
+                            will no longer have access.
+                        </p>
+
+                        {/* Error message */}
+                        {deleteModal.error && (
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                                <p className="text-sm text-red-700">{deleteModal.error}</p>
+                            </div>
+                        )}
+
+                        {/* Action buttons */}
+                        <div className="flex gap-3">
+                            <button
+                                onClick={handleDeleteCancel}
+                                disabled={deleteModal.isDeleting}
+                                className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteConfirm}
+                                disabled={deleteModal.isDeleting}
+                                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {deleteModal.isDeleting ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    'Delete Permanently'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
