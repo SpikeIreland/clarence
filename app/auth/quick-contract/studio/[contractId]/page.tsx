@@ -3394,9 +3394,7 @@ INSTRUCTIONS:
     return (
         <div className="h-screen bg-slate-100 flex flex-col overflow-hidden">
 
-            {/* ============================================================ */}
-            {/* SECTION 7A: HEADER */}
-            {/* ============================================================ */}
+
             {/* ============================================================ */}
             {/* SECTION 7A: HEADER */}
             {/* ============================================================ */}
@@ -3482,16 +3480,47 @@ INSTRUCTIONS:
                             </button>
                         )}
 
-                        {/* Invite Provider Button / Pending State (non-template mode, initiator only) */}
-                        {!isTemplateMode && isInitiator && (
-                            inviteSent || respondentInfo ? (
-                                <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-default">
-                                    <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Pending
-                                </div>
-                            ) : (
+                        {/* Invite / Status / Document Centre (non-template mode, initiator only) */}
+                        {!isTemplateMode && isInitiator && (() => {
+                            // Contract fully committed → Document Centre link
+                            if (contract?.status === 'committed') {
+                                return (
+                                    <button
+                                        onClick={() => router.push('/auth/document-centre?contract_id=' + contract.contractId)}
+                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        Document Centre
+                                    </button>
+                                )
+                            }
+
+                            // Respondent is active in studio → show Active badge
+                            if (respondentInfo) {
+                                return (
+                                    <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-default">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                                        Active
+                                    </div>
+                                )
+                            }
+
+                            // Invite sent but respondent hasn't joined yet
+                            if (inviteSent) {
+                                return (
+                                    <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-default">
+                                        <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Invite Pending
+                                    </div>
+                                )
+                            }
+
+                            // No invite sent yet → show Invite button
+                            return (
                                 <button
                                     onClick={() => setShowInviteModal(true)}
                                     className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5"
@@ -3502,7 +3531,7 @@ INSTRUCTIONS:
                                     Invite
                                 </button>
                             )
-                        )}
+                        })()}
 
                         {/* Save as Template Button (template mode only) */}
                         {isTemplateMode && (() => {
