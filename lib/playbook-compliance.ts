@@ -274,7 +274,9 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
     if (effectivePosition >= rule.minimum_position) {
         const range = rule.ideal_position - rule.minimum_position
         const achieved = effectivePosition - rule.minimum_position
-        const score = range > 0 ? Math.round((achieved / range) * 100) : 100
+        // Floor of 25% — being AT minimum is acceptable, not zero
+        const proportional = range > 0 ? (achieved / range) : 1
+        const score = Math.round(25 + (proportional * 75))
 
         // Check if below escalation threshold
         if (rule.requires_approval_below != null && effectivePosition < rule.requires_approval_below) {
@@ -286,7 +288,7 @@ export function scoreRule(rule: PlaybookRule, effectivePosition: number | null):
         }
 
         return {
-            status: score >= 50 ? 'acceptable' : 'warning',
+            status: score >= 70 ? 'acceptable' : 'warning',
             score,
             detail: `Position ${effectivePosition} is within acceptable range (${rule.minimum_position}-${rule.ideal_position})`
         }
@@ -442,16 +444,19 @@ function aggregateByCategory(
             }
         })
 
-        // Calculate weighted category score (exclude 'excluded' rules)
+        // Only include categories that have at least one scorable rule
         const scorableRules = scoredRules.filter(sr => sr.status !== 'excluded')
-        let categoryScore = 0
-        if (scorableRules.length > 0) {
-            const totalWeight = scorableRules.reduce((sum, sr) => sum + sr.rule.importance_level, 0)
-            const weightedSum = scorableRules.reduce(
-                (sum, sr) => sum + (sr.score * sr.rule.importance_level), 0
-            )
-            categoryScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0
+        if (scorableRules.length === 0) {
+            continue
         }
+
+        // Calculate weighted category score
+        let categoryScore = 0
+        const totalWeight = scorableRules.reduce((sum, sr) => sum + sr.rule.importance_level, 0)
+        const weightedSum = scorableRules.reduce(
+            (sum, sr) => sum + (sr.score * sr.rule.importance_level), 0
+        )
+        categoryScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 0
 
         const rulesPassed = scoredRules.filter(sr =>
             sr.status === 'pass'
