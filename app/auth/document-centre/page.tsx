@@ -3,7 +3,14 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
-import FeedbackButton from '@/app/components/FeedbackButton'
+import PlaybookComplianceIndicator from '@/app/components/PlaybookComplianceIndicator'
+import {
+    calculatePlaybookCompliance,
+    type PlaybookRule,
+    type ContractClause,
+    type ComplianceResult,
+} from '@/lib/playbook-compliance'
+
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -128,6 +135,14 @@ interface SignatureRecord {
     contract_hash: string
     consent_text: string
     status: string
+}
+
+interface PlaybookComplianceData {
+    compliance: ComplianceResult | null
+    playbookName: string
+    companyName: string
+    isVisible: boolean       // true only if active playbook + user is initiator
+    isLoading: boolean
 }
 
 // ============================================================================
@@ -1357,6 +1372,107 @@ function DocumentCentreContent() {
     const [isGeneratingDocument, setIsGeneratingDocument] = useState(false)
     const [isGeneratingPackage, setIsGeneratingPackage] = useState(false)
 
+
+    const [playbookCompliance, setPlaybookCompliance] = useState<PlaybookComplianceData>({
+        compliance: null,
+        playbookName: '',
+        companyName: '',
+        isVisible: false,
+        isLoading: false,
+    })
+
+
+
+    // SECTION 11B-PLAYBOOK: PLAYBOOK COMPLIANCE LOADER
+    const loadPlaybookCompliance = useCallback(async (
+        contractId: string,
+        userId: string,
+        companyId: string | null,
+        uploadedByUserId: string | null
+    ) => {
+        // Only show for initiator (the person who uploaded the contract)
+        const isInitiator = userId === uploadedByUserId
+        if (!isInitiator || !companyId) {
+            setPlaybookCompliance(prev => ({ ...prev, isVisible: false, isLoading: false }))
+            return
+        }
+
+        setPlaybookCompliance(prev => ({ ...prev, isLoading: true }))
+
+        try {
+            // Step 1: Check for active playbook
+            const { data: playbookData, error: playbookError } = await supabase
+                .from('company_playbooks')
+                .select('playbook_id, playbook_name, company_id')
+                .eq('company_id', companyId)
+                .eq('is_active', true)
+                .single()
+
+            if (playbookError || !playbookData) {
+                // No active playbook — hide indicator
+                setPlaybookCompliance(prev => ({ ...prev, isVisible: false, isLoading: false }))
+                return
+            }
+
+            // Step 2: Fetch playbook rules
+            const { data: rulesData, error: rulesError } = await supabase
+                .from('playbook_rules')
+                .select('*')
+                .eq('playbook_id', playbookData.playbook_id)
+                .eq('is_active', true)
+
+            if (rulesError || !rulesData || rulesData.length === 0) {
+                setPlaybookCompliance(prev => ({ ...prev, isVisible: false, isLoading: false }))
+                return
+            }
+
+            // Step 3: Fetch contract clauses with positions
+            const { data: clausesData, error: clausesError } = await supabase
+                .from('uploaded_contract_clauses')
+                .select('clause_id, clause_name, category, clarence_position, initiator_position, respondent_position, customer_position, is_header')
+                .eq('contract_id', contractId)
+
+            if (clausesError || !clausesData) {
+                setPlaybookCompliance(prev => ({ ...prev, isVisible: false, isLoading: false }))
+                return
+            }
+
+            // Step 4: Fetch company name for display
+            const { data: companyData } = await supabase
+                .from('companies')
+                .select('company_name')
+                .eq('company_id', companyId)
+                .single()
+
+            // Step 5: Calculate compliance
+            const compliance = calculatePlaybookCompliance(
+                rulesData as PlaybookRule[],
+                clausesData as ContractClause[]
+            )
+
+            setPlaybookCompliance({
+                compliance,
+                playbookName: playbookData.playbook_name || 'Company Playbook',
+                companyName: companyData?.company_name || 'Your Company',
+                isVisible: true,
+                isLoading: false,
+            })
+
+            // Log the compliance check
+            eventLogger.completed('documentation', 'playbook_compliance_calculated', {
+                contractId,
+                playbookId: playbookData.playbook_id,
+                overallScore: compliance.overallScore,
+                rulesChecked: compliance.rulesChecked,
+                redLineBreaches: compliance.redLineBreaches,
+            })
+
+        } catch (error) {
+            console.error('Error loading playbook compliance:', error)
+            setPlaybookCompliance(prev => ({ ...prev, isVisible: false, isLoading: false }))
+        }
+    }, [supabase])
+    
     // ============================================================================
     // SECTION 11A: SAVE AS TEMPLATE STATE
     // ============================================================================
@@ -1845,6 +1961,14 @@ function DocumentCentreContent() {
                         clauseCount: qcData.totalClauses,
                         agreedClauses: qcData.agreedClauses
                     })
+
+                    // Load playbook compliance indicator (initiator only)
+                    loadPlaybookCompliance(
+                        contractId,
+                        user.userId || '',
+                        qcData.companyId,
+                        qcData.uploadedByUserId
+                    )
                 } else {
                     // Failed to load QC data - redirect to dashboard
                     router.push('/auth/contracts-dashboard')
@@ -2970,7 +3094,7 @@ function DocumentCentreContent() {
     const contextId = mode === 'quick_contract' ? (quickContract?.contractId || '') : (session?.sessionId || '')
 
     return (
-        <div className="h-screen bg-slate-50 flex flex-col overflow-hidden">
+        <div className="min-h-screen bg-slate-50 flex flex-col">
             {/* Header */}
             <DocumentCentreHeader
                 session={session}
@@ -2980,8 +3104,17 @@ function DocumentCentreContent() {
                 onBackToStudio={handleBackToStudio}
             />
 
-            {/* Main Layout - three independent panels */}
-            <div className="flex-1 flex overflow-hidden min-h-0">
+            {/* Playbook Compliance Indicator — initiator only */}
+            {playbookCompliance.isVisible && playbookCompliance.compliance && (
+                <PlaybookComplianceIndicator
+                    compliance={playbookCompliance.compliance}
+                    playbookName={playbookCompliance.playbookName}
+                    companyName={playbookCompliance.companyName}
+                />
+            )}
+
+            {/* Main Layout */}
+            <div className="flex-1 flex overflow-hidden">
                 {/* LEFT PANEL: Document List */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col min-h-0">
                     {/* Progress Header */}
