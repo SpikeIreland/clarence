@@ -1444,7 +1444,36 @@ function DocumentCentreContent() {
                 .eq('company_id', companyId)
                 .single()
 
-            // Step 5: Calculate compliance
+
+            // ===== TEMPORARY DIAGNOSTIC — remove after debugging =====
+            console.log('=== PLAYBOOK COMPLIANCE DEBUG ===')
+            console.log('Rules loaded:', rulesData?.length, 'Clauses loaded:', clausesData?.length)
+
+            // Show what categories normalise to
+            const { normaliseCategory, getEffectivePosition } = await import('@/lib/playbook-compliance')
+
+            const ruleCategories = [...new Set((rulesData || []).map((r: any) =>
+                `${r.category} → ${normaliseCategory(r.category)}`
+            ))]
+            console.log('Rule categories:', ruleCategories)
+
+            const clauseCategories = [...new Set((clausesData || []).map((c: any) =>
+                `${c.category} → ${normaliseCategory(c.category)}`
+            ))]
+            console.log('Clause categories:', clauseCategories)
+
+            // Check positions for first few clauses
+            const sampleClauses = (clausesData || []).slice(0, 5).map((c: any) => ({
+                category: c.category,
+                clarence_position: c.clarence_position,
+                type: typeof c.clarence_position,
+                effective: getEffectivePosition(c as any),
+            }))
+            console.log('Sample clause positions:', sampleClauses)
+            console.log('=== END DEBUG ===')
+            // ===== END TEMPORARY DIAGNOSTIC =====
+
+            // Step 5: Calculate compliance (existing line)
             const compliance = calculatePlaybookCompliance(
                 rulesData as PlaybookRule[],
                 clausesData as ContractClause[]
@@ -1472,7 +1501,7 @@ function DocumentCentreContent() {
             setPlaybookCompliance(prev => ({ ...prev, isVisible: false, isLoading: false }))
         }
     }, [supabase])
-    
+
     // ============================================================================
     // SECTION 11A: SAVE AS TEMPLATE STATE
     // ============================================================================
