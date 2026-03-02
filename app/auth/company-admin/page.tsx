@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
+import { PlaybookRule, normaliseCategory, getCategoryDisplayName } from '@/lib/playbook-compliance'
 
 
 // ============================================================================
@@ -185,6 +186,52 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const [renameError, setRenameError] = useState<string | null>(null)
     const menuRef = useRef<HTMLDivElement>(null)
     const renameInputRef = useRef<HTMLInputElement>(null)
+
+    // --- Rules viewer state ---
+    const [expandedPlaybookId, setExpandedPlaybookId] = useState<string | null>(null)
+    const [loadedRules, setLoadedRules] = useState<Record<string, PlaybookRule[]>>({})
+    const [rulesLoading, setRulesLoading] = useState<string | null>(null)
+    const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
+
+    const handleToggleRules = async (playbookId: string) => {
+        if (expandedPlaybookId === playbookId) {
+            setExpandedPlaybookId(null)
+            setExpandedCategory(null)
+            return
+        }
+        setExpandedPlaybookId(playbookId)
+        setExpandedCategory(null)
+
+        if (loadedRules[playbookId]) return
+
+        setRulesLoading(playbookId)
+        try {
+            const supabase = createClient()
+            const { data, error } = await supabase
+                .from('playbook_rules')
+                .select('*')
+                .eq('playbook_id', playbookId)
+                .eq('is_active', true)
+            if (error) throw error
+            setLoadedRules(prev => ({ ...prev, [playbookId]: (data || []) as PlaybookRule[] }))
+        } catch (e) {
+            console.error('Failed to load playbook rules:', e)
+        } finally {
+            setRulesLoading(null)
+        }
+    }
+
+    const groupRulesByCategory = (rules: PlaybookRule[]) => {
+        const groups = new Map<string, { displayName: string; rules: PlaybookRule[] }>()
+        for (const rule of rules) {
+            const normCat = normaliseCategory(rule.category)
+            if (!groups.has(normCat)) {
+                groups.set(normCat, { displayName: getCategoryDisplayName(normCat), rules: [] })
+            }
+            groups.get(normCat)!.rules.push(rule)
+        }
+        return Array.from(groups.entries()).sort((a, b) => a[1].displayName.localeCompare(b[1].displayName))
+    }
 
     // --- Observability: Log tab loaded ---
     useEffect(() => {
@@ -412,6 +459,17 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
                                         {p.sourceFileName && <span>{p.sourceFileName}</span>}
                                         <span>{p.rulesExtracted} rules</span>
+                                        {['parsed', 'active', 'inactive', 'review_required'].includes(p.status) && p.rulesExtracted > 0 && (
+                                            <button
+                                                onClick={() => handleToggleRules(p.playbookId)}
+                                                className="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                                            >
+                                                {expandedPlaybookId === p.playbookId ? 'Hide Rules' : 'View Rules'}
+                                                <svg className={`w-3.5 h-3.5 transition-transform ${expandedPlaybookId === p.playbookId ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                        )}
                                         {p.aiConfidenceScore != null && <span>{Math.round(p.aiConfidenceScore * 100)}% confidence</span>}
                                         <span>{new Date(p.createdAt).toLocaleDateString()}</span>
                                     </div>
@@ -484,6 +542,70 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Expandable Rules Panel */}
+                            {expandedPlaybookId === p.playbookId && (
+                                <div className="mt-3 bg-slate-50 rounded-lg border border-slate-200 p-4">
+                                    {rulesLoading === p.playbookId ? (
+                                        <div className="flex items-center justify-center py-6">
+                                            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mr-3"></div>
+                                            <span className="text-sm text-slate-500">Loading rules...</span>
+                                        </div>
+                                    ) : !loadedRules[p.playbookId] || loadedRules[p.playbookId].length === 0 ? (
+                                        <p className="text-sm text-slate-500 text-center py-4">No rules found for this playbook.</p>
+                                    ) : (
+                                        <div className="space-y-1.5">
+                                            {groupRulesByCategory(loadedRules[p.playbookId]).map(([normCat, group]) => {
+                                                const isOpen = expandedCategory === `${p.playbookId}:${normCat}`
+                                                return (
+                                                    <div key={normCat} className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+                                                        <button
+                                                            onClick={() => setExpandedCategory(isOpen ? null : `${p.playbookId}:${normCat}`)}
+                                                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition ${isOpen ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
+                                                        >
+                                                            <div className="flex-1 min-w-0">
+                                                                <span className="text-sm font-semibold text-slate-800">{group.displayName}</span>
+                                                            </div>
+                                                            <span className="text-xs text-slate-400">{group.rules.length} rule{group.rules.length !== 1 ? 's' : ''}</span>
+                                                            <svg className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </button>
+
+                                                        {isOpen && (
+                                                            <div className="border-t border-slate-100 divide-y divide-slate-100">
+                                                                {group.rules.map((rule) => (
+                                                                    <div key={rule.rule_id} className="px-4 py-3">
+                                                                        <div className="flex items-center gap-2 mb-1.5">
+                                                                            <span className="text-sm font-medium text-slate-800">{rule.clause_name}</span>
+                                                                            {rule.is_deal_breaker && (
+                                                                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-100 text-red-700 rounded">Deal Breaker</span>
+                                                                            )}
+                                                                            {rule.is_non_negotiable && (
+                                                                                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded">Non-Negotiable</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                                                                            <span>Min <strong className="text-slate-700">{rule.minimum_position}</strong> &rarr; Ideal <strong className="text-slate-700">{rule.ideal_position}</strong> &rarr; Max <strong className="text-slate-700">{rule.maximum_position}</strong></span>
+                                                                            <span>Importance: <strong className="text-slate-700">{rule.importance_level}</strong></span>
+                                                                            {rule.requires_approval_below != null && (
+                                                                                <span>Escalate below <strong className="text-slate-700">{rule.requires_approval_below}</strong>{rule.escalation_contact ? ` to ${rule.escalation_contact}` : ''}</span>
+                                                                            )}
+                                                                        </div>
+                                                                        {rule.rationale && (
+                                                                            <p className="mt-1.5 text-xs text-slate-400 italic">{rule.rationale}</p>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
