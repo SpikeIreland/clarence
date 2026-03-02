@@ -3440,7 +3440,7 @@ INSTRUCTIONS:
                 {/* TIER 1: Navigation Bar                                 */}
                 {/* Back (left) | Title (centre) | Actions (right)         */}
                 {/* ═══════════════════════════════════════════════════════ */}
-                <div className="flex items-center justify-between px-4 py-2">
+                <div className="relative flex items-center justify-between px-4 py-2">
 
                     {/* LEFT: Back + Logo */}
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -3476,20 +3476,18 @@ INSTRUCTIONS:
                         </button>
                     </div>
 
-                    {/* CENTRE: Document Title */}
-                    <div className="flex-1 min-w-0 px-4">
-                        <div className="text-center">
-                            <h1 className="font-semibold text-slate-800 text-sm truncate" title={contract?.contractName}>
-                                {contract?.contractName}
-                            </h1>
-                            <p className="text-[10px] text-slate-400 leading-tight">
-                                {isTemplateMode
-                                    ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
-                                    : 'Quick Create Studio'}
-                                {' · '}{contract?.contractType}
-                                {' · '}{clauses.filter(c => !c.isHeader).length} clauses
-                            </p>
-                        </div>
+                    {/* CENTRE: Document Title — absolutely positioned for true page centre */}
+                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center max-w-md pointer-events-none">
+                        <h1 className="font-semibold text-slate-800 text-sm truncate" title={contract?.contractName}>
+                            {contract?.contractName}
+                        </h1>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                            {isTemplateMode
+                                ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
+                                : 'Quick Create Studio'}
+                            {' · '}{contract?.contractType}
+                            {' · '}{clauses.filter(c => !c.isHeader).length} clauses
+                        </p>
                     </div>
 
                     {/* RIGHT: Action Buttons (standardised sizing) */}
