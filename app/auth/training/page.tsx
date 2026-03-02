@@ -703,8 +703,8 @@ export default function TrainingStudioPage() {
                     aiDifficulty: selectedAiDifficulty,
                 })
 
-                // Navigate to training session
-                router.push(`/auth/training/${result.sessionId}`)
+                // Navigate to Contract Studio in training mode
+                router.push(`/auth/contract-studio?session_id=${result.sessionId}`)
             } else {
                 throw new Error('No session ID returned')
             }

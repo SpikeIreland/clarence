@@ -638,7 +638,7 @@ function InviteProvidersContent() {
     }
 
     const navigateToTrainingStudio = () => {
-        router.push(`/auth/training/${session?.sessionId}`)
+        router.push(`/auth/contract-studio?session_id=${session?.sessionId}`)
     }
 
     // Keep old function for backward compatibility

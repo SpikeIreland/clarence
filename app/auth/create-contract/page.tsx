@@ -2072,7 +2072,7 @@ function ContractCreationContent() {
             <p className="text-slate-500 mb-8">Your practice contract is ready.</p>
             <div className="flex gap-4">
                 <button onClick={() => router.push('/auth/training')} className="flex-1 px-6 py-3 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50">Back to Training</button>
-                <button onClick={() => router.push(`/auth/training/${trainingSessionCreated}`)} className="flex-1 px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium">Start Training &rarr;</button>
+                <button onClick={() => router.push(`/auth/contract-studio?session_id=${trainingSessionCreated}`)} className="flex-1 px-6 py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium">Start Training &rarr;</button>
             </div>
         </div>
     )

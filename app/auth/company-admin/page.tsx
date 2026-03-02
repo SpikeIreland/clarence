@@ -716,6 +716,48 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
 
             if (copyError) throw new Error('Failed to copy template clauses')
 
+            // Restore range mappings from template_clauses → clause_range_mappings
+            // Template clauses with range_mapping data need to be linked to the new clause IDs
+            const clausesWithRangeData = templateClauses.filter((tc: any) => tc.range_mapping)
+            if (clausesWithRangeData.length > 0) {
+                // Fetch the newly created clause IDs so we can link range mappings
+                const { data: newClauses } = await supabase
+                    .from('uploaded_contract_clauses')
+                    .select('clause_id, clause_number')
+                    .eq('contract_id', newContract.contract_id)
+
+                if (newClauses && newClauses.length > 0) {
+                    // Build a clause_number → new clause_id lookup
+                    const clauseNumberToId = new Map<string, string>()
+                    for (const nc of newClauses) {
+                        clauseNumberToId.set(nc.clause_number, nc.clause_id)
+                    }
+
+                    const rangeMappingInserts = clausesWithRangeData
+                        .map((tc: any) => {
+                            const newClauseId = clauseNumberToId.get(tc.clause_number || tc.display_number)
+                            if (!newClauseId || !tc.range_mapping) return null
+                            return {
+                                clause_id: newClauseId,
+                                contract_id: newContract.contract_id,
+                                is_displayable: tc.range_mapping.is_displayable ?? true,
+                                value_type: tc.range_mapping.value_type,
+                                range_unit: tc.range_mapping.range_unit,
+                                industry_standard_min: tc.range_mapping.industry_standard_min,
+                                industry_standard_max: tc.range_mapping.industry_standard_max,
+                                range_data: tc.range_mapping.range_data
+                            }
+                        })
+                        .filter(Boolean)
+
+                    if (rangeMappingInserts.length > 0) {
+                        await supabase
+                            .from('clause_range_mappings')
+                            .insert(rangeMappingInserts)
+                    }
+                }
+            }
+
             router.push(`/auth/quick-contract/studio/${newContract.contract_id}?mode=template&company=true&edit_template_id=${template.templateId}`)
         } catch (e) {
             console.error('Failed to open template for editing:', e)

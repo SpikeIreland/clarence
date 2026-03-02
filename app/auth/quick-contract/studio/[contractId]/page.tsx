@@ -1060,6 +1060,10 @@ function QuickContractStudioContent() {
         }
     }
 
+    // POSITION BAR HELPER: Map position 1-10 to 0%-100% across the bar width
+    // Position 1 sits at the left edge (0%), position 10 at the right edge (100%)
+    const positionToPercent = (pos: number) => ((pos - 1) / 9) * 100
+
     // Enhanced position label: use range data if available, fallback to DEFAULT_POSITION_OPTIONS
     const getRangeAwareLabel = (position: number | null, clauseId: string): string => {
         if (position === null) return 'Not set'
@@ -1642,8 +1646,8 @@ function QuickContractStudioContent() {
     }
 
     // SAVE AS TEMPLATE handler (template mode only)
-    // Supports both creating new templates and updating existing ones (via editTemplateId)
-    const handleSaveAsTemplate = async () => {
+    // Supports both creating new templates, updating existing ones, and "Save as New" copies
+    const handleSaveAsTemplate = async (saveAsNew = false) => {
         if (!templateName.trim() || !contractId || !userInfo) return
 
         setSavingTemplate(true)
@@ -1651,7 +1655,7 @@ function QuickContractStudioContent() {
             const certifiedClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
             let targetTemplateId: string
 
-            if (editTemplateId) {
+            if (editTemplateId && !saveAsNew) {
                 // UPDATE existing template
                 const { error: updateError } = await supabase
                     .from('contract_templates')
@@ -1703,25 +1707,36 @@ function QuickContractStudioContent() {
                 targetTemplateId = template.template_id
             }
 
-            // Insert certification-preserving template clauses
-            const templateClauses = certifiedClauses.map(clause => ({
-                template_id: targetTemplateId,
-                clause_number: clause.clauseNumber,
-                clause_name: clause.clauseName,
-                category: clause.category,
-                default_text: clause.clauseText || clause.originalText || '',
-                clause_level: clause.clauseLevel,
-                display_order: clause.displayOrder,
-                parent_clause_id: clause.parentClauseId,
-                clarence_position: clause.clarencePosition,
-                clarence_fairness: clause.clarenceFairness,
-                clarence_summary: clause.clarenceSummary,
-                clarence_assessment: clause.clarenceAssessment,
-                clarence_flags: clause.clarenceFlags || [],
-                clarence_certified: true,
-                clarence_certified_at: clause.clarenceCertifiedAt || new Date().toISOString(),
-                status: 'certified',
-            }))
+            // Insert certification-preserving template clauses (including range mapping data)
+            const templateClauses = certifiedClauses.map(clause => {
+                const rm = rangeMappings.get(clause.clauseId)
+                return {
+                    template_id: targetTemplateId,
+                    clause_number: clause.clauseNumber,
+                    clause_name: clause.clauseName,
+                    category: clause.category,
+                    default_text: clause.clauseText || clause.originalText || '',
+                    clause_level: clause.clauseLevel,
+                    display_order: clause.displayOrder,
+                    parent_clause_id: clause.parentClauseId,
+                    clarence_position: clause.clarencePosition,
+                    clarence_fairness: clause.clarenceFairness,
+                    clarence_summary: clause.clarenceSummary,
+                    clarence_assessment: clause.clarenceAssessment,
+                    clarence_flags: clause.clarenceFlags || [],
+                    clarence_certified: true,
+                    clarence_certified_at: clause.clarenceCertifiedAt || new Date().toISOString(),
+                    status: 'certified',
+                    range_mapping: rm ? {
+                        is_displayable: rm.isDisplayable,
+                        value_type: rm.valueType,
+                        range_unit: rm.rangeUnit,
+                        industry_standard_min: rm.industryStandardMin,
+                        industry_standard_max: rm.industryStandardMax,
+                        range_data: rm.rangeData
+                    } : null,
+                }
+            })
 
             if (templateClauses.length > 0) {
                 await supabase
@@ -4579,12 +4594,12 @@ INSTRUCTIONS:
                                             <div className="relative mb-6 pt-6 pb-2">
                                                 {/* Scale Background - BLUE (provider/flexibility) left â†’ EMERALD (customer/protection) right */}
                                                 <div className="relative h-4 bg-gradient-to-r from-blue-200 via-teal-200 via-50% to-emerald-200 rounded-full">
-                                                    {/* Scale markers (0-10 visual scale so 5 sits at true centre) */}
-                                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                                    {/* Scale markers (1-10 mapped to full bar width) */}
+                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                                         <div
                                                             key={n}
                                                             className="absolute top-0 bottom-0 w-px bg-white/50"
-                                                            style={{ left: `${(n / 10) * 100}%` }}
+                                                            style={{ left: `${positionToPercent(n)}%` }}
                                                         />
                                                     ))}
 
@@ -4595,7 +4610,7 @@ INSTRUCTIONS:
                                                         <div
                                                             className={`absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all ${isInitiator ? 'cursor-grab active:cursor-grabbing hover:scale-110' : 'cursor-default'}`}
                                                             style={{
-                                                                left: `${((getUserDisplayPosition(selectedClause) || 5) / 10) * 100}%`,
+                                                                left: `${positionToPercent(getUserDisplayPosition(selectedClause) || 5)}%`,
                                                                 top: '50%',
                                                                 transform: 'translate(-50%, -50%)'
                                                             }}
@@ -4613,7 +4628,7 @@ INSTRUCTIONS:
                                                                     const rect = bar.getBoundingClientRect()
                                                                     const x = moveEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const newPosition = Math.max(1, percent * 10)
+                                                                    const newPosition = Math.min(10, Math.max(1, percent * 9 + 1))
                                                                     const roundedPosition = Math.round(newPosition * 2) / 2
 
                                                                     const role = getPartyRole()
@@ -4637,7 +4652,7 @@ INSTRUCTIONS:
                                                                     const rect = bar.getBoundingClientRect()
                                                                     const x = upEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const finalPosition = Math.max(1, Math.round((percent * 10) * 2) / 2)
+                                                                    const finalPosition = Math.min(10, Math.max(1, Math.round((percent * 9 + 1) * 2) / 2))
 
                                                                     handlePositionChange(selectedClause.clauseId, finalPosition)
                                                                 }
@@ -4654,15 +4669,15 @@ INSTRUCTIONS:
                                                 {/* Scale Labels â€” Real-world values if range mapping exists, otherwise numeric */}
                                                 {rangeMappings.has(selectedClause.clauseId) && rangeMappings.get(selectedClause.clauseId)?.isDisplayable ? (
                                                     <>
-                                                        <div className="relative mt-1 h-4">
+                                                        <div className="relative mt-4 h-4">
                                                             {[1, 3, 5, 7, 10].map(pos => {
                                                                 const point = rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === pos)
                                                                 return point ? (
-                                                                    <span key={pos} className="absolute text-[10px] text-slate-500 font-medium -translate-x-1/2" style={{ left: `${(pos / 10) * 100}%` }}>
+                                                                    <span key={pos} className="absolute text-[10px] text-slate-500 font-medium -translate-x-1/2" style={{ left: `${positionToPercent(pos)}%` }}>
                                                                         {point.label}
                                                                     </span>
                                                                 ) : (
-                                                                    <span key={pos} className="absolute text-[10px] text-slate-400 font-medium -translate-x-1/2" style={{ left: `${(pos / 10) * 100}%` }}>{pos}</span>
+                                                                    <span key={pos} className="absolute text-[10px] text-slate-400 font-medium -translate-x-1/2" style={{ left: `${positionToPercent(pos)}%` }}>{pos}</span>
                                                                 )
                                                             })}
                                                         </div>
@@ -5782,8 +5797,24 @@ INSTRUCTIONS:
                                     >
                                         Cancel
                                     </button>
+                                    {editTemplateId && (
+                                        <button
+                                            onClick={() => handleSaveAsTemplate(true)}
+                                            disabled={!templateName.trim() || savingTemplate}
+                                            className="px-5 py-2 bg-white hover:bg-slate-50 disabled:bg-slate-100 text-purple-600 border border-purple-300 rounded-lg font-medium transition-colors flex items-center gap-2 text-sm"
+                                        >
+                                            {savingTemplate ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                'Save as New'
+                                            )}
+                                        </button>
+                                    )}
                                     <button
-                                        onClick={handleSaveAsTemplate}
+                                        onClick={() => handleSaveAsTemplate()}
                                         disabled={!templateName.trim() || savingTemplate}
                                         className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm"
                                     >
