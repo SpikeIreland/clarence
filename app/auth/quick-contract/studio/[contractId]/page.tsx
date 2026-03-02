@@ -4672,12 +4672,14 @@ INSTRUCTIONS:
                                                         <div className="relative mt-4 h-4">
                                                             {[1, 3, 5, 7, 10].map(pos => {
                                                                 const point = rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === pos)
+                                                                // Left-justify position 1, right-justify position 10, centre the rest
+                                                                const alignment = pos === 1 ? 'translate-x-0' : pos === 10 ? '-translate-x-full' : '-translate-x-1/2'
                                                                 return point ? (
-                                                                    <span key={pos} className="absolute text-[10px] text-slate-500 font-medium -translate-x-1/2" style={{ left: `${positionToPercent(pos)}%` }}>
+                                                                    <span key={pos} className={`absolute text-[10px] text-slate-500 font-medium ${alignment}`} style={{ left: `${positionToPercent(pos)}%` }}>
                                                                         {point.label}
                                                                     </span>
                                                                 ) : (
-                                                                    <span key={pos} className="absolute text-[10px] text-slate-400 font-medium -translate-x-1/2" style={{ left: `${positionToPercent(pos)}%` }}>{pos}</span>
+                                                                    <span key={pos} className={`absolute text-[10px] text-slate-400 font-medium ${alignment}`} style={{ left: `${positionToPercent(pos)}%` }}>{pos}</span>
                                                                 )
                                                             })}
                                                         </div>
