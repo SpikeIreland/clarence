@@ -59,7 +59,7 @@
 // - Modal states include 'waiting_other_party' for async commit flow
 // ============================================================================
 
-import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import FeedbackButton from '@/app/components/FeedbackButton'
@@ -2529,6 +2529,23 @@ INSTRUCTIONS:
         }
     }
 
+    // Get color and label for the aggregate balance gauge
+    const getBalanceColor = (score: number): { bg: string; text: string } => {
+        if (score >= 4.5 && score <= 5.5) return { bg: 'bg-teal-500', text: 'text-teal-700' }
+        if (score >= 3.5 && score < 4.5) return { bg: 'bg-sky-500', text: 'text-sky-700' }
+        if (score > 5.5 && score <= 6.5) return { bg: 'bg-emerald-400', text: 'text-emerald-700' }
+        if (score < 3.5) return { bg: 'bg-blue-500', text: 'text-blue-700' }
+        return { bg: 'bg-emerald-500', text: 'text-emerald-700' }
+    }
+
+    const getBalanceLabel = (score: number): string => {
+        const providerLabel = roleContext?.providingPartyLabel || 'Provider'
+        const customerLabel = roleContext?.protectedPartyLabel || 'Customer'
+        if (score >= 4.5 && score <= 5.5) return 'Balanced'
+        if (score < 4.5) return `Favours ${providerLabel}`
+        return `Favours ${customerLabel}`
+    }
+
 
     // ========================================================================
     // SECTION 4F-2: REALTIME SUBSCRIPTION FOR ACTIVITY NOTIFICATIONS
@@ -2796,6 +2813,25 @@ INSTRUCTIONS:
         const userPosition = role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
         return userPosition ?? clause.clarencePosition ?? null
     }, [contract, userInfo])
+
+    // Aggregate contract balance score — mean of all certified clause positions
+    // Uses live negotiation state (user-adjusted positions where set, else CLARENCE)
+    const aggregateBalance = useMemo(() => {
+        const certifiedLeafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
+        if (certifiedLeafClauses.length === 0) return null
+
+        const positions = certifiedLeafClauses
+            .map(c => getUserDisplayPosition(c))
+            .filter((p): p is number => p !== null)
+
+        if (positions.length === 0) return null
+
+        const sum = positions.reduce((acc, val) => acc + val, 0)
+        return {
+            score: sum / positions.length,
+            clauseCount: positions.length
+        }
+    }, [clauses, getUserDisplayPosition])
 
     // Auto-save dirty positions every 30 seconds
     useEffect(() => {
@@ -3400,12 +3436,31 @@ INSTRUCTIONS:
             {/* ============================================================ */}
             <header className="bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
 
-                {/* ── ROW 1: Primary Navigation ── */}
+                {/* ═══════════════════════════════════════════════════════ */}
+                {/* TIER 1: Navigation Bar                                 */}
+                {/* Back (left) | Title (centre) | Actions (right)         */}
+                {/* ═══════════════════════════════════════════════════════ */}
                 <div className="flex items-center justify-between px-4 py-2">
 
-                    {/* Left: Logo + Studio Label + Contract Title */}
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {/* Logo */}
+                    {/* LEFT: Back + Logo */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                            onClick={() => {
+                                if (isTemplateMode) {
+                                    router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
+                                } else if (getPartyRole() === 'respondent') {
+                                    window.location.href = '/provider'
+                                } else {
+                                    router.push('/auth/quick-contract')
+                                }
+                            }}
+                            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="Back"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
                         <button
                             onClick={() => {
                                 if (getPartyRole() === 'respondent') {
@@ -3414,82 +3469,43 @@ INSTRUCTIONS:
                                     router.push('/auth/contracts-dashboard')
                                 }
                             }}
-                            className="w-9 h-9 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md hover:from-purple-600 hover:to-purple-800 transition-all flex-shrink-0"
+                            className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-700 rounded-lg flex items-center justify-center shadow-md hover:from-purple-600 hover:to-purple-800 transition-all flex-shrink-0"
                             title="Back to dashboard"
                         >
                             <span className="text-white font-bold text-sm">C</span>
                         </button>
+                    </div>
 
-                        {/* Studio label */}
-                        <div className="flex-shrink-0">
-                            <h1 className="font-semibold text-slate-800 text-sm leading-tight">Quick Create Studio</h1>
+                    {/* CENTRE: Document Title */}
+                    <div className="flex-1 min-w-0 px-4">
+                        <div className="text-center">
+                            <h1 className="font-semibold text-slate-800 text-sm truncate" title={contract?.contractName}>
+                                {contract?.contractName}
+                            </h1>
                             <p className="text-[10px] text-slate-400 leading-tight">
                                 {isTemplateMode
                                     ? (isCompanyTemplate ? 'Company Template Certification' : 'Template Certification')
-                                    : 'CLARENCE Certified Review'}
-                            </p>
-                        </div>
-
-                        {/* Divider */}
-                        <div className="h-7 w-px bg-slate-200 flex-shrink-0"></div>
-
-                        {/* Contract title — truncated with tooltip */}
-                        <div className="min-w-0 flex-1">
-                            <h2 className="font-medium text-slate-700 text-sm truncate" title={contract?.contractName}>
-                                {contract?.contractName}
-                            </h2>
-                            <p className="text-[10px] text-slate-400 leading-tight">
-                                {contract?.contractType} · {clauses.filter(c => !c.isHeader).length} clauses · {getFullyAgreedCount()} agreed
+                                    : 'Quick Create Studio'}
+                                {' · '}{contract?.contractType}
+                                {' · '}{clauses.filter(c => !c.isHeader).length} clauses
                             </p>
                         </div>
                     </div>
 
-                    {/* Right: Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                    {/* RIGHT: Action Buttons (standardised sizing) */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
 
-                        {/* Beta Feedback Button */}
-                        <div className="pl-3 border-l border-slate-200">
-                            <FeedbackButton position="header" />
-                        </div>
+                        <FeedbackButton position="header" />
 
-                        {/* Party Chat Toggle (non-template mode only) */}
-                        {!isTemplateMode && (
-                            <button
-                                onClick={() => setPartyChatOpen(!partyChatOpen)}
-                                className="relative p-2 hover:bg-slate-100 rounded-lg transition group"
-                                title={`Chat with ${getOtherPartyName()}`}
-                            >
-                                <svg
-                                    className="w-5 h-5 text-slate-500 group-hover:text-emerald-600 transition"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                    />
-                                </svg>
-                                {partyChatUnread > 0 && (
-                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
-                                        {partyChatUnread > 9 ? '9+' : partyChatUnread}
-                                    </span>
-                                )}
-                            </button>
-                        )}
-
-                        {/* Contract Lifecycle Button (non-template mode, initiator only) */}
+                        {/* Contract Lifecycle Button (non-template, initiator) */}
                         {!isTemplateMode && isInitiator && (() => {
-                            // 1. Contract fully committed → Document Centre link
                             if (contract?.status === 'committed') {
                                 return (
                                     <button
                                         onClick={() => router.push('/auth/document-centre?contract_id=' + contract.contractId)}
-                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5"
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5"
                                     >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                         </svg>
                                         Document Centre
@@ -3497,16 +3513,15 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // 2. All clauses agreed by both parties → Commit Contract button
                             const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
                             const allBothAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
                             if (allBothAgreed) {
                                 return (
                                     <button
                                         onClick={() => setCommitModalState('confirm')}
-                                        className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5 animate-pulse"
+                                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5 animate-pulse"
                                     >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                         </svg>
                                         Commit Contract
@@ -3514,21 +3529,19 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // 3. Respondent is active in studio → Active badge
                             if (respondentInfo) {
                                 return (
-                                    <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-default">
+                                    <div className="px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium flex items-center gap-1.5 cursor-default">
                                         <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
                                         Active
                                     </div>
                                 )
                             }
 
-                            // 4. Invite sent but respondent hasn't joined
                             if (inviteSent) {
                                 return (
-                                    <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-default">
-                                        <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div className="px-4 py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium flex items-center gap-1.5 cursor-default">
+                                        <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                         Invite Pending
@@ -3536,13 +3549,12 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // 5. No invite sent → Invite button
                             return (
                                 <button
                                     onClick={() => setShowInviteModal(true)}
-                                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5"
+                                    className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5"
                                 >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                     </svg>
                                     Invite
@@ -3550,16 +3562,15 @@ INSTRUCTIONS:
                             )
                         })()}
 
-                        {/* Contract Lifecycle Button (non-template mode, respondent) */}
+                        {/* Contract Lifecycle Button (non-template, respondent) */}
                         {!isTemplateMode && !isInitiator && (() => {
-                            // 1. Contract fully committed → Document Centre link
                             if (contract?.status === 'committed') {
                                 return (
                                     <button
                                         onClick={() => router.push('/auth/document-centre?contract_id=' + contract.contractId)}
-                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5"
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5"
                                     >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                         </svg>
                                         Document Centre
@@ -3567,16 +3578,15 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // 2. All clauses agreed by both parties → Commit Contract
                             const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
                             const allBothAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
                             if (allBothAgreed) {
                                 return (
                                     <button
                                         onClick={() => setCommitModalState('confirm')}
-                                        className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5 animate-pulse"
+                                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5 animate-pulse"
                                     >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                         </svg>
                                         Commit Contract
@@ -3584,11 +3594,10 @@ INSTRUCTIONS:
                                 )
                             }
 
-                            // 3. Negotiation ongoing — no button needed for respondent
                             return null
                         })()}
 
-                        {/* Save as Template Button (template mode only) */}
+                        {/* Save as Template (template mode only) */}
                         {isTemplateMode && (() => {
                             const leafClauses = clauses.filter(c => !c.isHeader)
                             const certifiedCount = leafClauses.filter(c => c.clarenceCertified).length
@@ -3599,7 +3608,7 @@ INSTRUCTIONS:
                                 <button
                                     onClick={() => setShowSaveTemplateModal(true)}
                                     disabled={templateSaved || !isReady}
-                                    className={`px-3 py-1.5 rounded-lg transition-colors text-xs font-medium flex items-center gap-1.5 ${templateSaved
+                                    className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5 ${templateSaved
                                         ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 cursor-default'
                                         : isReady
                                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -3617,14 +3626,14 @@ INSTRUCTIONS:
                                 >
                                     {templateSaved ? (
                                         <>
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                             </svg>
                                             Template Saved
                                         </>
                                     ) : (
                                         <>
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                                             </svg>
                                             Save as Template
@@ -3633,72 +3642,90 @@ INSTRUCTIONS:
                                 </button>
                             )
                         })()}
-
-                        <button
-                            onClick={() => {
-                                if (isTemplateMode) {
-                                    router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts')
-                                } else if (getPartyRole() === 'respondent') {
-                                    window.location.href = '/provider'
-                                } else {
-                                    router.push('/auth/quick-contract')
-                                }
-                            }}
-                            className="px-3 py-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors text-xs font-medium"
-                        >
-                            Back
-                        </button>
                     </div>
                 </div>
 
-                {/* ── ROW 2: Party Identification & Progress (non-template only) ── */}
+                {/* ═══════════════════════════════════════════════════════ */}
+                {/* TIER 2: Negotiation Bar (non-template only)            */}
+                {/* Party A (left) | Chat (centre) | Party B (right)       */}
+                {/* ═══════════════════════════════════════════════════════ */}
                 {!isTemplateMode && (
-                    <div className="flex items-center justify-between px-4 py-1.5 border-t border-slate-100 bg-slate-50/50">
+                    <div className="flex items-center justify-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/50">
 
-                        {/* Party Badges */}
-                        <div className="flex items-center gap-2">
-                            {/* Initiator (Customer) */}
-                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
-                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full flex-shrink-0"></div>
-                                <span className="text-[11px] font-medium text-emerald-800">
-                                    {initiatorInfo?.company || initiatorInfo?.name || userInfo?.companyName || 'Initiator'}
-                                </span>
-                                <span className="text-[11px] text-emerald-600">
-                                    · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
-                                        ? roleContext.userRoleLabel
-                                        : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
-                                            ? roleContext.counterpartyRoleLabel
-                                            : 'Customer'}
-                                </span>
-                                {getPartyRole() === 'initiator' && (
-                                    <span className="text-[10px] text-emerald-400">(You)</span>
-                                )}
-                            </div>
-
-                            <span className="text-slate-300 text-[10px]">vs</span>
-
-                            {/* Respondent (Provider) */}
-                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-md">
-                                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
-                                <span className="text-[11px] font-medium text-blue-800">
-                                    {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
-                                </span>
-                                {respondentInfo && (
-                                    <span className="text-[11px] text-blue-600">
-                                        · {roleContext?.counterpartyRoleLabel && getPartyRole() === 'initiator'
-                                            ? roleContext.counterpartyRoleLabel
-                                            : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
-                                                ? roleContext.userRoleLabel
-                                                : 'Provider'}
-                                    </span>
-                                )}
-                                {getPartyRole() === 'respondent' && (
-                                    <span className="text-[10px] text-blue-400">(You)</span>
-                                )}
-                            </div>
+                        {/* Initiator (Customer) Badge */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
+                            <span className="text-xs font-medium text-emerald-800">
+                                {initiatorInfo?.company || initiatorInfo?.name || userInfo?.companyName || 'Initiator'}
+                            </span>
+                            <span className="text-xs text-emerald-600">
+                                · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
+                                    ? roleContext.userRoleLabel
+                                    : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
+                                        ? roleContext.counterpartyRoleLabel
+                                        : 'Customer'}
+                            </span>
+                            {getPartyRole() === 'initiator' && (
+                                <span className="text-[10px] text-emerald-400 font-medium">(You)</span>
+                            )}
                         </div>
 
-                        {/* Agreement Progress */}
+                        {/* Party Chat Toggle — centre between parties */}
+                        <button
+                            onClick={() => setPartyChatOpen(!partyChatOpen)}
+                            className="relative p-2.5 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-full transition shadow-sm group"
+                            title={`Chat with ${getOtherPartyName()}`}
+                        >
+                            <svg
+                                className="w-5 h-5 text-slate-500 group-hover:text-emerald-600 transition"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                />
+                            </svg>
+                            {partyChatUnread > 0 && (
+                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                                    {partyChatUnread > 9 ? '9+' : partyChatUnread}
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Respondent (Provider) Badge */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                            <span className="text-xs font-medium text-blue-800">
+                                {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
+                            </span>
+                            {respondentInfo && (
+                                <span className="text-xs text-blue-600">
+                                    · {roleContext?.counterpartyRoleLabel && getPartyRole() === 'initiator'
+                                        ? roleContext.counterpartyRoleLabel
+                                        : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
+                                            ? roleContext.userRoleLabel
+                                            : 'Provider'}
+                                </span>
+                            )}
+                            {getPartyRole() === 'respondent' && (
+                                <span className="text-[10px] text-blue-400 font-medium">(You)</span>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* ═══════════════════════════════════════════════════════ */}
+                {/* TIER 3: Status Bar (non-template only)                 */}
+                {/* Agreement Progress (left) | Contract Balance (right)    */}
+                {/* ═══════════════════════════════════════════════════════ */}
+                {!isTemplateMode && (
+                    <div className="flex items-center justify-between px-4 py-1.5 border-t border-slate-100">
+
+                        {/* LEFT: Agreement Progress */}
                         {clauses.length > 0 && (() => {
                             const leafClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
                             const fullyAgreedCount = leafClauses.filter(c => isBothPartiesAgreed(c.clauseId)).length
@@ -3709,12 +3736,21 @@ INSTRUCTIONS:
                             const partialPercent = totalCount > 0 ? ((fullyAgreedCount + partiallyAgreedCount) / totalCount) * 100 : 0
 
                             return (
-                                <div className="flex items-center gap-2">
-                                    <span className={`text-[11px] ${allFullyAgreed ? 'text-emerald-600 font-medium' : 'text-slate-500'}`}>
-                                        {fullyAgreedCount}/{totalCount} agreed
-                                        {partiallyAgreedCount > 0 && <span className="text-amber-500 ml-1">({partiallyAgreedCount} pending)</span>}
-                                    </span>
-                                    <div className="w-28 h-1.5 bg-slate-200 rounded-full overflow-hidden relative">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span className={`text-xs font-medium ${allFullyAgreed ? 'text-emerald-600' : 'text-slate-600'}`}>
+                                            {fullyAgreedCount}/{totalCount} Agreed
+                                        </span>
+                                        {partiallyAgreedCount > 0 && (
+                                            <span className="text-xs text-amber-500">
+                                                ({partiallyAgreedCount} pending)
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="w-36 h-2 bg-slate-200 rounded-full overflow-hidden relative">
                                         <div
                                             className="absolute h-full rounded-full bg-amber-300 transition-all duration-500"
                                             style={{ width: `${partialPercent}%` }}
@@ -3724,6 +3760,45 @@ INSTRUCTIONS:
                                             style={{ width: `${progressPercent}%` }}
                                         />
                                     </div>
+                                </div>
+                            )
+                        })()}
+
+                        {/* RIGHT: Aggregate Balance Score */}
+                        {aggregateBalance !== null && (() => {
+                            const score = aggregateBalance.score
+                            const colors = getBalanceColor(score)
+                            const gaugePercent = (score / 10) * 100
+
+                            return (
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                                        </svg>
+                                        <span className="text-xs font-medium text-slate-600">
+                                            Contract Balance
+                                        </span>
+                                    </div>
+                                    <span className={`text-xs font-bold ${colors.text}`}>
+                                        {score.toFixed(1)}
+                                    </span>
+                                    <div className="relative w-24 h-2 bg-gradient-to-r from-blue-200 via-teal-200 to-emerald-200 rounded-full">
+                                        <div
+                                            className="absolute top-0 w-px h-full bg-slate-400"
+                                            style={{ left: '50%' }}
+                                        />
+                                        <div
+                                            className={`absolute top-1/2 w-3 h-3 rounded-full ${colors.bg} border-2 border-white shadow-sm transition-all duration-500`}
+                                            style={{
+                                                left: `${gaugePercent}%`,
+                                                transform: 'translate(-50%, -50%)'
+                                            }}
+                                        />
+                                    </div>
+                                    <span className={`text-[10px] ${colors.text}`}>
+                                        {getBalanceLabel(score)}
+                                    </span>
                                 </div>
                             )
                         })()}
