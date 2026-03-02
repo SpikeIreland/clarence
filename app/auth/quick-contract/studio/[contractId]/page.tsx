@@ -3897,23 +3897,30 @@ INSTRUCTIONS:
                         </div>
                     )}
 
-                    {/* Smart select triggers when nothing selected yet */}
-                    {bulkSelectedIds.size === 0 && clauses.filter(c => !c.isHeader && c.clarenceCertified && !hasCurrentUserAgreed(c.clauseId)).length > 0 && (
+                    {/* Clause tree header — always visible */}
+                    {clauses.length > 0 && bulkSelectedIds.size === 0 && (
                         <div className="px-3 py-2 border-b border-slate-100 flex-shrink-0">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-400">Quick select:</span>
-                                <button
-                                    onClick={selectAllEligible}
-                                    className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                                >
-                                    All unagreed
-                                </button>
-                                <button
-                                    onClick={selectAllBalanced}
-                                    className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-                                >
-                                    Balanced (5.0)
-                                </button>
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-slate-600">
+                                    Clauses ({clauses.filter(c => !c.isHeader).length})
+                                </span>
+                                {/* Quick select triggers — only when there are unagreed clauses */}
+                                {clauses.filter(c => !c.isHeader && c.clarenceCertified && !hasCurrentUserAgreed(c.clauseId)).length > 0 && (
+                                    <div className="flex items-center gap-1.5">
+                                        <button
+                                            onClick={selectAllEligible}
+                                            className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                                        >
+                                            All unagreed
+                                        </button>
+                                        <button
+                                            onClick={selectAllBalanced}
+                                            className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                                        >
+                                            Balanced (5.0)
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -4050,7 +4057,7 @@ INSTRUCTIONS:
                                                                 : 'opacity-50 border-l-2 border-transparent'
                                                             }`}
                                                         >
-                                                            {/* Bulk select checkbox */}
+                                                            {/* Bulk select checkbox — only when eligible for agreement */}
                                                             {child.clarenceCertified && !hasCurrentUserAgreed(child.clauseId) && (
                                                                 <input
                                                                     type="checkbox"
@@ -4062,27 +4069,23 @@ INSTRUCTIONS:
                                                                     className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 focus:ring-1 cursor-pointer flex-shrink-0"
                                                                 />
                                                             )}
-                                                            {(!child.clarenceCertified || hasCurrentUserAgreed(child.clauseId)) && (
-                                                                <div className="w-3.5 flex-shrink-0" />
-                                                            )}
                                                             <button
                                                                 onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === child.clauseId))}
                                                                 disabled={!isClickable}
-                                                                className="flex items-center gap-2 flex-1 min-w-0"
+                                                                className="flex items-center gap-1.5 flex-1 min-w-0"
                                                             >
                                                                 <StatusIcon status={child.processingStatus} />
-                                                                <div className="flex-1 min-w-0 text-left">
-                                                                    <div className="flex items-center gap-1">
-                                                                        <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
-                                                                            {child.clauseNumber}
-                                                                        </span>
-                                                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
-                                                                            {child.clauseName}
-                                                                        </span>
-                                                                    </div>
+                                                                <div className="flex-1 min-w-0 text-left truncate">
+                                                                    <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
+                                                                        {child.clauseNumber}
+                                                                    </span>
+                                                                    {' '}
+                                                                    <span className={`text-sm ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
+                                                                        {child.clauseName}
+                                                                    </span>
                                                                 </div>
                                                                 {child.clarenceCertified && child.clarencePosition && (
-                                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${child.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${child.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
                                                                         child.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
                                                                             'bg-blue-100 text-blue-700'
                                                                         }`}>
@@ -4149,7 +4152,7 @@ INSTRUCTIONS:
                                                                 {isMenuOpen && (
                                                                     <div
                                                                         ref={clauseMenuRef}
-                                                                        className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                                                        className="absolute right-0 bottom-full mb-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
                                                                     >
                                                                         <button
                                                                             onClick={(e) => {
@@ -4187,7 +4190,7 @@ INSTRUCTIONS:
                                                     : 'opacity-50 border-l-2 border-transparent'
                                                 }`}
                                             >
-                                                {/* Bulk select checkbox */}
+                                                {/* Bulk select checkbox — only when eligible for agreement */}
                                                 {parent.clarenceCertified && !hasCurrentUserAgreed(parent.clauseId) && (
                                                     <input
                                                         type="checkbox"
@@ -4199,26 +4202,23 @@ INSTRUCTIONS:
                                                         className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 focus:ring-1 cursor-pointer flex-shrink-0"
                                                     />
                                                 )}
-                                                {(!parent.clarenceCertified || hasCurrentUserAgreed(parent.clauseId)) && (
-                                                    <div className="w-3.5 flex-shrink-0" />
-                                                )}
                                                 <button
                                                     onClick={() => isClickable && setSelectedClauseIndex(clauses.findIndex(c => c.clauseId === parent.clauseId))}
                                                     disabled={!isClickable}
-                                                    className="flex items-center gap-2 flex-1 min-w-0"
+                                                    className="flex items-center gap-1.5 flex-1 min-w-0"
                                                 >
                                                     <StatusIcon status={parent.processingStatus} />
-                                                    <div className="flex-1 min-w-0 text-left">
+                                                    <div className="flex-1 min-w-0 text-left truncate">
                                                         <span className={`text-xs font-medium ${isSelected ? 'text-teal-700' : 'text-slate-500'}`}>
                                                             {parent.clauseNumber}.
                                                         </span>
                                                         {' '}
-                                                        <span className={`text-sm truncate ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
+                                                        <span className={`text-sm ${isSelected ? 'text-teal-800 font-medium' : 'text-slate-700'}`}>
                                                             {parent.clauseName}
                                                         </span>
                                                     </div>
                                                     {parent.clarenceCertified && parent.clarencePosition && (
-                                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${parent.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
+                                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${parent.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
                                                             parent.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
                                                                 'bg-blue-100 text-blue-700'
                                                             }`}>
@@ -4285,7 +4285,7 @@ INSTRUCTIONS:
                                                     {isMenuOpen && (
                                                         <div
                                                             ref={clauseMenuRef}
-                                                            className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                                            className="absolute right-0 bottom-full mb-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
                                                         >
                                                             <button
                                                                 onClick={(e) => {
