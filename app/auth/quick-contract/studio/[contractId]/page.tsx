@@ -4466,12 +4466,12 @@ INSTRUCTIONS:
                                             <div className="relative mb-6 pt-6 pb-2">
                                                 {/* Scale Background - BLUE (provider/flexibility) left â†’ EMERALD (customer/protection) right */}
                                                 <div className="relative h-4 bg-gradient-to-r from-blue-200 via-teal-200 via-50% to-emerald-200 rounded-full">
-                                                    {/* Scale markers */}
-                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+                                                    {/* Scale markers (0-10 visual scale so 5 sits at true centre) */}
+                                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                                                         <div
                                                             key={n}
                                                             className="absolute top-0 bottom-0 w-px bg-white/50"
-                                                            style={{ left: `${((n - 1) / 9) * 100}%` }}
+                                                            style={{ left: `${(n / 10) * 100}%` }}
                                                         />
                                                     ))}
 
@@ -4482,7 +4482,7 @@ INSTRUCTIONS:
                                                         <div
                                                             className={`absolute w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 border-4 border-white flex items-center justify-center text-lg font-bold text-white z-20 shadow-xl transition-all ${isInitiator ? 'cursor-grab active:cursor-grabbing hover:scale-110' : 'cursor-default'}`}
                                                             style={{
-                                                                left: `${(((getUserDisplayPosition(selectedClause) || 5) - 1) / 9) * 100}%`,
+                                                                left: `${((getUserDisplayPosition(selectedClause) || 5) / 10) * 100}%`,
                                                                 top: '50%',
                                                                 transform: 'translate(-50%, -50%)'
                                                             }}
@@ -4500,7 +4500,7 @@ INSTRUCTIONS:
                                                                     const rect = bar.getBoundingClientRect()
                                                                     const x = moveEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const newPosition = 1 + (percent * 9)
+                                                                    const newPosition = Math.max(1, percent * 10)
                                                                     const roundedPosition = Math.round(newPosition * 2) / 2
 
                                                                     const role = getPartyRole()
@@ -4524,7 +4524,7 @@ INSTRUCTIONS:
                                                                     const rect = bar.getBoundingClientRect()
                                                                     const x = upEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const finalPosition = Math.round((1 + (percent * 9)) * 2) / 2
+                                                                    const finalPosition = Math.max(1, Math.round((percent * 10) * 2) / 2)
 
                                                                     handlePositionChange(selectedClause.clauseId, finalPosition)
                                                                 }
@@ -4541,15 +4541,15 @@ INSTRUCTIONS:
                                                 {/* Scale Labels â€” Real-world values if range mapping exists, otherwise numeric */}
                                                 {rangeMappings.has(selectedClause.clauseId) && rangeMappings.get(selectedClause.clauseId)?.isDisplayable ? (
                                                     <>
-                                                        <div className="flex justify-between mt-1 px-0">
+                                                        <div className="relative mt-1 h-4">
                                                             {[1, 3, 5, 7, 10].map(pos => {
                                                                 const point = rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === pos)
                                                                 return point ? (
-                                                                    <span key={pos} className="text-[10px] text-slate-500 font-medium">
+                                                                    <span key={pos} className="absolute text-[10px] text-slate-500 font-medium -translate-x-1/2" style={{ left: `${(pos / 10) * 100}%` }}>
                                                                         {point.label}
                                                                     </span>
                                                                 ) : (
-                                                                    <span key={pos} className="text-[10px] text-slate-400 font-medium">{pos}</span>
+                                                                    <span key={pos} className="absolute text-[10px] text-slate-400 font-medium -translate-x-1/2" style={{ left: `${(pos / 10) * 100}%` }}>{pos}</span>
                                                                 )
                                                             })}
                                                         </div>
