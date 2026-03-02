@@ -639,6 +639,7 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
     const [templateName, setTemplateName] = useState('')
     const [contractType, setContractType] = useState('custom')
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+    const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     // --- Observability: Log tab loaded ---
@@ -648,6 +649,79 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
             upload_source: 'company_admin'
         })
     }, [])
+
+    const handleEditTemplate = async (template: CompanyTemplate) => {
+        if (!userInfo?.userId || !userInfo?.companyId) return
+        setEditingTemplateId(template.templateId)
+
+        try {
+            const supabase = createClient()
+
+            // Load template clauses
+            const { data: templateClauses, error: tcError } = await supabase
+                .from('template_clauses')
+                .select('*')
+                .eq('template_id', template.templateId)
+                .order('display_order', { ascending: true })
+
+            if (tcError || !templateClauses || templateClauses.length === 0) {
+                throw new Error('No clauses found for this template')
+            }
+
+            // Create temporary uploaded_contracts record
+            const { data: newContract, error: createError } = await supabase
+                .from('uploaded_contracts')
+                .insert({
+                    company_id: userInfo.companyId,
+                    uploaded_by_user_id: userInfo.userId,
+                    contract_name: template.templateName,
+                    file_name: `${template.templateName}.template`,
+                    file_type: 'template',
+                    file_size: 0,
+                    status: 'ready',
+                    clause_count: templateClauses.length,
+                    contract_type_key: template.contractType,
+                    detected_contract_type: template.contractType
+                })
+                .select('contract_id')
+                .single()
+
+            if (createError || !newContract) throw new Error('Failed to create editing session')
+
+            // Map template_clauses → uploaded_contract_clauses (Strategy E mapping)
+            const clauseCopies = templateClauses.map((tc: any, index: number) => ({
+                contract_id: newContract.contract_id,
+                clause_number: tc.clause_number || tc.display_number || String(index + 1),
+                clause_name: tc.clause_name || 'Untitled Clause',
+                category: tc.category || tc.category_name || 'Other',
+                content: tc.default_text || tc.clause_content || '',
+                original_text: tc.default_text || tc.clause_content || '',
+                clause_level: tc.clause_level || 1,
+                display_order: tc.display_order || (tc.category_order || 0) * 100 + (tc.clause_order || index),
+                is_header: tc.is_header || false,
+                parent_clause_id: null,
+                status: tc.clarence_certified ? 'certified' : (tc.status || 'pending'),
+                clarence_certified: tc.clarence_certified || false,
+                clarence_position: tc.clarence_position,
+                clarence_fairness: tc.clarence_fairness,
+                clarence_summary: tc.clarence_summary,
+                clarence_assessment: tc.clarence_assessment,
+                clarence_flags: tc.clarence_flags || [],
+                clarence_certified_at: tc.clarence_certified_at
+            }))
+
+            const { error: copyError } = await supabase
+                .from('uploaded_contract_clauses')
+                .insert(clauseCopies)
+
+            if (copyError) throw new Error('Failed to copy template clauses')
+
+            router.push(`/auth/quick-contract/studio/${newContract.contract_id}?mode=template&company=true&edit_template_id=${template.templateId}`)
+        } catch (e) {
+            console.error('Failed to open template for editing:', e)
+            setEditingTemplateId(null)
+        }
+    }
 
     const handleFileDrop = (file: File) => {
         const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
@@ -1021,6 +1095,25 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
+                                    {template.status === 'ready' && template.clauseCount > 0 && (
+                                        <button
+                                            onClick={() => handleEditTemplate(template)}
+                                            disabled={editingTemplateId === template.templateId}
+                                            className="px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                                        >
+                                            {editingTemplateId === template.templateId ? (
+                                                <>
+                                                    <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                                                    Opening...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                                    Edit
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
                                     {template.isActive ? (
                                         <button onClick={() => onToggleActive(template.templateId, false)} className="px-3 py-1.5 text-sm font-medium bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Deactivate</button>
                                     ) : (

@@ -299,10 +299,25 @@ function QuickContractStudioContent() {
     // Template mode
     const isTemplateMode = searchParams.get('mode') === 'template'
     const isCompanyTemplate = searchParams.get('company') === 'true'
+    const editTemplateId = searchParams.get('edit_template_id')
     const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false)
     const [templateName, setTemplateName] = useState('')
     const [savingTemplate, setSavingTemplate] = useState(false)
     const [templateSaved, setTemplateSaved] = useState(false)
+
+    // Pre-fill template name when editing an existing template
+    useEffect(() => {
+        if (!editTemplateId) return
+        const supabase = createClient()
+        supabase
+            .from('contract_templates')
+            .select('template_name')
+            .eq('template_id', editTemplateId)
+            .single()
+            .then(({ data }) => {
+                if (data?.template_name) setTemplateName(data.template_name)
+            })
+    }, [editTemplateId])
 
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])
@@ -1627,45 +1642,70 @@ function QuickContractStudioContent() {
     }
 
     // SAVE AS TEMPLATE handler (template mode only)
-    // FIX: Now includes ALL certification fields so templates are pre-certified
-    // and don't trigger re-certification when used to create a new session
+    // Supports both creating new templates and updating existing ones (via editTemplateId)
     const handleSaveAsTemplate = async () => {
         if (!templateName.trim() || !contractId || !userInfo) return
 
         setSavingTemplate(true)
         try {
             const certifiedClauses = clauses.filter(c => !c.isHeader && c.clarenceCertified)
-            const templateCode = isCompanyTemplate
-                ? `CO-${contractId.substring(0, 8).toUpperCase()}`
-                : `USER-${contractId.substring(0, 8).toUpperCase()}`
+            let targetTemplateId: string
 
-            const { data: template, error: templateError } = await supabase
-                .from('contract_templates')
-                .insert({
-                    template_code: templateCode,
-                    template_name: templateName.trim(),
-                    description: `Certified from uploaded contract: ${contract?.contractName || 'Unknown'}`,
-                    contract_type: contract?.contractType || 'custom',
-                    industry: null,
-                    is_system: false,
-                    is_public: isCompanyTemplate,
-                    is_active: true,
-                    company_id: userInfo.companyId,
-                    created_by_user_id: userInfo.userId,
-                    clause_count: certifiedClauses.length,
-                    version: 1,
-                    times_used: 0,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                })
-                .select('template_id')
-                .single()
+            if (editTemplateId) {
+                // UPDATE existing template
+                const { error: updateError } = await supabase
+                    .from('contract_templates')
+                    .update({
+                        template_name: templateName.trim(),
+                        clause_count: certifiedClauses.length,
+                        contract_type: contract?.contractType || 'custom',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('template_id', editTemplateId)
 
-            if (templateError) throw templateError
+                if (updateError) throw updateError
+                targetTemplateId = editTemplateId
 
-            // FIX: Include ALL certification fields so clauses are pre-certified
+                // Delete old template clauses
+                await supabase
+                    .from('template_clauses')
+                    .delete()
+                    .eq('template_id', editTemplateId)
+            } else {
+                // CREATE new template
+                const templateCode = isCompanyTemplate
+                    ? `CO-${contractId.substring(0, 8).toUpperCase()}`
+                    : `USER-${contractId.substring(0, 8).toUpperCase()}`
+
+                const { data: template, error: templateError } = await supabase
+                    .from('contract_templates')
+                    .insert({
+                        template_code: templateCode,
+                        template_name: templateName.trim(),
+                        description: `Certified from uploaded contract: ${contract?.contractName || 'Unknown'}`,
+                        contract_type: contract?.contractType || 'custom',
+                        industry: null,
+                        is_system: false,
+                        is_public: isCompanyTemplate,
+                        is_active: true,
+                        company_id: userInfo.companyId,
+                        created_by_user_id: userInfo.userId,
+                        clause_count: certifiedClauses.length,
+                        version: 1,
+                        times_used: 0,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    })
+                    .select('template_id')
+                    .single()
+
+                if (templateError) throw templateError
+                targetTemplateId = template.template_id
+            }
+
+            // Insert certification-preserving template clauses
             const templateClauses = certifiedClauses.map(clause => ({
-                template_id: template.template_id,
+                template_id: targetTemplateId,
                 clause_number: clause.clauseNumber,
                 clause_name: clause.clauseName,
                 category: clause.category,
@@ -1689,7 +1729,7 @@ function QuickContractStudioContent() {
                     .insert(templateClauses)
             }
 
-            console.log(`✨ ${certifiedClauses.length} pre-certified clauses`)
+            console.log(`✨ ${certifiedClauses.length} pre-certified clauses ${editTemplateId ? 'updated' : 'saved'}`)
             setTemplateSaved(true)
             setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
 
@@ -3627,14 +3667,14 @@ INSTRUCTIONS:
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                             </svg>
-                                            Template Saved
+                                            {editTemplateId ? 'Template Updated' : 'Template Saved'}
                                         </>
                                     ) : (
                                         <>
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                                             </svg>
-                                            Save as Template
+                                            {editTemplateId ? 'Update Template' : 'Save as Template'}
                                         </>
                                     )}
                                 </button>
@@ -5700,22 +5740,28 @@ INSTRUCTIONS:
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                     </svg>
                                 </div>
-                                <h3 className="text-lg font-semibold text-slate-800 mb-2">Template Saved!</h3>
+                                <h3 className="text-lg font-semibold text-slate-800 mb-2">{editTemplateId ? 'Template Updated!' : 'Template Saved!'}</h3>
                                 <p className="text-sm text-slate-500">
-                                    {isCompanyTemplate
-                                        ? 'Company template created. Redirecting to Company Admin...'
-                                        : 'Redirecting to your template library...'}
+                                    {editTemplateId
+                                        ? 'Template updated successfully. Redirecting to Company Admin...'
+                                        : isCompanyTemplate
+                                            ? 'Company template created. Redirecting to Company Admin...'
+                                            : 'Redirecting to your template library...'}
                                 </p>
                             </div>
                         ) : (
                             <>
                                 <div className="p-6 border-b border-slate-200">
                                     <h3 className="text-lg font-semibold text-slate-800">
-                                        {isCompanyTemplate ? 'Save as Company Template' : 'Save as Template'}
+                                        {editTemplateId
+                                            ? (isCompanyTemplate ? 'Update Company Template' : 'Update Template')
+                                            : (isCompanyTemplate ? 'Save as Company Template' : 'Save as Template')}
                                     </h3>
                                     <p className="text-sm text-slate-500 mt-1">
-                                        This will save {clauses.filter(c => c.clarenceCertified).length} certified clauses as a
-                                        {isCompanyTemplate ? ' company-wide template available to all staff.' : ' reusable template.'}
+                                        This will {editTemplateId ? 'update' : 'save'} {clauses.filter(c => c.clarenceCertified).length} certified clauses
+                                        {editTemplateId
+                                            ? ' in the existing template.'
+                                            : isCompanyTemplate ? ' as a company-wide template available to all staff.' : ' as a reusable template.'}
                                     </p>
                                 </div>
                                 <div className="p-6">
@@ -5744,10 +5790,10 @@ INSTRUCTIONS:
                                         {savingTemplate ? (
                                             <>
                                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                Saving...
+                                                {editTemplateId ? 'Updating...' : 'Saving...'}
                                             </>
                                         ) : (
-                                            'Save Template'
+                                            editTemplateId ? 'Update Template' : 'Save Template'
                                         )}
                                     </button>
                                 </div>
