@@ -68,6 +68,10 @@ import QCPartyChatPanel from '@/app/auth/quick-contract/components/qc-party-chat
 // ROLE MATRIX Phase 2: Dynamic position labels
 import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
 
+// Playbook compliance engine + indicator component
+import { calculatePlaybookCompliance, type PlaybookRule, type ComplianceResult, type ContractClause as ComplianceClause } from '@/lib/playbook-compliance'
+import PlaybookComplianceIndicator from '@/app/components/PlaybookComplianceIndicator'
+
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
 // ============================================================================
@@ -248,6 +252,20 @@ const DEFAULT_POSITION_OPTIONS: PositionOption[] = [
     { value: 10, label: 'Maximum Protection', description: 'Most protective terms possible' }
 ]
 
+// Adapter: convert studio camelCase clauses to compliance engine snake_case format
+function toComplianceClauses(studioClauses: ContractClause[]): ComplianceClause[] {
+    return studioClauses.map(c => ({
+        clause_id: c.clauseId,
+        clause_name: c.clauseName,
+        category: c.category,
+        clarence_position: c.clarencePosition,
+        initiator_position: c.initiatorPosition,
+        respondent_position: c.respondentPosition,
+        customer_position: null,
+        is_header: c.isHeader,
+    }))
+}
+
 // ============================================================================
 // SECTION 3: LOADING COMPONENT
 // ============================================================================
@@ -305,6 +323,13 @@ function QuickContractStudioContent() {
     const [savingTemplate, setSavingTemplate] = useState(false)
     const [templateSaved, setTemplateSaved] = useState(false)
 
+    // Playbook compliance (initiator only, non-template mode)
+    const [playbookRules, setPlaybookRules] = useState<PlaybookRule[]>([])
+    const [playbookName, setPlaybookName] = useState('')
+    const [playbookCompanyName, setPlaybookCompanyName] = useState('')
+    const [playbookLoading, setPlaybookLoading] = useState(false)
+    const [showComplianceModal, setShowComplianceModal] = useState(false)
+
     // Pre-fill template name when editing an existing template
     useEffect(() => {
         if (!editTemplateId) return
@@ -318,6 +343,52 @@ function QuickContractStudioContent() {
                 if (data?.template_name) setTemplateName(data.template_name)
             })
     }, [editTemplateId])
+
+    // Fetch playbook rules for compliance checking (initiator only, once)
+    useEffect(() => {
+        if (!userInfo?.companyId || !contract || isTemplateMode) return
+        if (contract.uploadedByUserId !== userInfo.userId) return
+
+        async function loadPlaybookRules() {
+            setPlaybookLoading(true)
+            try {
+                const supabase = createClient()
+
+                const { data: playbookData, error: pbError } = await supabase
+                    .from('company_playbooks')
+                    .select('playbook_id, playbook_name, company_id')
+                    .eq('company_id', userInfo!.companyId!)
+                    .eq('is_active', true)
+                    .single()
+
+                if (pbError || !playbookData) return
+
+                const { data: rulesData, error: rulesError } = await supabase
+                    .from('playbook_rules')
+                    .select('*')
+                    .eq('playbook_id', playbookData.playbook_id)
+                    .eq('is_active', true)
+
+                if (rulesError || !rulesData || rulesData.length === 0) return
+
+                const { data: companyData } = await supabase
+                    .from('companies')
+                    .select('company_name')
+                    .eq('company_id', userInfo!.companyId!)
+                    .single()
+
+                setPlaybookRules(rulesData as PlaybookRule[])
+                setPlaybookName(playbookData.playbook_name || 'Company Playbook')
+                setPlaybookCompanyName(companyData?.company_name || 'Your Company')
+            } catch (err) {
+                console.error('Error loading playbook rules:', err)
+            } finally {
+                setPlaybookLoading(false)
+            }
+        }
+
+        loadPlaybookRules()
+    }, [userInfo?.companyId, userInfo?.userId, contract?.uploadedByUserId, isTemplateMode])
 
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])
@@ -2888,6 +2959,12 @@ INSTRUCTIONS:
         }
     }, [clauses, getUserDisplayPosition])
 
+    // Playbook compliance — recalculates live as positions change
+    const playbookCompliance = useMemo<ComplianceResult | null>(() => {
+        if (playbookRules.length === 0 || clauses.length === 0) return null
+        return calculatePlaybookCompliance(playbookRules, toComplianceClauses(clauses))
+    }, [playbookRules, clauses])
+
     // Auto-save dirty positions every 30 seconds
     useEffect(() => {
         if (dirtyPositions.size === 0) return
@@ -3816,6 +3893,53 @@ INSTRUCTIONS:
                                 </div>
                             )
                         })()}
+
+                        {/* CENTRE: Playbook Compliance Badge (initiator only) */}
+                        {isInitiator && playbookCompliance && !playbookLoading && (
+                            <button
+                                onClick={() => setShowComplianceModal(true)}
+                                className={`flex items-center gap-2 px-3 py-1 rounded-lg border transition-colors cursor-pointer ${
+                                    playbookCompliance.redLineBreaches > 0
+                                        ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                                        : playbookCompliance.overallScore >= 80
+                                            ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                                            : playbookCompliance.overallScore >= 60
+                                                ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+                                                : 'bg-red-50 border-red-200 hover:bg-red-100'
+                                }`}
+                                title="View playbook compliance details"
+                            >
+                                {playbookCompliance.redLineBreaches > 0 ? (
+                                    <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                    </svg>
+                                ) : (
+                                    <svg className={`w-4 h-4 ${
+                                        playbookCompliance.overallScore >= 80 ? 'text-emerald-500'
+                                            : playbookCompliance.overallScore >= 60 ? 'text-amber-500'
+                                                : 'text-red-500'
+                                    }`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                        <path d="M9 12l2 2 4-4" />
+                                    </svg>
+                                )}
+                                <span className={`text-xs font-bold font-mono ${
+                                    playbookCompliance.overallScore >= 80 ? 'text-emerald-600'
+                                        : playbookCompliance.overallScore >= 60 ? 'text-amber-600'
+                                            : 'text-red-600'
+                                }`}>
+                                    {playbookCompliance.overallScore}%
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-medium">Playbook</span>
+                                {playbookCompliance.redLineBreaches > 0 && (
+                                    <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded">
+                                        {playbookCompliance.redLineBreaches} breach{playbookCompliance.redLineBreaches !== 1 ? 'es' : ''}
+                                    </span>
+                                )}
+                            </button>
+                        )}
 
                         {/* RIGHT: Aggregate Balance Score */}
                         {aggregateBalance !== null && (() => {
@@ -5919,6 +6043,37 @@ INSTRUCTIONS:
                                     </>
                                 )}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* PLAYBOOK COMPLIANCE MODAL (initiator only)                    */}
+            {/* ============================================================ */}
+            {showComplianceModal && playbookCompliance && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-800">Playbook Compliance</h3>
+                                <p className="text-sm text-slate-500 mt-0.5">{playbookName} &middot; {playbookCompanyName}</p>
+                            </div>
+                            <button
+                                onClick={() => setShowComplianceModal(false)}
+                                className="p-1 hover:bg-slate-100 rounded-lg transition"
+                            >
+                                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            <PlaybookComplianceIndicator
+                                compliance={playbookCompliance}
+                                playbookName={playbookName}
+                                companyName={playbookCompanyName}
+                            />
                         </div>
                     </div>
                 </div>
