@@ -713,7 +713,10 @@ function TrainingStudioPage() {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
-                throw new Error(errorData.error || 'Failed to start playbook training session')
+                const errMsg = typeof errorData.error === 'string'
+                    ? errorData.error
+                    : (errorData.error?.message || errorData.message || 'Failed to start playbook training session')
+                throw new Error(errMsg)
             }
 
             const result = await response.json()
@@ -796,18 +799,23 @@ function TrainingStudioPage() {
             const sessionId = data.sessionId
 
             // Apply difficulty modifier to provider positions
-            const { data: positions } = await supabase.from('session_clause_positions').select('*').eq('session_id', sessionId)
-            if (positions) {
+            const { data: positions, error: posError } = await supabase.from('session_clause_positions').select('*').eq('session_id', sessionId)
+            if (posError) {
+                console.error('Failed to load session positions:', posError)
+                throw new Error('Training session created but failed to apply difficulty settings. Please try again.')
+            }
+            if (positions && positions.length > 0) {
                 const modifiers: Record<DifficultyMode, number> = { cooperative: -1.5, balanced: 0, aggressive: 1.5 }
                 const modifier = modifiers[practiceDifficulty]
                 if (modifier !== 0) {
-                    for (const pos of positions) {
+                    const updates = positions.map(pos => {
                         const currentProvider = pos.provider_position ?? 5
                         const newProvider = Math.max(1, Math.min(10, currentProvider + modifier))
-                        await supabase.from('session_clause_positions')
+                        return supabase.from('session_clause_positions')
                             .update({ provider_position: Math.round(newProvider * 10) / 10 })
                             .eq('position_id', pos.position_id)
-                    }
+                    })
+                    await Promise.all(updates)
                 }
             }
             router.push(`/auth/contract-studio?session_id=${sessionId}`)
