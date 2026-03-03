@@ -22,7 +22,7 @@
 // SECTION 1: IMPORTS
 // ============================================================================
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
@@ -246,7 +246,7 @@ function formatDate(dateStr: string): string {
 // SECTION 5: MAIN COMPONENT
 // ============================================================================
 
-export default function TrainingStudioPage() {
+function TrainingStudioPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const supabase = createClient()
@@ -1644,5 +1644,18 @@ export default function TrainingStudioPage() {
             <ScenarioModal />
             <PracticeConfigModal />
         </div>
+    )
+}
+
+// Wrap in Suspense boundary for useSearchParams (required by Next.js)
+export default function TrainingStudioPageWrapper() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-amber-50/30 flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        }>
+            <TrainingStudioPage />
+        </Suspense>
     )
 }
