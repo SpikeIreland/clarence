@@ -350,6 +350,63 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         }
     }
 
+    // Visual position bar for each playbook rule
+    const RulePositionBar = ({ rule }: { rule: PlaybookRule }) => {
+        const toPercent = (val: number) => ((val - 1) / 9) * 100
+        return (
+            <div className="mt-2 mb-1">
+                {/* Position bar */}
+                <div className="relative h-6 w-full">
+                    {/* Full 1-10 track */}
+                    <div className="absolute top-2.5 left-0 right-0 h-1.5 bg-slate-100 rounded-full" />
+                    {/* Acceptable range band (min → max) */}
+                    <div className="absolute top-2 h-2.5 bg-blue-100 rounded-full border border-blue-200"
+                        style={{
+                            left: `${toPercent(rule.minimum_position)}%`,
+                            width: `${toPercent(rule.maximum_position) - toPercent(rule.minimum_position)}%`
+                        }} />
+                    {/* Escalation threshold (red dashed line) */}
+                    {rule.requires_approval_below != null && (
+                        <div className="absolute top-1 w-px h-4 border-l-2 border-dashed border-red-400"
+                            style={{ left: `${toPercent(rule.requires_approval_below)}%`, transform: 'translateX(-50%)' }} />
+                    )}
+                    {/* Fallback position marker */}
+                    <div className="absolute top-2 w-1 h-2.5 bg-slate-400 rounded-full"
+                        style={{ left: `${toPercent(rule.fallback_position)}%`, transform: 'translateX(-50%)' }} />
+                    {/* Ideal position marker (prominent) */}
+                    <div className="absolute top-0.5 w-5 h-5 rounded-full bg-purple-600 border-2 border-white shadow-sm flex items-center justify-center"
+                        style={{ left: `${toPercent(rule.ideal_position)}%`, transform: 'translateX(-50%)' }}>
+                        <span className="text-[8px] font-bold text-white">{rule.ideal_position}</span>
+                    </div>
+                </div>
+                {/* Scale labels */}
+                <div className="flex justify-between text-[9px] text-slate-300 px-0.5 -mt-0.5">
+                    <span>1</span><span>5</span><span>10</span>
+                </div>
+                {/* Metric chips */}
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">
+                        Ideal: {rule.ideal_position}
+                    </span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600 rounded">
+                        Range: {rule.minimum_position}–{rule.maximum_position}
+                    </span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
+                        Fallback: {rule.fallback_position}
+                    </span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 rounded">
+                        Importance: {rule.importance_level}/10
+                    </span>
+                    {rule.requires_approval_below != null && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-red-50 text-red-600 rounded">
+                            Escalate &lt;{rule.requires_approval_below}{rule.escalation_contact ? ` → ${rule.escalation_contact}` : ''}
+                        </span>
+                    )}
+                </div>
+            </div>
+        )
+    }
+
     const getStatusBadge = (status: Playbook['status'], isActive: boolean) => {
         if (isActive) return <span className="px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Active</span>
         const c: Record<string, { bg: string; text: string; label: string }> = {
@@ -653,13 +710,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                                                 <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 rounded">Non-Negotiable</span>
                                                                             )}
                                                                         </div>
-                                                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                                                                            <span>Min <strong className="text-slate-700">{rule.minimum_position}</strong> &rarr; Ideal <strong className="text-slate-700">{rule.ideal_position}</strong> &rarr; Max <strong className="text-slate-700">{rule.maximum_position}</strong></span>
-                                                                            <span>Importance: <strong className="text-slate-700">{rule.importance_level}</strong></span>
-                                                                            {rule.requires_approval_below != null && (
-                                                                                <span>Escalate below <strong className="text-slate-700">{rule.requires_approval_below}</strong>{rule.escalation_contact ? ` to ${rule.escalation_contact}` : ''}</span>
-                                                                            )}
-                                                                        </div>
+                                                                        <RulePositionBar rule={rule} />
                                                                         {rule.rationale && (
                                                                             <p className="mt-1.5 text-xs text-slate-400 italic">{rule.rationale}</p>
                                                                         )}
