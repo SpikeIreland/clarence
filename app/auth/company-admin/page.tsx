@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
 import { PlaybookRule, normaliseCategory, getCategoryDisplayName } from '@/lib/playbook-compliance'
+import jsPDF from 'jspdf'
 
 
 // ============================================================================
@@ -52,6 +53,7 @@ interface Playbook {
     playbookSummary?: string
     status: 'pending_parse' | 'parsing' | 'parsed' | 'review_required' | 'active' | 'inactive' | 'superseded' | 'parse_failed'
     isActive: boolean
+    contractTypeKey: string | null
     sourceFileName?: string
     sourceFilePath?: string
     rulesExtracted: number
@@ -161,20 +163,24 @@ function TabNavigation({ activeTab, onTabChange, pendingCount }: TabNavigationPr
 interface PlaybooksTabProps {
     playbooks: Playbook[]
     isLoading: boolean
-    onUpload: (file: File) => Promise<void>
+    onUpload: (file: File, contractTypeKey: string | null) => Promise<void>
     onActivate: (playbookId: string) => Promise<void>
     onDeactivate: (playbookId: string) => Promise<void>
     onParse: (playbookId: string, sourceFilePath: string, sourceFileName: string) => Promise<void>
     onDelete: (playbookId: string, sourceFilePath?: string) => Promise<void>
     onDownload: (sourceFilePath: string, fileName: string) => Promise<void>
     onRename: (playbookId: string, newName: string) => Promise<void>
+    onTypeChange: (playbookId: string, contractTypeKey: string | null) => Promise<void>
     onRefresh: () => void
 }
 
-function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate, onParse, onDelete, onDownload, onRename, onRefresh }: PlaybooksTabProps) {
+function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate, onParse, onDelete, onDownload, onRename, onTypeChange, onRefresh }: PlaybooksTabProps) {
     const [isDragging, setIsDragging] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [uploadError, setUploadError] = useState<string | null>(null)
+    const [uploadContractType, setUploadContractType] = useState<string | null>(null)
+    const [editingTypeId, setEditingTypeId] = useState<string | null>(null)
+    const [editTypeValue, setEditTypeValue] = useState<string | null>(null)
     const [parsingId, setParsingId] = useState<string | null>(null)
     const [parseError, setParseError] = useState<string | null>(null)
     const [parseProgress, setParseProgress] = useState<string | null>(null)
@@ -269,7 +275,7 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         setIsUploading(true)
         setUploadError(null)
         try {
-            await onUpload(file)
+            await onUpload(file, uploadContractType)
         } catch (e) {
             setUploadError(e instanceof Error ? e.message : 'Failed to upload')
         } finally {
@@ -353,6 +359,20 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
             {/* Upload Section */}
             <div className="mb-8">
                 <h3 className="text-lg font-semibold text-slate-800 mb-4">Upload Playbook</h3>
+                {/* Contract Type Selector */}
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Contract Type</label>
+                    <select
+                        value={uploadContractType || ''}
+                        onChange={(e) => setUploadContractType(e.target.value || null)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-sm"
+                    >
+                        <option value="">General (applies to all contract types)</option>
+                        {CONTRACT_TYPE_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{CONTRACT_TYPE_ICONS[opt.value] || ''} {opt.label}</option>
+                        ))}
+                    </select>
+                </div>
                 <div
                     onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                     onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
@@ -450,7 +470,35 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                             <h4 className="font-semibold text-slate-800">{p.playbookName}</h4>
                                         )}
                                         {getStatusBadge(p.status, p.isActive)}
+                                        {p.contractTypeKey ? (
+                                            <span className="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
+                                                {CONTRACT_TYPE_ICONS[p.contractTypeKey] || ''} {CONTRACT_TYPE_OPTIONS.find(o => o.value === p.contractTypeKey)?.label || p.contractTypeKey}
+                                            </span>
+                                        ) : (
+                                            <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-500 rounded-full">General</span>
+                                        )}
                                     </div>
+                                    {/* Inline Change Type editor */}
+                                    {editingTypeId === p.playbookId && (
+                                        <div className="flex items-center gap-2 mb-2 mt-1">
+                                            <select
+                                                value={editTypeValue || ''}
+                                                onChange={(e) => setEditTypeValue(e.target.value || null)}
+                                                className="px-2 py-1 text-sm border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            >
+                                                <option value="">General (all types)</option>
+                                                {CONTRACT_TYPE_OPTIONS.map(opt => (
+                                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                ))}
+                                            </select>
+                                            <button onClick={async () => { await onTypeChange(p.playbookId, editTypeValue); setEditingTypeId(null) }} className="p-1 text-emerald-600 hover:bg-emerald-100 rounded" title="Save">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                            </button>
+                                            <button onClick={() => setEditingTypeId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded" title="Cancel">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                    )}
                                     {renameError && renamingId === p.playbookId && (
                                         <p className="text-sm text-red-600 mb-2">{renameError}</p>
                                     )}
@@ -509,6 +557,16 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                     </svg>
                                                     Rename
+                                                </button>
+                                                {/* Change Type Option */}
+                                                <button
+                                                    onClick={() => { setEditingTypeId(p.playbookId); setEditTypeValue(p.contractTypeKey); setOpenMenuId(null) }}
+                                                    className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                                    </svg>
+                                                    Change Type
                                                 </button>
                                                 {/* Download Option */}
                                                 {p.sourceFilePath && (
@@ -763,6 +821,135 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
             console.error('Failed to open template for editing:', e)
             setEditingTemplateId(null)
         }
+    }
+
+    // --- View / Download state ---
+    const [viewingTemplate, setViewingTemplate] = useState<CompanyTemplate | null>(null)
+    const [templateClauses, setTemplateClauses] = useState<Record<string, any[]>>({})
+    const [clausesLoading, setClausesLoading] = useState<string | null>(null)
+
+    const fetchTemplateClauses = async (templateId: string): Promise<any[]> => {
+        if (templateClauses[templateId]) return templateClauses[templateId]
+
+        setClausesLoading(templateId)
+        try {
+            const supabase = createClient()
+            const { data, error } = await supabase
+                .from('template_clauses')
+                .select('*')
+                .eq('template_id', templateId)
+                .order('display_order', { ascending: true })
+
+            if (error) throw error
+            const clauses = data || []
+            setTemplateClauses(prev => ({ ...prev, [templateId]: clauses }))
+            return clauses
+        } catch (e) {
+            console.error('Failed to fetch template clauses:', e)
+            return []
+        } finally {
+            setClausesLoading(null)
+        }
+    }
+
+    const handleViewTemplate = async (template: CompanyTemplate) => {
+        await fetchTemplateClauses(template.templateId)
+        setViewingTemplate(template)
+    }
+
+    const groupClausesByCategory = (clauses: any[]) => {
+        const groups = new Map<string, { displayName: string; clauses: any[] }>()
+        for (const clause of clauses) {
+            const cat = clause.category || clause.category_name || 'Other'
+            const normCat = normaliseCategory(cat)
+            if (!groups.has(normCat)) {
+                groups.set(normCat, { displayName: getCategoryDisplayName(normCat), clauses: [] })
+            }
+            groups.get(normCat)!.clauses.push(clause)
+        }
+        return Array.from(groups.values()).sort((a, b) => a.displayName.localeCompare(b.displayName))
+    }
+
+    const handleDownloadPDF = async (template: CompanyTemplate) => {
+        const clauses = await fetchTemplateClauses(template.templateId)
+        if (clauses.length === 0) return
+
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+        const pageWidth = doc.internal.pageSize.getWidth()
+        const margin = 20
+        const contentWidth = pageWidth - margin * 2
+        let y = margin
+
+        const checkPageBreak = (needed: number) => {
+            if (y + needed > doc.internal.pageSize.getHeight() - margin) {
+                doc.addPage()
+                y = margin
+            }
+        }
+
+        // Header
+        doc.setFontSize(20)
+        doc.setFont('helvetica', 'bold')
+        doc.text(template.templateName, margin, y)
+        y += 10
+
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(100, 100, 100)
+        const contractTypeLabel = CONTRACT_TYPE_OPTIONS.find(o => o.value === template.contractType)?.label || template.contractType
+        doc.text(`${contractTypeLabel}  ·  ${template.clauseCount} clauses  ·  ${new Date(template.createdAt).toLocaleDateString()}`, margin, y)
+        y += 4
+
+        doc.setDrawColor(200, 200, 200)
+        doc.line(margin, y, pageWidth - margin, y)
+        y += 10
+        doc.setTextColor(0, 0, 0)
+
+        // Clauses grouped by category
+        const groups = groupClausesByCategory(clauses)
+        for (const group of groups) {
+            checkPageBreak(20)
+
+            // Category heading
+            doc.setFontSize(13)
+            doc.setFont('helvetica', 'bold')
+            doc.setTextColor(60, 60, 120)
+            doc.text(group.displayName.toUpperCase(), margin, y)
+            y += 3
+            doc.setDrawColor(180, 180, 220)
+            doc.line(margin, y, margin + 60, y)
+            y += 8
+            doc.setTextColor(0, 0, 0)
+
+            for (const clause of group.clauses) {
+                const clauseText = clause.default_text || clause.clause_content || ''
+                const clauseNumber = clause.clause_number || clause.display_number || ''
+                const clauseName = clause.clause_name || 'Untitled'
+
+                // Clause name
+                checkPageBreak(15)
+                doc.setFontSize(11)
+                doc.setFont('helvetica', 'bold')
+                doc.text(`${clauseNumber}${clauseNumber ? '. ' : ''}${clauseName}`, margin, y)
+                y += 6
+
+                // Clause text
+                if (clauseText) {
+                    doc.setFontSize(9.5)
+                    doc.setFont('helvetica', 'normal')
+                    const lines = doc.splitTextToSize(clauseText, contentWidth)
+                    for (const line of lines) {
+                        checkPageBreak(5)
+                        doc.text(line, margin, y)
+                        y += 4.5
+                    }
+                }
+                y += 6
+            }
+            y += 4
+        }
+
+        doc.save(`${template.templateName}.pdf`)
     }
 
     const handleFileDrop = (file: File) => {
@@ -1156,6 +1343,31 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                                             )}
                                         </button>
                                     )}
+                                    {template.status === 'ready' && template.clauseCount > 0 && (
+                                        <>
+                                            <button
+                                                onClick={() => handleViewTemplate(template)}
+                                                disabled={clausesLoading === template.templateId}
+                                                className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                                            >
+                                                {clausesLoading === template.templateId ? (
+                                                    <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+                                                ) : (
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                                )}
+                                                View
+                                            </button>
+                                            <button
+                                                onClick={() => handleDownloadPDF(template)}
+                                                disabled={clausesLoading === template.templateId}
+                                                className="px-3 py-1.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                                                title="Download as PDF"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                                PDF
+                                            </button>
+                                        </>
+                                    )}
                                     {template.isActive ? (
                                         <button onClick={() => onToggleActive(template.templateId, false)} className="px-3 py-1.5 text-sm font-medium bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">Deactivate</button>
                                     ) : (
@@ -1175,6 +1387,82 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* View Template Modal */}
+            {viewingTemplate && templateClauses[viewingTemplate.templateId] && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 flex-shrink-0">
+                            <div>
+                                <h3 className="text-lg font-semibold text-slate-800">{viewingTemplate.templateName}</h3>
+                                <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                                    <span>{CONTRACT_TYPE_OPTIONS.find(o => o.value === viewingTemplate.contractType)?.label || viewingTemplate.contractType}</span>
+                                    <span>&middot;</span>
+                                    <span>{viewingTemplate.clauseCount} clauses</span>
+                                    <span>&middot;</span>
+                                    <span>{new Date(viewingTemplate.createdAt).toLocaleDateString()}</span>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setViewingTemplate(null)}
+                                className="p-1.5 hover:bg-slate-100 rounded-lg transition"
+                            >
+                                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto px-6 py-4">
+                            {groupClausesByCategory(templateClauses[viewingTemplate.templateId]).map((group) => (
+                                <div key={group.displayName} className="mb-6">
+                                    <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-3 pb-1 border-b border-indigo-100">
+                                        {group.displayName}
+                                    </h4>
+                                    <div className="space-y-4">
+                                        {group.clauses.map((clause: any, idx: number) => (
+                                            <div key={clause.template_clause_id || idx} className="rounded-lg border border-slate-200 p-4">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className="text-sm font-semibold text-slate-800">
+                                                        {clause.clause_number || clause.display_number || ''}{(clause.clause_number || clause.display_number) ? '. ' : ''}{clause.clause_name || 'Untitled'}
+                                                    </span>
+                                                    {clause.clarence_position != null && (
+                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">
+                                                            Position {clause.clarence_position}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                                    {clause.default_text || clause.clause_content || 'No content available'}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200 flex-shrink-0">
+                            <button
+                                onClick={() => { handleDownloadPDF(viewingTemplate); }}
+                                className="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded-lg flex items-center gap-2"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Download PDF
+                            </button>
+                            <button
+                                onClick={() => setViewingTemplate(null)}
+                                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
@@ -1356,7 +1644,7 @@ function CompanyAdminContent() {
             const { data, error } = await supabase.from('company_playbooks').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
             console.log('Playbooks:', { data, error })
             if (error) { if (error.code === '42P01') { setPlaybooks([]); return }; throw error }
-            setPlaybooks((data || []).map(p => ({ playbookId: p.playbook_id, playbookName: p.playbook_name, playbookVersion: p.playbook_version, playbookDescription: p.playbook_description, playbookSummary: p.playbook_summary, status: p.status, isActive: p.is_active || false, sourceFileName: p.source_file_name, sourceFilePath: p.source_file_path, rulesExtracted: p.rules_extracted || 0, aiConfidenceScore: p.ai_confidence_score, effectiveDate: p.effective_date, expiryDate: p.expiry_date, createdAt: p.created_at, createdBy: p.created_by, parsingError: p.parsing_error })))
+            setPlaybooks((data || []).map(p => ({ playbookId: p.playbook_id, playbookName: p.playbook_name, playbookVersion: p.playbook_version, playbookDescription: p.playbook_description, playbookSummary: p.playbook_summary, status: p.status, isActive: p.is_active || false, contractTypeKey: p.contract_type_key || null, sourceFileName: p.source_file_name, sourceFilePath: p.source_file_path, rulesExtracted: p.rules_extracted || 0, aiConfidenceScore: p.ai_confidence_score, effectiveDate: p.effective_date, expiryDate: p.expiry_date, createdAt: p.created_at, createdBy: p.created_by, parsingError: p.parsing_error })))
         } catch (e) { console.error('Load playbooks error:', e); setPlaybooks([]) } finally { setPlaybooksLoading(false) }
     }, [])
 
@@ -1417,7 +1705,7 @@ function CompanyAdminContent() {
     }, [])
 
 
-    const handlePlaybookUpload = async (file: File) => {
+    const handlePlaybookUpload = async (file: File, contractTypeKey: string | null = null) => {
         if (!userInfo?.companyId) return
         const supabase = createClient()
         let companyId = userInfo.companyId
@@ -1432,7 +1720,8 @@ function CompanyAdminContent() {
             source_file_name: file.name,
             source_file_path: fileName,
             status: 'pending_parse',
-            created_by_user_id: userInfo?.userId
+            created_by_user_id: userInfo?.userId,
+            contract_type_key: contractTypeKey,
         })
         if (insertError) throw new Error(insertError.message)
         await loadPlaybooks(companyId!)
@@ -1592,7 +1881,15 @@ function CompanyAdminContent() {
 
     const handlePlaybookActivate = async (playbookId: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
-        await supabase.from('company_playbooks').update({ is_active: false }).eq('company_id', userInfo.companyId).eq('is_active', true)
+        // Only deactivate other playbooks of the same contract type
+        const targetPlaybook = playbooks.find(p => p.playbookId === playbookId)
+        if (!targetPlaybook) return
+        const typeKey = targetPlaybook.contractTypeKey
+        if (typeKey) {
+            await supabase.from('company_playbooks').update({ is_active: false, status: 'inactive' }).eq('company_id', userInfo.companyId).eq('contract_type_key', typeKey).eq('is_active', true)
+        } else {
+            await supabase.from('company_playbooks').update({ is_active: false, status: 'inactive' }).eq('company_id', userInfo.companyId).is('contract_type_key', null).eq('is_active', true)
+        }
         await supabase.from('company_playbooks').update({ is_active: true, activated_at: new Date().toISOString(), status: 'active' }).eq('playbook_id', playbookId)
         await loadPlaybooks(userInfo.companyId)
     }
@@ -1600,6 +1897,16 @@ function CompanyAdminContent() {
     const handlePlaybookDeactivate = async (playbookId: string) => {
         if (!userInfo?.companyId) return; const supabase = createClient()
         await supabase.from('company_playbooks').update({ is_active: false, status: 'inactive' }).eq('playbook_id', playbookId)
+        await loadPlaybooks(userInfo.companyId)
+    }
+
+    const handlePlaybookTypeChange = async (playbookId: string, contractTypeKey: string | null) => {
+        if (!userInfo?.companyId) return; const supabase = createClient()
+        const { error } = await supabase.from('company_playbooks').update({ contract_type_key: contractTypeKey || null, updated_at: new Date().toISOString() }).eq('playbook_id', playbookId)
+        if (error) {
+            if (error.code === '23505') { alert('There is already an active playbook for this contract type. Deactivate it first or choose a different type.'); return }
+            console.error('Failed to update playbook type:', error); return
+        }
         await loadPlaybooks(userInfo.companyId)
     }
 
@@ -1863,7 +2170,7 @@ function CompanyAdminContent() {
             <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} pendingCount={pendingCount} />
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-                    {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
+                    {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                     {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
                     {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
                     {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}

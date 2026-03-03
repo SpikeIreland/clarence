@@ -355,15 +355,10 @@ function QuickContractStudioContent() {
             setPlaybookLoading(true)
             try {
                 const supabase = createClient()
+                const { findActivePlaybook } = await import('@/lib/playbook-loader')
 
-                const { data: playbookData, error: pbError } = await supabase
-                    .from('company_playbooks')
-                    .select('playbook_id, playbook_name, company_id')
-                    .eq('company_id', userInfo!.companyId!)
-                    .eq('is_active', true)
-                    .single()
-
-                if (pbError || !playbookData) return
+                const playbookData = await findActivePlaybook(userInfo!.companyId!, contract?.contractTypeKey || null)
+                if (!playbookData) return
 
                 const { data: rulesData, error: rulesError } = await supabase
                     .from('playbook_rules')
@@ -390,7 +385,7 @@ function QuickContractStudioContent() {
         }
 
         loadPlaybookRules()
-    }, [userInfo?.companyId, userInfo?.userId, contract?.uploadedByUserId, isTemplateMode])
+    }, [userInfo?.companyId, userInfo?.userId, contract?.uploadedByUserId, contract?.contractTypeKey, isTemplateMode])
 
     // Clause events & agreement tracking
     const [clauseEvents, setClauseEvents] = useState<ClauseEvent[]>([])

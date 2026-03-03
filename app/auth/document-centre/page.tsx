@@ -80,6 +80,7 @@ interface QuickContractData {
     contractId: string
     contractName: string
     contractType: string
+    contractTypeKey: string | null
     status: string
     clauseCount: number
     totalClauses: number
@@ -1405,6 +1406,8 @@ function DocumentCentreContent() {
     const [isChatLoading, setIsChatLoading] = useState(false)
     const [isGeneratingDocument, setIsGeneratingDocument] = useState(false)
     const [isGeneratingPackage, setIsGeneratingPackage] = useState(false)
+    const [isGeneratingAll, setIsGeneratingAll] = useState(false)
+    const [generatingAllProgress, setGeneratingAllProgress] = useState({ done: 0, total: 0 })
 
 
     const [playbookCompliance, setPlaybookCompliance] = useState<PlaybookComplianceData>({
@@ -1422,7 +1425,8 @@ function DocumentCentreContent() {
         contractId: string,
         userId: string,
         companyId: string | null,
-        uploadedByUserId: string | null
+        uploadedByUserId: string | null,
+        contractTypeKey: string | null = null
     ) => {
         // Only show for initiator (the person who uploaded the contract)
         const isInitiator = userId === uploadedByUserId
@@ -1434,15 +1438,11 @@ function DocumentCentreContent() {
         setPlaybookCompliance(prev => ({ ...prev, isLoading: true }))
 
         try {
-            // Step 1: Check for active playbook
-            const { data: playbookData, error: playbookError } = await supabase
-                .from('company_playbooks')
-                .select('playbook_id, playbook_name, company_id')
-                .eq('company_id', companyId)
-                .eq('is_active', true)
-                .single()
+            // Step 1: Find best-matching active playbook (type-specific > general > any)
+            const { findActivePlaybook } = await import('@/lib/playbook-loader')
+            const playbookData = await findActivePlaybook(companyId, contractTypeKey)
 
-            if (playbookError || !playbookData) {
+            if (!playbookData) {
                 // No active playbook — hide indicator
                 setPlaybookCompliance(prev => ({ ...prev, isVisible: false, isLoading: false }))
                 return
@@ -1717,6 +1717,7 @@ function DocumentCentreContent() {
                 contractId: contractData.contract_id,
                 contractName: contractData.contract_name || 'Untitled Contract',
                 contractType: contractData.detected_contract_type || contractData.contract_type || 'Contract',
+                contractTypeKey: contractData.contract_type_key || null,
                 status: contractData.status || 'unknown',
                 clauseCount: contractData.clause_count || leafClauses.length,
                 totalClauses: leafClauses.length,
@@ -2201,7 +2202,8 @@ function DocumentCentreContent() {
                         contractId,
                         user.userId || '',
                         qcData.companyId,
-                        qcData.uploadedByUserId
+                        qcData.uploadedByUserId,
+                        qcData.contractTypeKey
                     )
                 } else {
                     // Failed to load QC data - redirect to dashboard
@@ -2498,6 +2500,170 @@ function DocumentCentreContent() {
             setIsGeneratingDocument(false);
         }
     };
+
+    // ============================================================================
+    // SECTION 11D-1B: GENERATE ALL DOCUMENTS HANDLER
+    // ============================================================================
+    // Queues generation for every document that hasn't been generated yet.
+    // Documents are generated sequentially to avoid overwhelming the backend.
+
+    const handleGenerateAll = async () => {
+        if (!userInfo || isGeneratingAll) return
+
+        const contextId = mode === 'quick_contract'
+            ? quickContract?.contractId
+            : session?.sessionId
+        if (!contextId) return
+
+        // Find documents that can be generated (in_progress status = not yet generated)
+        const pendingDocs = documents.filter(d =>
+            d.status === 'in_progress' && d.canGenerate !== false
+        )
+
+        if (pendingDocs.length === 0) {
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: 'All documents have already been generated. You can regenerate individual documents by selecting them and clicking Regenerate.',
+                createdAt: new Date().toISOString()
+            }])
+            return
+        }
+
+        setIsGeneratingAll(true)
+        setGeneratingAllProgress({ done: 0, total: pendingDocs.length })
+
+        // CLARENCE message
+        setChatMessages(prev => [...prev, {
+            messageId: `msg-${Date.now()}`,
+            sessionId: contextId,
+            sender: 'clarence',
+            message: `Generating ${pendingDocs.length} document${pendingDocs.length > 1 ? 's' : ''}. This will take a few minutes \u2014 I'll update you as each one completes.`,
+            createdAt: new Date().toISOString()
+        }])
+
+        const endpointMap = mode === 'quick_contract' ? QC_ENDPOINTS : MEDIATION_ENDPOINTS
+        let successCount = 0
+        let failCount = 0
+
+        for (const doc of pendingDocs) {
+            const endpoint = endpointMap[doc.id]
+            if (!endpoint) {
+                failCount++
+                setGeneratingAllProgress(prev => ({ ...prev, done: prev.done + 1 }))
+                continue
+            }
+
+            // Mark this doc as generating
+            setDocuments(prev => prev.map(d =>
+                d.id === doc.id ? { ...d, status: 'generating' as DocumentStatus, progress: 0 } : d
+            ))
+            if (selectedDocument?.id === doc.id) {
+                setSelectedDocument(prev => prev ? { ...prev, status: 'generating' as DocumentStatus, progress: 0 } : null)
+            }
+
+            try {
+                const requestBody = mode === 'quick_contract'
+                    ? {
+                        contract_id: quickContract?.contractId,
+                        user_id: userInfo.userId,
+                        mode: 'quick_contract',
+                        format: 'pdf',
+                        regenerate: false
+                    }
+                    : {
+                        session_id: session?.sessionId,
+                        user_id: userInfo.userId,
+                        provider_id: session?.providerId,
+                        mode: 'mediation',
+                        format: 'pdf',
+                        regenerate: false
+                    }
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                })
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+                const result = await response.json()
+
+                if (result.success) {
+                    const newDownloadUrl = result.downloads?.pdf || result.pdf_public_url
+                    const newGeneratedAt = result.generated_at || new Date().toISOString()
+                    const newDocDbId = result.document_id
+
+                    // Persist URL to DB (same logic as single generate)
+                    if (newDocDbId && newDownloadUrl) {
+                        const storageBase = 'https://wlrlkvqiakaiydfqqdmu.supabase.co/storage/v1/object/public/documents/'
+                        const relativePath = newDownloadUrl.startsWith(storageBase)
+                            ? newDownloadUrl.replace(storageBase, '') : null
+                        const updateData: Record<string, unknown> = {
+                            generation_params: JSON.stringify({ public_url: newDownloadUrl, persisted_by: 'document_centre_frontend' }),
+                            updated_at: new Date().toISOString()
+                        }
+                        if (relativePath) updateData.storage_path_pdf = relativePath
+                        supabase.from('generated_documents').update(updateData).eq('document_id', newDocDbId).then(() => {})
+                    }
+
+                    // Update document state
+                    setDocuments(prev => prev.map(d =>
+                        d.id === doc.id
+                            ? { ...d, status: 'ready' as DocumentStatus, progress: 100, downloadUrl: newDownloadUrl, generatedAt: newGeneratedAt, documentDbId: newDocDbId }
+                            : d
+                    ))
+                    if (selectedDocument?.id === doc.id) {
+                        setSelectedDocument(prev => prev ? { ...prev, status: 'ready' as DocumentStatus, progress: 100, downloadUrl: newDownloadUrl, generatedAt: newGeneratedAt, documentDbId: newDocDbId } : null)
+                    }
+
+                    successCount++
+                } else {
+                    throw new Error(result.error || 'Generation failed')
+                }
+
+            } catch (err) {
+                console.error(`Generate All — error generating ${doc.id}:`, err)
+                // Revert to in_progress so user can retry individually
+                setDocuments(prev => prev.map(d =>
+                    d.id === doc.id ? { ...d, status: 'in_progress' as DocumentStatus, progress: 0 } : d
+                ))
+                if (selectedDocument?.id === doc.id) {
+                    setSelectedDocument(prev => prev ? { ...prev, status: 'in_progress' as DocumentStatus, progress: 0 } : null)
+                }
+                failCount++
+            }
+
+            setGeneratingAllProgress(prev => ({ ...prev, done: prev.done + 1 }))
+        }
+
+        // Final summary message
+        let summaryMsg = ''
+        if (failCount === 0) {
+            summaryMsg = `All ${successCount} document${successCount > 1 ? 's' : ''} generated successfully. You can now download individual PDFs or the full Evidence Package.`
+        } else if (successCount === 0) {
+            summaryMsg = `Generation failed for all ${failCount} document${failCount > 1 ? 's' : ''}. Please try again or generate them individually.`
+        } else {
+            summaryMsg = `${successCount} of ${pendingDocs.length} documents generated. ${failCount} failed \u2014 you can retry those individually.`
+        }
+
+        setChatMessages(prev => [...prev, {
+            messageId: `msg-${Date.now()}`,
+            sessionId: contextId,
+            sender: 'clarence',
+            message: summaryMsg,
+            createdAt: new Date().toISOString()
+        }])
+
+        eventLogger.completed('documentation', 'generate_all_completed', {
+            contextId, mode, successCount, failCount, totalAttempted: pendingDocs.length
+        })
+
+        setIsGeneratingAll(false)
+        setGeneratingAllProgress({ done: 0, total: 0 })
+    }
 
     const handleDownloadDocument = async (docId: string, format: 'pdf' | 'docx') => {
         const doc = documents.find(d => d.id === docId)

@@ -341,7 +341,7 @@ function TrainingStudioPage() {
                         playbookId: pb.playbook_id,
                         playbookName: pb.playbook_name,
                         playbookDescription: pb.playbook_description,
-                        contractType: pb.contract_type,
+                        contractType: pb.contract_type_key,
                         isActive: pb.is_active,
                         rulesCount: count || 0,
                         status: pb.status || 'active',
@@ -1466,7 +1466,14 @@ function TrainingStudioPage() {
                                         >
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <h4 className="font-medium text-slate-800">{playbook.playbookName}</h4>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-medium text-slate-800">{playbook.playbookName}</h4>
+                                                        {playbook.contractType && (
+                                                            <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">
+                                                                {playbook.contractType.toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {playbook.playbookDescription && (
                                                         <p className="text-sm text-slate-500 mt-1">{playbook.playbookDescription}</p>
                                                     )}
