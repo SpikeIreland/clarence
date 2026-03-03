@@ -261,6 +261,13 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         }
     }, [renamingId])
 
+    // Clear progress message when no playbook is in 'parsing' state (polling completed)
+    useEffect(() => {
+        if (parseProgress && !playbooks.some(p => p.status === 'parsing')) {
+            setParseProgress(null)
+        }
+    }, [playbooks, parseProgress])
+
     const handleFileUpload = async (file: File) => {
         const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
         if (!allowedTypes.includes(file.type)) { setUploadError('Please upload a PDF or Word document'); return }
@@ -291,10 +298,12 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         setParseProgress('Downloading document...')
         try {
             await onParse(playbookId, sourceFilePath, sourceFileName)
+            // Parse request sent — N8N processes in background. Show status message.
+            setParseProgress('Parsing in progress — this may take a few minutes...')
+            setParsingId(null)
         } catch (e) {
             console.error('Parse error:', e)
             setParseError(e instanceof Error ? e.message : 'Failed to parse')
-        } finally {
             setParsingId(null)
             setParseProgress(null)
         }
@@ -1831,7 +1840,27 @@ function CompanyAdminContent() {
             throw e
         }
 
-        setTimeout(() => { if (userInfo?.companyId) loadPlaybooks(userInfo.companyId) }, 2000)
+        // Poll for completion — the N8N workflow responds immediately (202) but
+        // parsing continues in the background for several minutes.
+        if (userInfo?.companyId) {
+            const companyId = userInfo.companyId
+            const pollInterval = setInterval(async () => {
+                const { data } = await supabase
+                    .from('company_playbooks')
+                    .select('status')
+                    .eq('playbook_id', playbookId)
+                    .single()
+                if (data && data.status !== 'parsing') {
+                    clearInterval(pollInterval)
+                    await loadPlaybooks(companyId)
+                }
+            }, 10000) // Check every 10 seconds
+            // Safety: stop polling after 10 minutes
+            setTimeout(() => {
+                clearInterval(pollInterval)
+                loadPlaybooks(companyId)
+            }, 600000)
+        }
     }
 
     // --- Helper: Extract text from playbook file (client-side) ---
