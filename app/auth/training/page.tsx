@@ -23,7 +23,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
@@ -248,7 +248,9 @@ function formatDate(dateStr: string): string {
 
 export default function TrainingStudioPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const supabase = createClient()
+    const deepLinkTemplateId = searchParams.get('template_id')
 
     // ==========================================================================
     // SECTION 6: STATE DECLARATIONS
@@ -524,6 +526,30 @@ export default function TrainingStudioPage() {
             loadCompanyPlaybooks()
         }
     }, [userInfo?.companyId, loadCompanyPlaybooks])
+
+    // Deep-link: auto-open practice modal when arriving with ?template_id=xxx
+    const deepLinkHandledRef = useRef(false)
+    useEffect(() => {
+        if (!deepLinkTemplateId || deepLinkHandledRef.current) return
+
+        // Switch to the choose-contract tab
+        setActiveTab('choose-contract')
+
+        // Templates load lazily — trigger load if empty
+        if (templates.length === 0) {
+            loadTemplates()
+            return // Wait for templates to load, this effect re-runs
+        }
+
+        // Find the template and auto-open practice modal
+        const target = templates.find(t => t.templateId === deepLinkTemplateId)
+        if (target) {
+            deepLinkHandledRef.current = true
+            handleTemplateClick(target)
+            // Clean up URL to prevent re-triggering
+            window.history.replaceState({}, '', '/auth/training')
+        }
+    }, [deepLinkTemplateId, templates, loadTemplates])
 
     // ==========================================================================
     // SECTION 9: EVENT HANDLERS (Quick Start / Scenario)

@@ -5,6 +5,8 @@ import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
 import { PartyChatPanel } from './components/party-chat-component'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import TrainingScorecard from './components/TrainingScorecard'
+import TrainingPlaybookCompliance from './components/TrainingPlaybookCompliance'
 // ROLE MATRIX Phase 2: Dynamic position labels
 import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
 import PositionScaleIndicator from '@/app/components/PositionScaleIndicator'
@@ -2076,15 +2078,15 @@ function TrainingModeBanner({ scenarioName, aiPersonality, onExitTraining }: Tra
                         <span>No real contracts affected</span>
                     </div>
 
-                    {/* Exit Training Button */}
+                    {/* End Training Button */}
                     <button
                         onClick={onExitTraining}
                         className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition flex items-center gap-1.5"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        Exit Training
+                        End Training
                     </button>
                 </div>
             </div>
@@ -2136,6 +2138,7 @@ function ContractStudioContent() {
     const [aiThinking, setAiThinking] = useState(false)
     const [aiThinkingClause, setAiThinkingClause] = useState<string | null>(null)
     const [trainingAvatarInfo, setTrainingAvatarInfo] = useState<TrainingAvatarInfo | null>(null)
+    const [showTrainingScorecard, setShowTrainingScorecard] = useState(false)
 
     // ==========================================================================
     // SIGN OUT FUNCTION
@@ -4594,6 +4597,11 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                         total: result.sessionState.totalClauses,
                         complete: result.sessionState.isComplete
                     })
+
+                    // Auto-show scorecard when all clauses are agreed
+                    if (result.sessionState.isComplete) {
+                        setShowTrainingScorecard(true)
+                    }
                 }
 
             } else {
@@ -8006,7 +8014,19 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 <TrainingModeBanner
                     scenarioName={trainingAvatarInfo?.scenarioName}
                     aiPersonality={trainingAvatarInfo?.aiPersonality}
-                    onExitTraining={() => router.push('/auth/training')}
+                    onExitTraining={() => setShowTrainingScorecard(true)}
+                />
+            )}
+            {/* Training Scorecard Overlay */}
+            {showTrainingScorecard && (
+                <TrainingScorecard
+                    clauses={clauses}
+                    chatMessages={chatMessages}
+                    trainingAvatarInfo={trainingAvatarInfo}
+                    sessionCreatedAt={session?.createdAt || null}
+                    sessionId={session?.sessionId || null}
+                    onClose={() => setShowTrainingScorecard(false)}
+                    onBackToTraining={() => router.push('/auth/training')}
                 />
             )}
             <PartyStatusBanner />
@@ -8157,6 +8177,16 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
                     </div>
+
+                    {/* Playbook Compliance - Training Mode Only */}
+                    {isTrainingMode && session?.sessionId && (
+                        <div className="flex-shrink-0 border-b border-slate-200">
+                            <TrainingPlaybookCompliance
+                                sessionId={session.sessionId}
+                                clauses={clauses}
+                            />
+                        </div>
+                    )}
 
                     {/* Clause Tree */}
                     <div className="flex-1 overflow-y-auto p-2">

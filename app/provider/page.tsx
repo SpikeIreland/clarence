@@ -627,6 +627,17 @@ function ProviderAuthContent() {
             localStorage.setItem('clarence_auth', JSON.stringify(clarenceAuth));
 
             // ================================================================
+            // STEP 2B: Check for QC Lobby return URL
+            // (Set by lobby page when recipient wasn't authenticated)
+            // ================================================================
+            const lobbyReturn = sessionStorage.getItem('clarence_qc_lobby_return');
+            if (lobbyReturn) {
+                sessionStorage.removeItem('clarence_qc_lobby_return');
+                window.location.href = lobbyReturn;
+                return;
+            }
+
+            // ================================================================
             // STEP 3: Check for QC redirect from sessionStorage
             // (Set by QC Token Page 'Enter Studio' button - Task 2)
             // ================================================================

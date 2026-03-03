@@ -170,9 +170,10 @@ function ProviderLobbyContent() {
                 const { data: { user: authUser } } = await supabase.auth.getUser()
 
                 if (!authUser) {
-                    setError('Please sign in to view this contract. If you don\'t have an account, register first and then click the link again.')
-                    setLoading(false)
-                    return
+                    // Store return URL so provider page can redirect back after login
+                    sessionStorage.setItem('clarence_qc_lobby_return', `/auth/quick-contract/review/${accessToken}`)
+                    window.location.href = '/provider'
+                    return // keep loading=true to prevent flash before redirect
                 }
 
                 // ---------------------------------------------------------

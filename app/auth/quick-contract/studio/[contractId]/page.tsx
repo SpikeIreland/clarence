@@ -322,6 +322,8 @@ function QuickContractStudioContent() {
     const [templateName, setTemplateName] = useState('')
     const [savingTemplate, setSavingTemplate] = useState(false)
     const [templateSaved, setTemplateSaved] = useState(false)
+    const [savedTemplateId, setSavedTemplateId] = useState<string | null>(null)
+    const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     // Playbook compliance (initiator only, non-template mode)
     const [playbookRules, setPlaybookRules] = useState<PlaybookRule[]>([])
@@ -521,12 +523,15 @@ function QuickContractStudioContent() {
                     if (hasRedirected.current) return
                     hasRedirected.current = true
 
-                    // Store the return URL in sessionStorage (NOT as a URL param).
-                    // URL params cause the Provider page to enter an infinite
-                    // React re-render loop due to GoTrueClient/searchParams interaction.
-                    const returnUrl = `/auth/quick-contract/studio/${contractId}`
-                    sessionStorage.setItem('clarence_qc_redirect', returnUrl)
-                    console.log('[QC Studio] Stored redirect in sessionStorage:', returnUrl)
+                    // Store redirect context as JSON (NOT a plain URL string).
+                    // The Provider page JSON.parses this and checks for contractId + source.
+                    // Matches the format used by /qc/[token] (the public recipient page).
+                    const qcRedirect = {
+                        contractId: contractId,
+                        source: 'qc_token_page'
+                    }
+                    sessionStorage.setItem('clarence_qc_redirect', JSON.stringify(qcRedirect))
+                    console.log('[QC Studio] Stored redirect in sessionStorage:', qcRedirect)
                     window.location.href = '/provider'
                     return
                 }
@@ -1817,7 +1822,8 @@ function QuickContractStudioContent() {
 
             console.log(`✨ ${certifiedClauses.length} pre-certified clauses ${editTemplateId ? 'updated' : 'saved'}`)
             setTemplateSaved(true)
-            setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
+            setSavedTemplateId(targetTemplateId)
+            redirectTimeoutRef.current = setTimeout(() => router.push(isCompanyTemplate ? '/auth/company-admin' : '/auth/contracts'), 1500)
 
         } catch (error) {
             console.error('Failed to save template:', error)
@@ -1830,9 +1836,18 @@ function QuickContractStudioContent() {
         }
     }
 
+    // Navigate to Training Studio with saved template pre-selected
+    const handlePracticeWithTemplate = () => {
+        if (redirectTimeoutRef.current) {
+            clearTimeout(redirectTimeoutRef.current)
+            redirectTimeoutRef.current = null
+        }
+        router.push(`/auth/training?template_id=${savedTemplateId}`)
+    }
+
     // ========================================================================
     // SECTION 4D-1A: LOAD PARTY INFO
-    // 
+    //
     // Strategy:
     //   - INITIATOR viewing: load respondent from qc_recipients (own data, no RLS issue)
     //                        load own info from userInfo (already in state)
@@ -5507,13 +5522,38 @@ INSTRUCTIONS:
                         </>
                     ) : (
                         <div className="flex-1 flex items-center justify-center">
-                            <div className="text-center">
-                                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                </div>
-                                <p className="text-slate-500 text-lg">Select a clause to view details</p>
+                            <div className="text-center max-w-md px-6">
+                                {clauses.length === 0 && contract ? (
+                                    <>
+                                        <div className="w-20 h-20 bg-violet-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <svg className="w-10 h-10 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-slate-700 mb-2">
+                                            {contract.contractName}
+                                        </h3>
+                                        <p className="text-slate-500 text-sm mb-4">
+                                            {['processing', 'certifying', 'uploading', 'pending'].includes(contract.status)
+                                                ? 'CLARENCE is processing this contract. Clauses will appear shortly.'
+                                                : 'No clauses are available for this contract yet. Please check back shortly or contact the sender.'}
+                                        </p>
+                                        {!isInitiator && (
+                                            <p className="text-xs text-slate-400">
+                                                You are the receiving party on this contract.
+                                            </p>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <svg className="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                        </div>
+                                        <p className="text-slate-500 text-lg">Select a clause to view details</p>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
@@ -5882,13 +5922,28 @@ INSTRUCTIONS:
                                     </svg>
                                 </div>
                                 <h3 className="text-lg font-semibold text-slate-800 mb-2">{editTemplateId ? 'Template Updated!' : 'Template Saved!'}</h3>
-                                <p className="text-sm text-slate-500">
+                                <p className="text-sm text-slate-500 mb-6">
                                     {editTemplateId
-                                        ? 'Template updated successfully. Redirecting to Company Admin...'
+                                        ? 'Your template has been updated successfully.'
                                         : isCompanyTemplate
-                                            ? 'Company template created. Redirecting to Company Admin...'
-                                            : 'Redirecting to your template library...'}
+                                            ? 'Company template created successfully.'
+                                            : 'Template saved to your library.'}
                                 </p>
+                                <div className="flex flex-col gap-3">
+                                    <button
+                                        onClick={handlePracticeWithTemplate}
+                                        className="w-full px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 text-sm"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Practice with AI
+                                    </button>
+                                    <p className="text-xs text-slate-400">
+                                        Redirecting to {isCompanyTemplate ? 'Company Admin' : 'Contract Library'}...
+                                    </p>
+                                </div>
                             </div>
                         ) : (
                             <>

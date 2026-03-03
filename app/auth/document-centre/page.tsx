@@ -10,6 +10,19 @@ import {
     type ContractClause,
     type ComplianceResult,
 } from '@/lib/playbook-compliance'
+import SigningPanelNew from '@/app/components/SigningPanel'
+import EntityConfirmationModal from '@/app/components/EntityConfirmationModal'
+import SigningCeremonyModal from '@/app/components/SigningCeremonyModal'
+import {
+    type SigningConfirmation,
+    type ContractSignature,
+    type SigningState,
+    type EntityConfirmationFormData,
+    deriveSigningStatus,
+    hashFileFromUrl,
+    generateConsentText,
+    buildInitialFormData,
+} from '@/lib/signing'
 
 
 // ============================================================================
@@ -1540,7 +1553,7 @@ function DocumentCentreContent() {
     } | null>(null)
 
     // ============================================================================
-    // SECTION 11A-2: SIGNING CEREMONY STATE
+    // SECTION 11A-2: SIGNING CEREMONY STATE (Entity Confirmation + Signing)
     // ============================================================================
 
     const [signatures, setSignatures] = useState<SignatureRecord[]>([])
@@ -1549,6 +1562,25 @@ function DocumentCentreContent() {
     const [isSigning, setIsSigning] = useState(false)
     const [isComputingHash, setIsComputingHash] = useState(false)
     const [contractHash, setContractHash] = useState<string | null>(null)
+
+    // Entity confirmation state
+    const [signingState, setSigningState] = useState<SigningState>({
+        initiatorConfirmation: null,
+        respondentConfirmation: null,
+        initiatorSignature: null,
+        respondentSignature: null,
+        contractHash: null,
+        status: 'awaiting_confirmations',
+        isLoading: true,
+    })
+    const [showEntityConfirmationModal, setShowEntityConfirmationModal] = useState(false)
+    const [showNewSigningModal, setShowNewSigningModal] = useState(false)
+    const [isSubmittingConfirmation, setIsSubmittingConfirmation] = useState(false)
+    const [currentPartyRole, setCurrentPartyRole] = useState<'initiator' | 'respondent' | null>(null)
+    const [entityFormInitialData, setEntityFormInitialData] = useState<EntityConfirmationFormData>({
+        entityName: '', registrationNumber: '', jurisdiction: '',
+        registeredAddress: '', signatoryName: '', signatoryTitle: '', signatoryEmail: '',
+    })
 
     // ============================================================================
     // SECTION 11B: DATA LOADING
@@ -1787,6 +1819,155 @@ function DocumentCentreContent() {
         }
     }, [supabase])
 
+    // ============================================================================
+    // SECTION 11B-2.7: LOAD SIGNING CONFIRMATIONS & FULL SIGNING STATE
+    // ============================================================================
+    // Queries signing_confirmations and contract_signatures tables to build the
+    // full SigningState. Also detects the current user's party role.
+
+    const loadSigningState = useCallback(async (
+        contractId: string,
+        userId: string,
+        uploadedByUserId: string | null
+    ) => {
+        try {
+            // 1. Determine party role
+            const isInitiator = userId === uploadedByUserId
+            let partyRole: 'initiator' | 'respondent' | null = null
+
+            if (isInitiator) {
+                partyRole = 'initiator'
+            } else {
+                // Check if user is a respondent via qc_recipients
+                const { data: recipientData } = await supabase
+                    .from('qc_recipients')
+                    .select('user_id')
+                    .eq('contract_id', contractId)
+                    .eq('user_id', userId)
+                    .maybeSingle()
+
+                if (recipientData) {
+                    partyRole = 'respondent'
+                }
+            }
+            setCurrentPartyRole(partyRole)
+
+            // 2. Load signing confirmations
+            const { data: confirmations, error: confError } = await supabase
+                .from('signing_confirmations')
+                .select('*')
+                .eq('contract_id', contractId)
+
+            if (confError) {
+                console.error('Error loading signing confirmations:', confError)
+            }
+
+            const initiatorConf = (confirmations || []).find(
+                (c: SigningConfirmation) => c.party_role === 'initiator'
+            ) as SigningConfirmation | undefined
+            const respondentConf = (confirmations || []).find(
+                (c: SigningConfirmation) => c.party_role === 'respondent'
+            ) as SigningConfirmation | undefined
+
+            // 3. Load signatures
+            const { data: sigs, error: sigError } = await supabase
+                .from('contract_signatures')
+                .select('*')
+                .eq('contract_id', contractId)
+                .eq('status', 'signed')
+
+            if (sigError) {
+                console.error('Error loading contract signatures:', sigError)
+            }
+
+            const initiatorSig = (sigs || []).find(
+                (s: ContractSignature) => s.party_role === 'initiator'
+            ) as ContractSignature | undefined
+            const respondentSig = (sigs || []).find(
+                (s: ContractSignature) => s.party_role === 'respondent'
+            ) as ContractSignature | undefined
+
+            // 4. Derive status
+            const status = deriveSigningStatus(
+                initiatorConf || null,
+                respondentConf || null,
+                initiatorSig || null,
+                respondentSig || null
+            )
+
+            setSigningState({
+                initiatorConfirmation: initiatorConf || null,
+                respondentConfirmation: respondentConf || null,
+                initiatorSignature: initiatorSig || null,
+                respondentSignature: respondentSig || null,
+                contractHash: initiatorSig?.contract_hash || respondentSig?.contract_hash || null,
+                status,
+                isLoading: false,
+            })
+
+            // Also update the legacy signatures array for backwards compat
+            setSignatures((sigs || []) as SignatureRecord[])
+
+            // 5. Pre-populate entity form if user hasn't confirmed yet
+            if (partyRole) {
+                const myConf = partyRole === 'initiator' ? initiatorConf : respondentConf
+                if (!myConf) {
+                    // Fetch company data for pre-population
+                    const { data: companyData } = await supabase
+                        .from('companies')
+                        .select('company_name, registration_number, jurisdiction, registered_address')
+                        .eq('company_id', (await supabase
+                            .from('uploaded_contracts')
+                            .select('company_id')
+                            .eq('contract_id', contractId)
+                            .single()
+                        ).data?.company_id || '')
+                        .maybeSingle()
+
+                    // For respondent, try their own company info
+                    let entityCompanyData = companyData
+                    if (partyRole === 'respondent') {
+                        const { data: recipientData } = await supabase
+                            .from('qc_recipients')
+                            .select('company_name, recipient_name, recipient_email')
+                            .eq('contract_id', contractId)
+                            .eq('user_id', userId)
+                            .maybeSingle()
+
+                        if (recipientData) {
+                            // Try to get the respondent's company details
+                            const { data: respCompanyData } = await supabase
+                                .from('companies')
+                                .select('company_name, registration_number, jurisdiction, registered_address')
+                                .eq('company_name', recipientData.company_name)
+                                .maybeSingle()
+
+                            entityCompanyData = respCompanyData || null
+                        }
+                    }
+
+                    const authData = localStorage.getItem('clarence_auth')
+                    const parsed = authData ? JSON.parse(authData) : {}
+                    const ui = parsed.userInfo || {}
+
+                    setEntityFormInitialData(buildInitialFormData(
+                        entityCompanyData?.company_name || ui.companyName || ui.company || '',
+                        entityCompanyData?.registration_number || null,
+                        entityCompanyData?.jurisdiction || null,
+                        entityCompanyData?.registered_address || null,
+                        ui.firstName || '',
+                        ui.lastName || '',
+                        ui.email || ''
+                    ))
+                }
+            }
+
+        } catch (err) {
+            console.error('Error loading signing state:', err)
+            setSigningState(prev => ({ ...prev, isLoading: false }))
+        }
+    }, [supabase])
+
     // SECTION 11B-3: INITIALIZE DOCUMENTS (mode-aware, DB-merged)
     // Merges document definitions with real status from generated_documents table.
     // DB record status mapping:
@@ -2001,6 +2182,9 @@ function DocumentCentreContent() {
                     const sigs = await loadSignatures('quick_contract', contractId)
                     setSignatures(sigs)
 
+                    // Load full signing state (confirmations + signatures + party role)
+                    loadSigningState(contractId, user.userId || '', qcData.uploadedByUserId)
+
                     // Log page view
                     eventLogger.setSession(contractId)
                     eventLogger.setUser(user.userId || '')
@@ -2084,7 +2268,7 @@ function DocumentCentreContent() {
         }
 
         init()
-    }, [loadUserInfo, loadSessionData, loadQuickContractData, loadGeneratedDocuments, loadSignatures, initializeDocuments, searchParams, router])
+    }, [loadUserInfo, loadSessionData, loadQuickContractData, loadGeneratedDocuments, loadSignatures, loadSigningState, initializeDocuments, searchParams, router])
 
     // ============================================================================
     // SECTION 11C: EVENT HANDLERS
@@ -2545,15 +2729,7 @@ function DocumentCentreContent() {
     const computeContractHash = useCallback(async (pdfUrl: string): Promise<string> => {
         try {
             setIsComputingHash(true)
-            // Fetch the PDF as binary data
-            const response = await fetch(pdfUrl)
-            if (!response.ok) throw new Error('Could not fetch PDF for hashing')
-            const buffer = await response.arrayBuffer()
-
-            // Compute SHA-256 using Web Crypto API
-            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
-            const hashArray = Array.from(new Uint8Array(hashBuffer))
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+            const hashHex = await hashFileFromUrl(pdfUrl)
             return hashHex
         } catch (err) {
             console.error('Error computing contract hash:', err)
@@ -2567,14 +2743,13 @@ function DocumentCentreContent() {
         }
     }, [])
 
-    // Open signing modal — only if Contract Draft is ready
+    // Open signing modal — only if Contract Draft is ready (legacy mediation path)
     const openSigningModal = useCallback(async () => {
         const contractDraft = documents.find(d => d.id === 'contract-draft')
         if (!contractDraft || contractDraft.status !== 'ready' || !contractDraft.downloadUrl) {
             return
         }
 
-        // Check if current user has already signed
         const currentUserId = userInfo?.userId
         const alreadySigned = signatures.some(s => s.user_id === currentUserId && s.status === 'signed')
         if (alreadySigned) {
@@ -2589,14 +2764,13 @@ function DocumentCentreContent() {
             return
         }
 
-        // Compute the contract hash before showing the modal
         const hash = await computeContractHash(contractDraft.downloadUrl)
         setContractHash(hash)
         setSigningTitle('')
         setShowSigningModal(true)
     }, [documents, userInfo, signatures, mode, quickContract, session, computeContractHash])
 
-    // Submit signature
+    // Submit signature (legacy mediation path)
     const handleSignContract = async () => {
         if (!userInfo || !contractHash) return
 
@@ -2609,7 +2783,6 @@ function DocumentCentreContent() {
         setIsSigning(true)
 
         try {
-            // Determine party info based on mode
             const companyName = mode === 'quick_contract'
                 ? (userInfo.company || 'Unknown Company')
                 : (userInfo.role === 'customer'
@@ -2623,7 +2796,6 @@ function DocumentCentreContent() {
             const signatoryName = `${userInfo.firstName || ''} ${userInfo.lastName || ''}`.trim()
             const consentText = `I, ${signatoryName}, on behalf of ${companyName}, confirm that I have reviewed the Contract Draft (SHA-256: ${contractHash.substring(0, 16)}...) and agree to the terms set out therein. This electronic signature constitutes my legally binding consent.`
 
-            // Insert signature record
             const { data, error } = await supabase
                 .from('contract_signatures')
                 .insert({
@@ -2638,7 +2810,7 @@ function DocumentCentreContent() {
                     signatory_title: signingTitle || null,
                     contract_hash: contractHash,
                     consent_text: consentText,
-                    ip_address: null,  // Could be fetched from an IP API if needed
+                    ip_address: null,
                     user_agent: navigator.userAgent,
                     status: 'signed'
                 })
@@ -2647,22 +2819,16 @@ function DocumentCentreContent() {
 
             if (error) throw error
 
-            // Update local state
             setSignatures(prev => [...prev, data as SignatureRecord])
             setShowSigningModal(false)
 
-            // Log the event
             eventLogger.completed('signing', 'contract_signed', {
-                contextId,
-                mode,
-                partyRole,
-                signatureId: data?.signature_id
+                contextId, mode, partyRole, signatureId: data?.signature_id
             })
 
-            // CLARENCE message
             const allPartiesSigned = mode === 'quick_contract'
-                ? true  // QC: only initiator needs to sign for now
-                : (signatures.length + 1) >= 2  // Mediation: both parties
+                ? true
+                : (signatures.length + 1) >= 2
 
             setChatMessages(prev => [...prev, {
                 messageId: `msg-${Date.now()}`,
@@ -2687,6 +2853,228 @@ function DocumentCentreContent() {
             setIsSigning(false)
         }
     }
+
+    // ============================================================================
+    // SECTION 11D-3: ENTITY CONFIRMATION + NEW SIGNING CEREMONY HANDLERS
+    // ============================================================================
+
+    // Open entity confirmation modal
+    const openEntityConfirmation = useCallback(() => {
+        setShowEntityConfirmationModal(true)
+    }, [])
+
+    // Submit entity confirmation
+    const handleEntityConfirmation = useCallback(async (formData: EntityConfirmationFormData) => {
+        if (!userInfo || !currentPartyRole) return
+
+        const contractId = quickContract?.contractId
+        if (!contractId) return
+
+        setIsSubmittingConfirmation(true)
+
+        try {
+            const { data, error } = await supabase
+                .from('signing_confirmations')
+                .insert({
+                    contract_id: contractId,
+                    user_id: userInfo.userId,
+                    party_role: currentPartyRole,
+                    entity_name: formData.entityName.trim(),
+                    registration_number: formData.registrationNumber.trim() || null,
+                    jurisdiction: formData.jurisdiction || null,
+                    registered_address: formData.registeredAddress.trim() || null,
+                    signatory_name: formData.signatoryName.trim(),
+                    signatory_title: formData.signatoryTitle.trim(),
+                    signatory_email: formData.signatoryEmail.trim(),
+                    user_agent: navigator.userAgent,
+                })
+                .select()
+                .single()
+
+            if (error) throw error
+
+            const confirmation = data as SigningConfirmation
+
+            // Update signing state
+            setSigningState(prev => {
+                const updated = {
+                    ...prev,
+                    [currentPartyRole === 'initiator' ? 'initiatorConfirmation' : 'respondentConfirmation']: confirmation,
+                }
+                updated.status = deriveSigningStatus(
+                    updated.initiatorConfirmation,
+                    updated.respondentConfirmation,
+                    updated.initiatorSignature,
+                    updated.respondentSignature
+                )
+                return updated
+            })
+
+            setShowEntityConfirmationModal(false)
+
+            // CLARENCE message
+            const contextId = contractId
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: `\u2705 Entity details confirmed for ${formData.entityName}. ${
+                    signingState.initiatorConfirmation && signingState.respondentConfirmation
+                        ? 'Both parties have confirmed — the signing ceremony is now available.'
+                        : 'Waiting for the other party to confirm their entity details.'
+                }`,
+                createdAt: new Date().toISOString()
+            }])
+
+            eventLogger.completed('signing', 'entity_confirmed', {
+                contractId, partyRole: currentPartyRole, entityName: formData.entityName
+            })
+
+        } catch (err) {
+            console.error('Entity confirmation error:', err)
+            const contextId = quickContract?.contractId || ''
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contextId,
+                sender: 'clarence',
+                message: `\u274C Error confirming entity details: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
+                createdAt: new Date().toISOString()
+            }])
+        } finally {
+            setIsSubmittingConfirmation(false)
+        }
+    }, [userInfo, currentPartyRole, quickContract, supabase, signingState])
+
+    // Open signing ceremony modal (new flow — after entity confirmation)
+    const openNewSigningCeremony = useCallback(async () => {
+        const contractDraft = documents.find(d => d.id === 'contract-draft')
+        if (!contractDraft || contractDraft.status !== 'ready' || !contractDraft.downloadUrl) {
+            return
+        }
+
+        // Compute hash
+        const hash = await computeContractHash(contractDraft.downloadUrl)
+        setContractHash(hash)
+        setSigningState(prev => ({ ...prev, contractHash: hash }))
+        setShowNewSigningModal(true)
+    }, [documents, computeContractHash])
+
+    // Submit signature (new flow — uses entity confirmation data)
+    const handleNewSignContract = useCallback(async () => {
+        if (!userInfo || !contractHash || !currentPartyRole) return
+
+        const contractId = quickContract?.contractId
+        if (!contractId) return
+
+        const contractDraft = documents.find(d => d.id === 'contract-draft')
+        if (!contractDraft) return
+
+        const myConfirmation = currentPartyRole === 'initiator'
+            ? signingState.initiatorConfirmation
+            : signingState.respondentConfirmation
+        if (!myConfirmation) return
+
+        setIsSigning(true)
+
+        try {
+            const consentText = generateConsentText(
+                myConfirmation.signatory_name,
+                myConfirmation.signatory_title,
+                myConfirmation.entity_name,
+                contractHash
+            )
+
+            const { data, error } = await supabase
+                .from('contract_signatures')
+                .insert({
+                    contract_id: contractId,
+                    document_id: contractDraft.documentDbId || null,
+                    confirmation_id: myConfirmation.confirmation_id,
+                    source_type: 'quick_contract',
+                    user_id: userInfo.userId,
+                    party_role: currentPartyRole,
+                    company_name: myConfirmation.entity_name,
+                    signatory_name: myConfirmation.signatory_name,
+                    signatory_title: myConfirmation.signatory_title,
+                    contract_hash: contractHash,
+                    consent_text: consentText,
+                    user_agent: navigator.userAgent,
+                    status: 'signed'
+                })
+                .select()
+                .single()
+
+            if (error) throw error
+
+            const signature = data as unknown as ContractSignature
+
+            // Update signing state
+            setSigningState(prev => {
+                const updated = {
+                    ...prev,
+                    [currentPartyRole === 'initiator' ? 'initiatorSignature' : 'respondentSignature']: signature,
+                    contractHash,
+                }
+                updated.status = deriveSigningStatus(
+                    updated.initiatorConfirmation,
+                    updated.respondentConfirmation,
+                    updated.initiatorSignature,
+                    updated.respondentSignature
+                )
+
+                // If fully executed, update contract status
+                if (updated.status === 'fully_executed') {
+                    supabase
+                        .from('uploaded_contracts')
+                        .update({ status: 'executed' })
+                        .eq('contract_id', contractId)
+                        .then(({ error: updateErr }) => {
+                            if (updateErr) console.error('Error updating contract status:', updateErr)
+                            else console.log('Contract status updated to executed')
+                        })
+                }
+
+                return updated
+            })
+
+            // Also update legacy signatures state
+            setSignatures(prev => [...prev, data as SignatureRecord])
+            setShowNewSigningModal(false)
+
+            eventLogger.completed('signing', 'contract_signed', {
+                contractId, mode: 'quick_contract', partyRole: currentPartyRole,
+                signatureId: signature.signature_id, withEntityConfirmation: true,
+            })
+
+            // Determine if both have signed
+            const otherSig = currentPartyRole === 'initiator'
+                ? signingState.respondentSignature
+                : signingState.initiatorSignature
+            const allSigned = !!otherSig
+
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contractId,
+                sender: 'clarence',
+                message: allSigned
+                    ? `\u2705 ${myConfirmation.signatory_name} has signed the contract on behalf of ${myConfirmation.entity_name}. All parties have now signed — the contract is EXECUTED.`
+                    : `\u2705 ${myConfirmation.signatory_name} has signed the contract on behalf of ${myConfirmation.entity_name}. Waiting for the other party to sign.`,
+                createdAt: new Date().toISOString()
+            }])
+
+        } catch (err) {
+            console.error('Signing error:', err)
+            setChatMessages(prev => [...prev, {
+                messageId: `msg-${Date.now()}`,
+                sessionId: contractId,
+                sender: 'clarence',
+                message: `\u274C Error recording signature: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
+                createdAt: new Date().toISOString()
+            }])
+        } finally {
+            setIsSigning(false)
+        }
+    }, [userInfo, contractHash, currentPartyRole, quickContract, documents, signingState, supabase])
 
     // ============================================================================
     // SECTION 11E: SAVE AS TEMPLATE HANDLER (with Observability Instrumentation)
@@ -3204,14 +3592,34 @@ function DocumentCentreContent() {
                         isGenerating={isGeneratingPackage}
                     />
 
-                    {/* Signing Panel — appears when Contract Draft is ready */}
-                    <SigningPanel
-                        documents={documents}
-                        signatures={signatures}
-                        currentUserId={userInfo?.userId}
-                        onSign={openSigningModal}
-                        mode={mode}
-                    />
+                    {/* Signing Panel — New Entity Confirmation flow (QC mode) */}
+                    {mode === 'quick_contract' && (
+                        <SigningPanelNew
+                            status={signingState.status}
+                            initiatorConfirmation={signingState.initiatorConfirmation}
+                            respondentConfirmation={signingState.respondentConfirmation}
+                            initiatorSignature={signingState.initiatorSignature}
+                            respondentSignature={signingState.respondentSignature}
+                            currentPartyRole={currentPartyRole}
+                            contractDraftReady={documents.some(d => d.id === 'contract-draft' && d.status === 'ready')}
+                            isContractCommitted={quickContract?.status === 'committed'}
+                            onOpenEntityConfirmation={openEntityConfirmation}
+                            onOpenSigningCeremony={openNewSigningCeremony}
+                            initiatorLabel="Initiator"
+                            respondentLabel="Respondent"
+                        />
+                    )}
+
+                    {/* Legacy Signing Panel — Mediation mode (original simple flow) */}
+                    {mode === 'mediation' && (
+                        <SigningPanel
+                            documents={documents}
+                            signatures={signatures}
+                            currentUserId={userInfo?.userId}
+                            onSign={openSigningModal}
+                            mode={mode}
+                        />
+                    )}
 
                     {/* Save as Template Card - Customers Only, Mediation mode only */}
                     {isCustomer && mode === 'mediation' && session && (
@@ -3274,7 +3682,7 @@ function DocumentCentreContent() {
             {/* Save as Template Modal */}
             <SaveAsTemplateModal />
 
-            {/* Signing Ceremony Modal */}
+            {/* Signing Ceremony Modal (legacy — mediation mode) */}
             <SigningModal
                 show={showSigningModal}
                 onClose={() => setShowSigningModal(false)}
@@ -3291,6 +3699,30 @@ function DocumentCentreContent() {
                 }
                 signingTitle={signingTitle}
                 onTitleChange={setSigningTitle}
+            />
+
+            {/* Entity Confirmation Modal (new — QC mode) */}
+            <EntityConfirmationModal
+                show={showEntityConfirmationModal}
+                onClose={() => setShowEntityConfirmationModal(false)}
+                onConfirm={handleEntityConfirmation}
+                initialData={entityFormInitialData}
+                partyRole={currentPartyRole || 'initiator'}
+                isSubmitting={isSubmittingConfirmation}
+            />
+
+            {/* New Signing Ceremony Modal (new — QC mode, after entity confirmation) */}
+            <SigningCeremonyModal
+                show={showNewSigningModal}
+                onClose={() => setShowNewSigningModal(false)}
+                onSign={handleNewSignContract}
+                isSigning={isSigning}
+                isComputingHash={isComputingHash}
+                contractHash={contractHash}
+                contractName={quickContract?.contractName || session?.customerCompany || 'Contract'}
+                currentPartyRole={currentPartyRole || 'initiator'}
+                initiatorConfirmation={signingState.initiatorConfirmation}
+                respondentConfirmation={signingState.respondentConfirmation}
             />
 
         </div>
