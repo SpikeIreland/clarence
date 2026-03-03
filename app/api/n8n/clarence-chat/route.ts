@@ -1,10 +1,11 @@
 // ============================================================================
 // FILE: app/api/n8n/clarence-chat/route.ts
-// PURPOSE: API route for Quick Contract Studio CLARENCE chat
-// VERSION: 2.0 - With Context Builder Integration
+// PURPOSE: Unified API route for ALL CLARENCE chat touchpoints
+// VERSION: 3.0 - Full context pipeline with role derivation
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getRoleContext, type PartyRole } from '@/lib/role-matrix'
 
 // ============================================================================
 // SECTION 1: TYPES
@@ -13,14 +14,29 @@ import { NextRequest, NextResponse } from 'next/server'
 interface ClarenceChatRequest {
     message: string
     contractId?: string
+    sessionId?: string
     clauseId?: string
     clauseName?: string
     clauseCategory?: string
     context?: string
-    // NEW: Context builder fields
+    // Context builder fields
     viewerRole?: 'initiator' | 'respondent'
     viewerUserId?: string
     viewerCompanyId?: string
+    // Role matrix fields — enables contract-type-specific party labels
+    contractTypeKey?: string
+    initiatorPartyRole?: PartyRole
+    // Dashboard-specific fields
+    dashboardData?: Record<string, unknown>
+    // Session-based fields (Contract Studio, Chat page)
+    providerId?: string
+    currentPhase?: number
+    alignmentScore?: number
+    negotiationContext?: Record<string, unknown>
+    // Assessment fields
+    action?: string
+    type?: string
+    prompt?: string
 }
 
 // ============================================================================
@@ -38,15 +54,18 @@ const CONTEXT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-qc-context-builder`
 // ============================================================================
 
 export async function POST(request: NextRequest) {
-    console.log('=== CLARENCE QC CHAT API v2.0 ===')
+    console.log('=== CLARENCE CHAT API v3.0 ===')
 
     try {
         const body: ClarenceChatRequest = await request.json()
 
         console.log('Contract:', body.contractId)
+        console.log('Session:', body.sessionId)
         console.log('Viewer Role:', body.viewerRole)
         console.log('Context Type:', body.context)
         console.log('Clause:', body.clauseName)
+        console.log('Contract Type:', body.contractTypeKey)
+        console.log('Initiator Party Role:', body.initiatorPartyRole)
         console.log('Message preview:', body.message?.substring(0, 100))
 
         if (!body.message) {
@@ -57,7 +76,24 @@ export async function POST(request: NextRequest) {
         }
 
         // ================================================================
-        // STEP 1: Build Context (if contractId provided)
+        // STEP 1: Derive Role Context (server-side)
+        // ================================================================
+        // Resolve party labels so the n8n workflow receives explicit
+        // "userRoleLabel", "counterpartyRoleLabel", "positionFavorEnd"
+        // instead of having to derive them from contractTypeKey.
+        let roleContext = null
+        if (body.contractTypeKey && body.initiatorPartyRole && body.viewerRole) {
+            const isInitiator = body.viewerRole === 'initiator'
+            roleContext = getRoleContext(
+                body.contractTypeKey,
+                body.initiatorPartyRole,
+                isInitiator
+            )
+            console.log('Role context derived:', roleContext.userRoleLabel, 'vs', roleContext.counterpartyRoleLabel)
+        }
+
+        // ================================================================
+        // STEP 2: Build Context (if contractId provided)
         // ================================================================
         let qcContext = null
 
@@ -74,6 +110,9 @@ export async function POST(request: NextRequest) {
                         viewerCompanyId: body.viewerCompanyId || '',
                         clauseId: body.clauseId || '',
                         touchpointType: body.context || 'qc_chat',
+                        // Forward role matrix fields to context builder
+                        contractTypeKey: body.contractTypeKey || '',
+                        initiatorPartyRole: body.initiatorPartyRole || '',
                         touchpointContext: {
                             userMessage: body.message,
                             clauseId: body.clauseId
@@ -97,7 +136,7 @@ export async function POST(request: NextRequest) {
         }
 
         // ================================================================
-        // STEP 2: Call Chat Workflow with Context
+        // STEP 3: Call Chat Workflow with Full Context
         // ================================================================
         console.log('Calling chat workflow...')
 
@@ -107,13 +146,29 @@ export async function POST(request: NextRequest) {
             body: JSON.stringify({
                 message: body.message,
                 contractId: body.contractId || null,
+                sessionId: body.sessionId || null,
                 clauseId: body.clauseId || null,
                 clauseName: body.clauseName || null,
                 clauseCategory: body.clauseCategory || null,
                 context: body.context || 'quick_contract_studio',
                 viewerRole: body.viewerRole || null,
+                // Role context — resolved party labels for the viewer
+                roleContext: roleContext,
+                contractTypeKey: body.contractTypeKey || null,
+                initiatorPartyRole: body.initiatorPartyRole || null,
                 // Pass the full context to the workflow
-                qcContext: qcContext
+                qcContext: qcContext,
+                // Session-based fields (for Chat page, Contract Studio)
+                providerId: body.providerId || null,
+                currentPhase: body.currentPhase || null,
+                alignmentScore: body.alignmentScore || null,
+                negotiationContext: body.negotiationContext || null,
+                // Dashboard fields
+                dashboardData: body.dashboardData || null,
+                // Assessment fields
+                action: body.action || null,
+                type: body.type || null,
+                prompt: body.prompt || null,
             })
         })
 
@@ -134,6 +189,9 @@ export async function POST(request: NextRequest) {
 
         const data = await n8nResponse.json()
         console.log('Response received, length:', (data.response || data.message || '').length)
+        if (roleContext) {
+            console.log('Response was generated with role context:', roleContext.userRoleLabel, '(viewer)')
+        }
 
         return NextResponse.json({
             response: data.response || data.message || data.text || '',

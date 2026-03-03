@@ -346,6 +346,13 @@ function QuickContractStudioContent() {
             })
     }, [editTemplateId])
 
+    // Pre-fill template name from contract name for new template uploads (avoids entering name twice)
+    useEffect(() => {
+        if (editTemplateId) return // Already handled above
+        if (!isTemplateMode || !contract?.contractName || templateName) return
+        setTemplateName(contract.contractName)
+    }, [isTemplateMode, contract?.contractName, editTemplateId, templateName])
+
     // Fetch playbook rules for compliance checking (initiator only, once)
     useEffect(() => {
         if (!userInfo?.companyId || !contract || isTemplateMode) return
@@ -454,6 +461,10 @@ function QuickContractStudioContent() {
 
     // Clause options menu state (for 3-dot menu)
     const [clauseMenuOpen, setClauseMenuOpen] = useState<string | null>(null)
+
+    // Retry failed certification state
+    const [retryingClauses, setRetryingClauses] = useState<Set<string>>(new Set())
+    const [retryInProgress, setRetryInProgress] = useState(false)
 
     // NEW: Auto-save state for position persistence
     const [dirtyPositions, setDirtyPositions] = useState<Map<string, number>>(new Map())
@@ -2184,12 +2195,14 @@ function QuickContractStudioContent() {
         }
         setChatMessages(prev => [...prev, requestMessage])
 
-        // Build direction hint based on target position
+        // Build direction hint based on target position — use role-aware labels
+        const providingLabel = roleContext?.providingPartyLabel || 'Provider'
+        const protectedLabel = roleContext?.protectedPartyLabel || 'Customer'
         let directionHint = ''
         if (targetPosition <= 3) {
-            directionHint = `Target position is ${targetPosition.toFixed(1)} (provider-favouring). Draft language that gives the provider more flexibility, shorter timelines, lower liability caps, and fewer obligations.`
+            directionHint = `Target position is ${targetPosition.toFixed(1)} (${providingLabel}-favouring). Draft language that gives the ${providingLabel} more flexibility, shorter timelines, lower liability caps, and fewer obligations.`
         } else if (targetPosition >= 7) {
-            directionHint = `Target position is ${targetPosition.toFixed(1)} (customer-favouring). Draft language that protects the customer with stronger warranties, longer timelines, higher liability, and more provider obligations.`
+            directionHint = `Target position is ${targetPosition.toFixed(1)} (${protectedLabel}-favouring). Draft language that protects the ${protectedLabel} with stronger warranties, longer timelines, higher liability, and more ${providingLabel} obligations.`
         } else {
             directionHint = `Target position is ${targetPosition.toFixed(1)} (balanced). Draft language that balances both parties' interests with industry-standard terms and mutual obligations.`
         }
@@ -2204,7 +2217,7 @@ function QuickContractStudioContent() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: `TASK: Rewrite the following clause to reflect position ${targetPosition.toFixed(1)} on a 1-10 scale where 1 is maximum provider flexibility and 10 is maximum customer protection.
+                    message: `TASK: Rewrite the following clause to reflect position ${targetPosition.toFixed(1)} on a 1-10 scale where 1 is maximum ${providingLabel} flexibility and 10 is maximum ${protectedLabel} protection.
 
 CLAUSE: "${selectedClause.clauseName}" (${selectedClause.clauseNumber})
 CATEGORY: ${selectedClause.category}
@@ -2228,7 +2241,13 @@ INSTRUCTIONS:
                     clauseId: selectedClause.clauseId,
                     clauseName: selectedClause.clauseName,
                     clauseCategory: selectedClause.category,
-                    context: 'position_draft_generation'
+                    context: 'position_draft_generation',
+                    // Viewer context — enables role-aware drafting
+                    viewerRole: getPartyRole(),
+                    viewerUserId: userInfo?.userId,
+                    viewerCompanyId: userInfo?.companyId,
+                    contractTypeKey: contract?.contractTypeKey || null,
+                    initiatorPartyRole: contract?.initiatorPartyRole || null,
                 })
             })
 
@@ -2378,15 +2397,17 @@ INSTRUCTIONS:
         }
         setChatMessages(prev => [...prev, requestMessage])
 
-        // Build the direction hint based on current position
-        // SCALE: 1 = Provider-Favouring, 10 = Customer-Favouring
+        // Build the direction hint based on current position — use role-aware labels
+        // SCALE: 1 = Providing Party-Favouring, 10 = Protected Party-Favouring
         const currentPosition = selectedClause.clarencePosition
+        const balProvidingLabel = roleContext?.providingPartyLabel || 'Provider'
+        const balProtectedLabel = roleContext?.protectedPartyLabel || 'Customer'
         let directionHint = ''
         if (currentPosition !== null) {
             if (currentPosition < 4) {
-                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (provider-favouring). To create a more balanced version, strengthen customer protections and introduce more equitable terms. Add reasonable safeguards for the customer without being overly aggressive.`
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (${balProvidingLabel}-favouring). To create a more balanced version, strengthen ${balProtectedLabel} protections and introduce more equitable terms. Add reasonable safeguards for the ${balProtectedLabel} without being overly aggressive.`
             } else if (currentPosition > 6) {
-                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (customer-favouring). To create a more balanced version, moderate the customer protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
+                directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (${balProtectedLabel}-favouring). To create a more balanced version, moderate the ${balProtectedLabel} protections while maintaining reasonable safeguards. Introduce fairer mutual obligations where appropriate.`
             } else {
                 directionHint = `The current draft is at position ${currentPosition.toFixed(1)} (near balanced). Fine-tune the language to ensure both parties have equitable obligations and protections. Aim for clearer, more neutral phrasing.`
             }
@@ -2402,7 +2423,7 @@ INSTRUCTIONS:
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    message: `TASK: Rewrite the following clause to be more balanced (targeting position 5.0 on a 1-10 scale where 1 is maximum provider flexibility and 10 is maximum customer protection).
+                    message: `TASK: Rewrite the following clause to be more balanced (targeting position 5.0 on a 1-10 scale where 1 is maximum ${balProvidingLabel} flexibility and 10 is maximum ${balProtectedLabel} protection).
 
 CLAUSE: "${selectedClause.clauseName}" (${selectedClause.clauseNumber})
 CATEGORY: ${selectedClause.category}
@@ -2428,7 +2449,13 @@ INSTRUCTIONS:
                     clauseId: selectedClause.clauseId,
                     clauseName: selectedClause.clauseName,
                     clauseCategory: selectedClause.category,
-                    context: 'balanced_draft_generation'
+                    context: 'balanced_draft_generation',
+                    // Viewer context — enables role-aware drafting
+                    viewerRole: getPartyRole(),
+                    viewerUserId: userInfo?.userId,
+                    viewerCompanyId: userInfo?.companyId,
+                    contractTypeKey: contract?.contractTypeKey || null,
+                    initiatorPartyRole: contract?.initiatorPartyRole || null,
                 })
             })
 
@@ -2619,6 +2646,63 @@ INSTRUCTIONS:
             setDeleteClauseTarget(null)
         }
     }
+
+    // Retry failed certification — resets failed clauses to 'pending' and re-triggers webhook
+    const retryFailedClauses = useCallback(async (clauseIds?: string[]) => {
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId) return
+
+        const targetIds = clauseIds || clauses
+            .filter(c => !c.isHeader && c.processingStatus === 'failed')
+            .map(c => c.clauseId)
+
+        if (targetIds.length === 0) return
+
+        setRetryingClauses(new Set(targetIds))
+        if (!clauseIds) setRetryInProgress(true)
+
+        try {
+            // Reset failed clauses to 'pending' in the database
+            const { error } = await supabase
+                .from('uploaded_contract_clauses')
+                .update({ status: 'pending', clarence_certified: false })
+                .in('clause_id', targetIds)
+
+            if (error) {
+                console.error('Failed to reset clause statuses:', error)
+                return
+            }
+
+            // Update local state to reflect pending status
+            setClauses(prev => prev.map(c => {
+                if (targetIds.includes(c.clauseId)) {
+                    return { ...c, processingStatus: 'pending' as const, clarenceCertified: false }
+                }
+                return c
+            }))
+
+            // Adjust certification progress
+            setCertificationProgress(prev => ({
+                ...prev,
+                failed: Math.max(0, prev.failed - targetIds.length),
+            }))
+
+            // Start polling before triggering webhook so we catch status changes
+            setIsPolling(true)
+
+            // Re-trigger the certification webhook
+            await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/certify-next-clause', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contract_id: effectiveId })
+            })
+        } catch (err) {
+            console.error('Retry certification error:', err)
+        } finally {
+            setRetryingClauses(new Set())
+            setRetryInProgress(false)
+        }
+    }, [contractId, resolvedContractId, clauses, supabase])
 
     // Cancel delete
     const handleCancelDelete = () => {
@@ -3741,8 +3825,10 @@ INSTRUCTIONS:
                         {isTemplateMode && (() => {
                             const leafClauses = clauses.filter(c => !c.isHeader)
                             const certifiedCount = leafClauses.filter(c => c.clarenceCertified).length
+                            const failedCount = leafClauses.filter(c => c.processingStatus === 'failed').length
                             const allCertified = leafClauses.length > 0 && certifiedCount === leafClauses.length
-                            const isReady = !isPolling && allCertified
+                            const allSettled = leafClauses.length > 0 && (certifiedCount + failedCount) === leafClauses.length
+                            const isReady = !isPolling && (allCertified || allSettled)
 
                             return (
                                 <button
@@ -3759,9 +3845,11 @@ INSTRUCTIONS:
                                             ? 'Template already saved'
                                             : isPolling
                                                 ? 'Waiting for certification to complete...'
-                                                : !allCertified
+                                                : !isReady
                                                     ? `${certifiedCount}/${leafClauses.length} clauses certified — waiting for all`
-                                                    : 'Save this contract as a reusable template'
+                                                    : failedCount > 0
+                                                        ? `Save template (${failedCount} failed clause${failedCount !== 1 ? 's' : ''} will be excluded)`
+                                                        : 'Save this contract as a reusable template'
                                     }
                                 >
                                     {templateSaved ? (
@@ -3787,26 +3875,29 @@ INSTRUCTIONS:
 
                 {/* ═══════════════════════════════════════════════════════ */}
                 {/* TIER 2: Negotiation Bar (non-template only)            */}
-                {/* Party A (left) | Chat (centre) | Party B (right)       */}
+                {/* Provider/blue (left) | Chat | Customer/emerald (right) */}
+                {/* Matches position bar: blue←provider | customer→emerald */}
                 {/* ═══════════════════════════════════════════════════════ */}
                 {!isTemplateMode && (
                     <div className="flex items-center justify-center gap-4 px-4 py-2 border-t border-slate-100 bg-slate-50/50">
 
-                        {/* Initiator (Customer) Badge */}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                            <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
-                            <span className="text-xs font-medium text-emerald-800">
-                                {initiatorInfo?.company || initiatorInfo?.name || userInfo?.companyName || 'Initiator'}
+                        {/* Respondent (Provider) Badge — LEFT to match blue/provider end of position bar */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
+                            <span className="text-xs font-medium text-blue-800">
+                                {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
                             </span>
-                            <span className="text-xs text-emerald-600">
-                                · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
-                                    ? roleContext.userRoleLabel
-                                    : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
+                            {respondentInfo && (
+                                <span className="text-xs text-blue-600">
+                                    · {roleContext?.counterpartyRoleLabel && getPartyRole() === 'initiator'
                                         ? roleContext.counterpartyRoleLabel
-                                        : 'Customer'}
-                            </span>
-                            {getPartyRole() === 'initiator' && (
-                                <span className="text-[10px] text-emerald-400 font-medium">(You)</span>
+                                        : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
+                                            ? roleContext.userRoleLabel
+                                            : 'Provider'}
+                                </span>
+                            )}
+                            {getPartyRole() === 'respondent' && (
+                                <span className="text-[10px] text-blue-400 font-medium">(You)</span>
                             )}
                         </div>
 
@@ -3836,23 +3927,21 @@ INSTRUCTIONS:
                             )}
                         </button>
 
-                        {/* Respondent (Provider) Badge */}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${respondentInfo ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
-                            <span className="text-xs font-medium text-blue-800">
-                                {respondentInfo?.company || respondentInfo?.name || 'Awaiting Respondent'}
+                        {/* Initiator (Customer) Badge — RIGHT to match emerald/customer end of position bar */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                            <div className="w-2 h-2 bg-emerald-500 rounded-full flex-shrink-0"></div>
+                            <span className="text-xs font-medium text-emerald-800">
+                                {initiatorInfo?.company || initiatorInfo?.name || userInfo?.companyName || 'Initiator'}
                             </span>
-                            {respondentInfo && (
-                                <span className="text-xs text-blue-600">
-                                    · {roleContext?.counterpartyRoleLabel && getPartyRole() === 'initiator'
+                            <span className="text-xs text-emerald-600">
+                                · {roleContext?.userRoleLabel && getPartyRole() === 'initiator'
+                                    ? roleContext.userRoleLabel
+                                    : roleContext?.counterpartyRoleLabel && getPartyRole() === 'respondent'
                                         ? roleContext.counterpartyRoleLabel
-                                        : roleContext?.userRoleLabel && getPartyRole() === 'respondent'
-                                            ? roleContext.userRoleLabel
-                                            : 'Provider'}
-                                </span>
-                            )}
-                            {getPartyRole() === 'respondent' && (
-                                <span className="text-[10px] text-blue-400 font-medium">(You)</span>
+                                        : 'Customer'}
+                            </span>
+                            {getPartyRole() === 'initiator' && (
+                                <span className="text-[10px] text-emerald-400 font-medium">(You)</span>
                             )}
                         </div>
                     </div>
@@ -3863,7 +3952,7 @@ INSTRUCTIONS:
                 {/* Agreement Progress (left) | Contract Balance (right)    */}
                 {/* ═══════════════════════════════════════════════════════ */}
                 {!isTemplateMode && (
-                    <div className="flex items-center justify-between px-4 py-1.5 border-t border-slate-100">
+                    <div className="relative flex items-center justify-between px-4 py-1.5 border-t border-slate-100">
 
                         {/* LEFT: Agreement Progress */}
                         {clauses.length > 0 && (() => {
@@ -3904,8 +3993,9 @@ INSTRUCTIONS:
                             )
                         })()}
 
-                        {/* CENTRE: Playbook Compliance Badge (initiator only) */}
+                        {/* CENTRE: Playbook Compliance Badge (absolutely centred on page) */}
                         {isInitiator && playbookCompliance && !playbookLoading && (
+                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
                             <button
                                 onClick={() => setShowComplianceModal(true)}
                                 className={`flex items-center gap-2 px-3 py-1 rounded-lg border transition-colors cursor-pointer ${
@@ -3949,13 +4039,14 @@ INSTRUCTIONS:
                                     </span>
                                 )}
                             </button>
+                            </div>
                         )}
 
                         {/* RIGHT: Aggregate Balance Score */}
                         {aggregateBalance !== null && (() => {
                             const score = aggregateBalance.score
                             const colors = getBalanceColor(score)
-                            const gaugePercent = (score / 10) * 100
+                            const gaugePercent = positionToPercent(score)
 
                             return (
                                 <div className="flex items-center gap-3">
@@ -4004,7 +4095,7 @@ INSTRUCTIONS:
                 {/* ======================================================== */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-hidden min-h-0">
 
-                    {/* ==================== CERTIFICATION PROGRESS ==================== */}
+                    {/* ==================== CERTIFICATION PROGRESS (during polling) ==================== */}
                     {isPolling && (
                         <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-emerald-50 flex-shrink-0">
                             <div className="flex items-center justify-between mb-2">
@@ -4027,9 +4118,50 @@ INSTRUCTIONS:
                             </div>
                             {certificationProgress.failed > 0 && (
                                 <p className="text-xs text-amber-600 mt-1">
-                                    {certificationProgress.failed} clause(s) failed certification
+                                    {certificationProgress.failed} clause(s) failed — will retry when done
                                 </p>
                             )}
+                        </div>
+                    )}
+
+                    {/* ==================== FAILED CLAUSES BANNER (persistent, after polling) ==================== */}
+                    {!isPolling && certificationProgress.failed > 0 && (
+                        <div className="px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-amber-50 to-red-50 flex-shrink-0">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-semibold text-red-700">
+                                    {certificationProgress.failed} clause{certificationProgress.failed !== 1 ? 's' : ''} failed certification
+                                </span>
+                                <button
+                                    onClick={() => retryFailedClauses()}
+                                    disabled={retryInProgress}
+                                    className="text-xs font-medium px-2.5 py-1 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white rounded-md transition-colors flex items-center gap-1"
+                                >
+                                    {retryInProgress ? (
+                                        <>
+                                            <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Retrying...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            </svg>
+                                            Retry All
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            <div className="mt-1 space-y-0.5 max-h-24 overflow-y-auto">
+                                {clauses
+                                    .filter(c => !c.isHeader && c.processingStatus === 'failed')
+                                    .map(c => (
+                                        <div key={c.clauseId} className="flex items-center gap-1.5 text-xs text-red-600">
+                                            <span className="text-red-400">{'\u26A0\uFE0F'}</span>
+                                            <span className="truncate">{c.clauseNumber}. {c.clauseName}</span>
+                                        </div>
+                                    ))
+                                }
+                            </div>
                         </div>
                     )}
 
@@ -4341,8 +4473,28 @@ INSTRUCTIONS:
                                                                 {isMenuOpen && (
                                                                     <div
                                                                         ref={clauseMenuRef}
-                                                                        className="absolute right-0 bottom-full mb-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                                                        className="absolute right-0 bottom-full mb-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
                                                                     >
+                                                                        {child.processingStatus === 'failed' && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation()
+                                                                                    setClauseMenuOpen(null)
+                                                                                    retryFailedClauses([child.clauseId])
+                                                                                }}
+                                                                                disabled={retryingClauses.has(child.clauseId)}
+                                                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors"
+                                                                            >
+                                                                                {retryingClauses.has(child.clauseId) ? (
+                                                                                    <span className="inline-block w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                                                                ) : (
+                                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                                    </svg>
+                                                                                )}
+                                                                                Retry Certification
+                                                                            </button>
+                                                                        )}
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation()
@@ -4474,8 +4626,28 @@ INSTRUCTIONS:
                                                     {isMenuOpen && (
                                                         <div
                                                             ref={clauseMenuRef}
-                                                            className="absolute right-0 bottom-full mb-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
+                                                            className="absolute right-0 bottom-full mb-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
                                                         >
+                                                            {parent.processingStatus === 'failed' && (
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        setClauseMenuOpen(null)
+                                                                        retryFailedClauses([parent.clauseId])
+                                                                    }}
+                                                                    disabled={retryingClauses.has(parent.clauseId)}
+                                                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 transition-colors"
+                                                                >
+                                                                    {retryingClauses.has(parent.clauseId) ? (
+                                                                        <span className="inline-block w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                                                    ) : (
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                        </svg>
+                                                                    )}
+                                                                    Retry Certification
+                                                                </button>
+                                                            )}
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation()

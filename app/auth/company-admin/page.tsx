@@ -182,9 +182,9 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     const [uploadContractType, setUploadContractType] = useState<string | null>(null)
     const [editingTypeId, setEditingTypeId] = useState<string | null>(null)
     const [editTypeValue, setEditTypeValue] = useState<string | null>(null)
-    const [parsingId, setParsingId] = useState<string | null>(null)
+    const [parsingIds, setParsingIds] = useState<Set<string>>(new Set())
     const [parseError, setParseError] = useState<string | null>(null)
-    const [parseProgress, setParseProgress] = useState<string | null>(null)
+    const [parseProgress, setParseProgress] = useState<Record<string, string>>({})
     const [openMenuId, setOpenMenuId] = useState<string | null>(null)
     const [deletingId, setDeletingId] = useState<string | null>(null)
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
@@ -261,12 +261,20 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
         }
     }, [renamingId])
 
-    // Clear progress message when no playbook is in 'parsing' state (polling completed)
+    // Clear progress messages when playbooks finish parsing
     useEffect(() => {
-        if (parseProgress && !playbooks.some(p => p.status === 'parsing')) {
-            setParseProgress(null)
+        if (Object.keys(parseProgress).length === 0) return
+        const stillParsing = new Set(playbooks.filter(p => p.status === 'parsing').map(p => p.playbookId))
+        const updated = { ...parseProgress }
+        let changed = false
+        for (const id of Object.keys(updated)) {
+            if (!stillParsing.has(id) && !parsingIds.has(id)) {
+                delete updated[id]
+                changed = true
+            }
         }
-    }, [playbooks, parseProgress])
+        if (changed) setParseProgress(updated)
+    }, [playbooks, parseProgress, parsingIds])
 
     const handleFileUpload = async (file: File) => {
         const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
@@ -293,19 +301,19 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
 
     const handleParseClick = async (playbookId: string, sourceFilePath: string, sourceFileName: string) => {
         console.log('=== PARSE BUTTON CLICKED ===', playbookId, sourceFilePath)
-        setParsingId(playbookId)
+        setParsingIds(prev => new Set(prev).add(playbookId))
         setParseError(null)
-        setParseProgress('Downloading document...')
+        setParseProgress(prev => ({ ...prev, [playbookId]: 'Downloading document...' }))
         try {
             await onParse(playbookId, sourceFilePath, sourceFileName)
             // Parse request sent — N8N processes in background. Show status message.
-            setParseProgress('Parsing in progress — this may take a few minutes...')
-            setParsingId(null)
+            setParseProgress(prev => ({ ...prev, [playbookId]: 'Parsing in progress — this may take a few minutes...' }))
+            setParsingIds(prev => { const next = new Set(prev); next.delete(playbookId); return next })
         } catch (e) {
             console.error('Parse error:', e)
             setParseError(e instanceof Error ? e.message : 'Failed to parse')
-            setParsingId(null)
-            setParseProgress(null)
+            setParsingIds(prev => { const next = new Set(prev); next.delete(playbookId); return next })
+            setParseProgress(prev => { const next = { ...prev }; delete next[playbookId]; return next })
         }
     }
 
@@ -466,12 +474,12 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                 </div>
                 {uploadError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{uploadError}</div>}
                 {parseError && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{parseError}</div>}
-                {parseProgress && (
-                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center gap-2">
+                {Object.entries(parseProgress).map(([id, msg]) => (
+                    <div key={id} className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm flex items-center gap-2">
                         <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                        {parseProgress}
+                        {msg}
                     </div>
-                )}
+                ))}
             </div>
 
             {/* Playbooks List */}
@@ -593,10 +601,10 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                                     {(p.status === 'pending_parse' || p.status === 'parse_failed') && (
                                         <button
                                             onClick={() => handleParseClick(p.playbookId, p.sourceFilePath || '', p.sourceFileName || 'playbook')}
-                                            disabled={parsingId === p.playbookId || !p.sourceFilePath}
+                                            disabled={parsingIds.has(p.playbookId) || !p.sourceFilePath}
                                             className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
                                         >
-                                            {parsingId === p.playbookId ? 'Processing...' : p.status === 'parse_failed' ? 'Retry Parse' : 'Parse Playbook'}
+                                            {parsingIds.has(p.playbookId) ? 'Processing...' : p.status === 'parse_failed' ? 'Retry Parse' : 'Parse Playbook'}
                                         </button>
                                     )}
                                     {p.status === 'parsing' && <span className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg">Parsing...</span>}
@@ -966,48 +974,31 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
         y += 10
         doc.setTextColor(0, 0, 0)
 
-        // Clauses grouped by category
-        const groups = groupClausesByCategory(clauses)
-        for (const group of groups) {
-            checkPageBreak(20)
+        // Clauses in document order (display_order from DB)
+        for (const clause of clauses) {
+            const clauseText = clause.default_text || clause.clause_content || ''
+            const clauseNumber = clause.clause_number || clause.display_number || ''
+            const clauseName = clause.clause_name || 'Untitled'
 
-            // Category heading
-            doc.setFontSize(13)
+            // Clause name
+            checkPageBreak(15)
+            doc.setFontSize(11)
             doc.setFont('helvetica', 'bold')
-            doc.setTextColor(60, 60, 120)
-            doc.text(group.displayName.toUpperCase(), margin, y)
-            y += 3
-            doc.setDrawColor(180, 180, 220)
-            doc.line(margin, y, margin + 60, y)
-            y += 8
-            doc.setTextColor(0, 0, 0)
+            doc.text(`${clauseNumber}${clauseNumber ? '. ' : ''}${clauseName}`, margin, y)
+            y += 6
 
-            for (const clause of group.clauses) {
-                const clauseText = clause.default_text || clause.clause_content || ''
-                const clauseNumber = clause.clause_number || clause.display_number || ''
-                const clauseName = clause.clause_name || 'Untitled'
-
-                // Clause name
-                checkPageBreak(15)
-                doc.setFontSize(11)
-                doc.setFont('helvetica', 'bold')
-                doc.text(`${clauseNumber}${clauseNumber ? '. ' : ''}${clauseName}`, margin, y)
-                y += 6
-
-                // Clause text
-                if (clauseText) {
-                    doc.setFontSize(9.5)
-                    doc.setFont('helvetica', 'normal')
-                    const lines = doc.splitTextToSize(clauseText, contentWidth)
-                    for (const line of lines) {
-                        checkPageBreak(5)
-                        doc.text(line, margin, y)
-                        y += 4.5
-                    }
+            // Clause text
+            if (clauseText) {
+                doc.setFontSize(9.5)
+                doc.setFont('helvetica', 'normal')
+                const lines = doc.splitTextToSize(clauseText, contentWidth)
+                for (const line of lines) {
+                    checkPageBreak(5)
+                    doc.text(line, margin, y)
+                    y += 4.5
                 }
-                y += 6
             }
-            y += 4
+            y += 6
         }
 
         doc.save(`${template.templateName}.pdf`)
@@ -1477,32 +1468,23 @@ function TemplatesTab({ templates, isLoading, userInfo, onUpload, onDelete, onTo
                             </button>
                         </div>
 
-                        {/* Body */}
-                        <div className="flex-1 overflow-y-auto px-6 py-4">
-                            {groupClausesByCategory(templateClauses[viewingTemplate.templateId]).map((group) => (
-                                <div key={group.displayName} className="mb-6">
-                                    <h4 className="text-sm font-bold text-indigo-700 uppercase tracking-wide mb-3 pb-1 border-b border-indigo-100">
-                                        {group.displayName}
-                                    </h4>
-                                    <div className="space-y-4">
-                                        {group.clauses.map((clause: any, idx: number) => (
-                                            <div key={clause.template_clause_id || idx} className="rounded-lg border border-slate-200 p-4">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <span className="text-sm font-semibold text-slate-800">
-                                                        {clause.clause_number || clause.display_number || ''}{(clause.clause_number || clause.display_number) ? '. ' : ''}{clause.clause_name || 'Untitled'}
-                                                    </span>
-                                                    {clause.clarence_position != null && (
-                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">
-                                                            Position {clause.clarence_position}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                                                    {clause.default_text || clause.clause_content || 'No content available'}
-                                                </p>
-                                            </div>
-                                        ))}
+                        {/* Body - clauses in document order */}
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                            {templateClauses[viewingTemplate.templateId].map((clause: any, idx: number) => (
+                                <div key={clause.template_clause_id || idx} className="rounded-lg border border-slate-200 p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-sm font-semibold text-slate-800">
+                                            {clause.clause_number || clause.display_number || ''}{(clause.clause_number || clause.display_number) ? '. ' : ''}{clause.clause_name || 'Untitled'}
+                                        </span>
+                                        {clause.clarence_position != null && (
+                                            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">
+                                                Position {clause.clarence_position}
+                                            </span>
+                                        )}
                                     </div>
+                                    <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                                        {clause.default_text || clause.clause_content || 'No content available'}
+                                    </p>
                                 </div>
                             ))}
                         </div>

@@ -475,6 +475,7 @@ function QuickContractCreateContent() {
             let sourceContractId: string | null = null
             let existingClauses: any[] = []
             let clausesFromTemplateTable = false
+            let templateClausesWithRangeMappings: any[] = []
 
             // Strategy A: Direct source_contract_id field
             if (templateData.source_contract_id) {
@@ -559,6 +560,7 @@ function QuickContractCreateContent() {
                 if (!tcError && templateClauses && templateClauses.length > 0) {
                     console.log(`Strategy E SUCCESS: Found ${templateClauses.length} clauses in template_clauses`)
                     clausesFromTemplateTable = true
+                    templateClausesWithRangeMappings = templateClauses.filter((tc: any) => tc.range_mapping)
 
                     existingClauses = templateClauses.map((tc, index) => ({
                         clause_id: tc.template_clause_id || crypto.randomUUID(),
@@ -728,8 +730,57 @@ function QuickContractCreateContent() {
                     } catch (rangeErr) {
                         console.warn('[Range Copy] Failed to copy range mappings:', rangeErr)
                     }
+                } else if (clausesFromTemplateTable && templateClausesWithRangeMappings.length > 0) {
+                    // Restore range mappings from template_clauses JSONB range_mapping column
+                    try {
+                        console.log(`[Range Copy] Restoring ${templateClausesWithRangeMappings.length} range mappings from template_clauses`)
+
+                        const { data: newClauses } = await supabase
+                            .from('uploaded_contract_clauses')
+                            .select('clause_id, clause_number')
+                            .eq('contract_id', newContractId)
+
+                        if (newClauses && newClauses.length > 0) {
+                            const clauseNumberToId = new Map<string, string>()
+                            for (const nc of newClauses) {
+                                clauseNumberToId.set(nc.clause_number, nc.clause_id)
+                            }
+
+                            const rangeMappingInserts = templateClausesWithRangeMappings
+                                .map((tc: any) => {
+                                    const clauseNumber = tc.clause_number || tc.display_number
+                                    const newClauseId = clauseNumberToId.get(clauseNumber)
+                                    if (!newClauseId || !tc.range_mapping) return null
+                                    return {
+                                        clause_id: newClauseId,
+                                        contract_id: newContractId,
+                                        is_displayable: tc.range_mapping.is_displayable ?? true,
+                                        value_type: tc.range_mapping.value_type,
+                                        range_unit: tc.range_mapping.range_unit,
+                                        industry_standard_min: tc.range_mapping.industry_standard_min,
+                                        industry_standard_max: tc.range_mapping.industry_standard_max,
+                                        range_data: tc.range_mapping.range_data
+                                    }
+                                })
+                                .filter(Boolean)
+
+                            if (rangeMappingInserts.length > 0) {
+                                const { error: rangeWriteError } = await supabase
+                                    .from('clause_range_mappings')
+                                    .insert(rangeMappingInserts)
+
+                                if (rangeWriteError) {
+                                    console.warn('[Range Copy] Error writing range mappings:', rangeWriteError)
+                                } else {
+                                    console.log(`[Range Copy] Restored ${rangeMappingInserts.length} range mappings from template data`)
+                                }
+                            }
+                        }
+                    } catch (rangeErr) {
+                        console.warn('[Range Copy] Failed to restore range mappings from template:', rangeErr)
+                    }
                 } else if (clausesFromTemplateTable) {
-                    console.log('[Range Copy] Skipped: clauses from template_clauses (no source contract_id)')
+                    console.log('[Range Copy] Skipped: no range_mapping data in template_clauses')
                 }
 
                 // Update times_used
