@@ -10,6 +10,7 @@ import {
     type ContractClause,
     type ComplianceResult,
 } from '@/lib/playbook-compliance'
+import FeedbackButton from '@/app/components/FeedbackButton'
 import SigningPanelNew from '@/app/components/SigningPanel'
 import EntityConfirmationModal from '@/app/components/EntityConfirmationModal'
 import SigningCeremonyModal from '@/app/components/SigningCeremonyModal'
@@ -421,84 +422,93 @@ function DocumentListItem({ document, isSelected, onClick }: DocumentItemProps) 
 interface EvidencePackageProps {
     documents: DocumentItem[]
     onDownload: () => void
-    isGenerating: boolean
+    onGenerateAll: () => void
+    isDownloading: boolean
+    isGeneratingAll: boolean
+    generatingAllProgress: { done: number; total: number }
+    isGeneratingDocument: boolean
 }
 
-function EvidencePackageCard({ documents, onDownload, isGenerating }: EvidencePackageProps) {
+function EvidencePackageBar({ documents, onDownload, onGenerateAll, isDownloading, isGeneratingAll, generatingAllProgress, isGeneratingDocument }: EvidencePackageProps) {
     const readyCount = documents.filter(d => d.status === 'ready' || d.status === 'final').length
     const totalCount = documents.length
     const allReady = readyCount === totalCount
     const hasAnyReady = readyCount > 0
+    const pendingCount = documents.filter(d => d.status === 'in_progress').length
 
     return (
-        <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${allReady
-            ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300'
-            : hasAnyReady
-                ? 'bg-gradient-to-br from-blue-50 to-slate-50 border-blue-200'
-                : 'bg-slate-50 border-slate-200'
-            }`}>
-            <div className="flex items-center gap-3 mb-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${allReady ? 'bg-emerald-100' : hasAnyReady ? 'bg-blue-100' : 'bg-slate-200'
-                    }`}>
-                    {'\u{1F4E6}'}
+        <div className="mx-3 mb-3 p-3 rounded-lg border border-slate-200 bg-slate-50">
+            {/* Compact progress row */}
+            <div className="flex items-center gap-2 mb-2">
+                <div className="h-1.5 flex-1 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                        className={`h-full transition-all duration-500 ${allReady ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                        style={{ width: `${totalCount > 0 ? (readyCount / totalCount) * 100 : 0}%` }}
+                    />
                 </div>
-                <div className="flex-1">
-                    <h3 className={`font-semibold ${allReady ? 'text-emerald-800' : hasAnyReady ? 'text-blue-800' : 'text-slate-600'}`}>
-                        Evidence Package
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                        {allReady
-                            ? 'All documents ready \u2014 download complete package'
-                            : hasAnyReady
-                                ? `${readyCount}/${totalCount} ready \u2014 download available documents`
-                                : `${readyCount}/${totalCount} documents ready`
-                        }
-                    </p>
-                </div>
+                <span className="text-[11px] text-slate-500 flex-shrink-0 tabular-nums">
+                    {readyCount}/{totalCount}
+                </span>
             </div>
 
-            {/* Progress Bar */}
-            <div className="h-2 bg-slate-200 rounded-full overflow-hidden mb-3">
-                <div
-                    className={`h-full transition-all duration-500 ${allReady ? 'bg-emerald-500' : 'bg-blue-500'
-                        }`}
-                    style={{ width: `${totalCount > 0 ? (readyCount / totalCount) * 100 : 0}%` }}
-                />
-            </div>
-
-            {/* Download Button */}
-            <button
-                onClick={onDownload}
-                disabled={!hasAnyReady || isGenerating}
-                className={`w-full py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 ${hasAnyReady && !isGenerating
-                    ? allReady
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-            >
-                {isGenerating ? (
-                    <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Assembling Package...
-                    </>
-                ) : allReady ? (
-                    <>
-                        <span>{'\u2B07\uFE0F'}</span>
-                        Download ZIP Package
-                    </>
-                ) : hasAnyReady ? (
-                    <>
-                        <span>{'\u2B07\uFE0F'}</span>
-                        Download {readyCount} Ready
-                    </>
-                ) : (
-                    <>
-                        <span>{'\u{1F512}'}</span>
-                        Generate Documents First
-                    </>
+            {/* Action buttons row */}
+            <div className="flex gap-2">
+                {/* Generate All — only when there are pending docs */}
+                {pendingCount > 0 && (
+                    <button
+                        onClick={onGenerateAll}
+                        disabled={isGeneratingAll || isGeneratingDocument}
+                        className="flex-1 h-8 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white text-xs font-medium rounded-full transition flex items-center justify-center gap-1.5"
+                    >
+                        {isGeneratingAll ? (
+                            <>
+                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                {generatingAllProgress.done}/{generatingAllProgress.total}
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Generate All
+                            </>
+                        )}
+                    </button>
                 )}
-            </button>
+
+                {/* Download ZIP */}
+                <button
+                    onClick={onDownload}
+                    disabled={!hasAnyReady || isDownloading}
+                    className={`${pendingCount > 0 ? 'flex-1' : 'w-full'} h-8 text-xs font-medium rounded-full transition flex items-center justify-center gap-1.5 ${
+                        hasAnyReady && !isDownloading
+                            ? allReady
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                : 'border border-slate-300 hover:border-slate-400 text-slate-700 hover:bg-white'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                >
+                    {isDownloading ? (
+                        <>
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Zipping...
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            {allReady ? 'Download ZIP' : hasAnyReady ? `Download ${readyCount}` : 'No Docs'}
+                        </>
+                    )}
+                </button>
+            </div>
         </div>
     )
 }
@@ -1281,13 +1291,16 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                         </div>
                     </div>
 
-                    {/* Right: User Info */}
-                    <div className="text-right">
-                        <div className="text-sm text-slate-300">
-                            {userInfo?.firstName} {userInfo?.lastName}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                            {mode === 'quick_contract' ? 'Document Centre' : (isCustomer ? 'Customer' : 'Provider')}
+                    {/* Right: Feedback + User Info */}
+                    <div className="flex items-center gap-3">
+                        <FeedbackButton position="header" />
+                        <div className="text-right">
+                            <div className="text-sm text-slate-300">
+                                {userInfo?.firstName} {userInfo?.lastName}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                                {mode === 'quick_contract' ? 'Document Centre' : (isCustomer ? 'Customer' : 'Provider')}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3751,11 +3764,15 @@ function DocumentCentreContent() {
                         ))}
                     </div>
 
-                    {/* Evidence Package Card */}
-                    <EvidencePackageCard
+                    {/* Evidence Package — compact bar with Generate All + Download */}
+                    <EvidencePackageBar
                         documents={documents}
                         onDownload={handleDownloadPackage}
-                        isGenerating={isGeneratingPackage}
+                        onGenerateAll={handleGenerateAll}
+                        isDownloading={isGeneratingPackage}
+                        isGeneratingAll={isGeneratingAll}
+                        generatingAllProgress={generatingAllProgress}
+                        isGeneratingDocument={isGeneratingDocument}
                     />
 
                     {/* Signing Panel — New Entity Confirmation flow (QC mode) */}
@@ -3787,35 +3804,20 @@ function DocumentCentreContent() {
                         />
                     )}
 
-                    {/* Save as Template Card - Customers Only, Mediation mode only */}
+                    {/* Save as Template — Customers Only, Mediation mode only */}
                     {isCustomer && mode === 'mediation' && session && (
-                        <div className={`mx-4 mb-4 p-4 rounded-xl border-2 ${session.isTraining
-                            ? 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
-                            : 'bg-gradient-to-br from-violet-50 to-purple-50 border-violet-200'
-                            }`}>
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${session.isTraining ? 'bg-amber-100' : 'bg-violet-100'
-                                    }`}>
-                                    {session.isTraining ? '\u{1F393}' : '\u{1F4BE}'}
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className={`font-semibold text-sm ${session.isTraining ? 'text-amber-800' : 'text-violet-800'}`}>
-                                        Save as Template
-                                    </h3>
-                                    <p className="text-xs text-slate-500">
-                                        Reuse this clause structure
-                                    </p>
-                                </div>
-                            </div>
-
+                        <div className="mx-3 mb-3">
                             <button
                                 onClick={openSaveTemplateModal}
-                                className={`w-full py-2 rounded-lg font-medium text-sm transition flex items-center justify-center gap-2 ${session.isTraining
-                                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                                    : 'bg-violet-600 hover:bg-violet-700 text-white'
-                                    }`}
+                                className={`w-full h-8 text-xs font-medium rounded-full transition flex items-center justify-center gap-1.5 ${session.isTraining
+                                    ? 'border border-amber-300 text-amber-700 hover:bg-amber-50'
+                                    : 'border border-violet-300 text-violet-700 hover:bg-violet-50'
+                                }`}
                             >
-                                {'\u{1F4BE}'} Save Outcome as Template
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                </svg>
+                                Save as Template
                             </button>
                         </div>
                     )}

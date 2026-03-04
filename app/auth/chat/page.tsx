@@ -287,14 +287,16 @@ function ClarenceChatContent() {
         leverage: leverageData || calculateLeverage()
       }
       
-      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/clarence-chat', {
+      const response = await fetch('/api/n8n/clarence-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: currentUserId,
-          sessionId: currentSessionId,
-          providerId: currentProviderId,
           message: inputMessage,
+          sessionId: currentSessionId,
+          viewerRole: 'initiator' as const,
+          viewerUserId: currentUserId,
+          context: 'negotiation_chat',
+          providerId: currentProviderId,
           currentPhase: 2,
           alignmentScore: currentAlignment,
           negotiationContext

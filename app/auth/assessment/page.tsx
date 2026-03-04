@@ -233,18 +233,20 @@ function PreliminaryAssessmentContent() {
   // Get CLARENCE Assessment (for future use)
   const runClarenceAssessment = async (assessmentType: string) => {
     try {
-      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/clarence-chat', {
+      const response = await fetch('/api/n8n/clarence-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'assess',
-          type: assessmentType,
-          context: { session, provider: selectedProvider },
-          prompt: generateAssessmentPrompt(assessmentType, {
+          message: generateAssessmentPrompt(assessmentType, {
             customerName: session?.customerCompany,
             providerName: selectedProvider?.providerName,
             serviceType: session?.serviceRequired
-          })
+          }),
+          action: 'assess',
+          type: assessmentType,
+          context: 'assessment',
+          sessionId: session?.sessionId || null,
+          viewerRole: 'initiator' as const,
         })
       })
 
@@ -252,7 +254,7 @@ function PreliminaryAssessmentContent() {
         const result = await response.json()
         setClarenceAssessments(prev => ({
           ...prev,
-          [assessmentType]: result.assessment || 'Assessment completed'
+          [assessmentType]: result.response || result.assessment || 'Assessment completed'
         }))
       }
     } catch {

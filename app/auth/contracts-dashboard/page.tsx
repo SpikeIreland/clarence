@@ -580,15 +580,14 @@ export default function ContractsDashboard() {
         }))
       }
 
-      const response = await fetch(`${API_BASE}/clarence-chat`, {
+      const response = await fetch('/api/n8n/clarence-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: chatInput,
           context: 'dashboard',
           dashboardData: dashboardContext,
-          sessionId: null,
-          userId: userInfo?.userId || 'unknown'
+          viewerUserId: userInfo?.userId || 'unknown',
         })
       })
 
