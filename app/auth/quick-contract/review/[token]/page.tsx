@@ -71,29 +71,6 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
     other: 'Contract'
 }
 
-const PROCESS_STEPS = [
-    {
-        number: '1',
-        title: 'Review the Contract',
-        description: 'Browse each clause and see CLARENCE\'s independent assessment of the contractual position. Every clause has been certified and scored on a 1-10 scale.'
-    },
-    {
-        number: '2',
-        title: 'Set Your Positions',
-        description: 'For each clause, indicate where you\'d like the terms to land. Your positions are private to you until you choose to share them.'
-    },
-    {
-        number: '3',
-        title: 'Negotiate via Party Chat',
-        description: 'Discuss specific clauses with the other party through the built-in chat. CLARENCE remains available to explain terms or suggest compromises.'
-    },
-    {
-        number: '4',
-        title: 'Agree & Commit',
-        description: 'Once both parties are aligned, commit the contract. CLARENCE generates the final documentation package for both sides.'
-    }
-]
-
 
 // ============================================================================
 // SECTION 3: LOADING COMPONENT
@@ -623,12 +600,51 @@ function ProviderLobbyContent() {
                         </div>
                     </div>
 
-                    {/* Description (if present) */}
-                    {contract?.description && (
-                        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                            <p className="text-sm text-slate-600 leading-relaxed">{contract.description}</p>
+                    {/* Contract Overview */}
+                    <div className="px-6 py-5 border-b border-slate-100 bg-slate-50">
+                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Contract Overview</h3>
+                        <div className="space-y-3">
+                            <div className="flex items-start gap-3">
+                                <svg className="w-4 h-4 text-violet-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-700">
+                                        {getContractTypeLabel(contract?.contractType || 'other')}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        {contract?.clauseCount || 0} clauses to review{contract?.certifiedCount ? `, ${contract.certifiedCount} independently assessed by CLARENCE` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            {(contract?.senderName || contract?.senderCompany) && (
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-4 h-4 text-violet-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-700">
+                                            Sent by {contract.senderName || 'the initiating party'}
+                                        </p>
+                                        {contract?.senderCompany && (
+                                            <p className="text-xs text-slate-500 mt-0.5">{contract.senderCompany}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="flex items-start gap-3">
+                                <svg className="w-4 h-4 text-violet-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-700">CLARENCE-Mediated Negotiation</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Each clause has been independently assessed. You can review positions, set your own, and negotiate directly with the other party.
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                    )}
+                    </div>
 
                     {/* CTA Section */}
                     <div className="p-6 bg-gradient-to-b from-white to-slate-50">
@@ -662,45 +678,8 @@ function ProviderLobbyContent() {
             </div>
 
 
-            {/* ============================================================ */}
-            {/* SECTION 8D: PROCESS EXPLAINER                                */}
-            {/* ============================================================ */}
-
-            <div className="max-w-4xl mx-auto px-6 mt-8 mb-12">
-                <div className="text-center mb-6">
-                    <h3 className="text-lg font-semibold text-slate-800">How CLARENCE Mediation Works</h3>
-                    <p className="text-sm text-slate-500 mt-1">A transparent, data-driven approach to contract negotiation</p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {PROCESS_STEPS.map((step) => (
-                        <div
-                            key={step.number}
-                            className="bg-white rounded-xl border border-slate-200 p-5 flex gap-4"
-                        >
-                            <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-200 flex items-center justify-center flex-shrink-0">
-                                <span className="text-sm font-bold text-violet-600">{step.number}</span>
-                            </div>
-                            <div>
-                                <h4 className="text-sm font-semibold text-slate-800 mb-1">{step.title}</h4>
-                                <p className="text-xs text-slate-500 leading-relaxed">{step.description}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Trust Footer */}
-                <div className="mt-8 text-center">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full">
-                        <div className="w-5 h-5 bg-gradient-to-br from-violet-500 to-violet-700 rounded flex items-center justify-center">
-                            <span className="text-white font-bold text-xs">C</span>
-                        </div>
-                        <span className="text-xs text-slate-600">
-                            CLARENCE acts as a neutral mediator. Neither party receives preferential treatment.
-                        </span>
-                    </div>
-                </div>
-            </div>
+            {/* Spacer below card */}
+            <div className="mb-12" />
 
 
             {/* ============================================================ */}
