@@ -23,6 +23,7 @@ import { CreateProgressBar } from '@/app/components/create-phase/CreateProgressH
 import { TransitionModal } from '@/app/components/create-phase/TransitionModal'
 import type { TransitionConfig } from '@/lib/pathway-utils'
 import { eventLogger } from '@/lib/eventLogger'
+import FeedbackButton from '@/app/components/FeedbackButton'
 
 // ============================================================================
 // SECTION 1: INTERFACES & TYPES
@@ -913,8 +914,9 @@ function CoCreateStudioContent() {
                         })}
                     </div>
 
-                    {/* Right: Session info */}
+                    {/* Right: Session info + Feedback */}
                     <div className="flex items-center gap-4">
+                        <FeedbackButton position="header" />
                         {session?.sessionNumber && (
                             <span className="text-sm text-slate-400 bg-slate-700 px-3 py-1 rounded-full font-mono">
                                 {session.sessionNumber}
