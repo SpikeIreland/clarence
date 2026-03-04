@@ -454,6 +454,9 @@ function ContractCreationContent() {
     const prefillTemplateName = searchParams.get('template_name')
     const hasPrefill = !!(prefillTemplateSource && prefillTemplateId)
 
+    // Pre-selected pathway from /auth/create page (e.g. ?pathway=co_create)
+    const prefillPathway = searchParams.get('pathway') as MediationType | null
+
     const colors = {
         primary: isTrainingMode ? 'amber' : 'emerald',
         bgLight: isTrainingMode ? 'bg-amber-50' : 'bg-emerald-50',
@@ -992,11 +995,21 @@ function ContractCreationContent() {
         addUserMessage(`I'm the ${roleLabel}`)
 
         setTimeout(() => {
-            addClarenceMessage(`**${roleLabel}** - understood! I'll show positions from your perspective.\n\nNow let's choose the right pathway for this contract...`)
-            setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
-            setTimeout(() => {
-                addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
-            }, 500)
+            // If pathway was pre-selected from /auth/create, skip the mediation type step
+            if (prefillPathway && prefillPathway !== 'quick_create') {
+                addClarenceMessage(`**${roleLabel}** - understood! I'll show positions from your perspective.`)
+                // Auto-select the pathway and move forward
+                handleMediationSelect(prefillPathway)
+            } else if (prefillPathway === 'quick_create') {
+                addClarenceMessage(`**${roleLabel}** - understood!`)
+                handleMediationSelect('quick_create')
+            } else {
+                addClarenceMessage(`**${roleLabel}** - understood! I'll show positions from your perspective.\n\nNow let's choose the right pathway for this contract...`)
+                setAssessment(prev => ({ ...prev, step: 'mediation_type' }))
+                setTimeout(() => {
+                    addClarenceMessage(CLARENCE_MESSAGES.mediation_selection, MEDIATION_OPTIONS)
+                }, 500)
+            }
         }, 300)
     }
 
@@ -1248,10 +1261,14 @@ function ContractCreationContent() {
 
     const renderProgressPanel = () => {
         // ROLE MATRIX: Added your_role step between contract_type and mediation_type
+        // If pathway was pre-selected from /auth/create, hide the Pathway step
+        const pathwayStep = prefillPathway
+            ? []
+            : [{ id: 'mediation_type', label: 'Pathway', icon: '*' }]
         const baseSteps = [
             { id: 'contract_type', label: 'Contract Type', icon: '*' },
             { id: 'your_role', label: 'Your Role', icon: '*' },
-            { id: 'mediation_type', label: 'Pathway', icon: '*' },
+            ...pathwayStep,
         ]
 
         const quickIntakeStep = !shouldSkipQuickIntake(assessment.mediationType)
