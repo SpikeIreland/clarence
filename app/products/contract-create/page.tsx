@@ -1,6 +1,5 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import Image from 'next/image'
 import MainNavigation from '@/app/components/MainNavigation'
 import FeatureListItem from '@/app/components/FeatureListItem'
 import ProductCard from '@/app/components/ProductCard'
@@ -92,13 +91,10 @@ export default function ContractCreatePage() {
               </div>
 
               <div className="rounded-2xl overflow-hidden border border-emerald-200 shadow-lg">
-                <Image
+                <img
                   src="/images/contractcreate-preview.png"
                   alt="ContractCreate — full mediation contract creation"
-                  width={800}
-                  height={450}
                   className="w-full h-auto"
-                  priority
                 />
               </div>
             </div>

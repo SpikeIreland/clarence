@@ -1,6 +1,5 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import Image from 'next/image'
 import MainNavigation from '@/app/components/MainNavigation'
 import FeatureListItem from '@/app/components/FeatureListItem'
 import ProductCard from '@/app/components/ProductCard'
@@ -60,13 +59,10 @@ export default function QuickCreatePage() {
           <div className="max-w-6xl mx-auto">
             <div className="grid md:grid-cols-2 gap-12 items-center">
               <div className="rounded-2xl overflow-hidden border border-emerald-200 shadow-lg">
-                <Image
+                <img
                   src="/images/quickcreate-preview.png"
                   alt="QuickCreate — rapid contract creation from templates"
-                  width={800}
-                  height={450}
                   className="w-full h-auto"
-                  priority
                 />
               </div>
 

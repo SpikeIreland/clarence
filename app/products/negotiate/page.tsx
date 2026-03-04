@@ -1,6 +1,5 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import Image from 'next/image'
 import MainNavigation from '@/app/components/MainNavigation'
 import FeatureListItem from '@/app/components/FeatureListItem'
 import ProductCard from '@/app/components/ProductCard'
@@ -91,13 +90,10 @@ export default function NegotiatePage() {
               </div>
 
               <div className="rounded-2xl overflow-hidden border border-slate-300 shadow-lg">
-                <Image
+                <img
                   src="/images/negotiate-preview.png"
                   alt="Negotiate — AI-mediated contract negotiation workspace"
-                  width={800}
-                  height={450}
                   className="w-full h-auto"
-                  priority
                 />
               </div>
             </div>
