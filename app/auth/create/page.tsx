@@ -15,7 +15,7 @@
 //   Each pathway card links to its own dedicated dashboard:
 //     - Quick Create    → /auth/quick-contract (existing QC Dashboard)
 //     - Contract Create → /auth/contracts-dashboard (existing Contracts Dashboard)
-//     - Co-Create       → Coming Soon
+//     - Co-Create       → /auth/create-contract?pathway=co_create
 //
 // AUTH PATTERN:
 //   Uses localStorage('clarence_auth') — matching QC Dashboard, Contract
@@ -98,7 +98,7 @@ export default function CreateGatewayPage() {
     // SECTION 6: PATHWAY SUMMARY DATA
     // Quick Create   → counted from quick_contracts table (created_by_user_id)
     // Contract Create → counted from sessions table (customer_user_id, non-training)
-    // Co-Create      → not yet built, always 0
+    // Co-Create      → counted from sessions table (customer_user_id, non-training, co_create)
     // ==========================================================================
 
     const loadPathwaySummary = useCallback(async (userId: string) => {
@@ -142,6 +142,25 @@ export default function CreateGatewayPage() {
                         summary.contractCreate.completed++
                     } else {
                         summary.contractCreate.active++
+                    }
+                })
+            }
+
+            // --- Co-Create: from sessions table ---
+            const { data: coCreateData } = await supabase
+                .from('sessions')
+                .select('session_id, mediation_type, status, is_training')
+                .eq('customer_user_id', userId)
+                .eq('is_training', false)
+                .eq('mediation_type', 'co_create')
+
+            if (coCreateData) {
+                coCreateData.forEach((s: any) => {
+                    const isCompleted = s.status === 'completed'
+                    if (isCompleted) {
+                        summary.coCreate.completed++
+                    } else {
+                        summary.coCreate.active++
                     }
                 })
             }
@@ -356,30 +375,24 @@ export default function CreateGatewayPage() {
 
                     {/* ============================================================ */}
                     {/* SECTION 13C: CO-CREATE CARD */}
-                    {/* Coming Soon — not yet linked */}
+                    {/* Links to create-contract with co_create pathway */}
                     {/* ============================================================ */}
-                    <div
-                        className="block bg-white rounded-2xl border-2 border-dashed border-slate-200 p-8 relative overflow-hidden opacity-75"
+                    <Link
+                        href="/auth/create-contract?pathway=co_create"
+                        className="group block bg-white rounded-2xl border-2 border-slate-200 hover:border-violet-400 p-8 transition-all hover:shadow-xl hover:shadow-violet-500/10 relative overflow-hidden"
                     >
                         {/* Accent bar */}
                         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-violet-400 to-violet-600"></div>
 
-                        {/* Coming Soon badge */}
-                        <div className="absolute top-4 right-4">
-                            <span className="px-3 py-1 bg-violet-100 text-violet-600 text-xs font-semibold rounded-full">
-                                Coming Soon
-                            </span>
-                        </div>
-
                         {/* Icon */}
-                        <div className="w-14 h-14 bg-violet-100 rounded-2xl flex items-center justify-center mb-5">
+                        <div className="w-14 h-14 bg-violet-100 rounded-2xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
                             <svg className="w-7 h-7 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                         </div>
 
                         {/* Title & Tagline */}
-                        <h2 className="text-xl font-bold text-slate-800 mb-1">
+                        <h2 className="text-xl font-bold text-slate-800 mb-1 group-hover:text-violet-700 transition-colors">
                             Co-Create
                         </h2>
                         <p className="text-sm text-violet-500 font-medium mb-4">
@@ -393,15 +406,15 @@ export default function CreateGatewayPage() {
                             inception. The fullest expression of the Honest Broker.
                         </p>
 
-                        {/* Placeholder stats */}
+                        {/* Stats */}
                         <div className="flex gap-4 mb-6">
                             <div className="bg-violet-50 rounded-lg px-3 py-2 flex-1 text-center">
-                                <div className="text-lg font-bold text-violet-400">—</div>
-                                <div className="text-xs text-violet-400">Active</div>
+                                <div className="text-lg font-bold text-violet-700">{pathwaySummary.coCreate.active}</div>
+                                <div className="text-xs text-violet-600">Active</div>
                             </div>
                             <div className="bg-slate-50 rounded-lg px-3 py-2 flex-1 text-center">
-                                <div className="text-lg font-bold text-slate-400">—</div>
-                                <div className="text-xs text-slate-400">Completed</div>
+                                <div className="text-lg font-bold text-slate-600">{pathwaySummary.coCreate.completed}</div>
+                                <div className="text-xs text-slate-500">Completed</div>
                             </div>
                         </div>
 
@@ -411,11 +424,14 @@ export default function CreateGatewayPage() {
                             partnerships, equal-leverage deals, parties who want neutral ground
                         </div>
 
-                        {/* Disabled CTA */}
-                        <div className="flex items-center gap-2 text-slate-400 font-semibold text-sm">
-                            Available soon
+                        {/* CTA */}
+                        <div className="flex items-center gap-2 text-violet-600 font-semibold text-sm group-hover:gap-3 transition-all">
+                            Start Co-Create
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
                         </div>
-                    </div>
+                    </Link>
 
                 </div>
 
