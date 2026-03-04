@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import Image from 'next/image'
 import MainNavigation from '@/app/components/MainNavigation'
 import FeatureListItem from '@/app/components/FeatureListItem'
 import ProductCard from '@/app/components/ProductCard'
@@ -56,12 +57,15 @@ export default function CoCreatePage() {
         <div className="container mx-auto px-6">
           <div className="max-w-6xl mx-auto">
             <div className="grid md:grid-cols-2 gap-12 items-center">
-              {/* Screenshot placeholder */}
-              <div className="bg-violet-50 rounded-2xl p-8 border border-violet-200 aspect-video flex items-center justify-center">
-                <div className="text-center text-violet-400">
-                  <Users className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm font-medium">Product Screenshot</p>
-                </div>
+              <div className="rounded-2xl overflow-hidden border border-violet-200 shadow-lg">
+                <Image
+                  src="/images/cocreate-preview.png"
+                  alt="Co-Create — collaborative contract building"
+                  width={800}
+                  height={450}
+                  className="w-full h-auto"
+                  priority
+                />
               </div>
 
               <div>

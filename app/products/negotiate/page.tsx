@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import Image from 'next/image'
 import MainNavigation from '@/app/components/MainNavigation'
 import FeatureListItem from '@/app/components/FeatureListItem'
 import ProductCard from '@/app/components/ProductCard'
@@ -89,12 +90,15 @@ export default function NegotiatePage() {
                 </ul>
               </div>
 
-              {/* Screenshot placeholder */}
-              <div className="bg-slate-100 rounded-2xl p-8 border border-slate-300 aspect-video flex items-center justify-center">
-                <div className="text-center text-slate-400">
-                  <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm font-medium">Product Screenshot</p>
-                </div>
+              <div className="rounded-2xl overflow-hidden border border-slate-300 shadow-lg">
+                <Image
+                  src="/images/negotiate-preview.png"
+                  alt="Negotiate — AI-mediated contract negotiation workspace"
+                  width={800}
+                  height={450}
+                  className="w-full h-auto"
+                  priority
+                />
               </div>
             </div>
           </div>

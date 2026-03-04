@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import Image from 'next/image'
 import MainNavigation from '@/app/components/MainNavigation'
 import FeatureListItem from '@/app/components/FeatureListItem'
 import ProductCard from '@/app/components/ProductCard'
@@ -90,12 +91,15 @@ export default function ContractCreatePage() {
                 </ul>
               </div>
 
-              {/* Screenshot placeholder */}
-              <div className="bg-emerald-50 rounded-2xl p-8 border border-emerald-200 aspect-video flex items-center justify-center">
-                <div className="text-center text-emerald-400">
-                  <Scale className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm font-medium">Product Screenshot</p>
-                </div>
+              <div className="rounded-2xl overflow-hidden border border-emerald-200 shadow-lg">
+                <Image
+                  src="/images/contractcreate-preview.png"
+                  alt="ContractCreate — full mediation contract creation"
+                  width={800}
+                  height={450}
+                  className="w-full h-auto"
+                  priority
+                />
               </div>
             </div>
           </div>
