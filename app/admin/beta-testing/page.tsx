@@ -465,7 +465,7 @@ function BetaTestingAdminDashboard() {
             const { data: sessions } = await supabase
                 .from('sessions')
                 .select('session_id, session_name, status, created_at')
-                .eq('customer_user_id', userId)
+                .eq('customer_id', userId)
                 .order('created_at', { ascending: false })
                 .limit(10)
 

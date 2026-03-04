@@ -131,7 +131,7 @@ export default function CreateGatewayPage() {
             const { data: sessionsData } = await supabase
                 .from('sessions')
                 .select('session_id, mediation_type, status, is_training')
-                .eq('customer_user_id', userId)
+                .eq('customer_id', userId)
                 .eq('is_training', false)
                 .in('mediation_type', ['contract_create', 'partial_mediation', 'full_mediation'])
 
@@ -150,7 +150,7 @@ export default function CreateGatewayPage() {
             const { data: coCreateData } = await supabase
                 .from('sessions')
                 .select('session_id, mediation_type, status, is_training')
-                .eq('customer_user_id', userId)
+                .eq('customer_id', userId)
                 .eq('is_training', false)
                 .eq('mediation_type', 'co_create')
 

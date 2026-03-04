@@ -104,14 +104,14 @@ export function useRoleContext({
                 if (sessionId && !contractTypeKey) {
                     const { data, error } = await supabase
                         .from('sessions')
-                        .select('contract_type_key, initiator_party_role, customer_user_id')
+                        .select('contract_type_key, initiator_party_role, customer_id')
                         .eq('session_id', sessionId)
                         .single()
 
                     if (!error && data) {
                         contractTypeKey = data.contract_type_key
                         initiatorPartyRole = data.initiator_party_role as PartyRole | null
-                        isInitiator = data.customer_user_id === userId
+                        isInitiator = data.customer_id === userId
                     }
                 }
 

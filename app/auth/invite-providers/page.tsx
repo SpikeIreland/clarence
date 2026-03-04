@@ -425,7 +425,7 @@ function InviteProvidersContent() {
             const sessionNotes = `Training Session | Character: ${selectedCharacter.characterName} | Company: ${selectedCharacter.companyName} | Difficulty: ${selectedCharacter.difficultyLevel} | Personality: ${selectedCharacter.negotiationStyle}`
 
             await supabase
-                .from('mediation_sessions')
+                .from('sessions')
                 .update({
                     session_notes: sessionNotes,
                     is_training: true,
