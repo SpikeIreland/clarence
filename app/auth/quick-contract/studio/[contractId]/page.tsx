@@ -1144,7 +1144,7 @@ function QuickContractStudioContent() {
 
     // POSITION BAR HELPER: Map position 1-10 to 0%-100% across the bar width
     // Position 1 sits at the left edge (0%), position 10 at the right edge (100%)
-    const positionToPercent = (pos: number) => ((pos - 1) / 9) * 100
+    const positionToPercent = (pos: number) => (pos / 10) * 100
 
     // Enhanced position label: use range data if available, fallback to DEFAULT_POSITION_OPTIONS
     const getRangeAwareLabel = (position: number | null, clauseId: string): string => {
@@ -4406,8 +4406,8 @@ INSTRUCTIONS:
                                                                     </span>
                                                                 </div>
                                                                 {child.clarenceCertified && child.clarencePosition && (
-                                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${child.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                                        child.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${child.clarencePosition > 5.5 ? 'bg-emerald-100 text-emerald-700' :
+                                                                        child.clarencePosition >= 4.5 ? 'bg-amber-100 text-amber-700' :
                                                                             'bg-blue-100 text-blue-700'
                                                                         }`}>
                                                                         {child.clarencePosition.toFixed(1)}
@@ -4559,8 +4559,8 @@ INSTRUCTIONS:
                                                         </span>
                                                     </div>
                                                     {parent.clarenceCertified && parent.clarencePosition && (
-                                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${parent.clarencePosition >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                                                            parent.clarencePosition >= 4 ? 'bg-amber-100 text-amber-700' :
+                                                        <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${parent.clarencePosition > 5.5 ? 'bg-emerald-100 text-emerald-700' :
+                                                            parent.clarencePosition >= 4.5 ? 'bg-amber-100 text-amber-700' :
                                                                 'bg-blue-100 text-blue-700'
                                                             }`}>
                                                             {parent.clarencePosition.toFixed(1)}
@@ -4934,7 +4934,7 @@ INSTRUCTIONS:
                                                                     const rect = bar.getBoundingClientRect()
                                                                     const x = moveEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const newPosition = Math.min(10, Math.max(1, percent * 9 + 1))
+                                                                    const newPosition = Math.max(1, percent * 10)
                                                                     const roundedPosition = Math.round(newPosition * 2) / 2
 
                                                                     const role = getPartyRole()
@@ -4958,7 +4958,7 @@ INSTRUCTIONS:
                                                                     const rect = bar.getBoundingClientRect()
                                                                     const x = upEvent.clientX - rect.left
                                                                     const percent = Math.max(0, Math.min(1, x / rect.width))
-                                                                    const finalPosition = Math.min(10, Math.max(1, Math.round((percent * 9 + 1) * 2) / 2))
+                                                                    const finalPosition = Math.max(1, Math.round((percent * 10) * 2) / 2)
 
                                                                     handlePositionChange(selectedClause.clauseId, finalPosition)
                                                                 }
