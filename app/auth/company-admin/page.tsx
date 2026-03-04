@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { eventLogger } from '@/lib/eventLogger'
-import { PlaybookRule, normaliseCategory, getCategoryDisplayName } from '@/lib/playbook-compliance'
+import { PlaybookRule, normaliseCategory, getCategoryDisplayName, getEffectiveRangeContext, translateRulePosition } from '@/lib/playbook-compliance'
 import jsPDF from 'jspdf'
 import FeedbackButton from '@/app/components/FeedbackButton'
 
@@ -361,8 +361,45 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
     // Visual position bar for each playbook rule
     const RulePositionBar = ({ rule }: { rule: PlaybookRule }) => {
         const toPercent = (val: number) => ((val - 1) / 9) * 100
+        const rangeCtx = getEffectiveRangeContext(rule)
+        const label = (pos: number) => translateRulePosition(rule, pos)
+        const idealLabel = label(rule.ideal_position)
+        const minLabel = label(rule.minimum_position)
         return (
             <div className="mt-2 mb-1">
+                {/* Range context unit badge + info icon */}
+                <div className="flex items-center gap-1.5 mb-1">
+                    {rangeCtx && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-medium bg-indigo-50 text-indigo-600 rounded border border-indigo-100">
+                            {rangeCtx.range_unit || rangeCtx.value_type}
+                        </span>
+                    )}
+                    {rangeCtx?.source === 'inferred' && (
+                        <span className="text-[9px] text-slate-400 italic">typical range</span>
+                    )}
+                    {/* Info tooltip */}
+                    <div className="relative group/info ml-auto">
+                        <div className="w-4 h-4 rounded-full bg-slate-200 hover:bg-indigo-100 flex items-center justify-center cursor-help transition-colors">
+                            <span className="text-[9px] font-bold text-slate-500 group-hover/info:text-indigo-600">i</span>
+                        </div>
+                        <div className="absolute right-0 top-5 w-72 p-3 bg-white rounded-lg shadow-xl border border-slate-200 text-[11px] text-slate-600 leading-relaxed z-50 opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible transition-all duration-150">
+                            <p className="font-semibold text-slate-800 mb-1.5">How to read this rule</p>
+                            <div className="space-y-1.5">
+                                <p><span className="inline-block w-2.5 h-2.5 rounded-full bg-purple-600 align-middle mr-1"></span><b>Purple circle</b> — Ideal (preferred) position{idealLabel ? `: ${idealLabel}` : ''}</p>
+                                <p><span className="inline-block w-6 h-2 rounded bg-blue-100 border border-blue-200 align-middle mr-1"></span><b>Blue band</b> — Acceptable range ({minLabel || rule.minimum_position} to {label(rule.maximum_position) || rule.maximum_position})</p>
+                                <p><span className="inline-block w-1.5 h-2.5 rounded-full bg-slate-400 align-middle mr-1"></span><b>Grey dot</b> — Fallback position if negotiation stalls</p>
+                                {rule.requires_approval_below != null && (
+                                    <p><span className="inline-block w-0.5 h-3 border-l-2 border-dashed border-red-400 align-middle mr-1"></span><b>Red line</b> — Below this requires escalation approval</p>
+                                )}
+                            </div>
+                            {rangeCtx && (
+                                <div className="mt-2 pt-2 border-t border-slate-100">
+                                    <p className="text-slate-500">The 1–10 scale represents <b>{rangeCtx.range_unit || rangeCtx.value_type}</b>. Position 1 ({label(1) || '1'}) favours the providing party; position 10 ({label(10) || '10'}) favours the protected party.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
                 {/* Position bar */}
                 <div className="relative h-6 w-full">
                     {/* Full 1-10 track */}
@@ -387,27 +424,35 @@ function PlaybooksTab({ playbooks, isLoading, onUpload, onActivate, onDeactivate
                         <span className="text-[8px] font-bold text-white">{rule.ideal_position}</span>
                     </div>
                 </div>
-                {/* Scale labels */}
-                <div className="flex justify-between text-[9px] text-slate-300 px-0.5 -mt-0.5">
-                    <span>1</span><span>5</span><span>10</span>
-                </div>
-                {/* Metric chips */}
+                {/* Scale labels — real-world if available, numeric fallback */}
+                {rangeCtx?.scale_points?.length ? (
+                    <div className="flex justify-between text-[9px] px-0.5 -mt-0.5">
+                        <span className="text-indigo-500 font-medium">{label(1) || '1'}</span>
+                        <span className="text-indigo-500 font-medium">{label(5) || '5'}</span>
+                        <span className="text-indigo-500 font-medium">{label(10) || '10'}</span>
+                    </div>
+                ) : (
+                    <div className="flex justify-between text-[9px] text-slate-300 px-0.5 -mt-0.5">
+                        <span>1</span><span>5</span><span>10</span>
+                    </div>
+                )}
+                {/* Metric chips — enhanced with real-world values */}
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                     <span className="px-1.5 py-0.5 text-[10px] font-medium bg-purple-100 text-purple-700 rounded">
-                        Ideal: {rule.ideal_position}
+                        Ideal: {label(rule.ideal_position) ? `${label(rule.ideal_position)} (${rule.ideal_position})` : rule.ideal_position}
                     </span>
                     <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600 rounded">
-                        Range: {rule.minimum_position}–{rule.maximum_position}
+                        Range: {label(rule.minimum_position) || rule.minimum_position}–{label(rule.maximum_position) || rule.maximum_position}
                     </span>
                     <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
-                        Fallback: {rule.fallback_position}
+                        Fallback: {label(rule.fallback_position) || rule.fallback_position}
                     </span>
                     <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 rounded">
                         Importance: {rule.importance_level}/10
                     </span>
                     {rule.requires_approval_below != null && (
                         <span className="px-1.5 py-0.5 text-[10px] font-medium bg-red-50 text-red-600 rounded">
-                            Escalate &lt;{rule.requires_approval_below}{rule.escalation_contact ? ` → ${rule.escalation_contact}` : ''}
+                            Escalate &lt;{label(rule.requires_approval_below) || rule.requires_approval_below}{rule.escalation_contact ? ` → ${rule.escalation_contact}` : ''}
                         </span>
                     )}
                 </div>

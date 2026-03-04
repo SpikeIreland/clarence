@@ -8,6 +8,13 @@
 // SECTION 1: INTERFACES
 // ============================================================================
 
+export interface PlaybookRangeContext {
+    value_type: 'duration' | 'percentage' | 'currency' | 'count' | 'boolean' | 'text' | null
+    range_unit: string | null
+    scale_points: { position: number; label: string; value: number }[]
+    source: 'parsed' | 'manual' | 'inferred'
+}
+
 export interface PlaybookRule {
     rule_id: string
     playbook_id: string
@@ -25,6 +32,7 @@ export interface PlaybookRule {
     escalation_contact: string | null
     escalation_contact_email: string | null
     rationale: string | null
+    range_context: PlaybookRangeContext | null
 }
 
 export interface ContractClause {
@@ -168,6 +176,113 @@ export function getCategoryDisplayName(normalisedKey: string): string {
     return CATEGORY_DISPLAY_NAMES[normalisedKey] || normalisedKey
         .replace(/_/g, ' ')
         .replace(/\b\w/g, c => c.toUpperCase())
+}
+
+// ============================================================================
+// SECTION 2B: RANGE CONTEXT FOR PLAYBOOK RULES
+// ============================================================================
+
+const CATEGORY_RANGE_DEFAULTS: Record<string, PlaybookRangeContext> = {
+    liability: {
+        value_type: 'percentage', range_unit: '% of annual fees', source: 'inferred',
+        scale_points: [
+            { position: 1, label: '50%', value: 50 },
+            { position: 3, label: '100%', value: 100 },
+            { position: 5, label: '150%', value: 150 },
+            { position: 7, label: '200%', value: 200 },
+            { position: 10, label: 'Unlimited', value: 999 },
+        ],
+    },
+    payment: {
+        value_type: 'duration', range_unit: 'days', source: 'inferred',
+        scale_points: [
+            { position: 1, label: '90 days', value: 90 },
+            { position: 3, label: '60 days', value: 60 },
+            { position: 5, label: '30 days', value: 30 },
+            { position: 7, label: '14 days', value: 14 },
+            { position: 10, label: '7 days', value: 7 },
+        ],
+    },
+    termination: {
+        value_type: 'duration', range_unit: 'months notice', source: 'inferred',
+        scale_points: [
+            { position: 1, label: '1 month', value: 1 },
+            { position: 3, label: '3 months', value: 3 },
+            { position: 5, label: '6 months', value: 6 },
+            { position: 7, label: '12 months', value: 12 },
+            { position: 10, label: '24 months', value: 24 },
+        ],
+    },
+    confidentiality: {
+        value_type: 'duration', range_unit: 'years', source: 'inferred',
+        scale_points: [
+            { position: 1, label: '1 year', value: 1 },
+            { position: 3, label: '2 years', value: 2 },
+            { position: 5, label: '3 years', value: 3 },
+            { position: 7, label: '5 years', value: 5 },
+            { position: 10, label: 'Perpetual', value: 99 },
+        ],
+    },
+    service_levels: {
+        value_type: 'percentage', range_unit: '% uptime', source: 'inferred',
+        scale_points: [
+            { position: 1, label: '95%', value: 95 },
+            { position: 3, label: '99%', value: 99 },
+            { position: 5, label: '99.5%', value: 99.5 },
+            { position: 7, label: '99.9%', value: 99.9 },
+            { position: 10, label: '99.99%', value: 99.99 },
+        ],
+    },
+    insurance: {
+        value_type: 'currency', range_unit: 'GBP', source: 'inferred',
+        scale_points: [
+            { position: 1, label: '£500K', value: 500000 },
+            { position: 3, label: '£1M', value: 1000000 },
+            { position: 5, label: '£2M', value: 2000000 },
+            { position: 7, label: '£5M', value: 5000000 },
+            { position: 10, label: '£10M', value: 10000000 },
+        ],
+    },
+    data_protection: {
+        value_type: 'duration', range_unit: 'hours (breach notify)', source: 'inferred',
+        scale_points: [
+            { position: 1, label: 'No SLA', value: 0 },
+            { position: 3, label: '72 hrs', value: 72 },
+            { position: 5, label: '48 hrs', value: 48 },
+            { position: 7, label: '24 hrs', value: 24 },
+            { position: 10, label: '4 hrs', value: 4 },
+        ],
+    },
+    intellectual_property: {
+        value_type: 'duration', range_unit: 'years retention', source: 'inferred',
+        scale_points: [
+            { position: 1, label: '0 years', value: 0 },
+            { position: 3, label: '1 year', value: 1 },
+            { position: 5, label: '3 years', value: 3 },
+            { position: 7, label: '5 years', value: 5 },
+            { position: 10, label: 'Perpetual', value: 99 },
+        ],
+    },
+}
+
+export function getCategoryFallbackContext(normalisedCategory: string): PlaybookRangeContext | null {
+    return CATEGORY_RANGE_DEFAULTS[normalisedCategory] || null
+}
+
+export function getEffectiveRangeContext(rule: PlaybookRule): PlaybookRangeContext | null {
+    if (rule.range_context) return rule.range_context
+    return getCategoryFallbackContext(normaliseCategory(rule.category))
+}
+
+export function translateRulePosition(rule: PlaybookRule, position: number): string | null {
+    const ctx = getEffectiveRangeContext(rule)
+    if (!ctx?.scale_points?.length) return null
+    const exact = ctx.scale_points.find(p => Math.abs(p.position - position) < 0.5)
+    if (exact) return exact.label
+    const sorted = [...ctx.scale_points].sort((a, b) =>
+        Math.abs(a.position - position) - Math.abs(b.position - position)
+    )
+    return sorted[0]?.label || null
 }
 
 // ============================================================================
