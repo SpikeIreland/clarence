@@ -114,6 +114,16 @@ export default function Footer() {
             <h4 className="text-white font-semibold text-sm mb-4">Company</h4>
             <ul className="space-y-2">
               <li>
+                <a
+                  href="https://dataroom.clarencelegal.ai"
+                  className="text-sm hover:text-white transition-colors"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Investor Data Room
+                </a>
+              </li>
+              <li>
                 <Link
                   href="/privacy"
                   className="text-sm hover:text-white transition-colors"
