@@ -1,521 +1,419 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import { CheckCircle2, X } from 'lucide-react'
 import MainNavigation from '../components/MainNavigation'
+import SectionCTA from '../components/SectionCTA'
+import Footer from '../components/Footer'
 
 export const metadata: Metadata = {
-    title: 'Pricing | CLARENCE - AI-Powered Contract Mediation',
-    description: 'Flexible pricing for teams of all sizes. From free trials to enterprise solutions. Contact us for custom pricing.',
+  title: 'Pricing | CLARENCE - AI-Powered Contract Intelligence',
+  description:
+    'Flexible pricing for teams of all sizes. Professional plan from £300/month. Start with a free trial or contact us for enterprise solutions.',
 }
 
 // ============================================================================
-// SECTION 1: MAIN PRICING PAGE COMPONENT
+// PRICING PAGE — REDESIGNED
 // Location: app/pricing/page.tsx
+//
+// Key changes:
+// - Professional tier now shows £300/month explicitly
+// - Product-tier mapping added
+// - Uses shared components (Footer, SectionCTA)
+// - Refreshed visual design to match new site style
 // ============================================================================
 
 export default function PricingPage() {
-    return (
-        <main className="min-h-screen bg-slate-50">
-            {/* ================================================================== */}
-            {/* SECTION 2: NAVIGATION */}
-            {/* ================================================================== */}
-            <MainNavigation />
+  return (
+    <main className="min-h-screen bg-slate-50">
+      <MainNavigation />
 
-            {/* ================================================================== */}
-            {/* SECTION 3: HERO SECTION */}
-            {/* ================================================================== */}
-            <section className="bg-white border-b border-slate-200">
-                <div className="container mx-auto px-6 py-16">
-                    <div className="max-w-3xl mx-auto text-center">
-                        <h1 className="text-4xl font-bold text-slate-800 mb-4">
-                            Simple, Transparent Pricing
-                        </h1>
-                        <p className="text-xl text-slate-600">
-                            Start with a free trial. Scale as you grow.
-                            No hidden fees, no surprises.
-                        </p>
-                    </div>
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <section className="bg-white border-b border-slate-200">
+        <div className="container mx-auto px-6 py-16">
+          <div className="max-w-3xl mx-auto text-center">
+            <h1 className="text-4xl font-bold text-slate-800 mb-4">
+              Simple, Transparent Pricing
+            </h1>
+            <p className="text-xl text-slate-600">
+              Start with a free trial. Scale as you grow. No hidden fees, no
+              surprises.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Pricing Tiers ────────────────────────────────────────────── */}
+      <section className="py-16">
+        <div className="container mx-auto px-6">
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {/* STARTER / FREE TRIAL */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
+              <div className="p-6 border-b border-slate-100">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium mb-4">
+                  Starter
                 </div>
-            </section>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">
+                  Free Trial
+                </h3>
+                <p className="text-slate-500 text-sm">
+                  Perfect for evaluating CLARENCE with your first contract
+                  negotiation.
+                </p>
+              </div>
 
-            {/* ================================================================== */}
-            {/* SECTION 4: PRICING TIERS */}
-            {/* ================================================================== */}
-            <section className="py-16">
-                <div className="container mx-auto px-6">
-                    <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-
-                        {/* ============================================================ */}
-                        {/* TIER 1: Starter / Free Trial */}
-                        {/* ============================================================ */}
-                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
-                            {/* Header */}
-                            <div className="p-6 border-b border-slate-100">
-                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-medium mb-4">
-                                    <span>🚀</span>
-                                    <span>Starter</span>
-                                </div>
-                                <h3 className="text-2xl font-bold text-slate-800 mb-2">Free Trial</h3>
-                                <p className="text-slate-500 text-sm">
-                                    Perfect for evaluating CLARENCE with your first contract negotiation.
-                                </p>
-                            </div>
-
-                            {/* Price */}
-                            <div className="p-6 bg-slate-50">
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-4xl font-bold text-slate-800">£0</span>
-                                    <span className="text-slate-500">/ trial</span>
-                                </div>
-                                <p className="text-sm text-slate-500 mt-2">1 contract session included</p>
-                            </div>
-
-                            {/* Features */}
-                            <div className="p-6">
-                                <ul className="space-y-3">
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">1 active contract session</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Up to 2 respondents</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Full Training Studio access</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Basic document package</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Community support</span>
-                                    </li>
-                                </ul>
-
-                                <Link
-                                    href="/request-trial"
-                                    className="block w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white text-center font-semibold rounded-lg transition-colors"
-                                >
-                                    Request Free Trial
-                                </Link>
-                            </div>
-                        </div>
-
-                        {/* ============================================================ */}
-                        {/* TIER 2: Professional - FEATURED */}
-                        {/* ============================================================ */}
-                        <div className="bg-white rounded-2xl border-2 border-emerald-500 overflow-hidden shadow-lg relative">
-                            {/* Popular Badge */}
-                            <div className="absolute top-0 left-0 right-0 bg-emerald-500 text-white text-center py-1 text-sm font-medium">
-                                Most Popular
-                            </div>
-
-                            {/* Header */}
-                            <div className="p-6 border-b border-slate-100 pt-10">
-                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium mb-4">
-                                    <span>⚡</span>
-                                    <span>Professional</span>
-                                </div>
-                                <h3 className="text-2xl font-bold text-slate-800 mb-2">Growing Teams</h3>
-                                <p className="text-slate-500 text-sm">
-                                    For procurement teams running regular contract negotiations.
-                                </p>
-                            </div>
-
-                            {/* Price */}
-                            <div className="p-6 bg-emerald-50">
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-4xl font-bold text-slate-800">Contact Us</span>
-                                </div>
-                                <p className="text-sm text-emerald-700 mt-2">Custom pricing based on your needs</p>
-                            </div>
-
-                            {/* Features */}
-                            <div className="p-6">
-                                <ul className="space-y-3">
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Up to 10 active contracts</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Up to 5 respondents per contract</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">5 team members</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Unlimited CLARENCE AI interactions</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Full document package</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Email support (48hr response)</span>
-                                    </li>
-                                </ul>
-
-                                <Link
-                                    href="/request-trial"
-                                    className="block w-full mt-6 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-center font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
-                                >
-                                    Contact Sales
-                                </Link>
-                            </div>
-                        </div>
-
-                        {/* ============================================================ */}
-                        {/* TIER 3: Enterprise */}
-                        {/* ============================================================ */}
-                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
-                            {/* Header */}
-                            <div className="p-6 border-b border-slate-100">
-                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium mb-4">
-                                    <span>🏢</span>
-                                    <span>Enterprise</span>
-                                </div>
-                                <h3 className="text-2xl font-bold text-slate-800 mb-2">Large Organizations</h3>
-                                <p className="text-slate-500 text-sm">
-                                    For enterprises with compliance, security, and scale requirements.
-                                </p>
-                            </div>
-
-                            {/* Price */}
-                            <div className="p-6 bg-slate-50">
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-4xl font-bold text-slate-800">Custom</span>
-                                </div>
-                                <p className="text-sm text-slate-500 mt-2">Tailored to your organization</p>
-                            </div>
-
-                            {/* Features */}
-                            <div className="p-6">
-                                <ul className="space-y-3">
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Unlimited contracts</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Unlimited respondents</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Unlimited team members</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">SSO / SAML authentication</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">API access</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Dedicated account manager</span>
-                                    </li>
-                                    <li className="flex items-start gap-3">
-                                        <svg className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                        </svg>
-                                        <span className="text-sm text-slate-600">Custom playbook integration</span>
-                                    </li>
-                                </ul>
-
-                                <Link
-                                    href="/request-trial"
-                                    className="block w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white text-center font-semibold rounded-lg transition-colors"
-                                >
-                                    Contact Sales
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
+              <div className="p-6 bg-slate-50">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-slate-800">£0</span>
+                  <span className="text-slate-500">/ trial</span>
                 </div>
-            </section>
+                <p className="text-sm text-slate-500 mt-2">
+                  1 contract session included
+                </p>
+              </div>
 
-            {/* ================================================================== */}
-            {/* SECTION 5: FEATURE COMPARISON TABLE */}
-            {/* ================================================================== */}
-            <section className="py-16 bg-white border-t border-slate-200">
-                <div className="container mx-auto px-6">
-                    <div className="max-w-5xl mx-auto">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-8 text-center">
-                            Feature Comparison
-                        </h2>
+              <div className="p-6">
+                <ul className="space-y-3">
+                  <FeatureItem>1 active contract session</FeatureItem>
+                  <FeatureItem>Up to 2 respondents</FeatureItem>
+                  <FeatureItem>QuickCreate access</FeatureItem>
+                  <FeatureItem>Full Training Studio access</FeatureItem>
+                  <FeatureItem>Basic document package</FeatureItem>
+                  <FeatureItem>50 AI interactions/month</FeatureItem>
+                </ul>
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-slate-200">
-                                        <th className="text-left py-4 px-4 font-semibold text-slate-800">Feature</th>
-                                        <th className="text-center py-4 px-4 font-semibold text-slate-800">Starter</th>
-                                        <th className="text-center py-4 px-4 font-semibold text-emerald-600">Professional</th>
-                                        <th className="text-center py-4 px-4 font-semibold text-slate-800">Enterprise</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-sm">
-                                    {/* Contract Sessions */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">Active contract sessions</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">1</td>
-                                        <td className="py-4 px-4 text-center text-slate-800 bg-emerald-50/50">10</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Unlimited</td>
-                                    </tr>
-                                    {/* Respondents */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">Respondents per session</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">2</td>
-                                        <td className="py-4 px-4 text-center text-slate-800 bg-emerald-50/50">5</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Unlimited</td>
-                                    </tr>
-                                    {/* Team Members */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">Team members</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">1</td>
-                                        <td className="py-4 px-4 text-center text-slate-800 bg-emerald-50/50">5</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Unlimited</td>
-                                    </tr>
-                                    {/* Training Studio */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">Training Studio</td>
-                                        <td className="py-4 px-4 text-center"><CheckIcon /></td>
-                                        <td className="py-4 px-4 text-center bg-emerald-50/50"><CheckIcon /></td>
-                                        <td className="py-4 px-4 text-center"><CheckIcon /></td>
-                                    </tr>
-                                    {/* CLARENCE AI */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">CLARENCE AI interactions</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">50/month</td>
-                                        <td className="py-4 px-4 text-center text-slate-800 bg-emerald-50/50">Unlimited</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Unlimited</td>
-                                    </tr>
-                                    {/* Document Package */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">Evidence Package</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Basic</td>
-                                        <td className="py-4 px-4 text-center text-slate-800 bg-emerald-50/50">Full</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Full + Custom</td>
-                                    </tr>
-                                    {/* Support */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">Support</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Community</td>
-                                        <td className="py-4 px-4 text-center text-slate-800 bg-emerald-50/50">Email (48hr)</td>
-                                        <td className="py-4 px-4 text-center text-slate-800">Priority + AM</td>
-                                    </tr>
-                                    {/* SSO */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">SSO / SAML</td>
-                                        <td className="py-4 px-4 text-center"><CrossIcon /></td>
-                                        <td className="py-4 px-4 text-center bg-emerald-50/50"><CrossIcon /></td>
-                                        <td className="py-4 px-4 text-center"><CheckIcon /></td>
-                                    </tr>
-                                    {/* API Access */}
-                                    <tr className="border-b border-slate-100">
-                                        <td className="py-4 px-4 text-slate-600">API Access</td>
-                                        <td className="py-4 px-4 text-center"><CrossIcon /></td>
-                                        <td className="py-4 px-4 text-center bg-emerald-50/50"><CrossIcon /></td>
-                                        <td className="py-4 px-4 text-center"><CheckIcon /></td>
-                                    </tr>
-                                    {/* Playbook Integration */}
-                                    <tr>
-                                        <td className="py-4 px-4 text-slate-600">Custom playbook integration</td>
-                                        <td className="py-4 px-4 text-center"><CrossIcon /></td>
-                                        <td className="py-4 px-4 text-center bg-emerald-50/50"><CrossIcon /></td>
-                                        <td className="py-4 px-4 text-center"><CheckIcon /></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                <Link
+                  href="/request-trial"
+                  className="block w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white text-center font-semibold rounded-lg transition-colors"
+                >
+                  Request Free Trial
+                </Link>
+              </div>
+            </div>
+
+            {/* PROFESSIONAL — FEATURED */}
+            <div className="bg-white rounded-2xl border-2 border-emerald-500 overflow-hidden shadow-lg relative">
+              <div className="absolute top-0 left-0 right-0 bg-emerald-500 text-white text-center py-1 text-sm font-medium">
+                Most Popular
+              </div>
+
+              <div className="p-6 border-b border-slate-100 pt-10">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium mb-4">
+                  Professional
                 </div>
-            </section>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">
+                  Growing Teams
+                </h3>
+                <p className="text-slate-500 text-sm">
+                  For procurement teams running regular contract negotiations.
+                </p>
+              </div>
 
-            {/* ================================================================== */}
-            {/* SECTION 6: FAQ */}
-            {/* ================================================================== */}
-            <section className="py-16 bg-slate-50 border-t border-slate-200">
-                <div className="container mx-auto px-6">
-                    <div className="max-w-3xl mx-auto">
-                        <h2 className="text-2xl font-bold text-slate-800 mb-8 text-center">
-                            Frequently Asked Questions
-                        </h2>
-
-                        <div className="space-y-6">
-                            <div className="bg-white rounded-xl p-6 border border-slate-200">
-                                <h3 className="font-semibold text-slate-800 mb-2">
-                                    How does the free trial work?
-                                </h3>
-                                <p className="text-sm text-slate-600">
-                                    Request a trial and we'll set you up with one complete contract session.
-                                    You'll have access to the Training Studio to learn the platform, then run
-                                    a real negotiation with up to 2 respondents. No credit card required.
-                                </p>
-                            </div>
-
-                            <div className="bg-white rounded-xl p-6 border border-slate-200">
-                                <h3 className="font-semibold text-slate-800 mb-2">
-                                    What's included in the Evidence Package?
-                                </h3>
-                                <p className="text-sm text-slate-600">
-                                    The Evidence Package includes executive summary, leverage report, position
-                                    history, chat transcripts, trade-off register, timeline audit, contract draft,
-                                    and the Contract Handbook for ongoing governance.
-                                </p>
-                            </div>
-
-                            <div className="bg-white rounded-xl p-6 border border-slate-200">
-                                <h3 className="font-semibold text-slate-800 mb-2">
-                                    Can I upgrade or downgrade my plan?
-                                </h3>
-                                <p className="text-sm text-slate-600">
-                                    Yes! Contact us at any time to adjust your plan. We'll pro-rate any changes
-                                    and ensure a smooth transition for your active contracts.
-                                </p>
-                            </div>
-
-                            <div className="bg-white rounded-xl p-6 border border-slate-200">
-                                <h3 className="font-semibold text-slate-800 mb-2">
-                                    Is my data secure?
-                                </h3>
-                                <p className="text-sm text-slate-600">
-                                    Absolutely. CLARENCE is built with enterprise-grade security. All data is
-                                    encrypted in transit and at rest. Enterprise plans include additional security
-                                    features like SSO/SAML and dedicated infrastructure options.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+              <div className="p-6 bg-emerald-50">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-slate-800">
+                    £300
+                  </span>
+                  <span className="text-slate-500">/ month</span>
                 </div>
-            </section>
+                <p className="text-sm text-emerald-700 mt-2">
+                  Per organisation, billed monthly
+                </p>
+              </div>
 
-            {/* ================================================================== */}
-            {/* SECTION 7: CTA */}
-            {/* ================================================================== */}
-            <section className="py-16 bg-gradient-to-br from-slate-800 to-slate-900">
-                <div className="container mx-auto px-6 text-center">
-                    <h2 className="text-3xl font-bold text-white mb-4">
-                        Ready to Get Started?
-                    </h2>
-                    <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-                        Start with a free trial or contact our team to discuss your requirements.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <Link
-                            href="/request-trial"
-                            className="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-all shadow-lg shadow-emerald-500/25"
-                        >
-                            Request Free Trial
-                        </Link>
-                        <Link
-                            href="/request-trial"
-                            className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg border border-slate-600 transition-all"
-                        >
-                            Contact Sales
-                        </Link>
-                    </div>
+              <div className="p-6">
+                <ul className="space-y-3">
+                  <FeatureItem>Up to 10 active contracts</FeatureItem>
+                  <FeatureItem>Up to 5 respondents per contract</FeatureItem>
+                  <FeatureItem>Full product suite access</FeatureItem>
+                  <FeatureItem>5 team members</FeatureItem>
+                  <FeatureItem>Unlimited AI interactions</FeatureItem>
+                  <FeatureItem>Full document package</FeatureItem>
+                  <FeatureItem>Email support (48hr response)</FeatureItem>
+                </ul>
+
+                <Link
+                  href="/request-trial"
+                  className="block w-full mt-6 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-center font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
+                >
+                  Get Started — £300/month
+                </Link>
+              </div>
+            </div>
+
+            {/* ENTERPRISE */}
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
+              <div className="p-6 border-b border-slate-100">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium mb-4">
+                  Enterprise
                 </div>
-            </section>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">
+                  Large Organisations
+                </h3>
+                <p className="text-slate-500 text-sm">
+                  For enterprises with compliance, security, and scale
+                  requirements.
+                </p>
+              </div>
 
-            {/* ================================================================== */}
-            {/* SECTION 8: FOOTER */}
-            {/* ================================================================== */}
-            <footer className="bg-slate-900 text-slate-400 py-12">
-                <div className="container mx-auto px-6">
-                    <div className="flex flex-col md:flex-row justify-between items-center">
-                        <div className="flex items-center gap-3 mb-6 md:mb-0">
-                            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
-                                <span className="text-white font-bold">C</span>
-                            </div>
-                            <div>
-                                <span className="text-white font-semibold">CLARENCE</span>
-                                <span className="text-slate-500 text-sm ml-2">The Honest Broker</span>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-8 text-sm">
-                            <Link href="/how-it-works" className="hover:text-white transition-colors">
-                                How It Works
-                            </Link>
-                            <Link href="/pricing" className="hover:text-white transition-colors">
-                                Pricing
-                            </Link>
-                            <Link href="/privacy" className="hover:text-white transition-colors">
-                                Privacy
-                            </Link>
-                            <Link href="/terms" className="hover:text-white transition-colors">
-                                Terms
-                            </Link>
-                        </div>
-                    </div>
-
-                    <div className="border-t border-slate-800 mt-8 pt-8 text-center text-sm">
-                        <p>&copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.</p>
-                    </div>
+              <div className="p-6 bg-slate-50">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-slate-800">
+                    Custom
+                  </span>
                 </div>
-            </footer>
-        </main>
-    )
+                <p className="text-sm text-slate-500 mt-2">
+                  Tailored to your organisation
+                </p>
+              </div>
+
+              <div className="p-6">
+                <ul className="space-y-3">
+                  <FeatureItem>Unlimited contracts</FeatureItem>
+                  <FeatureItem>Unlimited respondents</FeatureItem>
+                  <FeatureItem>Unlimited team members</FeatureItem>
+                  <FeatureItem>SSO / SAML authentication</FeatureItem>
+                  <FeatureItem>API access</FeatureItem>
+                  <FeatureItem>Dedicated account manager</FeatureItem>
+                  <FeatureItem>Custom playbook integration</FeatureItem>
+                </ul>
+
+                <Link
+                  href="/enterprise"
+                  className="block w-full mt-6 px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white text-center font-semibold rounded-lg transition-colors"
+                >
+                  Contact Sales
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Product Access by Tier ────────────────────────────────────── */}
+      <section className="py-16 bg-white border-t border-slate-200">
+        <div className="container mx-auto px-6">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-8 text-center">
+              Product Access by Plan
+            </h2>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left py-4 px-4 font-semibold text-slate-800">
+                      Product
+                    </th>
+                    <th className="text-center py-4 px-4 font-semibold text-slate-800">
+                      Starter
+                    </th>
+                    <th className="text-center py-4 px-4 font-semibold text-emerald-600">
+                      Professional
+                    </th>
+                    <th className="text-center py-4 px-4 font-semibold text-slate-800">
+                      Enterprise
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  <TableRow label="QuickCreate" starter={true} pro={true} enterprise={true} />
+                  <TableRow label="ContractCreate" starter={false} pro={true} enterprise={true} />
+                  <TableRow label="Co-Create" starter={false} pro={true} enterprise={true} />
+                  <TableRow label="Negotiate" starter="Limited" pro={true} enterprise={true} />
+                  <TableRow label="Training Studio" starter={true} pro={true} enterprise={true} />
+                  <TableRow label="Document Preparation" starter={false} pro={true} enterprise={true} note="Coming soon" />
+                  <TableRow label="ContractKnowledge" starter={false} pro={true} enterprise={true} note="Coming soon" />
+                  <TableRow label="Tendering" starter={false} pro={false} enterprise={true} note="Coming soon" />
+                  <TableRow label="Sign" starter={false} pro={true} enterprise={true} note="Coming soon" />
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Feature Comparison ───────────────────────────────────────── */}
+      <section className="py-16 bg-slate-50 border-t border-slate-200">
+        <div className="container mx-auto px-6">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-8 text-center">
+              Feature Comparison
+            </h2>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left py-4 px-4 font-semibold text-slate-800">
+                      Feature
+                    </th>
+                    <th className="text-center py-4 px-4 font-semibold text-slate-800">
+                      Starter
+                    </th>
+                    <th className="text-center py-4 px-4 font-semibold text-emerald-600">
+                      Professional
+                    </th>
+                    <th className="text-center py-4 px-4 font-semibold text-slate-800">
+                      Enterprise
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  <ComparisonRow label="Active contract sessions" starter="1" pro="10" enterprise="Unlimited" />
+                  <ComparisonRow label="Respondents per session" starter="2" pro="5" enterprise="Unlimited" />
+                  <ComparisonRow label="Team members" starter="1" pro="5" enterprise="Unlimited" />
+                  <ComparisonRow label="CLARENCE AI interactions" starter="50/month" pro="Unlimited" enterprise="Unlimited" />
+                  <ComparisonRow label="Evidence Package" starter="Basic" pro="Full" enterprise="Full + Custom" />
+                  <ComparisonRow label="Support" starter="Community" pro="Email (48hr)" enterprise="Priority + AM" />
+                  <TableRow label="SSO / SAML" starter={false} pro={false} enterprise={true} />
+                  <TableRow label="API Access" starter={false} pro={false} enterprise={true} />
+                  <TableRow label="Custom playbook integration" starter={false} pro={false} enterprise={true} />
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ──────────────────────────────────────────────────────── */}
+      <section className="py-16 bg-white border-t border-slate-200">
+        <div className="container mx-auto px-6">
+          <div className="max-w-3xl mx-auto">
+            <h2 className="text-2xl font-bold text-slate-800 mb-8 text-center">
+              Frequently Asked Questions
+            </h2>
+
+            <div className="space-y-6">
+              <FAQItem
+                question="How does the free trial work?"
+                answer="Request a trial and we'll set you up with one complete contract session. You'll have access to the Training Studio to learn the platform, then run a real negotiation with up to 2 respondents. No credit card required."
+              />
+              <FAQItem
+                question="What does £300/month include?"
+                answer="The Professional plan gives your organisation access to the full Clarence product suite including ContractCreate, Co-Create, Negotiate, Training Studio, and QuickCreate. You can run up to 10 active contracts with 5 respondents each, and have 5 team members on the platform."
+              />
+              <FAQItem
+                question="What's included in the Evidence Package?"
+                answer="The Evidence Package includes executive summary, leverage report, position history, chat transcripts, trade-off register, timeline audit, contract draft, and the Contract Handbook for ongoing governance."
+              />
+              <FAQItem
+                question="Can I upgrade or downgrade my plan?"
+                answer="Yes! Contact us at any time to adjust your plan. We'll pro-rate any changes and ensure a smooth transition for your active contracts."
+              />
+              <FAQItem
+                question="Is my data secure?"
+                answer="Absolutely. CLARENCE is built with enterprise-grade security. All data is encrypted in transit and at rest. Enterprise plans include additional security features like SSO/SAML and dedicated infrastructure options."
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <SectionCTA
+        title="Ready to Get Started?"
+        subtitle="Start with a free trial or contact our team to discuss your requirements."
+        primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
+        secondaryCTA={{ text: 'Contact Sales', href: '/enterprise' }}
+      />
+
+      <Footer />
+    </main>
+  )
 }
 
 // ============================================================================
-// SECTION 9: HELPER COMPONENTS
+// HELPER COMPONENTS
 // ============================================================================
 
-function CheckIcon() {
-    return (
-        <svg className="w-5 h-5 text-emerald-500 mx-auto" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-        </svg>
-    )
+function FeatureItem({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-3">
+      <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+      <span className="text-sm text-slate-600">{children}</span>
+    </li>
+  )
 }
 
-function CrossIcon() {
-    return (
-        <svg className="w-5 h-5 text-slate-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
-    )
+function TableRow({
+  label,
+  starter,
+  pro,
+  enterprise,
+  note,
+}: {
+  label: string
+  starter: boolean | string
+  pro: boolean | string
+  enterprise: boolean | string
+  note?: string
+}) {
+  return (
+    <tr className="border-b border-slate-100">
+      <td className="py-4 px-4 text-slate-600">
+        {label}
+        {note && (
+          <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full">
+            {note}
+          </span>
+        )}
+      </td>
+      <td className="py-4 px-4 text-center">
+        <CellValue value={starter} />
+      </td>
+      <td className="py-4 px-4 text-center bg-emerald-50/50">
+        <CellValue value={pro} />
+      </td>
+      <td className="py-4 px-4 text-center">
+        <CellValue value={enterprise} />
+      </td>
+    </tr>
+  )
+}
+
+function ComparisonRow({
+  label,
+  starter,
+  pro,
+  enterprise,
+}: {
+  label: string
+  starter: string
+  pro: string
+  enterprise: string
+}) {
+  return (
+    <tr className="border-b border-slate-100">
+      <td className="py-4 px-4 text-slate-600">{label}</td>
+      <td className="py-4 px-4 text-center text-slate-800">{starter}</td>
+      <td className="py-4 px-4 text-center text-slate-800 bg-emerald-50/50">
+        {pro}
+      </td>
+      <td className="py-4 px-4 text-center text-slate-800">{enterprise}</td>
+    </tr>
+  )
+}
+
+function CellValue({ value }: { value: boolean | string }) {
+  if (typeof value === 'string') {
+    return <span className="text-slate-800 text-sm">{value}</span>
+  }
+  if (value) {
+    return <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto" />
+  }
+  return <X className="w-5 h-5 text-slate-300 mx-auto" />
+}
+
+function FAQItem({
+  question,
+  answer,
+}: {
+  question: string
+  answer: string
+}) {
+  return (
+    <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+      <h3 className="font-semibold text-slate-800 mb-2">{question}</h3>
+      <p className="text-sm text-slate-600">{answer}</p>
+    </div>
+  )
 }

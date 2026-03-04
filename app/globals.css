@@ -81,6 +81,44 @@ body {
 }
 
 /* ============================================================================
+   NAVIGATION ANIMATIONS
+   ============================================================================ */
+
+/* Dropdown menu enter */
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-dropdown-enter {
+  animation: dropdown-enter 0.15s ease-out;
+}
+
+/* Mobile menu slide down */
+@keyframes slide-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-down {
+  animation: slide-in-down 0.2s ease-out;
+}
+
+/* ============================================================================
    UTILITY CLASSES
    ============================================================================ */
 

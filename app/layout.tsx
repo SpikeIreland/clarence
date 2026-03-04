@@ -19,12 +19,12 @@ export const metadata: Metadata = {
     default: "CLARENCE | The Honest Broker",
     template: "%s | CLARENCE"
   },
-  description: "Create, Negotiate, Agree. AI-powered contract mediation that removes emotion and brings transparency to negotiations.",
-  keywords: ["contract negotiation", "AI mediation", "contract management", "legal tech"],
+  description: "The complete platform for contract intelligence. AI-powered products for contract creation, negotiation, training, and signing.",
+  keywords: ["contract intelligence", "AI mediation", "contract negotiation", "contract management", "legal tech", "contract creation", "digital signing", "tender management", "negotiation training"],
   authors: [{ name: "CLARENCE" }],
   openGraph: {
     title: "CLARENCE | The Honest Broker",
-    description: "Create, Negotiate, Agree. AI-powered contract mediation.",
+    description: "The complete platform for contract intelligence. Create, Negotiate, Agree.",
     siteName: "CLARENCE",
     type: "website",
   },

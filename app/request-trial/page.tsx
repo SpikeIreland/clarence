@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Metadata } from 'next'
 import Link from 'next/link'
 import MainNavigation from '../components/MainNavigation'
+import Footer from '../components/Footer'
 
 // ============================================================================
 // SECTION 1: REQUEST TRIAL PAGE
@@ -234,6 +235,7 @@ export default function RequestTrialPage() {
                         </div>
                     </div>
                 </section>
+                <Footer />
             </main>
         )
     }
@@ -526,6 +528,7 @@ export default function RequestTrialPage() {
                     </div>
                 </div>
             </section>
+            <Footer />
         </main>
     )
 }
