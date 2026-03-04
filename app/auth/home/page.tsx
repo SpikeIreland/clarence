@@ -199,7 +199,7 @@ function buildStudioUrl(pathway: string, id: string, isTraining?: boolean): stri
         case 'training':
             return `/auth/contract-studio?session_id=${id}`
         case 'co_create':
-            return `/auth/co-create/studio/${id}`
+            return `/auth/co-create-studio?session_id=${id}`
         default:
             return `/auth/home`
     }

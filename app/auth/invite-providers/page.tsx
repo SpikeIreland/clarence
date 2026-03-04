@@ -27,7 +27,7 @@ interface SessionData {
     sessionId: string
     sessionNumber: string
     customerCompany: string
-    mediationType: 'straight_to_contract' | 'partial_mediation' | 'full_mediation'
+    mediationType: 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | 'quick_create' | 'contract_create' | 'co_create'
     contractType: string
     templateSource: string
     status: string
@@ -88,7 +88,10 @@ const API_BASE = process.env.NEXT_PUBLIC_N8N_API_BASE || 'https://spikeislandstu
 const MEDIATION_LABELS: Record<string, string> = {
     'straight_to_contract': 'Straight to Contract',
     'partial_mediation': 'Partial Mediation',
-    'full_mediation': 'Full Mediation'
+    'full_mediation': 'Full Mediation',
+    'quick_create': 'Quick Create',
+    'contract_create': 'Contract Create',
+    'co_create': 'Co-Create'
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -651,6 +654,22 @@ function InviteProvidersContent() {
         router.push(url)
     }
 
+    // Co-Create: After invite, route to strategic assessment with CO pathway params
+    const navigateToCoCreateAssessment = () => {
+        const pathwayId = searchParams.get('pathway_id')
+        let url = `/auth/strategic-assessment?session_id=${session?.sessionId}`
+        if (pathwayId) {
+            url += `&pathway_id=${pathwayId}`
+        }
+        router.push(url)
+    }
+
+    // Helper: Check if this is a Co-Create pathway
+    const isCoCreatePathway = (): boolean => {
+        const pathwayId = searchParams.get('pathway_id')
+        return pathwayId === 'CO' || session?.mediationType === 'co_create'
+    }
+
     const handleAddMoreProviders = () => {
         setShowSuccessState(false)
     }
@@ -995,17 +1014,39 @@ function InviteProvidersContent() {
                                 <span className="text-2xl">⚠️</span>
                                 <div>
                                     <h3 className="font-semibold text-amber-800 mb-1">Important</h3>
-                                    <p className="text-sm text-amber-700">
-                                        The Contract Studio will be in <strong>Solo Prep mode</strong> until your provider
-                                        completes their intake. You can review clauses and CLARENCE assessments while waiting.
-                                        Full negotiation activates once both parties have submitted.
-                                    </p>
+                                    {isCoCreatePathway() ? (
+                                        <p className="text-sm text-amber-700">
+                                            Both parties need to complete their <strong>strategic assessments</strong> before
+                                            entering the Co-Create Studio. Your provider will receive an invitation to begin their
+                                            assessment. Once both assessments are complete, you&apos;ll build the contract together.
+                                        </p>
+                                    ) : (
+                                        <p className="text-sm text-amber-700">
+                                            The Contract Studio will be in <strong>Solo Prep mode</strong> until your provider
+                                            completes their intake. You can review clauses and CLARENCE assessments while waiting.
+                                            Full negotiation activates once both parties have submitted.
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
                         {/* Navigation Buttons */}
                         <div className="px-8 py-6">
+                            {isCoCreatePathway() ? (
+                                <button
+                                    onClick={navigateToCoCreateAssessment}
+                                    className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all shadow-md mb-4"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div className="text-left">
+                                        <div className="font-semibold">Continue to Strategic Assessment</div>
+                                        <div className="text-xs text-emerald-200">Complete your assessment while the provider completes theirs</div>
+                                    </div>
+                                </button>
+                            ) : (
                             <button
                                 onClick={navigateToStudio}
                                 className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-md mb-4"
@@ -1018,6 +1059,7 @@ function InviteProvidersContent() {
                                     <div className="text-xs text-blue-200">Review clauses while waiting for provider</div>
                                 </div>
                             </button>
+                            )}
 
                             <button
                                 onClick={navigateToDashboard}

@@ -39,7 +39,8 @@ export type JourneyType =
     | 'contract_upload'
     | 'template_upload'
     | 'playbook_upload'
-    | 'template_save';
+    | 'template_save'
+    | 'co_create_studio';
 
 /**
  * Event payload structure for API calls

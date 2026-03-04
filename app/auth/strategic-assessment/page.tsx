@@ -976,23 +976,44 @@ Your data is saved and ready. Click below to continue.`)
     if (contractId) params.set('contract_id', contractId)
     if (pathwayId) params.set('pathway_id', pathwayId)
 
-    const redirectUrl = `/auth/invite-providers?${params.toString()}`
+    // Co-Create: Provider already invited — route to Co-Create Studio
+    const isCoCreate = pathwayId === 'CO'
 
-    const transition: TransitionConfig = {
-      id: 'transition_to_invite',
-      fromStage: 'strategic_assessment',
-      toStage: 'invite_providers',
-      title: assessmentMode === 'fast-track' ? 'Ready to Invite' : 'Strategic Profile Complete',
-      message: assessmentMode === 'fast-track'
-        ? "Great! Your strategic defaults are saved. Let's invite the other party to begin."
-        : "Excellent work! I now have a clear picture of your negotiating position. Next, you'll:",
-      bulletPoints: [
-        'Invite one or more providers to negotiate',
-        'They will complete their own strategic assessment',
-        'Once both sides are ready, the Contract Studio activates'
-      ],
-      buttonText: 'Continue to Invite Provider'
-    }
+    const redirectUrl = isCoCreate
+      ? `/auth/co-create-studio?${params.toString()}`
+      : `/auth/invite-providers?${params.toString()}`
+
+    const transition: TransitionConfig = isCoCreate
+      ? {
+          id: 'transition_to_invite' as TransitionConfig['id'],
+          fromStage: 'strategic_assessment',
+          toStage: 'invite_providers' as TransitionConfig['toStage'],
+          title: assessmentMode === 'fast-track' ? 'Assessment Complete' : 'Strategic Profile Complete',
+          message: assessmentMode === 'fast-track'
+            ? "Your strategic defaults are saved. The Co-Create Studio is ready — time to build your contract collaboratively."
+            : "Excellent work! Your strategic profile is complete. Both parties can now enter the Co-Create Studio to build the contract together with CLARENCE.",
+          bulletPoints: [
+            'Enter the Co-Create Studio with the other party',
+            'CLARENCE will propose clauses based on your contract type',
+            'Both parties set initial positions collaboratively'
+          ],
+          buttonText: 'Enter Co-Create Studio'
+        }
+      : {
+          id: 'transition_to_invite',
+          fromStage: 'strategic_assessment',
+          toStage: 'invite_providers',
+          title: assessmentMode === 'fast-track' ? 'Ready to Invite' : 'Strategic Profile Complete',
+          message: assessmentMode === 'fast-track'
+            ? "Great! Your strategic defaults are saved. Let's invite the other party to begin."
+            : "Excellent work! I now have a clear picture of your negotiating position. Next, you'll:",
+          bulletPoints: [
+            'Invite one or more providers to negotiate',
+            'They will complete their own strategic assessment',
+            'Once both sides are ready, the Contract Studio activates'
+          ],
+          buttonText: 'Continue to Invite Provider'
+        }
 
     setTransitionState({
       isOpen: true,

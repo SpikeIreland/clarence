@@ -765,7 +765,7 @@ function ContractCreationContent() {
      * Build redirect URL based on pathway
      * - QC (Quick Create): Handled earlier — redirects to /auth/quick-contract/create
      * - All CC: -> strategic-assessment (assessment first, then invite, then studio)
-     * - CO: -> strategic-assessment (same as CC)
+     * - CO: -> invite-providers (early invite — provider needed for collaborative pathway)
      */
     const buildRedirectUrl = (
         pathwayId: PathwayId | string,
@@ -780,9 +780,9 @@ function ContractCreationContent() {
             params.set('contract_id', contractId)
         }
 
-        // CO: Co-Create — route to strategic assessment (same as CC)
+        // CO: Co-Create — route to invite-providers (early invite so both parties can assess in parallel)
         if (pathwayId === 'CO') {
-            return `/auth/strategic-assessment?${params.toString()}`
+            return `/auth/invite-providers?${params.toString()}`
         }
 
         // All CC paths: Go to strategic-assessment first
@@ -803,20 +803,20 @@ function ContractCreationContent() {
      * Get the appropriate transition based on pathway
      */
     const getTransitionForPathway = (pathwayId: PathwayId | string): TransitionConfig | null => {
-        // CO: Co-Create transition (cast id — 'transition_to_co_create' not yet in TransitionId type)
+        // CO: Co-Create transition — early invite so both parties can assess in parallel
         if (pathwayId === 'CO') {
             return {
                 id: 'transition_to_prep' as TransitionConfig['id'],
                 fromStage: 'pathway_review',
-                toStage: 'contract_prep',
+                toStage: 'invite_providers' as TransitionConfig['toStage'],
                 title: 'Co-Create Session Created',
-                message: "Your collaborative session is ready! Next, we'll capture your strategic context so CLARENCE can calculate leverage effectively.",
+                message: "Your Co-Create session is ready! The next step is to invite the other party — Co-Create is collaborative, so both parties need to be involved from the start. Once invited, you'll both complete your strategic assessments in parallel before entering the Co-Create Studio together.",
                 bulletPoints: [
-                    'Complete your strategic assessment',
-                    'Invite the other party to participate',
-                    'CLARENCE will generate clauses collaboratively'
+                    'Invite the other party to collaborate',
+                    'Both parties complete strategic assessments in parallel',
+                    'Then enter the Co-Create Studio to build the contract together'
                 ],
-                buttonText: 'Continue to Assessment'
+                buttonText: 'Continue to Invite Provider'
             }
         }
 
