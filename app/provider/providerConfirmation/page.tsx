@@ -25,6 +25,7 @@ interface ProviderSession {
     questionnaireComplete: boolean
     invitedAt: string
     providerId: string
+    mediationType?: string
 }
 
 // ============================================================================
@@ -97,10 +98,19 @@ function getStatusConfig(session: ProviderSession): {
     actionDisabled: boolean
     description: string
 } {
-    const { bidStatus, intakeComplete, questionnaireComplete, sessionId, providerId } = session
+    const { bidStatus, intakeComplete, questionnaireComplete, sessionId, providerId, mediationType } = session
+    const isCoCreate = mediationType === 'co_create'
+    const studioRoute = isCoCreate
+        ? `/auth/co-create-studio?session_id=${sessionId}&provider_id=${providerId}`
+        : `/auth/contract-studio?session_id=${sessionId}&provider_id=${providerId}`
+    const studioLabel = isCoCreate ? 'Enter Co-Create Studio' : 'Enter Contract Studio'
 
     // Questionnaire complete - awaiting CLARENCE calculation
-    if (questionnaireComplete || bidStatus === 'questionnaire_complete') {
+    // Only show this if status is EXACTLY questionnaire_complete — not if already ready/active
+    if (
+        (questionnaireComplete || bidStatus === 'questionnaire_complete') &&
+        bidStatus !== 'ready' && bidStatus !== 'active' && bidStatus !== 'negotiation_active'
+    ) {
         return {
             colour: 'text-amber-600',
             bgColour: 'bg-amber-50 border-amber-200',
@@ -108,7 +118,7 @@ function getStatusConfig(session: ProviderSession): {
             actionLabel: 'Awaiting Activation',
             actionRoute: null,
             actionDisabled: true,
-            description: 'CLARENCE is analysing both parties to calculate leverage positions. You will be notified when the Contract Studio is ready.'
+            description: 'CLARENCE is analysing both parties to calculate leverage positions. You will be notified when the studio is ready.'
         }
     }
 
@@ -118,10 +128,10 @@ function getStatusConfig(session: ProviderSession): {
             colour: 'text-emerald-600',
             bgColour: 'bg-emerald-50 border-emerald-200',
             badge: 'Ready',
-            actionLabel: 'Enter Contract Studio',
-            actionRoute: `/auth/contract-studio?session_id=${sessionId}&provider_id=${providerId}`,
+            actionLabel: studioLabel,
+            actionRoute: studioRoute,
             actionDisabled: false,
-            description: 'Both parties have completed their assessments. The Contract Studio is ready for negotiation.'
+            description: 'Both parties have completed their assessments. The studio is ready.'
         }
     }
 
@@ -292,7 +302,6 @@ export default function ProviderConfirmationPage() {
 // ============================================================================
 
 function ProviderLobbyContent() {
-    const router = useRouter()
     const searchParams = useSearchParams()
 
     // ========================================================================
@@ -305,6 +314,7 @@ function ProviderLobbyContent() {
     const [providerName, setProviderName] = useState<string>('')
     const [providerCompany, setProviderCompany] = useState<string>('')
     const [error, setError] = useState<string | null>(null)
+    const [isPolling, setIsPolling] = useState(false)
 
     // ========================================================================
     // SECTION 8B: INITIALIZATION
@@ -347,52 +357,46 @@ function ProviderLobbyContent() {
 
                 // Fetch this specific session's data
                 try {
-                    const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}`)
+                    const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}&provider_id=${providerId}`)
                     if (response.ok) {
                         const data = await response.json()
+                        const bidStatus = data.bid?.bidStatus || data.bid?.status || data.bidStatus || data.bid_status || 'questionnaire_complete'
                         const sessionData: ProviderSession = {
-                            sessionId: sessionId,
+                            sessionId,
                             sessionNumber: data.session?.sessionNumber || data.sessionNumber || data.session_number || '',
                             customerCompany: data.session?.customerCompany || data.customerCompany || data.customer_company || 'Customer',
                             contractType: data.session?.contractType || data.contractType || data.contract_type || 'Service Agreement',
                             dealValue: data.session?.dealValue || data.dealValue || data.deal_value || '',
-                            bidStatus: 'questionnaire_complete',
+                            bidStatus,
                             intakeComplete: true,
                             questionnaireComplete: true,
                             invitedAt: '',
-                            providerId: providerId
+                            providerId,
+                            mediationType: data.session?.mediationType || data.mediationType || data.mediation_type || ''
                         }
                         setSessions([sessionData])
+                        // Start polling if still awaiting activation
+                        if (bidStatus === 'questionnaire_complete') {
+                            setIsPolling(true)
+                        }
                     } else {
-                        // Fallback: create a basic card from what we know
                         setSessions([{
-                            sessionId,
-                            sessionNumber: '',
-                            customerCompany: 'Customer',
-                            contractType: 'Service Agreement',
-                            dealValue: '',
-                            bidStatus: 'questionnaire_complete',
-                            intakeComplete: true,
-                            questionnaireComplete: true,
-                            invitedAt: '',
-                            providerId
+                            sessionId, sessionNumber: '', customerCompany: 'Customer',
+                            contractType: 'Service Agreement', dealValue: '',
+                            bidStatus: 'questionnaire_complete', intakeComplete: true,
+                            questionnaireComplete: true, invitedAt: '', providerId
                         }])
+                        setIsPolling(true)
                     }
                 } catch (err) {
                     console.error('Failed to load session data:', err)
-                    // Still show a card with minimal info
                     setSessions([{
-                        sessionId,
-                        sessionNumber: '',
-                        customerCompany: 'Customer',
-                        contractType: 'Service Agreement',
-                        dealValue: '',
-                        bidStatus: 'questionnaire_complete',
-                        intakeComplete: true,
-                        questionnaireComplete: true,
-                        invitedAt: '',
-                        providerId
+                        sessionId, sessionNumber: '', customerCompany: 'Customer',
+                        contractType: 'Service Agreement', dealValue: '',
+                        bidStatus: 'questionnaire_complete', intakeComplete: true,
+                        questionnaireComplete: true, invitedAt: '', providerId
                     }])
+                    setIsPolling(true)
                 }
             } else {
                 // RETURN VISIT: provider logged in, fetch all their sessions
@@ -446,6 +450,38 @@ function ProviderLobbyContent() {
 
         initialize()
     }, [searchParams])
+
+    // Poll every 10 seconds while waiting for leverage calculation to complete
+    useEffect(() => {
+        if (!isPolling) return
+
+        const sessionId = searchParams.get('session_id')
+        const providerId = searchParams.get('provider_id')
+        if (!sessionId || !providerId) return
+
+        const poll = async () => {
+            try {
+                const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}&provider_id=${providerId}`)
+                if (!response.ok) return
+                const data = await response.json()
+                const bidStatus = data.bid?.bidStatus || data.bid?.status || data.bidStatus || data.bid_status || 'questionnaire_complete'
+
+                if (bidStatus === 'ready' || bidStatus === 'active' || bidStatus === 'negotiation_active') {
+                    setSessions(prev => prev.map(s =>
+                        s.sessionId === sessionId
+                            ? { ...s, bidStatus, mediationType: data.session?.mediationType || data.mediationType || data.mediation_type || s.mediationType }
+                            : s
+                    ))
+                    setIsPolling(false)
+                }
+            } catch (err) {
+                console.error('Polling error:', err)
+            }
+        }
+
+        const interval = setInterval(poll, 10000)
+        return () => clearInterval(interval)
+    }, [isPolling, searchParams])
 
     // ========================================================================
     // SECTION 8C: LOADING STATE
