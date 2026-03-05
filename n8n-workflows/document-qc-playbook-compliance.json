@@ -1,0 +1,517 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "document-qc-playbook-compliance",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                0,
+                480
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000001",
+            "name": "Webhook",
+            "webhookId": "a1b2c3d4-2001-4bbb-9001-000000000001"
+        },
+        {
+            "parameters": {
+                "jsCode": "const input = $input.first().json.body;\n\nif (!input.contract_id) {\n  throw new Error(\"Missing required field: contract_id\");\n}\n\nif (!input.user_id) {\n  throw new Error(\"Missing required field: user_id\");\n}\n\nif (!input.compliance) {\n  throw new Error(\"Missing required field: compliance (compliance data object)\");\n}\n\nconst validated = {\n  contract_id: input.contract_id,\n  user_id: input.user_id,\n  format: input.format || \"both\",\n  regenerate: input.regenerate || false,\n  document_type: \"playbook-compliance\",\n  source_type: \"quick_contract\",\n  requested_at: new Date().toISOString(),\n\n  // Compliance data passed from frontend\n  compliance: input.compliance,\n  playbook_name: input.playbook_name || \"Playbook\",\n  company_name: input.company_name || \"Company\",\n};\n\nreturn [{ json: validated }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                224,
+                480
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000002",
+            "name": "Validate Request"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  document_id,\n  status,\n  storage_path_pdf,\n  storage_path_docx,\n  preview_data,\n  created_at,\n  updated_at\nFROM generated_documents\nWHERE contract_id = '{{ $json.contract_id }}'\n  AND document_type = 'playbook-compliance'\n  AND source_type = 'quick_contract'\n  AND status = 'generated'\nORDER BY created_at DESC\nLIMIT 1;\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                448,
+                480
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000003",
+            "name": "Check Existing Document",
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const request = $(\"Validate Request\").first().json;\nconst postgresResult = $input.all();\n\nlet cachedDocument = null;\nlet hasCached = false;\n\nif (postgresResult && postgresResult.length > 0) {\n  const firstResult = postgresResult[0].json;\n  if (firstResult && firstResult.document_id) {\n    cachedDocument = firstResult;\n    hasCached = true;\n  }\n}\n\nlet action = \"generate_new\";\nif (hasCached && !request.regenerate) {\n  action = \"return_cached\";\n}\n\nconst output = {\n  contract_id: request.contract_id,\n  user_id: request.user_id,\n  format: request.format,\n  regenerate: request.regenerate,\n  document_type: request.document_type,\n  source_type: request.source_type,\n  requested_at: request.requested_at,\n  compliance: request.compliance,\n  playbook_name: request.playbook_name,\n  company_name: request.company_name,\n  has_cached: hasCached,\n  cached_document: cachedDocument,\n  action: action,\n};\n\nreturn [{ json: output }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                672,
+                480
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000004",
+            "name": "Normalise Cache Results"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 3
+                    },
+                    "conditions": [
+                        {
+                            "id": "a1b2c3d4-3001-4ccc-a001-000000000001",
+                            "leftValue": "={{ $json.action }} ",
+                            "rightValue": "=return_cached",
+                            "operator": {
+                                "type": "string",
+                                "operation": "equals",
+                                "name": "filter.operator.equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.3,
+            "position": [
+                896,
+                480
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000005",
+            "name": "Check Cache"
+        },
+        {
+            "parameters": {
+                "jsCode": "const cached = $(\"Check Existing Document\").first().json;\n\nreturn [\n  {\n    json: {\n      success: true,\n      cached: true,\n      document_id: cached.document_id,\n      document_type: \"playbook-compliance\",\n      source_type: \"quick_contract\",\n      status: cached.status,\n      downloads: {\n        pdf: cached.storage_path_pdf\n          ? `/api/documents/download/${cached.document_id}?format=pdf`\n          : null,\n        docx: null,\n      },\n      preview: cached.preview_data,\n      generated_at: cached.created_at,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1120,
+                -96
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000006",
+            "name": "Return Cached Document"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  uc.contract_id,\n  uc.contract_name,\n  uc.file_name,\n  uc.detected_contract_type,\n  uc.contract_type_key,\n  uc.status as contract_status,\n  uc.clause_count,\n  uc.created_at as contract_created,\n\n  -- Initiator\n  u.first_name as initiator_first_name,\n  u.last_name as initiator_last_name,\n  u.email as initiator_email,\n\n  -- Company\n  c.company_name as initiator_company,\n  c.industry as initiator_industry\n\nFROM uploaded_contracts uc\nLEFT JOIN users u ON uc.uploaded_by_user_id = u.user_id\nLEFT JOIN companies c ON uc.company_id = c.company_id\nWHERE uc.contract_id = '{{ $json.contract_id }}';",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                288
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000007",
+            "name": "Fetch Contract Details",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  qr.recipient_name,\n  qr.recipient_company\nFROM quick_contracts qc\nJOIN qc_recipients qr ON qr.quick_contract_id = qc.quick_contract_id\nWHERE qc.source_contract_id = '{{ $json.contract_id }}'\nORDER BY qr.created_at ASC\nLIMIT 1;",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                480
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000008",
+            "name": "Fetch Recipient Details",
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "numberInputs": 2
+            },
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [
+                1344,
+                384
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000009",
+            "name": "Merge"
+        },
+        {
+            "parameters": {
+                "jsCode": "const contractData = $(\"Fetch Contract Details\").first().json;\nconst recipientData = $(\"Fetch Recipient Details\").first().json;\nconst request = $(\"Validate Request\").first().json;\nconst compliance = request.compliance;\n\n// Date formatting\nconst now = new Date();\nconst generatedDate = now.toLocaleDateString(\"en-GB\", {\n  day: \"numeric\",\n  month: \"long\",\n  year: \"numeric\",\n});\nconst generatedTime = now.toLocaleTimeString(\"en-GB\", {\n  hour: \"2-digit\",\n  minute: \"2-digit\",\n});\n\n// Score colour logic\nconst score = compliance.overallScore || 0;\nlet scoreColour = \"#10b981\"; // emerald\nif (score < 50) scoreColour = \"#ef4444\"; // red\nelse if (score < 75) scoreColour = \"#f59e0b\"; // amber\n\nconst hasBreaches = (compliance.redLineBreaches || 0) > 0;\n\n// Build red lines array for template\nconst redLines = (compliance.redLines || []).map((rl) => ({\n  rule: rl.rule || rl.name || \"Rule\",\n  status: rl.breached ? \"BREACH\" : \"PASS\",\n  statusColour: rl.breached ? \"#ef4444\" : \"#10b981\",\n  detail: rl.detail || rl.assessment || \"\",\n  clause: rl.clauseName || rl.clause || \"\",\n}));\n\n// Build categories array for template\nconst categories = (compliance.categories || []).map((cat) => ({\n  name: cat.name || cat.category || \"Category\",\n  score: cat.score != null ? cat.score : \"-\",\n  status: cat.status || (cat.score >= 80 ? \"Good\" : cat.score >= 50 ? \"Warning\" : \"Fail\"),\n  statusColour: cat.score >= 80 ? \"#10b981\" : cat.score >= 50 ? \"#f59e0b\" : \"#ef4444\",\n  ruleCount: cat.ruleCount || cat.rules || 0,\n  detail: cat.detail || cat.assessment || \"\",\n}));\n\n// Build flexibility array for template\nconst flexibility = (compliance.flexibility || []).map((flex) => ({\n  clause: flex.clauseName || flex.clause || \"Clause\",\n  category: flex.category || \"General\",\n  currentPosition: flex.currentPosition || flex.position || \"-\",\n  playbookMin: flex.playbookMin || flex.min || \"-\",\n  playbookMax: flex.playbookMax || flex.max || \"-\",\n  withinRange: flex.withinRange != null ? flex.withinRange : true,\n  statusColour: flex.withinRange !== false ? \"#10b981\" : \"#ef4444\",\n  statusLabel: flex.withinRange !== false ? \"Within range\" : \"Outside range\",\n}));\n\nconst templateData = {\n  // Header\n  reportTitle: \"Playbook Compliance Report\",\n  contractName: contractData.file_name || contractData.contract_name || \"Contract\",\n  contractType: contractData.detected_contract_type || contractData.contract_type_key || \"Contract\",\n  generatedDate: generatedDate,\n  generatedTime: generatedTime,\n\n  // Parties\n  initiatorCompany: contractData.initiator_company || request.company_name || \"Initiator\",\n  initiatorName: `${contractData.initiator_first_name || \"\"} ${contractData.initiator_last_name || \"\"}`.trim() || \"Unknown\",\n  respondentCompany: recipientData.recipient_company || \"Respondent\",\n  respondentName: recipientData.recipient_name || \"Unknown\",\n\n  // Playbook\n  playbookName: request.playbook_name,\n  companyName: request.company_name,\n\n  // Overall score\n  overallScore: score,\n  scoreColour: scoreColour,\n  scoreLabel: score >= 80 ? \"Compliant\" : score >= 50 ? \"Partially Compliant\" : \"Non-Compliant\",\n\n  // Rule summary\n  rulesPassed: compliance.rulesPassed || 0,\n  rulesWarning: compliance.rulesWarning || 0,\n  rulesFailed: compliance.rulesFailed || 0,\n  totalRules: (compliance.rulesPassed || 0) + (compliance.rulesWarning || 0) + (compliance.rulesFailed || 0),\n\n  // Red lines\n  hasBreaches: hasBreaches,\n  redLineBreaches: compliance.redLineBreaches || 0,\n  redLineTotal: redLines.length,\n  redLines: redLines,\n\n  // Categories\n  categories: categories,\n\n  // Flexibility\n  flexibility: flexibility,\n\n  // Footer\n  footer: {\n    clarence_version: \"1.0\",\n    document_id: request.contract_id,\n    confidentiality: \"CONFIDENTIAL - Initiator eyes only. This report is not shared with the counterparty.\",\n  },\n};\n\nreturn [\n  {\n    json: {\n      template_data: templateData,\n      preview_data: {\n        title: `Playbook Compliance: ${templateData.initiatorCompany} — ${request.playbook_name}`,\n        generated_at: request.requested_at,\n        sections: [\"Overall Score\", \"Red Lines\", \"Categories\", \"Flexibility\"],\n        summary: {\n          score: score,\n          redLineBreaches: compliance.redLineBreaches || 0,\n          rulesPassed: compliance.rulesPassed || 0,\n          rulesFailed: compliance.rulesFailed || 0,\n          playbookName: request.playbook_name,\n        },\n      },\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1568,
+                384
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000010",
+            "name": "Prepare API Template"
+        },
+        {
+            "parameters": {
+                "resource": "pdf",
+                "pdfTemplateId": "REPLACE_WITH_YOUR_TEMPLATE_ID",
+                "jsonParameters": true,
+                "download": true,
+                "propertiesJson": "={{ JSON.stringify($json.template_data) }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.apiTemplateIo",
+            "typeVersion": 1,
+            "position": [
+                1776,
+                384
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000011",
+            "name": "Create a pdf",
+            "credentials": {
+                "apiTemplateIoApi": {
+                    "id": "uRIDDC680toXhu54",
+                    "name": "APITemplate.io account 3"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "=https://wlrlkvqiakaiydfqqdmu.supabase.co/storage/v1/object/documents/playbook-compliance/{{ $('Validate Request').first().json.contract_id }}_qc_playbook_compliance.pdf",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndscmxrdnFpYWthaXlkZnFxZG11Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Mzg2MjQ4MSwiZXhwIjoyMDY5NDM4NDgxfQ.65i05wEqqs3MdVYn-sdchtF7b06TWD959_9kLRR83ts"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/pdf"
+                        },
+                        {
+                            "name": "x-upsert",
+                            "value": "true"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "binaryData",
+                "inputDataFieldName": "data",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                1984,
+                384
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000012",
+            "name": "Upload to Supabase"
+        },
+        {
+            "parameters": {
+                "jsCode": "const request = $(\"Validate Request\").first().json;\nconst templateData = $(\"Prepare API Template\").first().json;\n\nconst supabaseProject = \"wlrlkvqiakaiydfqqdmu\";\nconst bucket = \"documents\";\nconst filename = `${request.contract_id}_qc_playbook_compliance.pdf`;\nconst storagePath = `playbook-compliance/${filename}`;\n\nconst publicUrl = `https://${supabaseProject}.supabase.co/storage/v1/object/public/${bucket}/${storagePath}`;\n\nreturn [\n  {\n    json: {\n      ...templateData,\n      pdf_generated: true,\n      storage_path_pdf: storagePath,\n      pdf_public_url: publicUrl,\n      pdf_bucket: bucket,\n      pdf_filename: filename,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2192,
+                384
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000013",
+            "name": "Process Storage Response"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "DELETE FROM generated_documents \nWHERE contract_id = '{{ $('Validate Request').first().json.contract_id }}'\n  AND document_type = 'playbook-compliance'\n  AND source_type = 'quick_contract';\n \nINSERT INTO generated_documents (\n  contract_id,\n  document_type,\n  source_type,\n  document_name,\n  storage_path_pdf,\n  preview_data,\n  generation_params,\n  status,\n  created_at,\n  updated_at\n) VALUES (\n  '{{ $('Validate Request').first().json.contract_id }}',\n  'playbook-compliance',\n  'quick_contract',\n  '{{ $json.preview_data.title }}',\n  '{{ $json.storage_path_pdf }}',\n  '{{ JSON.stringify($json.preview_data) }}'::jsonb,\n  '{{ JSON.stringify({ bucket: $json.pdf_bucket, filename: $json.pdf_filename, public_url: $json.pdf_public_url }) }}'::jsonb,\n  'generated',\n  NOW(),\n  NOW()\n)\nRETURNING document_id, created_at;\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                2400,
+                384
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000014",
+            "name": "Save Document Record",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO system_events (\n  contract_id,\n  user_id,\n  journey_type,\n  step_name,\n  status,\n  source_system,\n  source_identifier,\n  context,\n  created_at\n) VALUES (\n  '{{ $('Validate Request').first().json.contract_id }}',\n  '{{ $('Validate Request').first().json.user_id }}',\n  'document_generation',\n  'qc_playbook_compliance_generated',\n  'completed',\n  'n8n',\n  '6.6Q QC Playbook Compliance Report',\n  '{\"document_type\": \"playbook-compliance\", \"source_type\": \"quick_contract\"}'::jsonb,\n  NOW()\n);\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                2608,
+                576
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000015",
+            "name": "Log System Event",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "const savedDoc = $(\"Save Document Record\").first().json;\nconst storageData = $(\"Process Storage Response\").first().json;\nconst request = $(\"Validate Request\").first().json;\n\nconst response = {\n  success: true,\n  cached: false,\n  document_id: savedDoc.document_id,\n  document_type: \"playbook-compliance\",\n  source_type: \"quick_contract\",\n  status: \"generated\",\n  downloads: {\n    pdf: storageData.pdf_public_url || null,\n    docx: null,\n  },\n  pdf_public_url: storageData.pdf_public_url || null,\n  preview: storageData.preview_data,\n  generated_at: savedDoc.created_at,\n  metadata: {\n    contract_id: request.contract_id,\n    storage_path: storageData.storage_path_pdf,\n    bucket: storageData.pdf_bucket,\n  },\n};\n\nreturn [{ json: response }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2608,
+                384
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000016",
+            "name": "Build Final Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                2816,
+                240
+            ],
+            "id": "a1b2c3d4-1001-4aaa-8001-000000000017",
+            "name": "Respond to Webhook"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Request": {
+            "main": [
+                [
+                    {
+                        "node": "Check Existing Document",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Existing Document": {
+            "main": [
+                [
+                    {
+                        "node": "Normalise Cache Results",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalise Cache Results": {
+            "main": [
+                [
+                    {
+                        "node": "Check Cache",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Cache": {
+            "main": [
+                [
+                    {
+                        "node": "Return Cached Document",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Fetch Contract Details",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch Recipient Details",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Return Cached Document": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Contract Details": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Recipient Details": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Merge": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare API Template",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare API Template": {
+            "main": [
+                [
+                    {
+                        "node": "Create a pdf",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create a pdf": {
+            "main": [
+                [
+                    {
+                        "node": "Upload to Supabase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upload to Supabase": {
+            "main": [
+                [
+                    {
+                        "node": "Process Storage Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Storage Response": {
+            "main": [
+                [
+                    {
+                        "node": "Save Document Record",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Document Record": {
+            "main": [
+                [
+                    {
+                        "node": "Log System Event",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Build Final Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Final Response": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}

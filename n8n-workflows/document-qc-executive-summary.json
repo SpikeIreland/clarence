@@ -1,0 +1,782 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "document-qc-executive-summary",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                0,
+                480
+            ],
+            "id": "e0658e01-b0ce-41ab-9f7c-fd04993332e0",
+            "name": "Webhook",
+            "webhookId": "576d3794-90bb-41d2-a238-5e42871b9b15"
+        },
+        {
+            "parameters": {
+                "jsCode": "const input = $input.first().json.body;\n\n// QC Executive Summary requires contract_id (not session_id)\nif (!input.contract_id) {\n  throw new Error(\"Missing required field: contract_id\");\n}\n\nif (!input.user_id) {\n  throw new Error(\"Missing required field: user_id\");\n}\n\nconst validated = {\n  contract_id: input.contract_id,\n  user_id: input.user_id,\n  format: input.format || \"both\",\n  regenerate: input.regenerate || false,\n  document_type: \"executive-summary\",\n  source_type: \"quick_contract\",\n  requested_at: new Date().toISOString(),\n};\n\nreturn [{ json: validated }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                224,
+                480
+            ],
+            "id": "f6f9f848-0ee4-4877-acb8-30dd6f6332f4",
+            "name": "Validate Request"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  document_id,\n  status,\n  storage_path_pdf,\n  storage_path_docx,\n  preview_data,\n  created_at,\n  updated_at\nFROM generated_documents\nWHERE contract_id = '{{ $json.contract_id }}'\n  AND document_type = 'executive-summary'\n  AND source_type = 'quick_contract'\n  AND status = 'generated'\nORDER BY created_at DESC\nLIMIT 1;\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                448,
+                480
+            ],
+            "id": "2c7fbb4b-efb8-4918-813d-2465aa0e5c40",
+            "name": "Check Existing Document",
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const request = $(\"Validate Request\").first().json;\nconst postgresResult = $input.all();\n\nlet cachedDocument = null;\nlet hasCached = false;\n\nif (postgresResult && postgresResult.length > 0) {\n  const firstResult = postgresResult[0].json;\n  if (firstResult && firstResult.document_id) {\n    cachedDocument = firstResult;\n    hasCached = true;\n  }\n}\n\nlet action = \"generate_new\";\nif (hasCached && !request.regenerate) {\n  action = \"return_cached\";\n}\n\nconst output = {\n  contract_id: request.contract_id,\n  user_id: request.user_id,\n  format: request.format,\n  regenerate: request.regenerate,\n  document_type: request.document_type,\n  source_type: request.source_type,\n  requested_at: request.requested_at,\n  has_cached: hasCached,\n  cached_document: cachedDocument,\n  action: action,\n};\n\nreturn [{ json: output }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                672,
+                480
+            ],
+            "id": "eb59c48b-698c-40e5-bcd3-8279e74931d3",
+            "name": "Normalise Cache Results"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 3
+                    },
+                    "conditions": [
+                        {
+                            "id": "c8923dc3-2bd9-4572-9d71-8bb86e484342",
+                            "leftValue": "={{ $json.action }} ",
+                            "rightValue": "=return_cached",
+                            "operator": {
+                                "type": "string",
+                                "operation": "equals",
+                                "name": "filter.operator.equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.3,
+            "position": [
+                896,
+                480
+            ],
+            "id": "066b570d-9a6a-440f-88a9-90321c88d0cd",
+            "name": "Check Cache"
+        },
+        {
+            "parameters": {
+                "jsCode": "const cached = $(\"Check Existing Document\").first().json;\nconst request = $(\"Validate Request\").first().json;\n\nreturn [\n  {\n    json: {\n      success: true,\n      cached: true,\n      document_id: cached.document_id,\n      document_type: \"executive-summary\",\n      source_type: \"quick_contract\",\n      status: cached.status,\n      downloads: {\n        pdf: cached.storage_path_pdf\n          ? `/api/documents/download/${cached.document_id}?format=pdf`\n          : null,\n        docx: cached.storage_path_docx\n          ? `/api/documents/download/${cached.document_id}?format=docx`\n          : null,\n      },\n      preview: cached.preview_data,\n      generated_at: cached.created_at,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1120,
+                -96
+            ],
+            "id": "230a4bbf-5426-4860-b644-fac0aa1c8146",
+            "name": "Return Cached Document"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  uc.contract_id,\n  uc.contract_name,\n  uc.file_name,\n  uc.detected_contract_type,\n  uc.contract_type_key,\n  uc.status as contract_status,\n  uc.clause_count,\n  uc.created_at as contract_created,\n  uc.uploaded_by_user_id,\n  uc.company_id,\n  \n  -- Initiator (uploader)\n  u.first_name as initiator_first_name,\n  u.last_name as initiator_last_name,\n  u.email as initiator_email,\n  \n  -- Initiator company\n  c.company_name as initiator_company,\n  c.company_type as initiator_company_type,\n  c.industry as initiator_industry\n \nFROM uploaded_contracts uc\nLEFT JOIN users u ON uc.uploaded_by_user_id = u.user_id\nLEFT JOIN companies c ON uc.company_id = c.company_id\nWHERE uc.contract_id = '{{ $json.contract_id }}';",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                96
+            ],
+            "id": "b53f27d5-cbb2-4200-a891-883ed56eefee",
+            "name": "Fetch Contract Details",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  qr.recipient_id,\n  qr.recipient_name,\n  qr.recipient_email,\n  qr.recipient_company,\n  qr.status as recipient_status,\n  qr.first_viewed_at,\n  qr.responded_at,\n  qr.response_type,\n  qc.quick_contract_id,\n  qc.status as qc_status\n \nFROM quick_contracts qc\nJOIN qc_recipients qr ON qr.quick_contract_id = qc.quick_contract_id\nWHERE qc.source_contract_id = '{{ $json.contract_id }}'\nORDER BY qr.created_at ASC\nLIMIT 1;\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                288
+            ],
+            "id": "b663a9f8-f47d-4b42-98e9-8d9f01c2cadc",
+            "name": "Fetch Recipient Details",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  COUNT(*) as total_clauses,\n  COUNT(*) FILTER (WHERE clarence_certified = true) as certified_count,\n  COUNT(*) FILTER (WHERE is_header = true) as header_count,\n  \n  -- Position distribution across the 1-10 scale\n  ROUND(AVG(clarence_position)::numeric, 2) as avg_position,\n  ROUND(MIN(clarence_position)::numeric, 2) as min_position,\n  ROUND(MAX(clarence_position)::numeric, 2) as max_position,\n  \n  -- Fairness distribution\n  COUNT(*) FILTER (WHERE clarence_fairness = 'balanced') as balanced_count,\n  COUNT(*) FILTER (WHERE clarence_fairness = 'customer_favoring') as customer_favoring_count,\n  COUNT(*) FILTER (WHERE clarence_fairness = 'provider_favoring') as provider_favoring_count,\n  \n  -- Category breakdown (top 5)\n  (SELECT json_agg(cat_row) FROM (\n    SELECT category, COUNT(*) as clause_count\n    FROM uploaded_contract_clauses\n    WHERE contract_id = '{{ $json.contract_id }}'\n      AND is_header IS NOT TRUE\n    GROUP BY category\n    ORDER BY COUNT(*) DESC\n    LIMIT 5\n  ) cat_row) as top_categories\n \nFROM uploaded_contract_clauses\nWHERE contract_id = '{{ $json.contract_id }}'\n  AND is_header IS NOT TRUE;\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                480
+            ],
+            "id": "f99668c4-3c21-48dd-9048-1b0117e5584e",
+            "name": "Fetch Clause Summary",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  clause_id,\n  clause_number,\n  clause_name,\n  category,\n  clarence_position,\n  clarence_fairness,\n  clarence_summary,\n  clarence_assessment,\n  clarence_flags,\n  clarence_certified,\n  display_order\n \nFROM uploaded_contract_clauses\nWHERE contract_id = '{{ $json.contract_id }}'\n  AND is_header IS NOT TRUE\n  AND clarence_certified = true\nORDER BY \n  CASE WHEN clarence_flags IS NOT NULL AND jsonb_array_length(clarence_flags) > 0 THEN 0 ELSE 1 END,\n  ABS(clarence_position - 5) DESC,\n  display_order ASC\nLIMIT 10;",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                672
+            ],
+            "id": "1bfc612e-5483-4cd2-9a0d-d25181deacc4",
+            "name": "Fetch Key Clauses",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  COUNT(*) as total_events,\n  COUNT(*) FILTER (WHERE event_type = 'agreed' AND party_role = 'initiator') as initiator_agreed,\n  COUNT(*) FILTER (WHERE event_type = 'agreed' AND party_role = 'respondent') as respondent_agreed,\n  COUNT(*) FILTER (WHERE event_type = 'queried') as queries_raised,\n  COUNT(DISTINCT clause_id) FILTER (WHERE event_type = 'agreed') as clauses_with_agreement,\n  \n  -- Both parties agreed on same clause\n  (SELECT COUNT(DISTINCT a.clause_id)\n   FROM qc_clause_events a\n   JOIN qc_clause_events b ON a.clause_id = b.clause_id \n     AND a.contract_id = b.contract_id\n   WHERE a.contract_id = '{{ $json.contract_id }}'\n     AND a.event_type = 'agreed' AND a.party_role = 'initiator'\n     AND b.event_type = 'agreed' AND b.party_role = 'respondent'\n  ) as fully_agreed_clauses\n \nFROM qc_clause_events\nWHERE contract_id = '{{ $json.contract_id }}';\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                864
+            ],
+            "id": "8fabb4da-737b-49a5-bb6b-3e0672799d49",
+            "name": "Fetch Agreement Status",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  COUNT(*) as total_messages,\n  COUNT(*) FILTER (WHERE sender_role = 'initiator') as initiator_messages,\n  COUNT(*) FILTER (WHERE sender_role = 'respondent') as respondent_messages,\n  MIN(created_at) as first_message_at,\n  MAX(created_at) as last_message_at\n \nFROM qc_party_messages\nWHERE contract_id = '{{ $json.contract_id }}';\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                1120,
+                1056
+            ],
+            "id": "ad5cf2e8-19e2-41e4-ac39-5b7cc6c98dac",
+            "name": "Fetch Chat Stats",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "numberInputs": 6
+            },
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [
+                1344,
+                512
+            ],
+            "id": "560b2708-f064-4afe-a86c-578364388c6f",
+            "name": "Merge"
+        },
+        {
+            "parameters": {
+                "jsCode": "const contractData = $(\"Fetch Contract Details\").first().json;\nconst recipient = $(\"Fetch Recipient Details\").first().json;\nconst clauseSummary = $(\"Fetch Clause Summary\").first().json;\nconst keyClauses = $(\"Fetch Key Clauses\")\n  .all()\n  .map((item) => item.json);\nconst agreement = $(\"Fetch Agreement Status\").first().json;\nconst chatStats = $(\"Fetch Chat Stats\").first().json;\nconst request = $(\"Validate Request\").first().json;\n\n// Build key clause summaries for AI\nconst keyClauseSummaries = keyClauses\n  .map((c) => {\n    const flags =\n      c.clarence_flags && c.clarence_flags.length > 0\n        ? ` [FLAGS: ${c.clarence_flags.join(\", \")}]`\n        : \"\";\n    return `- ${c.clause_name} (${c.category}): Position ${c.clarence_position}/10, Fairness: ${c.clarence_fairness || \"N/A\"}${flags}\\n  Assessment: ${c.clarence_summary || \"No summary\"}`;\n  })\n  .join(\"\\n\");\n\n// Parse categories\nlet categoryBreakdown = \"Not available\";\ntry {\n  const cats =\n    typeof clauseSummary.top_categories === \"string\"\n      ? JSON.parse(clauseSummary.top_categories)\n      : clauseSummary.top_categories;\n  if (cats && cats.length > 0) {\n    categoryBreakdown = cats\n      .map((c) => `${c.category}: ${c.clause_count} clauses`)\n      .join(\", \");\n  }\n} catch (e) {\n  categoryBreakdown = \"Parse error\";\n}\n\n// Calculate negotiation progress\nconst totalClauses = parseInt(clauseSummary.total_clauses) || 0;\nconst fullyAgreed = parseInt(agreement.fully_agreed_clauses) || 0;\nconst progressPct =\n  totalClauses > 0 ? Math.round((fullyAgreed / totalClauses) * 100) : 0;\n\n// Determine position balance\nconst avgPos = parseFloat(clauseSummary.avg_position) || 5;\nlet positionBalance = \"Balanced\";\nif (avgPos < 4) positionBalance = \"Strongly customer-favoring\";\nelse if (avgPos < 4.5) positionBalance = \"Customer-leaning\";\nelse if (avgPos > 6) positionBalance = \"Strongly provider-favoring\";\nelse if (avgPos > 5.5) positionBalance = \"Provider-leaning\";\n\nconst aiContext = {\n  // Contract\n  contract_id: contractData.contract_id,\n  contract_name: contractData.file_name || \"Untitled Contract\",\n  contract_type: contractData.contract_type || \"other\",\n  contract_status: contractData.contract_status,\n  contract_created: contractData.contract_created,\n\n  // Initiator\n  initiator_name:\n    `${contractData.initiator_first_name || \"\"} ${contractData.initiator_last_name || \"\"}`.trim() ||\n    \"Unknown\",\n  initiator_email: contractData.initiator_email || \"Not provided\",\n  initiator_company: contractData.initiator_company || \"Unknown Company\",\n  initiator_industry: contractData.initiator_industry || \"Not specified\",\n\n  // Provider (recipient)\n  provider_name: recipient.recipient_name || \"Unknown Provider\",\n  provider_email: recipient.recipient_email || \"Not provided\",\n  provider_company: recipient.recipient_company || \"Unknown Company\",\n  provider_status: recipient.recipient_status || \"invited\",\n  provider_first_viewed: recipient.first_viewed_at || \"Not yet viewed\",\n\n  // Clause Analysis\n  total_clauses: totalClauses,\n  certified_count: parseInt(clauseSummary.certified_count) || 0,\n  avg_position: avgPos,\n  min_position: parseFloat(clauseSummary.min_position) || 0,\n  max_position: parseFloat(clauseSummary.max_position) || 0,\n  position_balance: positionBalance,\n  balanced_count: parseInt(clauseSummary.balanced_count) || 0,\n  customer_favoring_count: parseInt(clauseSummary.customer_favoring_count) || 0,\n  provider_favoring_count: parseInt(clauseSummary.provider_favoring_count) || 0,\n  category_breakdown: categoryBreakdown,\n\n  // Agreement Status\n  fully_agreed_clauses: fullyAgreed,\n  initiator_agreed: parseInt(agreement.initiator_agreed) || 0,\n  respondent_agreed: parseInt(agreement.respondent_agreed) || 0,\n  queries_raised: parseInt(agreement.queries_raised) || 0,\n  negotiation_progress: progressPct,\n\n  // Engagement\n  total_messages: parseInt(chatStats.total_messages) || 0,\n  initiator_messages: parseInt(chatStats.initiator_messages) || 0,\n  respondent_messages: parseInt(chatStats.respondent_messages) || 0,\n\n  // Key clauses for detailed analysis\n  key_clause_summaries: keyClauseSummaries || \"No clause data available\",\n\n  // Metadata\n  generated_at: new Date().toISOString(),\n};\n\n// Build the full Claude API request body with proper escaping\nconst userPrompt = `Generate the Executive Summary for this Quick Contract mediation:\n\nCONTRACT: ${aiContext.contract_name} (${aiContext.contract_type})\nSTATUS: ${aiContext.contract_status}\nCREATED: ${aiContext.contract_created}\n\nINITIATOR: ${aiContext.initiator_name} (${aiContext.initiator_company}, ${aiContext.initiator_industry})\nPROVIDER: ${aiContext.provider_name} (${aiContext.provider_company}) - Status: ${aiContext.provider_status}\n\nCLAUSE ANALYSIS:\n- Total clauses: ${aiContext.total_clauses} (${aiContext.certified_count} CLARENCE-certified)\n- Average position: ${aiContext.avg_position}/10 (${aiContext.position_balance})\n- Position range: ${aiContext.min_position} to ${aiContext.max_position}\n- Fairness: ${aiContext.balanced_count} balanced, ${aiContext.customer_favoring_count} customer-favoring, ${aiContext.provider_favoring_count} provider-favoring\n- Categories: ${aiContext.category_breakdown}\n\nAGREEMENT STATUS:\n- Fully agreed (both parties): ${aiContext.fully_agreed_clauses} of ${aiContext.total_clauses} clauses (${aiContext.negotiation_progress}%)\n- Initiator agreed: ${aiContext.initiator_agreed}\n- Respondent agreed: ${aiContext.respondent_agreed}\n- Queries raised: ${aiContext.queries_raised}\n\nENGAGEMENT:\n- Total messages: ${aiContext.total_messages} (Initiator: ${aiContext.initiator_messages}, Respondent: ${aiContext.respondent_messages})\n\nKEY CLAUSES:\n${aiContext.key_clause_summaries}`;\n\nconst apiBody = {\n  model: \"claude-sonnet-4-20250514\",\n  max_tokens: 4096,\n  system:\n    \"You are CLARENCE, the Contract Leverage Analysis and Real-time Negotiation Clearinghouse Engine. You are generating an Executive Summary for a Quick Contract mediation.\\n\\nGenerate a professional executive summary with these sections. Use markdown headers (**SECTION NAME**) for each:\\n\\n**DEAL OVERVIEW**\\nSummarise the contract between the two parties. Include contract type, clause count, and overall assessment of the contract's position balance. Note: Quick Contracts have CLARENCE-certified positions on a 1-10 scale where 1 = maximum customer protection and 10 = maximum provider flexibility. The average position indicates overall contract lean.\\n\\n**PARTY PROFILES**\\nBrief profile of both parties based on available information. Note engagement level (messages exchanged, clauses agreed).\\n\\n**CONTRACT POSITION ANALYSIS**\\nAnalyse the contract's position distribution. Highlight the average position, any extreme positions, and the overall fairness assessment. Break down by category where relevant. Note flagged clauses that may need attention.\\n\\n**KEY CLAUSES REQUIRING ATTENTION**\\nFocus on the most significant clauses - those with extreme positions (far from 5/balanced), flags, or queries raised. For each, explain the business implication of the current position.\\n\\n**NEGOTIATION PROGRESS**\\nSummarise current agreement status - how many clauses both parties have agreed on, queries outstanding, and overall trajectory. Comment on engagement levels from chat activity.\\n\\n**RECOMMENDED NEXT STEPS**\\nProvide 3-5 specific, actionable recommendations for progressing the negotiation. Be concrete and reference specific clause areas where movement would be most beneficial.\\n\\nKeep the tone professional, neutral, and data-driven. CLARENCE is the honest broker - never favour either party. Reference specific numbers and percentages throughout.\",\n  messages: [\n    {\n      role: \"user\",\n      content: userPrompt,\n    },\n  ],\n};\n\n// Return both the context (for other nodes) and the pre-built API body\naiContext.api_body = JSON.stringify(apiBody);\nreturn [{ json: aiContext }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1568,
+                576
+            ],
+            "id": "0501c601-990f-4c17-8ae1-001f62948525",
+            "name": "Prepare AI Context"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.anthropic.com/v1/messages",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "anthropic-version",
+                            "value": "2023-06-01"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json.api_body }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                1776,
+                576
+            ],
+            "id": "09a678a5-3031-458d-bbcf-c67b77ce11df",
+            "name": "HTTP Request",
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "xYYWl2zK5GgqiQf8",
+                    "name": "Anthropic API Key"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const context = $(\"Prepare AI Context\").first().json;\nconst aiResponse = $(\"Parse AI Response\").first().json;\nconst contractData = $(\"Fetch Contract Details\").first().json;\nconst recipient = $(\"Fetch Recipient Details\").first().json;\nconst clauseSummary = $(\"Fetch Clause Summary\").first().json;\nconst keyClauses = $(\"Fetch Key Clauses\")\n  .all()\n  .map((item) => item.json);\nconst agreement = $(\"Fetch Agreement Status\").first().json;\n\n// Parse AI sections\nconst content = aiResponse.content_markdown || \"\";\nconst extractSection = (sectionName) => {\n  const regex = new RegExp(\n    `\\\\*\\\\*${sectionName}\\\\*\\\\*[\\\\s\\\\S]*?(?=\\\\*\\\\*[A-Z]|$)`,\n    \"i\",\n  );\n  const match = content.match(regex);\n  if (match) {\n    return match[0].replace(/\\*\\*[A-Z\\s&]+\\*\\*/i, \"\").trim();\n  }\n  return \"\";\n};\n\n// Date formatting\nconst now = new Date();\nconst generatedDate = now.toLocaleDateString(\"en-GB\", {\n  day: \"numeric\",\n  month: \"long\",\n  year: \"numeric\",\n});\nconst generatedTime = now.toLocaleTimeString(\"en-GB\", {\n  hour: \"2-digit\",\n  minute: \"2-digit\",\n});\n\n// Position balance for visual indicator\nconst avgPos = parseFloat(clauseSummary.avg_position) || 5;\nconst customerPct = Math.round(((10 - avgPos) / 10) * 100);\nconst providerPct = 100 - customerPct;\n\nconst templateData = {\n  // Header\n  reportTitle: `Executive Summary: ${context.initiator_company} & ${context.provider_company}`,\n  contractName: context.contract_name,\n  contractType: context.contract_type,\n  generatedDate: generatedDate,\n  generatedTime: generatedTime,\n\n  // Initiator\n  customer: {\n    company: context.initiator_company,\n    contact: context.initiator_name,\n    email: context.initiator_email,\n    industry: context.initiator_industry,\n  },\n\n  // Provider\n  provider: {\n    company: context.provider_company,\n    contact: context.provider_name,\n    email: context.provider_email,\n    status: context.provider_status,\n  },\n\n  // Position Analysis\n  positions: {\n    customer_percentage: customerPct,\n    provider_percentage: providerPct,\n    avg_position: avgPos,\n    total_clauses: context.total_clauses,\n    certified: context.certified_count,\n    balanced: parseInt(clauseSummary.balanced_count) || 0,\n    customer_favoring: parseInt(clauseSummary.customer_favoring_count) || 0,\n    provider_favoring: parseInt(clauseSummary.provider_favoring_count) || 0,\n  },\n\n  // Agreement\n  agreement: {\n    fully_agreed: parseInt(agreement.fully_agreed_clauses) || 0,\n    total_clauses: context.total_clauses,\n    progress_pct: context.negotiation_progress,\n    queries: context.queries_raised,\n  },\n\n  // AI Sections\n  mediation: {\n    deal_overview: extractSection(\"DEAL OVERVIEW\") || \"Assessment in progress.\",\n    party_profiles: extractSection(\"PARTY PROFILES\") || \"\",\n    position_analysis: extractSection(\"CONTRACT POSITION ANALYSIS\") || \"\",\n    key_clauses: extractSection(\"KEY CLAUSES REQUIRING ATTENTION\") || \"\",\n    negotiation_progress: extractSection(\"NEGOTIATION PROGRESS\") || \"\",\n    next_steps: extractSection(\"RECOMMENDED NEXT STEPS\") || \"\",\n  },\n\n  // Key clauses for table\n  key_clauses: keyClauses.slice(0, 5).map((clause) => ({\n    name: clause.clause_name || \"Unknown\",\n    category: clause.category || \"General\",\n    position: clause.clarence_position || \"-\",\n    fairness: clause.clarence_fairness || \"-\",\n    flags: (clause.clarence_flags || []).join(\", \") || \"None\",\n  })),\n\n  // Footer\n  footer: {\n    clarence_version: \"1.0\",\n    document_id: context.contract_id,\n    confidentiality: \"CONFIDENTIAL - For authorised parties only\",\n  },\n};\n\nconsole.log(\"TEMPLATE DATA:\", JSON.stringify(templateData, null, 2));\n\nreturn [\n  {\n    json: {\n      ...aiResponse,\n      template_data: templateData,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2224,
+                576
+            ],
+            "id": "d5adee89-e64d-405c-86ad-a7c314c06cee",
+            "name": "Prepare API Template"
+        },
+        {
+            "parameters": {
+                "resource": "pdf",
+                "pdfTemplateId": "98377b23ce0f2812",
+                "jsonParameters": true,
+                "download": true,
+                "propertiesJson": "={{ JSON.stringify($json.template_data) }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.apiTemplateIo",
+            "typeVersion": 1,
+            "position": [
+                2432,
+                576
+            ],
+            "id": "39c32cda-d41d-44b0-99b5-dda39cefb680",
+            "name": "Create a pdf",
+            "credentials": {
+                "apiTemplateIoApi": {
+                    "id": "uRIDDC680toXhu54",
+                    "name": "APITemplate.io account 3"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "=https://wlrlkvqiakaiydfqqdmu.supabase.co/storage/v1/object/documents/executive-summaries/{{ $('Validate Request').first().json.contract_id }}_qc_exec_summary.pdf",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndscmxrdnFpYWthaXlkZnFxZG11Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Mzg2MjQ4MSwiZXhwIjoyMDY5NDM4NDgxfQ.65i05wEqqs3MdVYn-sdchtF7b06TWD959_9kLRR83ts"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/pdf"
+                        },
+                        {
+                            "name": "x-upsert",
+                            "value": "true"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "binaryData",
+                "inputDataFieldName": "data",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                2640,
+                576
+            ],
+            "id": "98a8ee23-ffb4-4b1d-8789-3e7ff7f50452",
+            "name": "Upload to Supabase"
+        },
+        {
+            "parameters": {
+                "jsCode": "const request = $(\"Validate Request\").first().json;\nconst templateData = $(\"Prepare API Template\").first().json;\n\nconst supabaseProject = \"wlrlkvqiakaiydfqqdmu\";\nconst bucket = \"documents\";\nconst filename = `${request.contract_id}_qc_exec_summary.pdf`;\nconst storagePath = `executive-summaries/${filename}`;\n\nconst publicUrl = `https://${supabaseProject}.supabase.co/storage/v1/object/public/${bucket}/${storagePath}`;\n\nreturn [\n  {\n    json: {\n      ...templateData,\n      pdf_generated: true,\n      storage_path_pdf: storagePath,\n      pdf_public_url: publicUrl,\n      pdf_bucket: bucket,\n      pdf_filename: filename,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2848,
+                576
+            ],
+            "id": "c1b3ae69-1fa1-435d-98fb-35d37e1937d1",
+            "name": "Process Storage Response"
+        },
+        {
+            "parameters": {
+                "jsCode": "const apiResponse = $input.first().json;\nconst previousData = $(\"Prepare API Template\").first().json;\n\nif (apiResponse.status === \"success\" || apiResponse.download_url) {\n  return [\n    {\n      json: {\n        ...previousData,\n        pdf_generated: true,\n        pdf_url: apiResponse.download_url || apiResponse.url,\n        pdf_transaction_id: apiResponse.transaction_ref || apiResponse.id,\n        storage_path_pdf: apiResponse.download_url || apiResponse.url,\n      },\n    },\n  ];\n} else {\n  console.log(\"PDF generation failed:\", apiResponse);\n  return [\n    {\n      json: {\n        ...previousData,\n        pdf_generated: false,\n        pdf_error: apiResponse.message || \"PDF generation failed\",\n        storage_path_pdf: null,\n      },\n    },\n  ];\n}\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                3056,
+                576
+            ],
+            "id": "534188f2-4802-4d76-a167-99b42a06be63",
+            "name": "Process pdf Response"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "DELETE FROM generated_documents \nWHERE contract_id = '{{ $('Validate Request').first().json.contract_id }}'\n  AND document_type = 'executive-summary'\n  AND source_type = 'quick_contract';\n \nINSERT INTO generated_documents (\n  contract_id,\n  document_type,\n  source_type,\n  document_name,\n  storage_path_pdf,\n  preview_data,\n  generation_params,\n  ai_model_used,\n  status,\n  created_at,\n  updated_at\n) VALUES (\n  '{{ $('Validate Request').first().json.contract_id }}',\n  'executive-summary',\n  'quick_contract',\n  '{{ $json.preview_data.title }}',\n  '{{ $json.storage_path_pdf }}',\n  '{{ JSON.stringify($json.preview_data) }}'::jsonb,\n  '{{ JSON.stringify({ bucket: $json.pdf_bucket, filename: $json.pdf_filename, public_url: $json.pdf_public_url }) }}'::jsonb,\n  '{{ $json.ai_model_used || \"claude-sonnet-4-20250514\" }}',\n  'generated',\n  NOW(),\n  NOW()\n)\nRETURNING document_id, created_at;\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                3264,
+                576
+            ],
+            "id": "dab50a4a-d0ea-4bbe-857b-9b2eb9d7f735",
+            "name": "Save Document Record",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO system_events (\n  contract_id,\n  user_id,\n  journey_type,\n  step_name,\n  status,\n  source_system,\n  source_identifier,\n  context,\n  created_at\n) VALUES (\n  '{{ $('Validate Request').first().json.contract_id }}',\n  '{{ $('Validate Request').first().json.user_id }}',\n  'document_generation',\n  'qc_executive_summary_generated',\n  'completed',\n  'n8n',\n  '6.1Q QC Executive Summary',\n  '{\"document_type\": \"executive-summary\", \"source_type\": \"quick_contract\"}'::jsonb,\n  NOW()\n);\n",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                3488,
+                784
+            ],
+            "id": "d5e2254d-11c5-4832-ae8d-f5f28dcc54eb",
+            "name": "Log System Event",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "const savedDoc = $(\"Save Document Record\").first().json;\nconst storageData = $(\"Process Storage Response\").first().json;\nconst request = $(\"Validate Request\").first().json;\n\nconst response = {\n  success: true,\n  cached: false,\n  document_id: savedDoc.document_id,\n  document_type: \"executive-summary\",\n  source_type: \"quick_contract\",\n  status: \"generated\",\n  downloads: {\n    pdf: storageData.pdf_public_url || null,\n    docx: null,\n  },\n  pdf_public_url: storageData.pdf_public_url || null,\n  preview: storageData.preview_data,\n  generated_at: savedDoc.created_at,\n  metadata: {\n    contract_id: request.contract_id,\n    storage_path: storageData.storage_path_pdf,\n    bucket: storageData.pdf_bucket,\n  },\n};\n\nreturn [{ json: response }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                3488,
+                576
+            ],
+            "id": "c9c57254-520e-4d54-a356-14ad726e3986",
+            "name": "Build Final Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                3856,
+                320
+            ],
+            "id": "d0c2b2df-8435-43dd-8c36-09404a36c926",
+            "name": "Respond to Webhook"
+        },
+        {
+            "parameters": {
+                "jsCode": "const aiResponse = $input.first().json;\nconst context = $(\"Prepare AI Context\").first().json;\nconst request = $(\"Validate Request\").first().json;\n\nconst generatedContent =\n  aiResponse.content?.[0]?.text ||\n  aiResponse.message?.content ||\n  aiResponse.text ||\n  aiResponse.output ||\n  \"\";\n\n// Extract sections for preview\nconst sections = [];\nconst sectionMatches = generatedContent.match(/\\*\\*([A-Z\\s&]+)\\*\\*/g);\nif (sectionMatches) {\n  sectionMatches.forEach((match) => {\n    sections.push(match.replace(/\\*\\*/g, \"\").trim());\n  });\n}\n\nconst documentRecord = {\n  contract_id: request.contract_id,\n  document_type: \"executive-summary\",\n  source_type: \"quick_contract\",\n  document_name: `Executive Summary - ${context.initiator_company} & ${context.provider_company}`,\n  content_markdown: generatedContent,\n  preview_data: {\n    title: `Executive Summary: ${context.initiator_company} & ${context.provider_company}`,\n    generated_at: context.generated_at,\n    sections: sections,\n    summary: {\n      initiator: context.initiator_company,\n      provider: context.provider_company,\n      contract: context.contract_name,\n      clauses: context.total_clauses,\n      progress: context.negotiation_progress,\n      avg_position: context.avg_position,\n    },\n  },\n  generated_by: request.user_id,\n  generation_params: {\n    model: \"claude-sonnet-4-20250514\",\n    source_type: \"quick_contract\",\n    context_keys: Object.keys(context),\n  },\n  ai_model_used: \"claude-sonnet-4-20250514\",\n  status: \"generated\",\n};\n\nreturn [{ json: documentRecord }];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2016,
+                576
+            ],
+            "id": "f23820a5-b750-41d0-8f77-1af943c87458",
+            "name": "Parse AI Response"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Request": {
+            "main": [
+                [
+                    {
+                        "node": "Check Existing Document",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Existing Document": {
+            "main": [
+                [
+                    {
+                        "node": "Normalise Cache Results",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalise Cache Results": {
+            "main": [
+                [
+                    {
+                        "node": "Check Cache",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Cache": {
+            "main": [
+                [
+                    {
+                        "node": "Return Cached Document",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Fetch Contract Details",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch Recipient Details",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch Clause Summary",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch Key Clauses",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch Agreement Status",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch Chat Stats",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Return Cached Document": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Contract Details": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Recipient Details": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Fetch Clause Summary": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 2
+                    }
+                ]
+            ]
+        },
+        "Fetch Key Clauses": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 3
+                    }
+                ]
+            ]
+        },
+        "Fetch Agreement Status": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 4
+                    }
+                ]
+            ]
+        },
+        "Fetch Chat Stats": {
+            "main": [
+                [
+                    {
+                        "node": "Merge",
+                        "type": "main",
+                        "index": 5
+                    }
+                ]
+            ]
+        },
+        "Merge": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare AI Context",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare AI Context": {
+            "main": [
+                [
+                    {
+                        "node": "HTTP Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "HTTP Request": {
+            "main": [
+                [
+                    {
+                        "node": "Parse AI Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare API Template": {
+            "main": [
+                [
+                    {
+                        "node": "Create a pdf",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create a pdf": {
+            "main": [
+                [
+                    {
+                        "node": "Upload to Supabase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upload to Supabase": {
+            "main": [
+                [
+                    {
+                        "node": "Process Storage Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Storage Response": {
+            "main": [
+                [
+                    {
+                        "node": "Process pdf Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process pdf Response": {
+            "main": [
+                [
+                    {
+                        "node": "Save Document Record",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Document Record": {
+            "main": [
+                [
+                    {
+                        "node": "Log System Event",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Build Final Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Final Response": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse AI Response": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare API Template",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}

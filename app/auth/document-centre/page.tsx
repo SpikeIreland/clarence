@@ -3,7 +3,15 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { eventLogger } from '@/lib/eventLogger'
 import { createClient } from '@/lib/supabase'
-import PlaybookComplianceIndicator from '@/app/components/PlaybookComplianceIndicator'
+import PlaybookComplianceIndicator, {
+    ScoreRing,
+    RedLinesTab,
+    CategoriesTab,
+    FlexibilityTab,
+    ShieldCheckIcon,
+    ShieldAlertIcon,
+    LockIcon as PlaybookLockIcon,
+} from '@/app/components/PlaybookComplianceIndicator'
 import {
     calculatePlaybookCompliance,
     type PlaybookRule,
@@ -11,6 +19,7 @@ import {
     type ComplianceResult,
 } from '@/lib/playbook-compliance'
 import FeedbackButton from '@/app/components/FeedbackButton'
+import RequestApprovalModal from '@/app/components/RequestApprovalModal'
 import SigningPanelNew from '@/app/components/SigningPanel'
 import EntityConfirmationModal from '@/app/components/EntityConfirmationModal'
 import SigningCeremonyModal from '@/app/components/SigningCeremonyModal'
@@ -43,6 +52,8 @@ type DocumentId =
     | 'timeline-audit'
     | 'contract-draft'
     | 'contract-roadmap'
+    | 'playbook-compliance'
+    | 'internal-approvals'
 
 
 interface DocumentItem {
@@ -186,6 +197,7 @@ const QC_ENDPOINTS: Record<string, string> = {
     'chat-transcript': `${N8N_BASE_URL}/document-qc-chat-transcript`,
     'timeline-audit': `${N8N_BASE_URL}/document-qc-timeline-audit`,
     'contract-draft': `${N8N_BASE_URL}/document-qc-contract-draft`,
+    'playbook-compliance': `${N8N_BASE_URL}/document-qc-playbook-compliance`,
 };
 
 // Legacy alias - kept for any references elsewhere
@@ -199,7 +211,8 @@ const QC_AVAILABLE_DOCUMENTS: DocumentId[] = [
     'position-history',
     'chat-transcript',
     'timeline-audit',
-    'contract-draft'
+    'contract-draft',
+    'internal-approvals'
 ]
 
 const MEDIATION_AVAILABLE_DOCUMENTS: DocumentId[] = [
@@ -210,8 +223,12 @@ const MEDIATION_AVAILABLE_DOCUMENTS: DocumentId[] = [
     'trade-off-register',
     'timeline-audit',
     'contract-draft',
-    'contract-roadmap'
+    'contract-roadmap',
+    'internal-approvals'
 ]
+
+// Dynamic documents added at runtime based on conditions
+// 'playbook-compliance' — added when QC mode + initiator + active playbook
 
 const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downloadUrl' | 'progress' | 'documentDbId'>[] = [
     {
@@ -277,6 +294,22 @@ const DOCUMENT_DEFINITIONS: Omit<DocumentItem, 'status' | 'generatedAt' | 'downl
         category: 'governance',
         icon: '\u{1F5FA}\uFE0F',
         prerequisites: ['contract-draft']
+    },
+    {
+        id: 'playbook-compliance',
+        name: 'Playbook Compliance Report',
+        description: 'Compliance analysis against your active playbook rules',
+        category: 'compliance',
+        icon: '\u{1F6E1}\uFE0F',
+        prerequisites: []
+    },
+    {
+        id: 'internal-approvals',
+        name: 'Internal Approvals',
+        description: 'Request and track internal stakeholder approvals',
+        category: 'workflow',
+        icon: '\u2705',
+        prerequisites: []
     }
 ]
 
@@ -344,8 +377,9 @@ function formatCurrency(value: string | number | null, currency: string = 'GBP')
     return `${symbol}${num.toFixed(0)}`
 }
 
-function getDocumentsForMode(mode: DocumentCentreMode): typeof DOCUMENT_DEFINITIONS {
-    const available = mode === 'quick_contract' ? QC_AVAILABLE_DOCUMENTS : MEDIATION_AVAILABLE_DOCUMENTS
+function getDocumentsForMode(mode: DocumentCentreMode, extraDocIds: DocumentId[] = []): typeof DOCUMENT_DEFINITIONS {
+    const base = mode === 'quick_contract' ? QC_AVAILABLE_DOCUMENTS : MEDIATION_AVAILABLE_DOCUMENTS
+    const available = [...base, ...extraDocIds]
     return DOCUMENT_DEFINITIONS.filter(d => available.includes(d.id))
 }
 
@@ -514,25 +548,46 @@ function EvidencePackageBar({ documents, onDownload, onGenerateAll, isDownloadin
 }
 
 // ============================================================================
-// SECTION 7: DOCUMENT PREVIEW PANEL COMPONENT
+// SECTION 7: DOCUMENT ACTION HUB (Centre Panel)
+// ============================================================================
+// Replaces the former passive PDF viewer with an active document workspace.
+// Shows document header, action buttons (View/Print/Save/Share/Generate),
+// and context-specific content area (inline PDF viewer, static previews, etc.)
 // ============================================================================
 
-interface DocumentPreviewProps {
+interface DocumentActionHubProps {
     document: DocumentItem | null
     session: Session | null
     quickContract: QuickContractData | null
     onGenerate: (docId: DocumentId) => void
     onDownload: (docId: DocumentId, format: 'pdf' | 'docx') => void
     isGenerating: boolean
+    playbookCompliance?: PlaybookComplianceData
+    onRequestApproval?: (doc: DocumentItem) => void
+    approvalRequests?: InternalApprovalsViewProps['requests']
 }
 
-function DocumentPreviewPanel({ document, session, quickContract, onGenerate, onDownload, isGenerating }: DocumentPreviewProps) {
+function DocumentActionHub({ document, session, quickContract, onGenerate, onDownload, isGenerating, playbookCompliance, onRequestApproval, approvalRequests }: DocumentActionHubProps) {
+    const [showPdfViewer, setShowPdfViewer] = useState(false)
+    const printIframeRef = useRef<HTMLIFrameElement>(null)
+
+    // Reset PDF viewer when document changes
+    useEffect(() => {
+        setShowPdfViewer(false)
+    }, [document?.id])
+
+    // ========================================================================
+    // SECTION 7.1: EMPTY STATE
+    // ========================================================================
+
     if (!document) {
         return (
             <div className="flex-1 flex items-center justify-center bg-slate-50 p-8">
                 <div className="text-center">
                     <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <span className="text-4xl">{'\u{1F4CB}'}</span>
+                        <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
                     </div>
                     <h3 className="text-lg font-semibold text-slate-700 mb-2">Select a Document</h3>
                     <p className="text-slate-500 max-w-sm">
@@ -543,82 +598,233 @@ function DocumentPreviewPanel({ document, session, quickContract, onGenerate, on
         )
     }
 
+    // ========================================================================
+    // SECTION 7.2: ACTION HANDLERS
+    // ========================================================================
+
+    const isReady = document.status === 'ready' || document.status === 'final'
+    const hasUrl = !!document.downloadUrl
+
+    const handleViewPdf = () => {
+        setShowPdfViewer(prev => !prev)
+    }
+
+    const handlePopOut = () => {
+        if (document.downloadUrl) {
+            window.open(document.downloadUrl, '_blank', 'noopener,noreferrer')
+        }
+    }
+
+    const handlePrint = () => {
+        if (!document.downloadUrl) return
+        // Create a temporary hidden iframe for printing
+        const iframe = printIframeRef.current
+        if (iframe) {
+            iframe.src = document.downloadUrl
+            iframe.onload = () => {
+                try {
+                    iframe.contentWindow?.print()
+                } catch {
+                    // Cross-origin: fall back to opening in new tab
+                    window.open(document.downloadUrl, '_blank')
+                }
+            }
+        }
+    }
+
+    const handleSaveAsPdf = () => {
+        if (!document.downloadUrl) return
+        const a = window.document.createElement('a')
+        a.href = document.downloadUrl
+        a.download = `${document.name.replace(/\s+/g, '_')}.pdf`
+        a.target = '_blank'
+        window.document.body.appendChild(a)
+        a.click()
+        window.document.body.removeChild(a)
+    }
+
+    const getCategoryBadge = (category: string) => {
+        const styles: Record<string, string> = {
+            assessment: 'text-blue-600 bg-blue-50 border-blue-200',
+            negotiation: 'text-amber-600 bg-amber-50 border-amber-200',
+            agreement: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+            governance: 'text-violet-600 bg-violet-50 border-violet-200',
+            compliance: 'text-violet-600 bg-violet-50 border-violet-200',
+            workflow: 'text-slate-600 bg-slate-50 border-slate-200',
+        }
+        return styles[category] || styles.workflow
+    }
+
+    // ========================================================================
+    // SECTION 7.3: RENDER
+    // ========================================================================
+
     return (
         <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Document Header */}
+
+            {/* ============================================================ */}
+            {/* SECTION 7.3A: DOCUMENT ACTION HEADER */}
+            {/* ============================================================ */}
             <div className="flex-shrink-0 p-4 border-b border-slate-200 bg-white">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
                             {document.icon}
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-slate-800">{document.name}</h2>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-lg font-semibold text-slate-800">{document.name}</h2>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getCategoryBadge(document.category)}`}>
+                                    {document.category}
+                                </span>
+                            </div>
                             <p className="text-sm text-slate-500">{document.description}</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        {/* Status Badge */}
-                        <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
-                            {getStatusIcon(document.status)} {getStatusLabel(document.status)}
-                        </span>
+                    {/* Status Badge */}
+                    <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${getStatusColor(document.status)}`}>
+                        {getStatusIcon(document.status)} {getStatusLabel(document.status)}
+                    </span>
+                </div>
 
-                        {/* Action Buttons */}
-                        {document.status === 'in_progress' && (
+                {/* Generated date line */}
+                {isReady && document.generatedAt && (
+                    <p className="text-xs text-slate-400 mb-3">
+                        Generated {new Date(document.generatedAt).toLocaleString([], {
+                            day: 'numeric', month: 'short', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                        })}
+                    </p>
+                )}
+
+                {/* ======================================================== */}
+                {/* SECTION 7.3B: ACTION BUTTON ROW */}
+                {/* ======================================================== */}
+                <div className="flex flex-wrap items-center gap-1.5">
+
+                    {/* Generate (when in_progress) */}
+                    {document.status === 'in_progress' && (
+                        <button
+                            onClick={() => onGenerate(document.id)}
+                            disabled={isGenerating}
+                            className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-full transition disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                            {isGenerating ? (
+                                <>
+                                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Generating...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                    Generate
+                                </>
+                            )}
+                        </button>
+                    )}
+
+                    {/* Ready-state actions */}
+                    {isReady && (
+                        <>
+                            {/* View PDF */}
+                            {hasUrl && (
+                                <button
+                                    onClick={handleViewPdf}
+                                    className={`h-8 px-3.5 text-xs font-medium rounded-full transition flex items-center gap-1.5 ${
+                                        showPdfViewer
+                                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                            : 'border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600'
+                                    }`}
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    {showPdfViewer ? 'Hide Preview' : 'View PDF'}
+                                </button>
+                            )}
+
+                            {/* Print */}
+                            {hasUrl && (
+                                <button
+                                    onClick={handlePrint}
+                                    className="h-8 px-3.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-full transition flex items-center gap-1.5"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+                                    </svg>
+                                    Print
+                                </button>
+                            )}
+
+                            {/* Save as PDF */}
+                            {hasUrl && (
+                                <button
+                                    onClick={handleSaveAsPdf}
+                                    className="h-8 px-3.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-full transition flex items-center gap-1.5"
+                                >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                    </svg>
+                                    Save PDF
+                                </button>
+                            )}
+
+                            {/* Save as DOCX (disabled, coming soon) */}
+                            <button
+                                disabled
+                                className="h-8 px-3.5 border border-slate-200 text-slate-400 text-xs font-medium rounded-full cursor-not-allowed flex items-center gap-1.5"
+                                title="DOCX export coming soon"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                </svg>
+                                DOCX
+                            </button>
+
+                            {/* Divider */}
+                            <div className="w-px h-5 bg-slate-200 mx-0.5" />
+
+                            {/* Regenerate */}
                             <button
                                 onClick={() => onGenerate(document.id)}
                                 disabled={isGenerating}
-                                className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-full transition disabled:opacity-50 flex items-center gap-1.5"
+                                className="h-8 px-3.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-full transition disabled:opacity-50 flex items-center gap-1.5"
                             >
-                                {isGenerating ? (
-                                    <>
-                                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                        </svg>
-                                        Generating...
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                        </svg>
-                                        Generate
-                                    </>
-                                )}
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                                </svg>
+                                Regenerate
                             </button>
-                        )}
 
-                        {document.status === 'ready' && (
-                            <div className="flex gap-1.5">
+                            {/* Request Approval */}
+                            {document.id !== 'internal-approvals' && onRequestApproval && (
                                 <button
-                                    onClick={() => onGenerate(document.id)}
-                                    disabled={isGenerating}
-                                    className="h-8 px-3.5 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-full transition disabled:opacity-50 flex items-center gap-1.5"
+                                    onClick={() => onRequestApproval(document)}
+                                    className="h-8 px-3.5 border border-violet-200 hover:border-violet-300 hover:bg-violet-50 text-violet-600 text-xs font-medium rounded-full transition flex items-center gap-1.5"
                                 >
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 4.97-4.03 9-9 9a9.003 9.003 0 01-8.354-5.646M21 12A9 9 0 006.354 5.646M21 12H3" />
                                     </svg>
-                                    Regenerate
+                                    Request Approval
                                 </button>
-                                <button
-                                    onClick={() => onDownload(document.id, 'pdf')}
-                                    className="h-8 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-full transition flex items-center gap-1.5"
-                                >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                    </svg>
-                                    Download PDF
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* Document Content / Preview */}
+            {/* ============================================================ */}
+            {/* SECTION 7.3C: DOCUMENT CONTENT AREA */}
+            {/* ============================================================ */}
             <div className="flex-1 overflow-y-auto bg-slate-50">
+
                 {/* Generating State */}
                 {document.status === 'generating' && (
                     <div className="flex items-center justify-center h-full">
@@ -641,28 +847,25 @@ function DocumentPreviewPanel({ document, session, quickContract, onGenerate, on
                     </div>
                 )}
 
-                {/* Ready State with PDF URL — show real PDF in iframe */}
-                {document.status === 'ready' && document.downloadUrl && (
+                {/* Ready State — inline PDF viewer (toggleable) */}
+                {isReady && hasUrl && showPdfViewer && (
                     <div className="h-full flex flex-col">
                         <div className="flex-shrink-0 px-4 py-2 bg-white border-b border-slate-200 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-slate-500">
-                                <span>{'\u2705'}</span>
-                                <span>Generated {document.generatedAt
-                                    ? new Date(document.generatedAt).toLocaleString([], {
-                                        day: 'numeric', month: 'short', year: 'numeric',
-                                        hour: '2-digit', minute: '2-digit'
-                                    })
-                                    : ''
-                                }</span>
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span>PDF Preview</span>
                             </div>
-                            <a
-                                href={document.downloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+                            <button
+                                onClick={handlePopOut}
+                                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1 transition"
                             >
-                                {'\u{1F517}'} Open in new tab
-                            </a>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                </svg>
+                                Pop out
+                            </button>
                         </div>
                         <iframe
                             src={document.downloadUrl}
@@ -672,35 +875,395 @@ function DocumentPreviewPanel({ document, session, quickContract, onGenerate, on
                     </div>
                 )}
 
-                {/* Ready State without PDF URL — show placeholder */}
-                {document.status === 'ready' && !document.downloadUrl && (
+                {/* Ready State — action hub view (when PDF viewer is hidden) */}
+                {isReady && !showPdfViewer && (
                     <div className="p-6">
-                        <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-                            <div className="text-center py-8">
-                                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <span className="text-2xl">{'\u2705'}</span>
+                        <div className="max-w-3xl mx-auto">
+                            {hasUrl ? (
+                                /* Document ready with URL — show info card */
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-14 h-14 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                                            <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h3 className="font-semibold text-slate-800 mb-1">{document.name}</h3>
+                                            <p className="text-sm text-slate-500 mb-3">
+                                                Document generated successfully. Use the action buttons above to view, print, save, or share.
+                                            </p>
+                                            <div className="flex flex-wrap gap-4 text-xs text-slate-400">
+                                                {document.generatedAt && (
+                                                    <span className="flex items-center gap-1">
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        {new Date(document.generatedAt).toLocaleString([], {
+                                                            day: 'numeric', month: 'short', year: 'numeric',
+                                                            hour: '2-digit', minute: '2-digit'
+                                                        })}
+                                                    </span>
+                                                )}
+                                                <span className="flex items-center gap-1">
+                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                                    </svg>
+                                                    PDF
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Quick action: Click to view */}
+                                    <button
+                                        onClick={handleViewPdf}
+                                        className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-lg text-sm text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50/50 transition flex items-center justify-center gap-2"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        Click to preview document
+                                    </button>
                                 </div>
-                                <h3 className="font-semibold text-slate-700 mb-2">{document.name} is Ready</h3>
-                                <p className="text-sm text-slate-500 mb-4">
-                                    Document generated successfully. Click Download PDF to get your copy.
-                                </p>
-                                <p className="text-xs text-slate-400">
-                                    PDF preview unavailable — the download URL could not be resolved.
-                                    Try regenerating the document.
-                                </p>
-                            </div>
+                            ) : (
+                                /* Document ready without URL — show fallback */
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                                    <div className="text-center py-8">
+                                        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="font-semibold text-slate-700 mb-2">{document.name} is Ready</h3>
+                                        <p className="text-sm text-slate-500 mb-4">
+                                            Document generated successfully. Click Download PDF to get your copy.
+                                        </p>
+                                        <p className="text-xs text-slate-400">
+                                            PDF preview unavailable — the download URL could not be resolved.
+                                            Try regenerating the document.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
 
+                {/* ======================================================== */}
+                {/* SECTION 7.3D: PLAYBOOK COMPLIANCE REPORT VIEW */}
+                {/* ======================================================== */}
+                {document.id === 'playbook-compliance' && !showPdfViewer && playbookCompliance?.compliance && (
+                    <PlaybookComplianceReportView
+                        compliance={playbookCompliance.compliance}
+                        playbookName={playbookCompliance.playbookName}
+                        companyName={playbookCompliance.companyName}
+                        hasGeneratedPdf={isReady && hasUrl}
+                        onGenerate={() => onGenerate('playbook-compliance')}
+                        isGenerating={isGenerating}
+                    />
+                )}
+
+                {/* ======================================================== */}
+                {/* SECTION 7.3E: INTERNAL APPROVALS VIEW (placeholder) */}
+                {/* ======================================================== */}
+                {document.id === 'internal-approvals' && (
+                    <InternalApprovalsView requests={approvalRequests} />
+                )}
+
                 {/* Not Ready States — show static preview placeholders */}
-                {document.status !== 'generating' && document.status !== 'ready' && (
+                {document.id !== 'playbook-compliance' && document.id !== 'internal-approvals' && document.status !== 'generating' && !isReady && (
                     <div className="p-6">
                         <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8">
                             <DocumentContentPreview document={document} session={session} quickContract={quickContract} />
                         </div>
                     </div>
                 )}
+            </div>
+
+            {/* Hidden iframe for printing */}
+            <iframe ref={printIframeRef} className="hidden" title="Print frame" />
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 7B: PLAYBOOK COMPLIANCE REPORT VIEW
+// ============================================================================
+// Full compliance breakdown shown in centre panel when 'playbook-compliance'
+// is selected. Reuses ScoreRing, RedLinesTab, CategoriesTab, FlexibilityTab
+// exported from PlaybookComplianceIndicator.tsx.
+// ============================================================================
+
+interface PlaybookComplianceReportViewProps {
+    compliance: ComplianceResult
+    playbookName: string
+    companyName: string
+    hasGeneratedPdf: boolean
+    onGenerate: () => void
+    isGenerating: boolean
+}
+
+function PlaybookComplianceReportView({
+    compliance, playbookName, companyName, hasGeneratedPdf, onGenerate, isGenerating
+}: PlaybookComplianceReportViewProps) {
+    const [activeTab, setActiveTab] = useState<'redlines' | 'categories' | 'flexibility'>('redlines')
+    const hasBreaches = compliance.redLineBreaches > 0
+
+    const tabs = [
+        { key: 'redlines' as const, label: `Red Lines (${compliance.redLines.length})` },
+        { key: 'categories' as const, label: `Categories (${compliance.categories.length})` },
+        { key: 'flexibility' as const, label: `Flexibility (${compliance.flexibility.length})` },
+    ]
+
+    return (
+        <div className="p-6">
+            <div className="max-w-3xl mx-auto space-y-4">
+
+                {/* Summary Card */}
+                <div className={`bg-white rounded-xl shadow-sm border p-5 ${
+                    hasBreaches ? 'border-amber-200' : 'border-emerald-200'
+                }`}>
+                    <div className="flex items-center gap-4">
+                        <ScoreRing score={compliance.overallScore} size={72} strokeWidth={5} />
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-semibold text-slate-800">Compliance Score</h3>
+                                {hasBreaches ? (
+                                    <ShieldAlertIcon size={18} className="text-amber-500" />
+                                ) : (
+                                    <ShieldCheckIcon size={18} className="text-emerald-500" />
+                                )}
+                            </div>
+                            <p className="text-sm text-slate-500 mb-2">{playbookName}</p>
+                            <div className="flex flex-wrap gap-3 text-xs">
+                                <span className="flex items-center gap-1 text-slate-600">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                                    {compliance.rulesPassed} passed
+                                </span>
+                                <span className="flex items-center gap-1 text-slate-600">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                    {compliance.rulesWarning} warnings
+                                </span>
+                                <span className="flex items-center gap-1 text-slate-600">
+                                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                                    {compliance.rulesFailed} failed
+                                </span>
+                                {compliance.redLineBreaches > 0 && (
+                                    <span className="flex items-center gap-1 text-red-600 font-semibold">
+                                        <span className="w-2 h-2 rounded-full bg-red-600" />
+                                        {compliance.redLineBreaches} red line breach{compliance.redLineBreaches > 1 ? 'es' : ''}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex-shrink-0 flex items-center gap-1 text-[9px] font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded uppercase tracking-wide">
+                            <PlaybookLockIcon size={8} /> Initiator Only
+                        </div>
+                    </div>
+                </div>
+
+                {/* Generate PDF button (when no PDF yet) */}
+                {!hasGeneratedPdf && (
+                    <button
+                        onClick={onGenerate}
+                        disabled={isGenerating}
+                        className="w-full h-10 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white text-sm font-medium rounded-lg transition flex items-center justify-center gap-2"
+                    >
+                        {isGenerating ? (
+                            <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Generating PDF Report...
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                </svg>
+                                Generate PDF Report
+                            </>
+                        )}
+                    </button>
+                )}
+
+                {/* Privacy notice */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-md border border-slate-100 text-[10px] text-slate-400">
+                    <PlaybookLockIcon size={10} className="flex-shrink-0" />
+                    This analysis is private to {companyName} and compares negotiation outcomes
+                    against your active playbook. The other party cannot see this information.
+                </div>
+
+                {/* Tab bar */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="flex border-b border-slate-200 bg-slate-50/80 px-4">
+                        {tabs.map((tab) => (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`px-4 py-2.5 text-xs font-medium border-b-2 transition whitespace-nowrap ${
+                                    activeTab === tab.key
+                                        ? 'text-slate-800 font-semibold border-emerald-500'
+                                        : 'text-slate-500 border-transparent hover:text-slate-700'
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Tab content */}
+                    <div className="p-4 max-h-[500px] overflow-y-auto">
+                        {activeTab === 'redlines' && <RedLinesTab redLines={compliance.redLines} />}
+                        {activeTab === 'categories' && <CategoriesTab categories={compliance.categories} />}
+                        {activeTab === 'flexibility' && <FlexibilityTab flexibility={compliance.flexibility} />}
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ============================================================================
+// SECTION 7C: INTERNAL APPROVALS VIEW (Phase 3 placeholder)
+// ============================================================================
+// Shows active approval requests and their statuses. Full implementation
+// will be added in Phase 3 (database tables, email workflow, approver page).
+// ============================================================================
+
+interface InternalApprovalsViewProps {
+    requests?: Array<{
+        request_id: string
+        document_name: string
+        document_type: string
+        priority: string
+        status: string
+        created_at: string
+        responses: Array<{
+            approver_name: string
+            approver_email: string
+            status: string
+            responded_at: string | null
+        }>
+    }>
+}
+
+function InternalApprovalsView({ requests = [] }: InternalApprovalsViewProps) {
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'approved': return 'bg-emerald-100 text-emerald-700'
+            case 'rejected': return 'bg-red-100 text-red-700'
+            case 'viewed': return 'bg-blue-100 text-blue-700'
+            case 'sent': return 'bg-amber-100 text-amber-700'
+            default: return 'bg-slate-100 text-slate-600'
+        }
+    }
+
+    const getPriorityBadge = (priority: string) => {
+        switch (priority) {
+            case 'urgent': return 'bg-red-100 text-red-600'
+            case 'high': return 'bg-amber-100 text-amber-600'
+            default: return ''
+        }
+    }
+
+    if (requests.length === 0) {
+        return (
+            <div className="p-6">
+                <div className="max-w-3xl mx-auto">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+                        <div className="text-center py-6">
+                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 4.97-4.03 9-9 9a9.003 9.003 0 01-8.354-5.646M21 12A9 9 0 006.354 5.646M21 12H3" />
+                                </svg>
+                            </div>
+                            <h3 className="font-semibold text-slate-700 mb-2">Internal Approvals</h3>
+                            <p className="text-sm text-slate-500 max-w-md mx-auto mb-4">
+                                Request internal sign-off from stakeholders before finalising your contract.
+                                Select any generated document from the list and click &quot;Request Approval&quot; to get started.
+                            </p>
+                            <div className="inline-flex items-center gap-1.5 text-xs text-slate-400 bg-slate-50 px-3 py-1.5 rounded-full">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                No active approval requests
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="p-6">
+            <div className="max-w-3xl mx-auto space-y-3">
+                {requests.map((req) => {
+                    const approvedCount = req.responses.filter(r => r.status === 'approved').length
+                    const totalCount = req.responses.length
+
+                    return (
+                        <div key={req.request_id} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h4 className="text-sm font-semibold text-slate-800">{req.document_name}</h4>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium capitalize ${getStatusBadge(req.status)}`}>
+                                            {req.status}
+                                        </span>
+                                        {req.priority !== 'normal' && (
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium uppercase ${getPriorityBadge(req.priority)}`}>
+                                                {req.priority}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-slate-400">
+                                        Requested {new Date(req.created_at).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </p>
+                                </div>
+                                <div className="text-xs text-slate-500 font-medium tabular-nums">
+                                    {approvedCount}/{totalCount} approved
+                                </div>
+                            </div>
+
+                            {/* Approver list */}
+                            <div className="space-y-1.5">
+                                {req.responses.map((resp, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 text-xs">
+                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                            resp.status === 'approved' ? 'bg-emerald-100' :
+                                            resp.status === 'rejected' ? 'bg-red-100' :
+                                            'bg-slate-100'
+                                        }`}>
+                                            {resp.status === 'approved' ? (
+                                                <svg className="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                                </svg>
+                                            ) : resp.status === 'rejected' ? (
+                                                <svg className="w-3 h-3 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            ) : (
+                                                <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            )}
+                                        </div>
+                                        <span className="text-slate-700 font-medium">{resp.approver_name}</span>
+                                        <span className="text-slate-400">{resp.approver_email}</span>
+                                        <span className={`ml-auto capitalize ${getStatusBadge(resp.status)} px-1.5 py-0.5 rounded text-[10px] font-medium`}>
+                                            {resp.status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )
+                })}
             </div>
         </div>
     )
@@ -1596,6 +2159,27 @@ function DocumentCentreContent() {
     })
 
     // ============================================================================
+    // SECTION 11A-3: INTERNAL APPROVALS STATE
+    // ============================================================================
+    const [showApprovalModal, setShowApprovalModal] = useState(false)
+    const [approvalDocumentTarget, setApprovalDocumentTarget] = useState<DocumentItem | null>(null)
+    const [approvalRequests, setApprovalRequests] = useState<Array<{
+        request_id: string
+        document_name: string
+        document_type: string
+        priority: string
+        status: string
+        created_at: string
+        responses: Array<{
+            approver_name: string
+            approver_email: string
+            status: string
+            responded_at: string | null
+        }>
+    }>>([])
+    const [isSubmittingApproval, setIsSubmittingApproval] = useState(false)
+
+    // ============================================================================
     // SECTION 11B: DATA LOADING
     // ============================================================================
 
@@ -1994,9 +2578,10 @@ function DocumentCentreContent() {
         currentMode: DocumentCentreMode,
         dbRecords: Map<string, GeneratedDocumentRecord>,
         sessionData?: Session | null,
-        qcData?: QuickContractData | null
+        qcData?: QuickContractData | null,
+        extraDocIds?: DocumentId[]
     ): DocumentItem[] => {
-        const availableDefs = getDocumentsForMode(currentMode)
+        const availableDefs = getDocumentsForMode(currentMode, extraDocIds)
 
         return availableDefs.map(def => {
             // Check if we have a DB record for this document type
@@ -2296,6 +2881,35 @@ function DocumentCentreContent() {
     }
 
     // ============================================================================
+    // SECTION 11C-2: ADD PLAYBOOK COMPLIANCE DOC WHEN DATA LOADS
+    // ============================================================================
+    // Playbook compliance loads async after initializeDocuments.
+    // When it becomes visible, inject the playbook-compliance document into the list.
+    useEffect(() => {
+        if (playbookCompliance.isVisible && mode === 'quick_contract') {
+            setDocuments(prev => {
+                // Only add if not already in the list
+                if (prev.some(d => d.id === 'playbook-compliance')) return prev
+                const def = DOCUMENT_DEFINITIONS.find(d => d.id === 'playbook-compliance')
+                if (!def) return prev
+                // Insert before internal-approvals (last item) if present
+                const approvalIdx = prev.findIndex(d => d.id === 'internal-approvals')
+                const newDoc: DocumentItem = {
+                    ...def,
+                    status: 'in_progress',     // compliance data is ready, PDF not yet generated
+                    canGenerate: true,
+                }
+                if (approvalIdx >= 0) {
+                    const updated = [...prev]
+                    updated.splice(approvalIdx, 0, newDoc)
+                    return updated
+                }
+                return [...prev, newDoc]
+            })
+        }
+    }, [playbookCompliance.isVisible, mode])
+
+    // ============================================================================
     // SECTION 11D: GENERATE DOCUMENT HANDLER
     // ============================================================================
 
@@ -2365,7 +2979,7 @@ function DocumentCentreContent() {
 
         try {
             // Build request body based on mode
-            const requestBody = mode === 'quick_contract'
+            const requestBody: Record<string, unknown> = mode === 'quick_contract'
                 ? {
                     contract_id: quickContract?.contractId,
                     user_id: userInfo.userId,
@@ -2381,6 +2995,13 @@ function DocumentCentreContent() {
                     format: 'pdf',
                     regenerate: isRegeneration
                 }
+
+            // Playbook compliance needs the computed compliance data in the payload
+            if (documentId === 'playbook-compliance' && playbookCompliance?.compliance) {
+                requestBody.compliance = playbookCompliance.compliance
+                requestBody.playbook_name = playbookCompliance.playbookName
+                requestBody.company_name = playbookCompliance.companyName
+            }
 
             const response = await fetch(endpoint, {
                 method: 'POST',
@@ -3256,6 +3877,176 @@ function DocumentCentreContent() {
     }, [userInfo, contractHash, currentPartyRole, quickContract, documents, signingState, supabase])
 
     // ============================================================================
+    // SECTION 11D-4: INTERNAL APPROVALS HANDLERS
+    // ============================================================================
+
+    const openApprovalModal = useCallback((doc: DocumentItem) => {
+        setApprovalDocumentTarget(doc)
+        setShowApprovalModal(true)
+    }, [])
+
+    const loadApprovalRequests = useCallback(async () => {
+        const contractId = quickContract?.contractId || null
+        const sessionId = session?.sessionId || null
+        if (!contractId && !sessionId) return
+
+        try {
+            let query = supabase
+                .from('internal_approval_requests')
+                .select('request_id, document_name, document_type, priority, status, created_at')
+                .order('created_at', { ascending: false })
+
+            if (contractId) {
+                query = query.eq('contract_id', contractId)
+            } else if (sessionId) {
+                query = query.eq('session_id', sessionId)
+            }
+
+            const { data: requests } = await query
+
+            if (requests && requests.length > 0) {
+                // Load responses for each request
+                const requestIds = requests.map(r => r.request_id)
+                const { data: responses } = await supabase
+                    .from('internal_approval_responses')
+                    .select('request_id, approver_name, approver_email, status, responded_at')
+                    .in('request_id', requestIds)
+
+                const enriched = requests.map(req => ({
+                    ...req,
+                    responses: (responses || []).filter(r => r.request_id === req.request_id)
+                }))
+
+                setApprovalRequests(enriched)
+            } else {
+                setApprovalRequests([])
+            }
+        } catch (err) {
+            console.error('Error loading approval requests:', err)
+        }
+    }, [quickContract?.contractId, session?.sessionId, supabase])
+
+    const handleSubmitApprovalRequest = useCallback(async (
+        approvers: Array<{ name: string; email: string; company: string }>,
+        message: string,
+        priority: 'normal' | 'high' | 'urgent'
+    ) => {
+        if (!approvalDocumentTarget || !userInfo) return
+        setIsSubmittingApproval(true)
+
+        try {
+            const contractId = quickContract?.contractId || null
+            const sessionId = session?.sessionId || null
+            const contractName = quickContract?.contractName || session?.customerCompany || 'Contract'
+
+            // 1. Create the approval request
+            const { data: requestRow, error: insertError } = await supabase
+                .from('internal_approval_requests')
+                .insert({
+                    contract_id: contractId,
+                    session_id: sessionId,
+                    source_type: mode,
+                    document_type: approvalDocumentTarget.id,
+                    document_name: approvalDocumentTarget.name,
+                    document_url: approvalDocumentTarget.downloadUrl || null,
+                    requested_by_user_id: userInfo.userId,
+                    requested_by_name: `${userInfo.firstName} ${userInfo.lastName}`.trim(),
+                    requested_by_email: userInfo.email,
+                    message: message || null,
+                    priority,
+                    requires_all_approvers: true,
+                })
+                .select('request_id')
+                .single()
+
+            if (insertError || !requestRow) {
+                throw new Error(insertError?.message || 'Failed to create approval request')
+            }
+
+            // 2. Create response rows for each approver (with unique access tokens)
+            const responseRows = approvers.map(approver => ({
+                request_id: requestRow.request_id,
+                approver_email: approver.email,
+                approver_name: approver.name,
+                approver_company: approver.company || null,
+                access_token: crypto.randomUUID(),
+                status: 'pending',
+            }))
+
+            const { data: insertedResponses, error: respError } = await supabase
+                .from('internal_approval_responses')
+                .insert(responseRows)
+                .select('response_id, approver_email, approver_name, access_token')
+
+            if (respError) {
+                throw new Error(respError.message || 'Failed to create approver records')
+            }
+
+            // 3. Send emails to each approver
+            const baseUrl = window.location.origin
+            for (const resp of (insertedResponses || [])) {
+                try {
+                    await fetch('/api/email/send-approval-request', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            approverEmail: resp.approver_email,
+                            approverName: resp.approver_name,
+                            requesterName: `${userInfo.firstName} ${userInfo.lastName}`.trim(),
+                            requesterEmail: userInfo.email,
+                            requesterCompany: userInfo.company || '',
+                            documentName: approvalDocumentTarget.name,
+                            documentType: approvalDocumentTarget.category,
+                            contractName,
+                            message,
+                            priority,
+                            approvalUrl: `${baseUrl}/approval/${resp.access_token}`,
+                        }),
+                    })
+
+                    // Mark as sent
+                    await supabase
+                        .from('internal_approval_responses')
+                        .update({ status: 'sent', sent_at: new Date().toISOString() })
+                        .eq('response_id', resp.response_id)
+                } catch (emailErr) {
+                    console.error('Failed to send approval email to:', resp.approver_email, emailErr)
+                }
+            }
+
+            // 4. Refresh the approval requests list
+            await loadApprovalRequests()
+
+            // 5. Close modal and show CLARENCE message
+            setShowApprovalModal(false)
+            setApprovalDocumentTarget(null)
+
+            const currentContextId = quickContract?.contractId || session?.sessionId || ''
+            setChatMessages(prev => [...prev, {
+                messageId: `approval-${Date.now()}`,
+                sessionId: currentContextId,
+                sender: 'clarence',
+                message: `Approval request sent for "${approvalDocumentTarget.name}" to ${approvers.length} approver${approvers.length > 1 ? 's' : ''}: ${approvers.map(a => a.name).join(', ')}.`,
+                createdAt: new Date().toISOString(),
+            }])
+
+        } catch (err) {
+            console.error('Error submitting approval request:', err)
+            alert('Failed to send approval request. Please try again.')
+        } finally {
+            setIsSubmittingApproval(false)
+        }
+    }, [approvalDocumentTarget, userInfo, quickContract, session, mode, supabase, loadApprovalRequests])
+
+    // Load approval requests on init
+    const approvalContextId = quickContract?.contractId || session?.sessionId || ''
+    useEffect(() => {
+        if (approvalContextId) {
+            loadApprovalRequests()
+        }
+    }, [approvalContextId, loadApprovalRequests])
+
+    // ============================================================================
     // SECTION 11E: SAVE AS TEMPLATE HANDLER (with Observability Instrumentation)
     // ============================================================================
 
@@ -3823,15 +4614,18 @@ function DocumentCentreContent() {
                     )}
                 </div>
 
-                {/* CENTER PANEL: Document Preview */}
+                {/* CENTER PANEL: Document Action Hub */}
                 <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-                    <DocumentPreviewPanel
+                    <DocumentActionHub
                         document={selectedDocument}
                         session={session}
                         quickContract={quickContract}
                         onGenerate={handleGenerateDocument}
                         onDownload={handleDownloadDocument}
                         isGenerating={isGeneratingDocument}
+                        playbookCompliance={playbookCompliance}
+                        onRequestApproval={openApprovalModal}
+                        approvalRequests={approvalRequests}
                     />
                 </div>
 
@@ -3891,6 +4685,16 @@ function DocumentCentreContent() {
                 currentPartyRole={currentPartyRole || 'initiator'}
                 initiatorConfirmation={signingState.initiatorConfirmation}
                 respondentConfirmation={signingState.respondentConfirmation}
+            />
+
+            {/* Request Approval Modal */}
+            <RequestApprovalModal
+                show={showApprovalModal}
+                onClose={() => { setShowApprovalModal(false); setApprovalDocumentTarget(null) }}
+                onSubmit={handleSubmitApprovalRequest}
+                documentName={approvalDocumentTarget?.name || ''}
+                documentCategory={approvalDocumentTarget?.category || ''}
+                isSubmitting={isSubmittingApproval}
             />
 
         </div>

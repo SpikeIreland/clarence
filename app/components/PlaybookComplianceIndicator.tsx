@@ -426,7 +426,13 @@ function FlexibilityTab({ flexibility }: { flexibility: FlexibilityResult[] }) {
 }
 
 // ============================================================================
-// SECTION 10: MAIN INDICATOR COMPONENT
+// SECTION 10: EXPORTED SUB-COMPONENTS (for reuse in Document Centre)
+// ============================================================================
+
+export { ScoreRing, RedLinesTab, CategoriesTab, FlexibilityTab, ShieldCheckIcon, ShieldAlertIcon, LockIcon }
+
+// ============================================================================
+// SECTION 11: MAIN INDICATOR COMPONENT
 // ============================================================================
 
 export default function PlaybookComplianceIndicator({
