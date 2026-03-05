@@ -13,5 +13,5 @@ export const DATAROOM_DOMAIN = 'dataroom.clarencelegal.ai'
 export const DATAROOM_LOCAL_DOMAIN = 'dataroom.localhost:3000'
 
 export const DATAROOM_ADMIN_EMAILS = (
-  process.env.DATAROOM_ADMIN_EMAILS || ''
+  process.env.NEXT_PUBLIC_DATAROOM_ADMIN_EMAILS || ''
 ).split(',').map((e) => e.trim().toLowerCase()).filter(Boolean)
