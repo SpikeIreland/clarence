@@ -16,15 +16,15 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "CLARENCE | The Honest Broker",
+    default: "CLARENCE | Built to Agree",
     template: "%s | CLARENCE"
   },
-  description: "The complete platform for contract intelligence. AI-powered products for contract creation, negotiation, training, and signing.",
-  keywords: ["contract intelligence", "AI mediation", "contract negotiation", "contract management", "legal tech", "contract creation", "digital signing", "tender management", "negotiation training"],
+  description: "The principled platform for contract creation, negotiation, and agreement. Neutral mediation that serves the deal, not a side.",
+  keywords: ["contract negotiation", "agreement platform", "neutral mediation", "contract management", "legal tech", "contract creation", "honest broker", "principled negotiation", "negotiation training"],
   authors: [{ name: "CLARENCE" }],
   openGraph: {
-    title: "CLARENCE | The Honest Broker",
-    description: "The complete platform for contract intelligence. Create, Negotiate, Agree.",
+    title: "CLARENCE | Built to Agree",
+    description: "Agreements, not arguments. The principled platform for contract negotiation and agreement.",
     siteName: "CLARENCE",
     type: "website",
   },

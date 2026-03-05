@@ -9,9 +9,9 @@ import { getProductBySlug } from '@/app/lib/products'
 import { GraduationCap, Target, Bot, UsersRound, TrendingUp } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Training Studio | CLARENCE - Contract Negotiation Training',
+  title: 'Training Studio | CLARENCE - Rehearse the Deal Before You Do the Deal',
   description:
-    'Master contract negotiation in a risk-free environment. Train your team on company playbooks, practice with AI opponents, and prepare for important deals.',
+    'A flight simulator for contract negotiation. Rehearse real scenarios, sharpen strategy on your own playbooks, and build confidence before the stakes are real.',
 }
 
 export default function TrainingPage() {
@@ -29,16 +29,20 @@ export default function TrainingPage() {
           <div className="max-w-4xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-full text-sm font-medium mb-8">
               <GraduationCap className="w-4 h-4" />
-              <span>Practice Mode</span>
+              <span>Flight Simulator</span>
             </div>
 
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
               Training Studio
             </h1>
+            <p className="text-2xl font-semibold text-amber-200 mb-6">
+              Rehearse the deal before you do the deal.
+            </p>
             <p className="text-xl text-amber-100 max-w-2xl mx-auto leading-relaxed">
-              Master contract negotiation in a risk-free environment. Train your
-              team, practice with AI opponents, and prepare for important deals
-              before going live.
+              A flight simulator for contract negotiation. Your team rehearses
+              real scenarios against intelligent opponents, sharpens strategy on
+              your own playbooks, and builds confidence — before the stakes are
+              real.
             </p>
 
             <div className="mt-10">
@@ -68,13 +72,14 @@ export default function TrainingPage() {
 
               <div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-6">
-                  Learn by Doing — Without the Risk
+                  Every Pilot Trains Before They Fly
                 </h2>
                 <p className="text-slate-600 mb-8 text-lg leading-relaxed">
-                  The Training Studio provides a safe environment to develop
-                  negotiation skills, test strategies, and prepare teams for
-                  high-stakes deals. Every training session uses the same
-                  AI-powered mediation as live contracts.
+                  The Training Studio is your negotiation flight simulator. Same
+                  instruments as the real thing — same mediation engine, same
+                  leverage dynamics, same clause-by-clause structure. The only
+                  difference: nothing is binding. Make mistakes. Test strategies.
+                  Build muscle memory.
                 </p>
 
                 <div className="space-y-4">
@@ -84,11 +89,12 @@ export default function TrainingPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-800 mb-1">
-                        No Real Commitments
+                        Zero Consequences
                       </h3>
                       <p className="text-sm text-slate-600">
-                        Practice negotiations without any binding obligations.
-                        Make mistakes, learn, improve.
+                        Crash and learn. Every training session uses the full
+                        mediation engine but nothing is binding. Experiment
+                        freely.
                       </p>
                     </div>
                   </div>
@@ -99,11 +105,11 @@ export default function TrainingPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-800 mb-1">
-                        AI Opponents
+                        Intelligent Opponents
                       </h3>
                       <p className="text-sm text-slate-600">
-                        Negotiate against intelligent AI with adjustable
-                        difficulty — from beginner to expert.
+                        Negotiate against opponents calibrated from beginner to
+                        expert. They adapt, push back, and make you sharper.
                       </p>
                     </div>
                   </div>
@@ -114,11 +120,12 @@ export default function TrainingPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-800 mb-1">
-                        Team Practice
+                        Team War Games
                       </h3>
                       <p className="text-sm text-slate-600">
-                        Run multi-player sessions with colleagues to sharpen
-                        skills before important deals.
+                        Run multi-player sessions with colleagues. Test your
+                        playbook against your own people before facing the real
+                        counterparty.
                       </p>
                     </div>
                   </div>
@@ -129,11 +136,12 @@ export default function TrainingPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-slate-800 mb-1">
-                        Progress Tracking
+                        Performance Scorecard
                       </h3>
                       <p className="text-sm text-slate-600">
-                        Monitor skill development and identify areas for
-                        improvement over time.
+                        Track improvement over time. See where you concede too
+                        early, where you hold too long, and where you find
+                        creative value.
                       </p>
                     </div>
                   </div>
@@ -149,11 +157,11 @@ export default function TrainingPage() {
         <div className="container mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Training Scenarios
+              Mission Library
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
               Pre-built scenarios covering common contract types and negotiation
-              challenges.
+              challenges. Choose your mission.
             </p>
           </div>
 
@@ -207,11 +215,11 @@ export default function TrainingPage() {
                 Enterprise Feature
               </div>
               <h2 className="text-3xl font-bold text-slate-800 mb-4">
-                Company Playbook Integration
+                Train on Your Actual Playbook
               </h2>
               <p className="text-slate-600 max-w-2xl mx-auto">
-                Train your team on your actual negotiation playbooks and
-                contract standards.
+                Upload your negotiation standards. Clarence enforces compliance
+                and scores your team against your own rules.
               </p>
             </div>
 
@@ -219,7 +227,7 @@ export default function TrainingPage() {
               <div className="grid md:grid-cols-2 gap-8">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                    Customise Training to Your Business
+                    Load Your Rules of Engagement
                   </h3>
                   <ul className="space-y-3">
                     <FeatureListItem color="amber">
@@ -235,14 +243,14 @@ export default function TrainingPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                    Promote to Live Contracts
+                    From Rehearsal to Reality
                   </h3>
                   <ul className="space-y-3">
                     <FeatureListItem color="amber">
-                      Successful training contracts can become live templates
+                      When a training run goes well, promote it to a live template with one click
                     </FeatureListItem>
                     <FeatureListItem color="amber">
-                      Seamless transition from practice to production
+                      Carry your strategy straight into the real negotiation
                     </FeatureListItem>
                     <FeatureListItem color="amber">
                       Preserve learnings and refine approach before going live
@@ -276,8 +284,8 @@ export default function TrainingPage() {
       </section>
 
       <SectionCTA
-        title="Ready to Start Training?"
-        subtitle="Build your team's negotiation skills risk-free with the Training Studio."
+        title="Ready to Log Your First Hours?"
+        subtitle="Build your team's negotiation confidence in the flight simulator — then take what you've learned into the real thing."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'See How It Works', href: '/how-it-works' }}
       />

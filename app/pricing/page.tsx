@@ -6,7 +6,7 @@ import SectionCTA from '../components/SectionCTA'
 import Footer from '../components/Footer'
 
 export const metadata: Metadata = {
-  title: 'Pricing | CLARENCE - AI-Powered Contract Intelligence',
+  title: 'Pricing | CLARENCE - Simple, Transparent Pricing',
   description:
     'Flexible pricing for teams of all sizes. Professional plan from £300/month. Start with a free trial or contact us for enterprise solutions.',
 }
@@ -32,11 +32,11 @@ export default function PricingPage() {
         <div className="container mx-auto px-6 py-16">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-4xl font-bold text-slate-800 mb-4">
-              Simple, Transparent Pricing
+              Transparent Pricing. Obviously.
             </h1>
             <p className="text-xl text-slate-600">
-              Start with a free trial. Scale as you grow. No hidden fees, no
-              surprises.
+              No hidden fees. No surprises. No theatre. Start with a free trial
+              and scale as your team grows.
             </p>
           </div>
         </div>
@@ -310,8 +310,8 @@ export default function PricingPage() {
       </section>
 
       <SectionCTA
-        title="Ready to Get Started?"
-        subtitle="Start with a free trial or contact our team to discuss your requirements."
+        title="Ready to Agree?"
+        subtitle="Start with a free trial or contact our team to discuss what your organisation needs."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'Contact Sales', href: '/enterprise' }}
       />

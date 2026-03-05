@@ -7,9 +7,9 @@ import Footer from '../components/Footer'
 import { products, productCategories } from '../lib/products'
 
 export const metadata: Metadata = {
-  title: 'Products | CLARENCE - Contract Intelligence Suite',
+  title: 'Products | CLARENCE - The Agreement Suite',
   description:
-    'Explore the complete Clarence product suite. AI-powered tools for contract creation, negotiation, training, signing, and knowledge management.',
+    'Explore the complete Clarence product suite. Principled tools for contract creation, negotiation, training, signing, and knowledge management.',
 }
 
 // ============================================================================
@@ -26,8 +26,8 @@ export default function ProductsPage() {
 
       <PageHero
         badge={{ icon: 'C', text: 'Product Suite' }}
-        title="The Clarence Product Suite"
-        subtitle="A comprehensive set of AI-powered tools covering every stage of the contract lifecycle — from first draft to final signature."
+        title="Tools Built to Agree"
+        subtitle="Every product built on the same principled framework — neutrality, transparency, and fairness from first draft to final signature."
       />
 
       {/* ================================================================== */}
@@ -77,9 +77,8 @@ export default function ProductsPage() {
             <span className="text-violet-600">Agree</span>
           </div>
           <p className="text-slate-600 max-w-xl mx-auto">
-            Every Clarence product is built on our principled mediation
-            framework — ensuring neutrality, transparency, and fairness at every
-            step.
+            Every Clarence product follows the same principled mediation
+            framework — because better environments produce better agreements.
           </p>
         </div>
       </section>

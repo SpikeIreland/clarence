@@ -13,8 +13,8 @@ import Footer from '../components/Footer'
 
 // Note: Metadata export needs to be in a separate file for client components
 // export const metadata: Metadata = {
-//   title: 'Request Free Trial | CLARENCE - AI-Powered Contract Mediation',
-//   description: 'Start your free CLARENCE trial. Experience AI-powered contract mediation with transparent leverage and principled negotiation.',
+//   title: 'Request Free Trial | CLARENCE - Principled Contract Mediation',
+//   description: 'Start your free CLARENCE trial. Experience principled contract mediation with transparent leverage and fair negotiation.',
 // }
 
 // ============================================================================
@@ -257,7 +257,7 @@ export default function RequestTrialPage() {
                                 Request Your Free Trial
                             </h1>
                             <p className="text-slate-600 max-w-xl mx-auto">
-                                Experience AI-powered contract mediation with one complete contract session.
+                                Experience principled contract mediation with one complete agreement session.
                                 No credit card required.
                             </p>
                         </div>

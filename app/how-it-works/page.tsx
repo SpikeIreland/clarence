@@ -9,7 +9,7 @@ import { ArrowRight } from 'lucide-react'
 export const metadata: Metadata = {
   title: 'How It Works | CLARENCE - The Create, Negotiate, Agree Platform',
   description:
-    'A principled approach to contract negotiation that removes emotion, reveals leverage, and guides both parties to fair agreements.',
+    'A principled approach to contract negotiation. Transparent leverage, principled mediation, and a framework that guides both parties to agreements that reflect reality.',
 }
 
 // ============================================================================
@@ -37,12 +37,11 @@ export default function HowItWorksPage() {
             </div>
 
             <h1 className="text-4xl md:text-5xl font-bold mb-6">
-              How the Clarence Platform Works
+              How Agreements Get Made
             </h1>
             <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              A principled approach to contract negotiation that removes
-              emotion, reveals leverage, and guides both parties to fair
-              agreements.
+              A principled approach that removes the theatre, reveals leverage,
+              and guides both parties to agreements that reflect reality.
             </p>
           </div>
         </div>
@@ -60,8 +59,8 @@ export default function HowItWorksPage() {
                 Collaboration Over Confrontation
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                CLARENCE guides both parties toward mutually beneficial outcomes
-                rather than adversarial winners and losers.
+                Clarence guides both parties toward the agreement itself — not
+                advantage for one side.
               </p>
             </div>
             <div className="text-center p-6">
@@ -72,8 +71,8 @@ export default function HowItWorksPage() {
                 Stronger Relationships
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Remove the emotional friction from negotiations. Start your
-                business relationship on positive terms.
+                Professionalism does not require hostility. Agreements made
+                through Clarence start relationships on solid ground.
               </p>
             </div>
             <div className="text-center p-6">
@@ -96,8 +95,8 @@ export default function HowItWorksPage() {
                 Transparent Leverage
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Both parties see the same data. No hidden agendas — just facts
-                that drive fair, realistic negotiations.
+                Both parties see the same data. No hidden agendas. Truth is
+                safer to disclose.
               </p>
             </div>
           </div>
@@ -109,7 +108,7 @@ export default function HowItWorksPage() {
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Your Contract Journey
+              Your Agreement Journey
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
               From initial setup to signed agreement — see how CLARENCE guides
@@ -196,7 +195,7 @@ export default function HowItWorksPage() {
                   </h3>
                   <p className="text-slate-600 mb-6 text-lg leading-relaxed">
                     The heart of CLARENCE. Work through every clause with
-                    AI-powered mediation, real-time leverage tracking, and
+                    principled mediation, real-time leverage visibility, and
                     intelligent trade-off suggestions.
                   </p>
                   <ul className="space-y-3 mb-6">
@@ -375,11 +374,11 @@ export default function HowItWorksPage() {
       </section>
 
       <SectionCTA
-        title="Ready to Transform Your Negotiations?"
-        subtitle="Start with the Training Studio to experience CLARENCE risk-free, then bring those skills to your real contracts."
+        title="This Is How Agreements Should Be Made"
+        subtitle="Start with the Training Studio to experience CLARENCE risk-free, then bring those skills to your real agreements."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{
-          text: 'Try Training Studio',
+          text: 'Try the Flight Simulator',
           href: '/products/training',
         }}
       />

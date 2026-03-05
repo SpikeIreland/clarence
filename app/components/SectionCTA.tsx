@@ -29,13 +29,16 @@ export default function SectionCTA({
     <section className="py-20 bg-gradient-to-br from-slate-800 to-slate-900">
       <div className="container mx-auto px-6 text-center">
         {/* Brand echo */}
-        <div className="text-2xl font-bold mb-6 flex items-baseline justify-center gap-2">
+        <div className="text-2xl font-bold mb-2 flex items-baseline justify-center gap-2">
           <span className="text-emerald-400">Create</span>
           <span className="text-slate-600 font-light">·</span>
           <span className="text-slate-300">Negotiate</span>
           <span className="text-slate-600 font-light">·</span>
           <span className="text-violet-400">Agree</span>
         </div>
+        <p className="text-xs text-slate-500 uppercase tracking-widest mb-6">
+          Built to agree
+        </p>
 
         <h2 className="text-3xl font-bold text-white mb-4">{title}</h2>
         <p className="text-slate-300 mb-8 max-w-xl mx-auto">{subtitle}</p>

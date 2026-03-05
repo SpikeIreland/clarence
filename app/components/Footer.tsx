@@ -26,12 +26,12 @@ export default function Footer() {
               </div>
               <div>
                 <div className="text-white font-semibold">CLARENCE</div>
-                <div className="text-slate-500 text-xs">The Honest Broker</div>
+                <div className="text-slate-500 text-xs tracking-wider">Built to agree</div>
               </div>
             </Link>
             <p className="text-sm text-slate-500 leading-relaxed">
-              AI-powered contract intelligence platform. From creation to
-              signature — fair, transparent, principled.
+              The principled platform for contract negotiation and agreement.
+              Neutral, transparent, fair.
             </p>
           </div>
 
@@ -106,6 +106,14 @@ export default function Footer() {
                   Request Trial
                 </Link>
               </li>
+              <li>
+                <Link
+                  href="/who-is-clarence"
+                  className="text-sm hover:text-white transition-colors"
+                >
+                  Who is Clarence?
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -146,7 +154,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm">
-            &copy; {new Date().getFullYear()} CLARENCE. The Honest Broker.
+            &copy; {new Date().getFullYear()} CLARENCE. Built to agree.
           </p>
           <p className="text-sm">
             <span className="text-emerald-500">Create</span>

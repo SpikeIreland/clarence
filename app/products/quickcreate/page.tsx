@@ -9,9 +9,9 @@ import { getProductBySlug } from '@/app/lib/products'
 import { Zap, Upload, Send, CheckCircle } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'QuickCreate | CLARENCE - Rapid Contract Creation from Templates',
+  title: 'QuickCreate | CLARENCE - Rapid Agreement Creation',
   description:
-    'Upload or select a template and let Clarence handle the rest. AI auto-configures clause ranges and positions for rapid contract creation and sending.',
+    'Choose a template, set your terms, and send. Clarence configures fair starting positions for rapid agreement creation.',
 }
 
 export default function QuickCreatePage() {
@@ -36,9 +36,8 @@ export default function QuickCreatePage() {
               QuickCreate
             </h1>
             <p className="text-xl text-emerald-100 max-w-2xl mx-auto leading-relaxed">
-              Standard contracts, fast. Upload or select a template and let
-              Clarence handle the rest — review, adjust, and send without full
-              mediation.
+              Agreements at the speed of trust. Choose a template, set your
+              terms, and send — without the back-and-forth.
             </p>
 
             <div className="mt-10">
@@ -69,11 +68,11 @@ export default function QuickCreatePage() {
               {/* Features */}
               <div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-6">
-                  Send Contracts in Minutes, Not Days
+                  Send Agreements in Minutes, Not Days
                 </h2>
                 <p className="text-slate-600 mb-8 text-lg leading-relaxed">
-                  QuickCreate removes the complexity from routine contract
-                  creation. Choose a template, let AI configure the clause
+                  QuickCreate strips the friction from routine agreements.
+                  Choose a template, let Clarence configure fair starting
                   positions, and send to recipients — all in a streamlined
                   workflow.
                 </p>
@@ -136,8 +135,8 @@ export default function QuickCreatePage() {
                 2. Review & Adjust
               </h3>
               <p className="text-sm text-slate-600">
-                AI auto-configures clause ranges and positions. Review and make
-                any adjustments.
+                Clarence configures fair clause positions automatically. Review
+                and make any adjustments.
               </p>
             </div>
             <div className="text-center">
@@ -204,8 +203,8 @@ export default function QuickCreatePage() {
       </section>
 
       <SectionCTA
-        title="Ready to Send Your First Contract?"
-        subtitle="Start with a free trial and send your first QuickCreate contract in minutes."
+        title="Ready to Send Your First Agreement?"
+        subtitle="Start with a free trial and send your first QuickCreate agreement in minutes."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'View Pricing', href: '/pricing' }}
       />

@@ -114,7 +114,7 @@ export default function MainNavigation() {
               <div className="font-semibold text-slate-800 tracking-wide">
                 CLARENCE
               </div>
-              <div className="text-xs text-slate-400">The Honest Broker</div>
+              <div className="text-xs text-slate-400 tracking-wider">Built to agree</div>
             </div>
           </Link>
 
@@ -226,6 +226,18 @@ export default function MainNavigation() {
               Pricing
             </Link>
 
+            {/* Who is Clarence? */}
+            <Link
+              href="/who-is-clarence"
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                isActive('/who-is-clarence')
+                  ? 'text-slate-900 bg-slate-100'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              Who is Clarence?
+            </Link>
+
             {/* Resources Dropdown */}
             <div ref={resourcesRef} className="relative">
               <button
@@ -286,6 +298,20 @@ export default function MainNavigation() {
                       </div>
                       <div className="text-xs text-slate-400">
                         Start your free evaluation
+                      </div>
+                    </div>
+                  </Link>
+                  <Link
+                    href="/who-is-clarence"
+                    className="flex items-start gap-3 px-3 py-3 rounded-lg hover:bg-slate-50 transition-colors"
+                    onClick={() => setResourcesOpen(false)}
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-slate-700">
+                        Who is Clarence?
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        The Honest Broker story
                       </div>
                     </div>
                   </Link>
@@ -391,6 +417,16 @@ export default function MainNavigation() {
               className="block px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
             >
               Enterprise
+            </Link>
+            <Link
+              href="/who-is-clarence"
+              className={`block px-3 py-2 text-sm rounded-lg ${
+                isActive('/who-is-clarence')
+                  ? 'text-slate-900 bg-slate-100 font-medium'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              Who is Clarence?
             </Link>
 
             <div className="border-t border-slate-100 my-2"></div>

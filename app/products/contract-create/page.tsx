@@ -9,9 +9,9 @@ import { getProductBySlug } from '@/app/lib/products'
 import { Scale, FileText, BarChart3, MessageSquare } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'ContractCreate | CLARENCE - Full Mediation Contract Creation',
+  title: 'ContractCreate | CLARENCE - Structured Agreement with Full Mediation',
   description:
-    'Bring your own contract template, complete strategic assessment, and invite the other party. Full leverage analysis, three-position negotiation, and clause-by-clause mediation.',
+    'Bring your own contract, complete the strategic assessment, invite the other party. Full leverage visibility, principled mediation, clause-by-clause resolution.',
 }
 
 export default function ContractCreatePage() {
@@ -36,9 +36,9 @@ export default function ContractCreatePage() {
               ContractCreate
             </h1>
             <p className="text-xl text-emerald-100 max-w-2xl mx-auto leading-relaxed">
-              Your contract, professionally mediated. Full leverage analysis,
-              three-position negotiation, and clause-by-clause AI mediation for
-              serious agreements.
+              Your terms, honestly mediated. Full leverage visibility,
+              three-position negotiation, and clause-by-clause principled
+              mediation for agreements that matter.
             </p>
 
             <div className="mt-10">
@@ -60,13 +60,14 @@ export default function ContractCreatePage() {
             <div className="grid md:grid-cols-2 gap-12 items-center">
               <div>
                 <h2 className="text-3xl font-bold text-slate-800 mb-6">
-                  Structured Negotiation with Data-Driven Intelligence
+                  Structured Negotiation with Principled Intelligence
                 </h2>
                 <p className="text-slate-600 mb-8 text-lg leading-relaxed">
                   ContractCreate captures strategic intelligence from both
                   parties before negotiation begins. Party-fit scores, leverage
-                  positions, and clause assessments power truly objective AI
-                  mediation.
+                  positions, and clause assessments power truly principled
+                  mediation — because both sides deserve to see the same
+                  picture.
                 </p>
                 <ul className="space-y-3">
                   <FeatureListItem color="emerald">
@@ -204,7 +205,7 @@ export default function ContractCreatePage() {
 
       <SectionCTA
         title="Ready to Start a Structured Negotiation?"
-        subtitle="Experience full AI-mediated contract creation with your free trial."
+        subtitle="Experience full principled mediation with your free trial."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'View Pricing', href: '/pricing' }}
       />

@@ -6,9 +6,9 @@ import Footer from '../components/Footer'
 import { Shield, Lock, Server, Users, HeadphonesIcon, BookOpen } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Enterprise | CLARENCE - Contract Intelligence for Large Organisations',
+  title: 'Enterprise | CLARENCE - Principled Negotiation at Scale',
   description:
-    'Enterprise-grade contract intelligence with SSO, API access, custom playbooks, and dedicated support. Built for organisations with compliance and scale requirements.',
+    'Enterprise-grade agreement platform with SSO, API access, custom playbooks, and dedicated support. Built for organisations with compliance and scale requirements.',
 }
 
 // ============================================================================
@@ -34,8 +34,9 @@ export default function EnterprisePage() {
               Clarence for Enterprise
             </h1>
             <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              Enterprise-grade contract intelligence with the security,
-              compliance, and scale your organisation demands.
+              Principled negotiation at the scale your organisation demands.
+              Security, compliance, and a framework that serves every agreement
+              equally.
             </p>
 
             <div className="mt-10">
@@ -55,11 +56,11 @@ export default function EnterprisePage() {
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Built for Enterprise
+              Built to Scale
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
-              Everything you need to deploy AI-powered contract intelligence at
-              scale.
+              Everything you need to deploy principled agreement management
+              across your organisation.
             </p>
           </div>
 
@@ -144,7 +145,7 @@ export default function EnterprisePage() {
                   Upload company playbooks and position guides
                 </FeatureListItem>
                 <FeatureListItem color="purple">
-                  AI-powered playbook compliance checking
+                  Automated playbook compliance checking
                 </FeatureListItem>
                 <FeatureListItem color="purple">
                   Train teams on your actual standards

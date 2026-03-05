@@ -9,9 +9,9 @@ import { getProductBySlug } from '@/app/lib/products'
 import { Users, FilePlus, Handshake, Shield } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Co-Create | CLARENCE - Collaborative Contract Building',
+  title: 'Co-Create | CLARENCE - Collaborative Agreement Building',
   description:
-    'No starting document from either side. Clarence generates the clause set and both parties shape the agreement collaboratively from inception.',
+    'No starting document from either side. Clarence generates the clause set and both parties shape the agreement collaboratively from neutral ground.',
 }
 
 export default function CoCreatePage() {
@@ -34,9 +34,9 @@ export default function CoCreatePage() {
 
             <h1 className="text-4xl md:text-5xl font-bold mb-6">Co-Create</h1>
             <p className="text-xl text-violet-100 max-w-2xl mx-auto leading-relaxed">
-              Built together, from the ground up. No starting document from
-              either side — Clarence generates the clause set and both parties
-              shape the agreement collaboratively.
+              No starting advantage. Just a starting point. No starting
+              document from either side — Clarence generates the clause set and
+              both parties shape the agreement from neutral ground.
             </p>
 
             <div className="mt-10">
@@ -202,7 +202,7 @@ export default function CoCreatePage() {
 
       <SectionCTA
         title="Ready to Build Together?"
-        subtitle="Start from neutral ground with your free Co-Create trial."
+        subtitle="Start from neutral ground with your free trial. No starting advantage for either side."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'View Pricing', href: '/pricing' }}
       />

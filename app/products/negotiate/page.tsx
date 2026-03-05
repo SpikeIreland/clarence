@@ -9,9 +9,9 @@ import { getProductBySlug } from '@/app/lib/products'
 import { MessageSquare, Columns3, BarChart2, Lightbulb } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Negotiate | CLARENCE - AI-Mediated Contract Negotiation',
+  title: 'Negotiate | CLARENCE - Principled Contract Mediation',
   description:
-    'The heart of Clarence. AI-powered clause-by-clause mediation with real-time leverage tracking, trade-off suggestions, and industry benchmarking.',
+    'The heart of Clarence. Clause-by-clause mediation with real-time leverage visibility, trade-off suggestions, and industry benchmarking. Both sides see the same data.',
 }
 
 export default function NegotiatePage() {
@@ -34,9 +34,9 @@ export default function NegotiatePage() {
 
             <h1 className="text-4xl md:text-5xl font-bold mb-6">Negotiate</h1>
             <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              The heart of Clarence. AI-mediated clause-by-clause negotiation
-              with real-time leverage tracking and intelligent trade-off
-              suggestions.
+              The heart of Clarence. Clause-by-clause mediation with real-time
+              leverage visibility and intelligent trade-off suggestions. Both
+              parties see the same data.
             </p>
 
             <div className="mt-10">
@@ -63,9 +63,9 @@ export default function NegotiatePage() {
                 <p className="text-slate-600 mb-8 text-lg leading-relaxed">
                   The negotiation workspace is where Clarence truly
                   differentiates. A three-panel interface provides clause
-                  navigation, the negotiation area, and Clarence AI guidance —
-                  all powered by the leverage data gathered during contract
-                  creation.
+                  navigation, the negotiation area, and Clarence guidance — all
+                  powered by the leverage data gathered during creation.
+                  Transparency here is not weakness. It is the foundation.
                 </p>
                 <ul className="space-y-3">
                   <FeatureListItem color="slate">
@@ -109,8 +109,8 @@ export default function NegotiatePage() {
               The Negotiation Workspace
             </h2>
             <p className="text-slate-600 max-w-xl mx-auto">
-              Three integrated panels that work together to drive fair
-              agreements.
+              Three integrated panels that work together toward agreements
+              that reflect reality.
             </p>
           </div>
 
@@ -203,8 +203,8 @@ export default function NegotiatePage() {
       </section>
 
       <SectionCTA
-        title="Ready to Negotiate Smarter?"
-        subtitle="Experience AI-mediated negotiation with your free trial."
+        title="Ready to Negotiate with Principle?"
+        subtitle="Experience principled mediation with your free trial."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'View Pricing', href: '/pricing' }}
       />

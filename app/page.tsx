@@ -9,9 +9,9 @@ import { getFeaturedProducts } from './lib/products'
 import { ArrowRight } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'CLARENCE | AI-Powered Contract Intelligence Platform',
+  title: 'CLARENCE | Agreements, Not Arguments',
   description:
-    'The complete platform for contract intelligence. From creation to signature — ten products that transform how organisations create, negotiate, and agree.',
+    'The principled platform for contract creation, negotiation, and agreement. Neutral mediation that changes the structure, not the people.',
 }
 
 // ============================================================================
@@ -52,16 +52,17 @@ export default function Home() {
               <span>The Honest Broker</span>
             </div>
 
-            {/* Product-first headline */}
+            {/* Headline */}
             <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight text-slate-800">
-              The complete platform for{' '}
-              <span className="text-emerald-600">contract intelligence</span>
+              Agreements,{' '}
+              <span className="text-emerald-600">not arguments</span>
             </h1>
 
             {/* Subtitle */}
             <p className="text-xl text-slate-600 mb-4 max-w-2xl mx-auto leading-relaxed">
-              From creation to signature. AI-powered products that transform how
-              organisations create, negotiate, and agree.
+              Clarence is the principled intermediary that serves the agreement
+              itself. Neutral mediation for contract creation, negotiation, and
+              signing.
             </p>
 
             {/* Brand echo — Create/Negotiate/Agree */}
@@ -80,15 +81,15 @@ export default function Home() {
             <div className="mt-16 flex items-center justify-center gap-8 text-sm text-slate-500 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span>Neutral Mediation</span>
+                <span>Neutral by design</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span>Data-Driven Leverage</span>
+                <span>Transparent leverage</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                <span>Enterprise Security</span>
+                <span>Fairness is not naivete</span>
               </div>
             </div>
           </div>
@@ -102,11 +103,11 @@ export default function Home() {
         <div className="container mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Our Products
+              The Clarence Suite
             </h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
-              A comprehensive suite of AI-powered tools for every stage of the
-              contract lifecycle.
+              Every tool built on the same principled framework — neutrality,
+              transparency, and fairness at every step.
             </p>
           </div>
 
@@ -135,11 +136,11 @@ export default function Home() {
         <div className="container mx-auto px-6">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-slate-800 mb-4">
-              Your Contract Journey
+              Your Agreement Journey
             </h2>
             <p className="text-slate-600 max-w-xl mx-auto">
-              A principled framework that guides every contract from setup to
-              signature.
+              A principled framework that guides every agreement from first
+              conversation to final signature.
             </p>
           </div>
 
@@ -153,8 +154,9 @@ export default function Home() {
                 Create
               </h3>
               <p className="text-sm text-slate-600">
-                Build your contract and gather strategic intelligence — party-fit
-                and leverage data that powers objective negotiation.
+                Build your agreement and establish the intelligence that drives
+                principled negotiation — party-fit, leverage data, and starting
+                positions grounded in reality.
               </p>
             </div>
 
@@ -167,8 +169,9 @@ export default function Home() {
                 Negotiate
               </h3>
               <p className="text-sm text-slate-600">
-                AI-mediated clause-by-clause negotiation with real-time leverage
-                tracking and intelligent trade-off suggestions.
+                Principled mediation with full leverage visibility and
+                intelligent trade-off suggestions. Both parties see the same
+                data. No hidden agendas.
               </p>
             </div>
 
@@ -179,8 +182,9 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-violet-600 mb-2">Agree</h3>
               <p className="text-sm text-slate-600">
-                Complete evidence package for every negotiation — executive
-                summaries, audit trails, and governance handbook.
+                A complete evidence package for every negotiation — executive
+                summaries, audit trails, and a governance handbook. This
+                agreement reflects reality, not theatre.
               </p>
             </div>
           </div>
@@ -217,9 +221,9 @@ export default function Home() {
               </span>
             </div>
             <p className="text-slate-400 text-sm max-w-xl mx-auto">
-              CLARENCE mediates with no hidden agendas, full leverage
-              visibility, and a principled framework that serves both parties
-              equally.
+              Professionalism does not require hostility. Fairness is not
+              naivete. CLARENCE mediates with no hidden agendas and a principled
+              framework that serves both parties equally.
             </p>
           </div>
         </div>
@@ -229,8 +233,8 @@ export default function Home() {
       {/* CTA + FOOTER                                                       */}
       {/* ================================================================== */}
       <SectionCTA
-        title="Ready to Transform Your Negotiations?"
-        subtitle="Join forward-thinking organisations using CLARENCE to achieve better contract outcomes with less stress."
+        title="Change the Structure, Not the People"
+        subtitle="Better environments produce better decisions. Better decisions produce better agreements. Better agreements produce better relationships."
         primaryCTA={{ text: 'Request Free Trial', href: '/request-trial' }}
         secondaryCTA={{ text: 'View Pricing', href: '/pricing' }}
       />
