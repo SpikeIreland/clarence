@@ -25,6 +25,14 @@ export interface DataroomInvestor {
 
 // --- Category Types ---
 
+export type CategorySection =
+  | 'the_investment_case'
+  | 'the_company'
+  | 'the_product'
+  | 'legal_corporate'
+  | 'full_disclosure'
+  | 'internal'
+
 export interface DataroomCategory {
   category_id: string
   name: string
@@ -33,9 +41,17 @@ export interface DataroomCategory {
   icon: string | null
   display_order: number
   min_tier: InvestorTier
+  section: CategorySection
+  is_internal_only: boolean
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface CategorySectionGroup {
+  section: CategorySection
+  label: string
+  categories: (DataroomCategory & { document_count?: number })[]
 }
 
 // --- Document Types ---
