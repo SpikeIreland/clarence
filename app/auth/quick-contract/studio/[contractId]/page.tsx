@@ -474,6 +474,8 @@ function QuickContractStudioContent() {
     // Draft-Position Sync: Prompt to regenerate draft after position change
     const [showDraftOfferPrompt, setShowDraftOfferPrompt] = useState(false)
     const [pendingDraftPosition, setPendingDraftPosition] = useState<number | null>(null)
+    // Store the position before the drag so we can revert if the user cancels
+    const [preChangePosition, setPreChangePosition] = useState<number | null>(null)
     const [isInitiator, setIsInitiator] = useState(true)
     const [generatingPositionDraft, setGeneratingPositionDraft] = useState(false)
     // Track the target position for a generated draft (so we can update clarence_position on save)
@@ -2256,7 +2258,18 @@ INSTRUCTIONS:
                 const data = await response.json()
                 const newDraftText = (data.response || data.message || '').trim()
 
-                if (newDraftText && newDraftText.length > 20) {
+                // Detect error/apology responses that the AI or workflow returned
+                // as content (200 OK) rather than as a proper HTTP error
+                const looksLikeErrorResponse = (text: string) => {
+                    const t = text.toLowerCase()
+                    return t.startsWith('i apologize') ||
+                        t.startsWith('i\'m sorry') ||
+                        t.includes('encountered an issue') ||
+                        t.includes('please try again') ||
+                        t.includes('unable to process')
+                }
+
+                if (newDraftText && newDraftText.length > 20 && !looksLikeErrorResponse(newDraftText)) {
                     // Put the new draft into the editor for review
                     setEditingDraftText(newDraftText)
                     setIsDraftEditing(true)
@@ -2287,10 +2300,11 @@ INSTRUCTIONS:
                     }
                     setChatMessages(prev => [...prev, confirmMessage])
                 } else {
+                    // Either empty/short response, or the workflow returned an apology
                     const errorMessage: ChatMessage = {
                         id: `position-draft-error-${Date.now()}`,
                         role: 'assistant',
-                        content: `I wasn't able to generate a draft for position ${targetPosition.toFixed(1)}. You can edit the draft manually or try again.`,
+                        content: `I wasn't able to generate a draft for position ${targetPosition.toFixed(1)} right now. You can edit the draft text manually in the Draft tab, or try again in a moment.`,
                         timestamp: new Date()
                     }
                     setChatMessages(prev => [...prev, errorMessage])
@@ -3188,6 +3202,10 @@ INSTRUCTIONS:
             // If user moved position by more than 1 point from CLARENCE's assessment,
             // offer to regenerate the draft to match their new position
             if (positionDelta >= 1.0) {
+                // Capture old position so cancel can revert
+                const role = getPartyRole()
+                const oldPosition = role === 'initiator' ? clause.initiatorPosition : clause.respondentPosition
+                setPreChangePosition(oldPosition ?? clause.clarencePosition)
                 setPendingDraftPosition(newPosition)
                 setShowDraftOfferPrompt(true)
             }
@@ -6378,8 +6396,23 @@ INSTRUCTIONS:
                         <div className="px-6 pb-6 flex gap-3">
                             <button
                                 onClick={() => {
+                                    // Revert the badge to its position before the drag
+                                    if (preChangePosition !== null && selectedClause) {
+                                        const role = getPartyRole()
+                                        setClauses(prev => prev.map(c =>
+                                            c.clauseId === selectedClause.clauseId
+                                                ? { ...c, ...(role === 'initiator' ? { initiatorPosition: preChangePosition } : { respondentPosition: preChangePosition }) }
+                                                : c
+                                        ))
+                                        setDirtyPositions(prev => {
+                                            const next = new Map(prev)
+                                            next.delete(selectedClause.clauseId)
+                                            return next
+                                        })
+                                    }
                                     setShowDraftOfferPrompt(false)
                                     setPendingDraftPosition(null)
+                                    setPreChangePosition(null)
                                 }}
                                 className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition font-medium"
                             >
