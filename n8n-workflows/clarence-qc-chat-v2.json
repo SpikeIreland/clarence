@@ -1,0 +1,239 @@
+{
+  "name": "clarence-qc-chat v2.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clarence-qc-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "qc-chat-webhook-001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-600, 300],
+      "webhookId": "clarence-qc-chat"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// VALIDATE & EXTRACT INPUT for QC Chat v2.0\n// ============================================================================\n\nconst rawInput = $input.first().json;\n\nlet input = {};\nif (rawInput.body && typeof rawInput.body === 'string') {\n  try {\n    input = JSON.parse(rawInput.body.trim().replace(/^=/, ''));\n  } catch (e) {\n    console.log('Failed to parse body:', e.message);\n  }\n} else if (rawInput.body && typeof rawInput.body === 'object') {\n  input = rawInput.body;\n} else {\n  input = rawInput;\n}\n\nconsole.log('=== QC CHAT v2.0 INPUT ===');\nconsole.log('Message:', (input.message || '').substring(0, 100));\nconsole.log('Context type:', input.context);\nconsole.log('Has qcContext:', !!input.qcContext);\nconsole.log('Has roleContext:', !!input.roleContext);\nconsole.log('Viewer role:', input.viewerRole);\n\nif (!input.message) {\n  throw new Error('No message provided');\n}\n\n// Pass everything through to the prompt builder\nreturn [{ json: {\n  message: input.message,\n  contractId: input.contractId || null,\n  clauseId: input.clauseId || null,\n  clauseName: input.clauseName || null,\n  clauseCategory: input.clauseCategory || null,\n  touchpointType: input.context || 'qc_chat',\n  viewerRole: input.viewerRole || 'initiator',\n  roleContext: input.roleContext || null,\n  contractTypeKey: input.contractTypeKey || null,\n  initiatorPartyRole: input.initiatorPartyRole || null,\n  qcContext: input.qcContext || {},\n  // Session-based fields (passthrough)\n  sessionId: input.sessionId || null,\n  providerId: input.providerId || null,\n  currentPhase: input.currentPhase || null,\n  alignmentScore: input.alignmentScore || null,\n  negotiationContext: input.negotiationContext || null,\n  dashboardData: input.dashboardData || null,\n} }];\n"
+      },
+      "id": "qc-chat-validate-001",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-380, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_URL || 'https://spikeislandstudios.app.n8n.cloud' }}/webhook/clarence-prompt-builder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "qc-chat-prompt-builder-001",
+      "name": "Call Prompt Builder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-140, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// EXTRACT PROMPT BUILDER RESPONSE & PREPARE CLAUDE API CALL\n// ============================================================================\n\nconst promptData = $input.first().json;\n\nconsole.log('=== PROMPT BUILDER RESPONSE ===');\nconsole.log('System prompt length:', (promptData.systemPrompt || '').length);\nconsole.log('User prompt length:', (promptData.userPrompt || '').length);\nconsole.log('Viewer:', promptData.viewerName, '(' + promptData.userRoleLabel + ')');\nconsole.log('Is drafting:', promptData.isDrafting);\n\nif (!promptData.systemPrompt || !promptData.userPrompt) {\n  throw new Error('Prompt builder returned empty prompts');\n}\n\nreturn [{ json: {\n  systemPrompt: promptData.systemPrompt,\n  userPrompt: promptData.userPrompt,\n  viewerName: promptData.viewerName,\n  userRoleLabel: promptData.userRoleLabel,\n  isDrafting: promptData.isDrafting,\n} }];\n"
+      },
+      "id": "qc-chat-extract-001",
+      "name": "Extract Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 4096,\n  \"temperature\": 0,\n  \"system\": {{ JSON.stringify($json.systemPrompt) }},\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.userPrompt) }}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "qc-chat-claude-001",
+      "name": "Call Claude API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_HTTP_HEADER_AUTH_ID",
+          "name": "Anthropic API Key"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// FORMAT SUCCESSFUL RESPONSE for QC Chat v2.0\n// ============================================================================\n\nconst claudeResponse = $input.first().json;\n\n// Extract response text from Anthropic Messages API response\n// Response format: { content: [{ type: 'text', text: '...' }], ... }\nlet responseText = '';\n\nif (claudeResponse.content && Array.isArray(claudeResponse.content)) {\n  // Standard Anthropic Messages API response\n  responseText = claudeResponse.content\n    .filter(block => block.type === 'text')\n    .map(block => block.text)\n    .join('\\n');\n} else if (typeof claudeResponse.text === 'string') {\n  responseText = claudeResponse.text;\n} else if (typeof claudeResponse.response === 'string') {\n  responseText = claudeResponse.response;\n} else if (typeof claudeResponse.output === 'string') {\n  responseText = claudeResponse.output;\n}\n\nif (!responseText) {\n  responseText = 'I apologize, but I was unable to generate a response. Please try again.';\n}\n\nconsole.log('=== QC CHAT RESPONSE ===');\nconsole.log('Response length:', responseText.length);\nconsole.log('Model:', claudeResponse.model || 'unknown');\nconsole.log('Stop reason:', claudeResponse.stop_reason || 'unknown');\nconsole.log('Input tokens:', claudeResponse.usage?.input_tokens || 0);\nconsole.log('Output tokens:', claudeResponse.usage?.output_tokens || 0);\n\nreturn [{ json: {\n  response: responseText,\n  message: responseText,\n  success: true\n} }];\n"
+      },
+      "id": "qc-chat-format-001",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "qc-chat-respond-001",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// ERROR HANDLER — returns a graceful error response\n// ============================================================================\n\nconst errorData = $input.first().json;\n\nconsole.error('=== QC CHAT ERROR ===');\nconsole.error('Error:', JSON.stringify(errorData).substring(0, 500));\n\nconst errorMessage = 'I apologize, but I encountered an issue processing your request. Please try again in a moment.';\n\nreturn [{ json: {\n  response: errorMessage,\n  message: errorMessage,\n  success: false,\n  error: true\n} }];\n"
+      },
+      "id": "qc-chat-error-handler-001",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 520]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "qc-chat-error-respond-001",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [740, 520]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Call Prompt Builder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Prompt Builder": {
+      "main": [
+        [
+          {
+            "node": "Extract Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Prompts": {
+      "main": [
+        [
+          {
+            "node": "Call Claude API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Claude API": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+  }
+}

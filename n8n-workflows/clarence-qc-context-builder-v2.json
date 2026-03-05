@@ -1,0 +1,425 @@
+{
+  "name": "clarence-qc-context-builder v2.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clarence-qc-context-builder",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "91c445f1-f5df-4156-8497-9052eb4ad101",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-896, 464],
+      "webhookId": "qc-context-builder"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// SECTION 1: VALIDATE INPUT FOR QC CONTEXT BUILDER v2.0\n// ============================================================================\n\nconst rawInput = $input.first().json;\n\nconsole.log(\"=== QC CONTEXT BUILDER v2.0 - WEBHOOK INPUT ===\");\nconsole.log(\"Keys:\", Object.keys(rawInput));\n\n// Extract from body if needed\nlet input = {};\nif (rawInput.body && typeof rawInput.body === 'string') {\n  try {\n    input = JSON.parse(rawInput.body.trim().replace(/^=/, ''));\n  } catch (e) {\n    console.log(\"Failed to parse body:\", e.message);\n  }\n} else if (rawInput.body && typeof rawInput.body === 'object') {\n  input = rawInput.body;\n} else {\n  input = rawInput;\n}\n\nconsole.log(\"Extracted input:\", JSON.stringify(input));\n\n// ============================================================================\n// SECTION 2: VALIDATE REQUIRED FIELDS\n// ============================================================================\n\nif (!input.contractId) {\n  throw new Error('contractId is required');\n}\n\nconst validRoles = ['initiator', 'respondent'];\nif (!validRoles.includes(input.viewerRole)) {\n  throw new Error(`viewerRole must be 'initiator' or 'respondent'. Received: '${input.viewerRole}'`);\n}\n\n// Parse touchpointContext if string\nif (input.touchpointContext && typeof input.touchpointContext === 'string') {\n  try {\n    input.touchpointContext = JSON.parse(input.touchpointContext);\n  } catch (e) {\n    input.touchpointContext = {};\n  }\n}\n\n// ============================================================================\n// SECTION 3: NORMALIZE OUTPUT\n// ============================================================================\n\nconst validated = {\n  contractId: input.contractId,\n  viewerRole: input.viewerRole,\n  viewerUserId: input.viewerUserId || '',\n  viewerCompanyId: input.viewerCompanyId || '',\n  touchpointType: input.touchpointType || 'qc_chat',\n  touchpointContext: input.touchpointContext || {},\n  clauseId: input.touchpointContext?.clauseId || input.clauseId || '',\n  userMessage: input.touchpointContext?.userMessage || input.userMessage || '',\n  // NEW v2.0: Role matrix fields forwarded from API route\n  contractTypeKey: input.contractTypeKey || '',\n  initiatorPartyRole: input.initiatorPartyRole || '',\n  buildStartedAt: Date.now()\n};\n\nconsole.log(\"=== QC CONTEXT BUILDER v2.0 VALIDATED ===\");\nconsole.log(\"Contract:\", validated.contractId);\nconsole.log(\"Viewer:\", validated.viewerRole);\nconsole.log(\"Touchpoint:\", validated.touchpointType);\nconsole.log(\"ClauseId:\", validated.clauseId);\nconsole.log(\"ContractTypeKey:\", validated.contractTypeKey);\nconsole.log(\"InitiatorPartyRole:\", validated.initiatorPartyRole);\n\nreturn [{ json: validated }];\n"
+      },
+      "id": "cec66864-d32b-4707-9e7e-8a439f07dc26",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-672, 464]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    uc.contract_id,\n    uc.contract_name,\n    uc.detected_contract_type AS contract_type,\n    uc.description,\n    uc.status AS contract_status,\n    uc.clause_count,\n    uc.company_id,\n    uc.uploaded_by_user_id AS initiator_user_id,\n    uc.created_at AS contract_created_at,\n    uc.updated_at AS contract_updated_at,\n    -- v2.0: Contract type role fields\n    uc.contract_type_key,\n    uc.initiator_party_role,\n    -- Get initiator info\n    COALESCE(u.first_name || ' ' || u.last_name, 'Initiator') AS initiator_name,\n    u.email AS initiator_email,\n    COALESCE(c.company_name, 'Company') AS initiator_company,\n    -- Get respondent info from qc_recipients\n    qr.recipient_email AS respondent_email,\n    qr.recipient_name AS respondent_name,\n    qr.recipient_company AS respondent_company,\n    qr.status AS respondent_status,\n    qr.first_viewed_at AS respondent_accessed_at\nFROM uploaded_contracts uc\nLEFT JOIN users u ON u.user_id = uc.uploaded_by_user_id\nLEFT JOIN companies c ON c.company_id = uc.company_id\nLEFT JOIN qc_recipients qr ON qr.quick_contract_id = uc.contract_id\nWHERE uc.contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "3d3cc2d8-37e0-40a3-9538-3f06b4e44076",
+      "name": "Fetch Contract Info",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, -144],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH clause_stats AS (\n    SELECT \n        COUNT(*) AS total_clauses,\n        COUNT(*) FILTER (WHERE clarence_certified = true) AS certified_clauses,\n        COUNT(*) FILTER (WHERE is_header = false) AS negotiable_clauses,\n        ROUND(AVG(clarence_position)::numeric, 2) AS avg_clarence_position,\n        COUNT(*) FILTER (WHERE clarence_fairness = 'balanced') AS balanced_count,\n        COUNT(*) FILTER (WHERE clarence_fairness != 'balanced' AND clarence_fairness IS NOT NULL) AS review_needed_count\n    FROM uploaded_contract_clauses\n    WHERE contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid\n    AND is_header = false\n)\nSELECT \n    cs.*,\n    -- Calculate agreement stats from events\n    (SELECT COUNT(DISTINCT clause_id) FROM qc_clause_events \n     WHERE contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid \n     AND event_type = 'agreed') AS clauses_with_agreements,\n    (SELECT COUNT(DISTINCT clause_id) FROM qc_clause_events \n     WHERE contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid \n     AND event_type = 'queried' \n     AND clause_id NOT IN (\n         SELECT clause_id FROM qc_clause_events \n         WHERE contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid \n         AND event_type = 'query_resolved'\n     )) AS pending_queries\nFROM clause_stats cs;",
+        "options": {}
+      },
+      "id": "07c09b4b-acfe-4301-8b91-066bdf344fad",
+      "name": "Fetch Clause Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, 240],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    ucc.clause_id,\n    ucc.clause_number,\n    ucc.clause_name,\n    ucc.category,\n    SUBSTRING(ucc.content, 1, 500) AS clause_excerpt,\n    ucc.clarence_certified,\n    ucc.clarence_position,\n    ucc.clarence_fairness,\n    ucc.clarence_summary,\n    ucc.clarence_assessment,\n    ucc.clarence_flags,\n    ucc.initiator_position,\n    ucc.respondent_position,\n    ucc.draft_text IS NOT NULL AS has_draft,\n    CASE \n        WHEN ucc.initiator_position IS NOT NULL AND ucc.respondent_position IS NOT NULL \n        THEN ABS(ucc.initiator_position - ucc.respondent_position)\n        ELSE NULL\n    END AS position_gap,\n    ucc.display_order,\n    -- v2.0: Position labels from clause_range_mappings\n    crm.range_data AS position_labels,\n    crm.value_type,\n    crm.range_unit\nFROM uploaded_contract_clauses ucc\nLEFT JOIN clause_range_mappings crm ON crm.clause_id = ucc.clause_id\nWHERE ucc.contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid\nAND ucc.is_header = false\nORDER BY ucc.display_order;",
+        "options": {}
+      },
+      "id": "a4283e46-51d0-441a-92c9-6e3396d81bfe",
+      "name": "Fetch All Clauses",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, 624],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    event_id,\n    clause_id,\n    event_type,\n    party_role,\n    user_name,\n    message,\n    activity_summary,\n    event_data,\n    created_at\nFROM qc_clause_events\nWHERE contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid\nORDER BY created_at DESC\nLIMIT 20;",
+        "options": {}
+      },
+      "id": "efddb5bd-975a-4aa0-833b-5dfa15a9d27a",
+      "name": "Fetch Activity Events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, 48],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    message_id,\n    sender_user_id,\n    sender_name,\n    sender_role,\n    message_text,\n    related_clause_id,\n    related_clause_name,\n    is_system_message,\n    created_at\nFROM qc_party_messages\nWHERE contract_id = '{{ $('Validate Input').first().json.contractId }}'::uuid\nORDER BY created_at DESC\nLIMIT 15;",
+        "options": {}
+      },
+      "id": "79e47582-0531-429a-b827-6378da657018",
+      "name": "Fetch Party Chat",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, 432],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "clause-id-check",
+              "leftValue": "={{ $('Validate Input').first().json.clauseId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "eaae1058-41f6-4566-9102-27061e5da6d6",
+      "name": "Has Clause ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-80, 784]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    ucc.clause_id,\n    ucc.clause_number,\n    ucc.clause_name,\n    ucc.category,\n    ucc.content AS full_clause_text,\n    ucc.original_text,\n    ucc.clarence_certified,\n    ucc.clarence_position,\n    ucc.clarence_fairness,\n    ucc.clarence_summary,\n    ucc.clarence_assessment,\n    ucc.clarence_flags,\n    ucc.initiator_position,\n    ucc.respondent_position,\n    ucc.draft_text,\n    ucc.extracted_value,\n    ucc.extracted_unit,\n    ucc.value_type,\n    -- v2.0: Position labels for the focused clause\n    crm.range_data AS position_labels,\n    crm.value_type AS range_value_type,\n    crm.range_unit\nFROM uploaded_contract_clauses ucc\nLEFT JOIN clause_range_mappings crm ON crm.clause_id = ucc.clause_id\nWHERE ucc.clause_id = '{{ $('Validate Input').first().json.clauseId }}'::uuid;",
+        "options": {}
+      },
+      "id": "9ec08002-2b53-40c8-83e7-db1511068a46",
+      "name": "Fetch Specific Clause",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, 912],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    event_id,\n    event_type,\n    party_role,\n    user_name,\n    message,\n    activity_summary,\n    created_at\nFROM qc_clause_events\nWHERE clause_id = '{{ $('Validate Input').first().json.clauseId }}'::uuid\nORDER BY created_at DESC\nLIMIT 10;",
+        "options": {}
+      },
+      "id": "1d751842-8039-4e01-8a7b-437d3f40a7fc",
+      "name": "Fetch Clause Events",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, 1104],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    p.playbook_id,\n    p.playbook_name,\n    p.playbook_description,\n    p.playbook_summary,\n    p.contract_type,\n    p.status,\n    p.ai_confidence_score,\n    p.rules_extracted,\n    COALESCE(\n        (SELECT json_agg(json_build_object(\n            'rule_id', pr.rule_id,\n            'clause_id', pr.clause_id,\n            'clause_code', pr.clause_code,\n            'clause_name', pr.clause_name,\n            'category', pr.category,\n            'ideal_position', pr.ideal_position,\n            'minimum_position', pr.minimum_position,\n            'maximum_position', pr.maximum_position,\n            'fallback_position', pr.fallback_position,\n            'rationale', pr.rationale,\n            'negotiation_tips', pr.negotiation_tips,\n            'talking_points', pr.talking_points,\n            'escalation_trigger', pr.escalation_trigger,\n            'importance_level', pr.importance_level,\n            'is_deal_breaker', pr.is_deal_breaker,\n            'is_non_negotiable', pr.is_non_negotiable\n        ) ORDER BY pr.category, pr.display_order)\n        FROM playbook_rules pr \n        WHERE pr.playbook_id = p.playbook_id\n        AND pr.is_active = true\n        LIMIT 15),\n        '[]'::json\n    ) AS active_rules\nFROM company_playbooks p\nWHERE p.company_id = '{{ $('Validate Input').first().json.viewerCompanyId }}'::uuid\nAND p.is_active = true\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "a54168a6-d981-4c2f-b136-786293741f11",
+      "name": "Fetch Company Playbook",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [128, 1296],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "17c4747e-6162-4a45-bc53-22812fb804b2",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1056, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// ASSEMBLE QC CONTEXT OBJECT v2.0\n// ============================================================================\n// Changes from v1.0:\n// - Added contract_type_key and initiator_party_role to contract overview\n// - Added position_labels (from clause_range_mappings) to clause data\n// - Fixed alignment terminology: leverageBalance vs clauseAlignment\n// - Added viewerAnchoring section for prompt builder\n// ============================================================================\n\nconst input = $(\"Validate Input\").first().json;\nconst contract = $(\"Fetch Contract Info\").first()?.json || {};\nconst clauseStats = $(\"Fetch Clause Stats\").first()?.json || {};\nconst allClauses =\n  $(\"Fetch All Clauses\")\n    .all()\n    .map((i) => i.json) || [];\nconst activityEvents =\n  $(\"Fetch Activity Events\")\n    .all()\n    .map((i) => i.json) || [];\nconst partyChat =\n  $(\"Fetch Party Chat\")\n    .all()\n    .map((i) => i.json) || [];\nconst playbook = $(\"Fetch Company Playbook\").first()?.json || null;\n\n// Get specific clause if available (from conditional branch)\nlet specificClause = null;\nlet clauseEvents = [];\ntry {\n  specificClause = $(\"Fetch Specific Clause\").first()?.json || null;\n  clauseEvents =\n    $(\"Fetch Clause Events\")\n      .all()\n      .map((i) => i.json) || [];\n} catch (e) {\n  // Clause-specific nodes didn't run\n}\n\n// ============================================================================\n// BUILD CONTEXT SECTIONS\n// ============================================================================\n\n// 1. CONTRACT OVERVIEW — v2.0: includes contract_type_key, initiator_party_role\nconst contractOverview = {\n  contractId: contract.contract_id,\n  contractName: contract.contract_name,\n  contractType: contract.contract_type || \"Contract\",\n  contractTypeKey: contract.contract_type_key || null,\n  initiatorPartyRole: contract.initiator_party_role || null,\n  status: contract.contract_status,\n  createdAt: contract.contract_created_at,\n  initiator: {\n    name: contract.initiator_name,\n    email: contract.initiator_email,\n    company: contract.initiator_company,\n  },\n  respondent: {\n    name: contract.respondent_name,\n    email: contract.respondent_email,\n    company: contract.respondent_company,\n    status: contract.respondent_status,\n    accessedAt: contract.respondent_accessed_at,\n  },\n};\n\n// 2. CLAUSE STATISTICS — v2.0: disambiguated alignment terminology\nconst statistics = {\n  totalClauses: clauseStats.total_clauses || 0,\n  certifiedClauses: clauseStats.certified_clauses || 0,\n  negotiableClauses: clauseStats.negotiable_clauses || 0,\n  avgClarencePosition: clauseStats.avg_clarence_position,\n  balancedCount: clauseStats.balanced_count || 0,\n  reviewNeededCount: clauseStats.review_needed_count || 0,\n  clausesWithAgreements: clauseStats.clauses_with_agreements || 0,\n  pendingQueries: clauseStats.pending_queries || 0,\n  // v2.0: Disambiguated alignment - NEVER call both 'alignment'\n  clauseAlignment: clauseStats.clauses_with_agreements > 0\n    ? Math.round((clauseStats.clauses_with_agreements / Math.max(clauseStats.negotiable_clauses, 1)) * 100)\n    : 0,\n};\n\n// 3. CLAUSES SUMMARY — v2.0: includes position_labels from range_mappings\nconst clausesWithGaps = allClauses\n  .filter((c) => c.position_gap !== null && c.position_gap > 0)\n  .sort((a, b) => b.position_gap - a.position_gap)\n  .slice(0, 5)\n  .map((c) => ({\n    ...c,\n    positionLabels: c.position_labels || null,\n    valueType: c.value_type || null,\n    rangeUnit: c.range_unit || null,\n  }));\n\nconst flaggedClauses = allClauses\n  .filter((c) => c.clarence_flags && c.clarence_flags.length > 0)\n  .slice(0, 5);\n\nconst reviewNeededClauses = allClauses\n  .filter((c) => c.clarence_fairness && c.clarence_fairness !== \"balanced\")\n  .slice(0, 5);\n\n// 4. RECENT ACTIVITY (formatted for context)\nconst recentActivity = activityEvents.slice(0, 10).map((e) => ({\n  type: e.event_type,\n  party: e.party_role,\n  actor: e.user_name,\n  summary: e.activity_summary,\n  clauseId: e.clause_id,\n  timestamp: e.created_at,\n}));\n\n// 5. PARTY CHAT (formatted for context)\nconst recentPartyChat = partyChat.slice(0, 10).map((m) => ({\n  sender: m.sender_name,\n  role: m.sender_role,\n  message: m.message_text?.substring(0, 300),\n  relatedClause: m.related_clause_name,\n  isSystem: m.is_system_message,\n  timestamp: m.created_at,\n}));\n\n// 6. SPECIFIC CLAUSE CONTEXT — v2.0: includes position_labels\nlet clauseContext = null;\nif (specificClause) {\n  clauseContext = {\n    clauseId: specificClause.clause_id,\n    clauseNumber: specificClause.clause_number,\n    clauseName: specificClause.clause_name,\n    category: specificClause.category,\n    fullText: specificClause.full_clause_text,\n    originalText: specificClause.original_text,\n    draftText: specificClause.draft_text,\n    clarencePosition: specificClause.clarence_position,\n    clarenceFairness: specificClause.clarence_fairness,\n    clarenceSummary: specificClause.clarence_summary,\n    clarenceAssessment: specificClause.clarence_assessment,\n    clarenceFlags: specificClause.clarence_flags || [],\n    initiatorPosition: specificClause.initiator_position,\n    respondentPosition: specificClause.respondent_position,\n    extractedValue: specificClause.extracted_value,\n    extractedUnit: specificClause.extracted_unit,\n    valueType: specificClause.value_type,\n    // v2.0: Position labels from clause_range_mappings\n    positionLabels: specificClause.position_labels || null,\n    rangeValueType: specificClause.range_value_type || null,\n    rangeUnit: specificClause.range_unit || null,\n    recentEvents: clauseEvents.slice(0, 5).map((e) => ({\n      type: e.event_type,\n      party: e.party_role,\n      actor: e.user_name,\n      summary: e.activity_summary,\n      timestamp: e.created_at,\n    })),\n  };\n}\n\n// 7. COMPANY PLAYBOOK (if available)\nlet playbookContext = null;\nif (playbook && playbook.playbook_id) {\n  playbookContext = {\n    playbookName: playbook.playbook_name,\n    description: playbook.playbook_description,\n    defaultStance: playbook.default_stance,\n    riskTolerance: playbook.risk_tolerance,\n    relationshipPriority: playbook.relationship_priority,\n    activeRules: playbook.active_rules || [],\n  };\n}\n\n// ============================================================================\n// 8. VIEWER ANCHORING — v2.0: NEW\n// Pre-compute viewer-specific labels so the prompt builder doesn't have to\n// ============================================================================\n\nconst isInitiator = input.viewerRole === 'initiator';\nconst viewerAnchoring = {\n  viewerRole: input.viewerRole,\n  viewerName: isInitiator ? contractOverview.initiator.name : contractOverview.respondent.name,\n  viewerCompany: isInitiator ? contractOverview.initiator.company : contractOverview.respondent.company,\n  otherPartyName: isInitiator ? contractOverview.respondent.name : contractOverview.initiator.name,\n  otherPartyCompany: isInitiator ? contractOverview.respondent.company : contractOverview.initiator.company,\n  // These will be overridden by roleContext from the API route if available\n  viewerRoleLabel: null,\n  otherPartyRoleLabel: null,\n};\n\n// ============================================================================\n// FINAL CONTEXT OBJECT\n// ============================================================================\n\nconst qcContext = {\n  contextType: \"qc_studio\",\n  contextVersion: \"2.0\",\n  buildTimestamp: new Date().toISOString(),\n  buildDurationMs: Date.now() - input.buildStartedAt,\n\n  // Request metadata\n  request: {\n    contractId: input.contractId,\n    viewerRole: input.viewerRole,\n    viewerUserId: input.viewerUserId,\n    touchpointType: input.touchpointType,\n    userMessage: input.userMessage,\n  },\n\n  // v2.0: Viewer anchoring data\n  viewerAnchoring: viewerAnchoring,\n\n  // Core context sections\n  contract: contractOverview,\n  statistics: statistics,\n\n  // Clause analysis — v2.0: includes position_labels\n  clauseHighlights: {\n    biggestGaps: clausesWithGaps,\n    flaggedClauses: flaggedClauses,\n    reviewNeeded: reviewNeededClauses,\n  },\n\n  // Communication history\n  recentActivity: recentActivity,\n  partyChat: recentPartyChat,\n\n  // Specific clause (if requested) — v2.0: includes position_labels\n  clauseContext: clauseContext,\n\n  // Company guidance\n  playbook: playbookContext,\n};\n\nconsole.log(\"=== QC CONTEXT v2.0 BUILT ===\");\nconsole.log(\"Contract:\", qcContext.contract.contractName);\nconsole.log(\"Contract Type Key:\", qcContext.contract.contractTypeKey);\nconsole.log(\"Clauses:\", qcContext.statistics.totalClauses);\nconsole.log(\"Clause Alignment:\", qcContext.statistics.clauseAlignment + '%');\nconsole.log(\"Activity Events:\", qcContext.recentActivity.length);\nconsole.log(\"Party Chat:\", qcContext.partyChat.length);\nconsole.log(\"Has Clause Context:\", !!qcContext.clauseContext);\nconsole.log(\"Has Position Labels:\", !!qcContext.clauseContext?.positionLabels);\nconsole.log(\"Has Playbook:\", !!qcContext.playbook);\nconsole.log(\"Viewer:\", qcContext.viewerAnchoring.viewerName, '(' + qcContext.viewerAnchoring.viewerRole + ')');\nconsole.log(\"Build Time:\", qcContext.buildDurationMs, \"ms\");\n\nreturn [{ json: qcContext }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [816, 512],
+      "id": "92582df9-0707-4f36-a3da-34acd58d26a1",
+      "name": "Assemble"
+    },
+    {
+      "parameters": {
+        "numberInputs": 9
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [608, 400],
+      "id": "b50e44f7-f8ae-421f-85a6-c0466e4218d1",
+      "name": "Merge"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Fetch Contract Info",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Clause Stats",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch All Clauses",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Activity Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Party Chat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has Clause ID?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Company Playbook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contract Info": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Clause Stats": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fetch All Clauses": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Fetch Activity Events": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Party Chat": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Has Clause ID?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Specific Clause",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Clause Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Fetch Specific Clause": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "Fetch Clause Events": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "Fetch Company Playbook": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "Assemble": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Assemble",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+  }
+}

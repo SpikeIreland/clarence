@@ -1826,19 +1826,21 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
         <div className="bg-slate-800 text-white">
             {/* Navigation Row */}
             <div className="px-6 py-2 border-b border-slate-700">
-                <div className="flex items-center justify-between">
-                    {/* Left: Back to Studio */}
-                    <button
-                        onClick={onBackToStudio}
-                        className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                        <span className="text-sm">{backLabel}</span>
-                    </button>
+                <div className="flex items-center">
+                    {/* Left: Back to Studio — fixed width to balance right side */}
+                    <div className="flex-1 flex items-center">
+                        <button
+                            onClick={onBackToStudio}
+                            className="flex items-center gap-1.5 text-slate-400 hover:text-white transition cursor-pointer"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                            <span className="text-sm">{backLabel}</span>
+                        </button>
+                    </div>
 
-                    {/* Center: Title */}
+                    {/* Center: Title — truly centred */}
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center">
                             <span className="text-white font-bold text-sm">C</span>
@@ -1854,8 +1856,8 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                         </div>
                     </div>
 
-                    {/* Right: Feedback + User Info */}
-                    <div className="flex items-center gap-3">
+                    {/* Right: Feedback + User Info — fixed width to balance left side */}
+                    <div className="flex-1 flex items-center justify-end gap-3">
                         <FeedbackButton position="header" />
                         <div className="text-right">
                             <div className="text-sm text-slate-300">
@@ -1873,9 +1875,9 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
             <div className="px-6 py-3">
                 {mode === 'quick_contract' ? (
                     /* Quick Contract Context */
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center">
                         {/* Left: Contract Name */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex-1 flex items-center gap-3">
                             <div className="w-3 h-3 rounded-full bg-teal-400" />
                             <div>
                                 <div className="text-xs text-slate-400">Contract</div>
@@ -1903,8 +1905,8 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                         </div>
 
                         {/* Right: Certification Stats */}
-                        <div className="flex items-center gap-3">
-                            <div>
+                        <div className="flex-1 flex items-center justify-end gap-3">
+                            <div className="text-right">
                                 <div className="text-xs text-slate-400">Agreed</div>
                                 <div className="text-sm font-medium text-emerald-400">
                                     {quickContract?.agreedClauses || 0}/{quickContract?.totalClauses || 0}
@@ -1915,9 +1917,9 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                     </div>
                 ) : (
                     /* Mediation Context (original) */
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center">
                         {/* Customer */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex-1 flex items-center gap-3">
                             <div className="w-3 h-3 rounded-full bg-emerald-400" />
                             <div>
                                 <div className="text-xs text-slate-400">Customer</div>
@@ -1947,8 +1949,8 @@ function DocumentCentreHeader({ session, userInfo, mode, quickContract, onBackTo
                         </div>
 
                         {/* Provider */}
-                        <div className="flex items-center gap-3">
-                            <div>
+                        <div className="flex-1 flex items-center justify-end gap-3">
+                            <div className="text-right">
                                 <div className="text-xs text-slate-400">Provider</div>
                                 <div className="text-sm font-medium text-blue-400">{session?.providerCompany || '\u2014'}</div>
                             </div>

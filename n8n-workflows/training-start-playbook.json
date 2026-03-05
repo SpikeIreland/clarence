@@ -1,0 +1,319 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "training-start-playbook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "716ff0b0-12bf-4388-b0ae-6891f8dda5e7",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        336
+      ],
+      "webhookId": "b5e38642-00a0-4c31-8620-ca768d8704d4"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// SETUP & CONFIG - PLAYBOOK TRAINING\n// ============================================================\n\nconst input = $input.first().json.body || $input.first().json;\n\n// Generate UUIDs\nfunction generateUUID() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst sessionId = generateUUID();\n\n// Extract input data\nconst userId = input.userId;\nconst userEmail = input.userEmail;\nconst userName = input.userName;\nconst companyName = input.companyName;\nconst companyId = input.companyId;\n\n// Playbook data\nconst playbookId = input.playbookId;\nconst playbookName = input.playbookName;\n\n// Training configuration\nconst trainingMode = input.trainingMode || 'practice';  // 'tutorial', 'practice', 'test'\nconst focusArea = input.focusArea || 'all';\nconst focusCategories = input.focusCategories || [];\nconst showGuidance = input.showGuidance !== false;\nconst showHints = input.showHints || false;\nconst allowDeviations = input.allowDeviations !== false;\n\n// AI character data\nconst characterId = input.characterId;\nconst characterName = input.characterName;\nconst aiCompanyName = input.aiCompanyName || 'Training Provider';\nconst aiPersonality = input.aiPersonality || 'balanced';\nconst baseLeverageCustomer = input.baseLeverageCustomer || 50;\nconst baseLeverageProvider = input.baseLeverageProvider || 50;\n\n// AI personality config\nconst personalityConfig = {\n  cooperative: {\n    positionOffset: 1,\n    dealBreakerChance: 0.05,\n    weightModifier: 0.8\n  },\n  balanced: {\n    positionOffset: 0,\n    dealBreakerChance: 0.15,\n    weightModifier: 1.0\n  },\n  aggressive: {\n    positionOffset: -1,\n    dealBreakerChance: 0.3,\n    weightModifier: 1.2\n  }\n};\nconst config = personalityConfig[aiPersonality] || personalityConfig.balanced;\n\n// Map AI personality to system provider ID\nconst aiProviderMap = {\n  cooperative: '00000000-0000-0000-0000-000000000001',\n  balanced: '00000000-0000-0000-0000-000000000002',\n  aggressive: '00000000-0000-0000-0000-000000000003'\n};\nconst aiProviderId = aiProviderMap[aiPersonality] || aiProviderMap.balanced;\n\nreturn {\n  json: {\n    // IDs\n    sessionId,\n    aiProviderId,\n    userId,\n    companyId,\n    characterId,\n    \n    // User data\n    userEmail,\n    userName,\n    companyName,\n    \n    // Character data\n    characterName,\n    aiCompanyName,\n    aiPersonality,\n    \n    // Playbook data\n    playbookId,\n    playbookName,\n    \n    // Training config\n    trainingMode,\n    focusArea,\n    focusCategories,\n    showGuidance,\n    showHints,\n    allowDeviations,\n    \n    // Leverage\n    baseLeverageCustomer,\n    baseLeverageProvider,\n    \n    // AI config\n    config,\n    \n    // Timestamp\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "edabb325-2fa5-4f2d-befb-3afd311ea2b9",
+      "name": "Setup & Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sessions (\n  session_id,\n  user_id,\n  customer_id,\n  session_number,\n  customer_company,\n  provider_company,\n  service_type,\n  deal_value,\n  contract_type,\n  phase,\n  status,\n  is_training,\n  notes,\n  created_at,\n  updated_at\n) VALUES (\n  '{{ $json.sessionId }}'::uuid,\n  '{{ $json.userId }}'::uuid,\n  '{{ $json.userId }}'::uuid,\n  'TRN-' || LPAD(FLOOR(RANDOM() * 10000)::text, 4, '0'),\n  '{{ $json.companyName }}',\n  '{{ $json.aiCompanyName }}',\n  'Playbook Training',\n  '£1,000,000',\n  'Outsourcing',\n  1,\n  'active',\n  true,\n  'Training scenario: {{ $json.playbookName }} | AI: {{ $json.aiPersonality }} | Opponent: {{ $json.characterName }} | Mode: {{ $json.trainingMode }} | Focus: {{ $json.focusArea }}',\n  NOW(),\n  NOW()\n)\nRETURNING session_id;\n",
+        "options": {}
+      },
+      "id": "c7fe0ffa-ef7e-45e8-a8a3-0640caac11cc",
+      "name": "Create Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        448,
+        336
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO playbook_training_sessions (\n  session_id,\n  playbook_id,\n  user_id,\n  training_mode,\n  focus_area,\n  show_guidance,\n  show_hints,\n  allow_deviations,\n  ai_challenge_level,\n  ai_target_red_lines,\n  started_at,\n  created_at,\n  updated_at\n) VALUES (\n  '{{ $('Setup & Config').item.json.sessionId }}'::uuid,\n  '{{ $('Setup & Config').item.json.playbookId }}'::uuid,\n  '{{ $('Setup & Config').item.json.userId }}'::uuid,\n  '{{ $('Setup & Config').item.json.trainingMode }}',\n  '{{ $('Setup & Config').item.json.focusArea }}',\n  {{ $('Setup & Config').item.json.showGuidance }},\n  {{ $('Setup & Config').item.json.showHints }},\n  {{ $('Setup & Config').item.json.allowDeviations }},\n  CASE \n    WHEN '{{ $('Setup & Config').item.json.aiPersonality }}' = 'cooperative' THEN 3\n    WHEN '{{ $('Setup & Config').item.json.aiPersonality }}' = 'aggressive' THEN 8\n    ELSE 5\n  END,\n  true,\n  NOW(),\n  NOW(),\n  NOW()\n)\nRETURNING id;",
+        "options": {}
+      },
+      "id": "aeff2392-f9d7-489b-b4ca-a863a8a861a4",
+      "name": "Create Playbook Training Session",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        672,
+        272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO provider_bids (\n  bid_id,\n  session_id,\n  provider_id,\n  provider_company,\n  provider_contact_name,\n  provider_contact_email,\n  status,\n  intake_complete,\n  questionnaire_complete,\n  invited_at,\n  created_at,\n  updated_at\n) VALUES (\n  gen_random_uuid(),\n  '{{ $('Setup & Config').item.json.sessionId }}'::uuid,\n  '{{ $('Setup & Config').item.json.aiProviderId }}'::uuid,\n  '{{ $('Setup & Config').item.json.aiCompanyName }}',\n  '{{ $('Setup & Config').item.json.characterName }}',\n  'ai-training@clarence.ai',\n  'submitted',\n  true,\n  true,\n  NOW(),\n  NOW(),\n  NOW()\n)\nRETURNING bid_id;",
+        "options": {}
+      },
+      "id": "26d2dec5-fe4a-453b-8aa9-71373efc4f7a",
+      "name": "Create AI Provider Bid",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        896,
+        192
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  pr.rule_id,\n  pr.clause_id,\n  pr.clause_code,\n  pr.clause_name,\n  pr.category,\n  pr.ideal_position,\n  pr.minimum_position,\n  pr.maximum_position,\n  pr.fallback_position,\n  pr.rationale,\n  pr.negotiation_tips,\n  pr.escalation_trigger,\n  pr.escalation_contact,\n  pr.importance_level,\n  pr.is_deal_breaker,\n  pr.is_non_negotiable,\n  pr.display_order\nFROM playbook_rules pr\nWHERE pr.playbook_id = '{{ $('Setup & Config').item.json.playbookId }}'::uuid\n  AND pr.is_active = true\n  AND (\n    '{{ $('Setup & Config').item.json.focusArea }}' = 'all'\n    OR pr.category = ANY(\n      SELECT unnest(\n        CASE \n          WHEN '{{ $('Setup & Config').item.json.focusArea }}' = 'liability' THEN ARRAY['Liability', 'Indemnity']\n          WHEN '{{ $('Setup & Config').item.json.focusArea }}' = 'payment' THEN ARRAY['Charges and Payment', 'Payment']\n          WHEN '{{ $('Setup & Config').item.json.focusArea }}' = 'termination' THEN ARRAY['Term and Termination', 'Termination']\n          WHEN '{{ $('Setup & Config').item.json.focusArea }}' = 'data' THEN ARRAY['Data Protection', 'Security', 'Privacy']\n          WHEN '{{ $('Setup & Config').item.json.focusArea }}' = 'service' THEN ARRAY['Service Levels', 'Performance']\n          WHEN '{{ $('Setup & Config').item.json.focusArea }}' = 'ip' THEN ARRAY['Intellectual Property', 'IP']\n          ELSE ARRAY['']::text[]\n        END\n      )\n    )\n  )\nORDER BY pr.display_order, pr.category, pr.clause_name;",
+        "options": {}
+      },
+      "id": "31f725b2-3f91-4b80-ba40-2d6a89518ff0",
+      "name": "Get Playbook Rules",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1120,
+        128
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// BUILD CLAUSE POSITIONS FROM PLAYBOOK RULES\n// ============================================================\n\nconst setupData = $('Setup & Config').first().json;\nconst rulesData = $('Get Playbook Rules').all();\nconst bidId = $('Create AI Provider Bid').first().json.bid_id;\n\nconst {\n  sessionId,\n  aiPersonality,\n  config,\n  baseLeverageCustomer,\n  baseLeverageProvider\n} = setupData;\n\n// Helper functions\nfunction generateUUID() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nfunction clamp(value, min, max) {\n  return Math.min(Math.max(value, min), max);\n}\n\n// Leverage calculation\nconst leverageDelta = baseLeverageCustomer - baseLeverageProvider;\nconst leveragePositionAdjust = (leverageDelta / 20) * 0.5;\n\n// Minimum gap for training\nconst MINIMUM_GAP = 2.0;\n\nconst timestamp = new Date().toISOString();\n\n// Build positions from playbook rules\nconst clausePositions = rulesData.map((item, index) => {\n  const rule = item.json;\n  \n  // Customer position: Use playbook ideal position\n  let customerPosition = rule.ideal_position || 7;\n  \n  // Apply leverage to customer if provider has advantage\n  if (leverageDelta < -10) {\n    customerPosition = customerPosition + (leveragePositionAdjust * 0.5);\n  }\n  customerPosition = clamp(Math.round(customerPosition * 10) / 10, 1, 10);\n  \n  // Provider position: Start from playbook minimum (red line) and move based on personality\n  // Non-negotiable clauses: provider matches customer\n  let providerPosition;\n  \n  if (rule.is_non_negotiable) {\n    // Non-negotiable: provider must accept customer position\n    providerPosition = customerPosition;\n  } else {\n    // Start provider at a challenging position based on personality\n    const baseProviderPosition = rule.minimum_position || (customerPosition - 3);\n    providerPosition = baseProviderPosition + config.positionOffset;\n    \n    // Apply leverage\n    if (leverageDelta > 0) {\n      providerPosition = providerPosition + leveragePositionAdjust;\n    }\n    providerPosition = clamp(Math.round(providerPosition * 10) / 10, 1, 10);\n    \n    // Enforce minimum gap for training\n    const currentGap = customerPosition - providerPosition;\n    if (Math.abs(currentGap) < MINIMUM_GAP && !rule.is_non_negotiable) {\n      if (customerPosition > providerPosition) {\n        providerPosition = customerPosition - MINIMUM_GAP;\n      } else {\n        providerPosition = customerPosition + MINIMUM_GAP;\n      }\n      providerPosition = clamp(Math.round(providerPosition * 10) / 10, 1, 10);\n    }\n  }\n  \n  // Calculate gap\n  const gapSize = Math.abs(customerPosition - providerPosition);\n  const gapSeverity = gapSize <= 2 ? 1 : gapSize <= 4 ? 2 : 3;\n  \n  // Calculate AI suggested compromise (CLARENCE)\n  const midpoint = (customerPosition + providerPosition) / 2;\n  let aiSuggestedCompromise = midpoint + (leverageDelta / 50);\n  \n  if (aiPersonality === 'cooperative') {\n    aiSuggestedCompromise += 0.3;\n  } else if (aiPersonality === 'aggressive') {\n    aiSuggestedCompromise -= 0.3;\n  }\n  \n  // Keep CLARENCE between parties\n  const lowerBound = Math.min(customerPosition, providerPosition) + 0.5;\n  const upperBound = Math.max(customerPosition, providerPosition) - 0.5;\n  if (gapSize > 1) {\n    aiSuggestedCompromise = clamp(aiSuggestedCompromise, lowerBound, upperBound);\n  }\n  aiSuggestedCompromise = clamp(Math.round(aiSuggestedCompromise * 10) / 10, 1, 10);\n  \n  // Weights\n  const customerWeight = rule.importance_level || 5;\n  const providerWeight = Math.round(customerWeight * config.weightModifier);\n  \n  return {\n    position_id: generateUUID(),\n    session_id: sessionId,\n    clause_id: rule.clause_id,\n    bid_id: bidId,\n    provider_id: null,\n    clause_number: (index + 1).toString(),\n    display_order: index + 1,\n    clause_level: 1,\n    \n    // Positions\n    customer_position: customerPosition,\n    provider_position: providerPosition,\n    original_customer_position: customerPosition,\n    original_provider_position: providerPosition,\n    ai_suggested_compromise: aiSuggestedCompromise,\n    \n    // Gap analysis\n    gap_size: gapSize,\n    gap_severity: gapSeverity,\n    \n    // Weights\n    customer_weight: customerWeight,\n    provider_weight: providerWeight,\n    priority_level: gapSeverity,\n    \n    // Deal breakers\n    is_deal_breaker_customer: false,\n    is_deal_breaker_provider: rule.is_deal_breaker || false,\n    \n    // Content from playbook\n    clause_content: rule.rationale || rule.clause_name,\n    \n    // Status\n    status: 'pending',\n    is_applicable: true,\n    is_removed: false,\n    is_locked: rule.is_non_negotiable || false,\n    selected_by_customer: true,\n    \n    // Source tracking\n    source_type: 'playbook_training',\n    source_master_clause_id: rule.clause_id,\n    \n    // Playbook metadata (for guidance panel)\n    playbook_rule_id: rule.rule_id,\n    playbook_ideal: rule.ideal_position,\n    playbook_minimum: rule.minimum_position,\n    playbook_maximum: rule.maximum_position,\n    playbook_fallback: rule.fallback_position,\n    playbook_rationale: rule.rationale,\n    playbook_tips: rule.negotiation_tips,\n    playbook_escalation_trigger: rule.escalation_trigger,\n    playbook_escalation_contact: rule.escalation_contact,\n    \n    // Timestamps\n    created_at: timestamp,\n    updated_at: timestamp,\n    position_set_at: timestamp,\n    position_set_by: 'playbook_training_system',\n    customer_selected_at: timestamp\n  };\n});\n\nreturn {\n  json: {\n    sessionId,\n    clauseCount: clausePositions.length,\n    clausePositions,\n    aiPersonality\n  }\n};"
+      },
+      "id": "fe662214-26eb-44e5-9e11-d540d9937d99",
+      "name": "Build Clause Positions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO session_clause_positions (\n  position_id,\n  session_id,\n  clause_id,\n  bid_id,\n  provider_id,\n  clause_number,\n  display_order,\n  clause_level,\n  customer_position,\n  provider_position,\n  original_customer_position,\n  original_provider_position,\n  ai_suggested_compromise,\n  gap_size,\n  customer_weight,\n  provider_weight,\n  is_deal_breaker_customer,\n  is_deal_breaker_provider,\n  clause_content,\n  status,\n  is_applicable,\n  is_removed,\n  is_locked,\n  selected_by_customer,\n  source_type,\n  source_master_clause_id,\n  created_at,\n  updated_at\n)\nSELECT \n  (value->>'position_id')::uuid,\n  (value->>'session_id')::uuid,\n  (value->>'clause_id')::uuid,\n  (value->>'bid_id')::uuid,\n  (value->>'provider_id')::uuid,\n  value->>'clause_number',\n  (value->>'display_order')::int,\n  (value->>'clause_level')::int,\n  (value->>'customer_position')::numeric,\n  (value->>'provider_position')::numeric,\n  (value->>'original_customer_position')::numeric,\n  (value->>'original_provider_position')::numeric,\n  (value->>'ai_suggested_compromise')::numeric,\n  (value->>'gap_size')::numeric,\n  (value->>'customer_weight')::numeric,\n  (value->>'provider_weight')::numeric,\n  (value->>'is_deal_breaker_customer')::boolean,\n  (value->>'is_deal_breaker_provider')::boolean,\n  value->>'clause_content',\n  value->>'status',\n  (value->>'is_applicable')::boolean,\n  (value->>'is_removed')::boolean,\n  (value->>'is_locked')::boolean,\n  (value->>'selected_by_customer')::boolean,\n  value->>'source_type',\n  (value->>'source_master_clause_id')::uuid,\n  (value->>'created_at')::timestamptz,\n  (value->>'updated_at')::timestamptz\nFROM jsonb_array_elements('{{ JSON.stringify($json.clausePositions) }}'::jsonb);",
+        "options": {}
+      },
+      "id": "062c0d4a-2c88-4b00-87db-736763e042a3",
+      "name": "Insert Clause Positions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1568,
+        48
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "ZH5KS5KZA0pid8fg",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"sessionId\": \"{{ $('Setup & Config').item.json.sessionId }}\",\n  \"playbookId\": \"{{ $('Setup & Config').item.json.playbookId }}\",\n  \"trainingMode\": \"{{ $('Setup & Config').item.json.trainingMode }}\",\n  \"clauseCount\": {{ $('Build Clause Positions').item.json.clauseCount }},\n  \"characterName\": \"{{ $('Setup & Config').item.json.characterName }}\",\n  \"aiPersonality\": \"{{ $('Setup & Config').item.json.aiPersonality }}\"\n}",
+        "options": {}
+      },
+      "id": "25d38456-55ea-4181-9ebb-42914f22bc51",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"{{ $json.error || 'An error occurred' }}\"\n}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "a2d2d65d-a8d3-48e6-b4ea-9cdbe4b5646c",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        336
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Setup & Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup & Config": {
+      "main": [
+        [
+          {
+            "node": "Create Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Session": {
+      "main": [
+        [
+          {
+            "node": "Create Playbook Training Session",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Playbook Training Session": {
+      "main": [
+        [
+          {
+            "node": "Create AI Provider Bid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AI Provider Bid": {
+      "main": [
+        [
+          {
+            "node": "Get Playbook Rules",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Playbook Rules": {
+      "main": [
+        [
+          {
+            "node": "Build Clause Positions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Clause Positions": {
+      "main": [
+        [
+          {
+            "node": "Insert Clause Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Clause Positions": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+  }
+}

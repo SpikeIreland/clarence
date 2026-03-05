@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /Users/sharonlyons/Desktop/clarence/app/auth/quick-contract/studio/[contractId]/page.tsx)",
+      "Bash(npx next build)",
+      "Bash(npx next build --no-lint)",
+      "Bash(npx tsc --noEmit --pretty)",
+      "Bash(grep -n \"handleSaveAsTemplate\" /Users/sharonlyons/Desktop/clarence/app/auth/quick-contract/studio/[contractId]/page.tsx)",
+      "Bash(grep -n \"from.*contract_templates.*select\\\\|.select.*from.*contract_templates\" /Users/sharonlyons/Desktop/clarence/app/auth/quick-contract/studio/[contractId]/page.tsx)"
+    ]
+  }
+}
