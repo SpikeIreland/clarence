@@ -513,9 +513,48 @@ function QuickContractCreateContent() {
                 }
             }
 
-            // Strategy C: Skip - uploaded_contracts does not have source_template_id column
+            // Strategy C: Query template_clauses directly (most reliable for user-created templates)
+            // This runs BEFORE the fuzzy name-match to prevent picking up wrong clauses
+            if (existingClauses.length === 0) {
+                console.log('Strategy C: Querying template_clauses directly for template_id:', templateId)
+                const { data: templateClauses, error: tcError } = await supabase
+                    .from('template_clauses')
+                    .select('*')
+                    .eq('template_id', templateId)
+                    .order('category_order', { ascending: true })
+                    .order('clause_order', { ascending: true })
 
-            // Strategy D: Search uploaded_contracts by template name match
+                if (!tcError && templateClauses && templateClauses.length > 0) {
+                    console.log(`Strategy C SUCCESS: Found ${templateClauses.length} clauses in template_clauses`)
+                    clausesFromTemplateTable = true
+                    templateClausesWithRangeMappings = templateClauses.filter((tc: any) => tc.range_mapping)
+
+                    existingClauses = templateClauses.map((tc, index) => ({
+                        clause_id: tc.template_clause_id || crypto.randomUUID(),
+                        clause_number: tc.clause_number || tc.display_number || String(index + 1),
+                        clause_name: tc.clause_name || 'Untitled Clause',
+                        category: tc.category || 'Other',
+                        content: tc.default_text || '',
+                        original_text: tc.default_text || '',
+                        clause_level: tc.clause_level || 1,
+                        display_order: tc.display_order || (tc.category_order * 100) + tc.clause_order,
+                        parent_clause_id: tc.parent_clause_id || tc.parent_template_clause_id,
+                        clarence_position: tc.clarence_position,
+                        clarence_fairness: tc.clarence_fairness,
+                        clarence_summary: tc.clarence_summary,
+                        clarence_assessment: tc.clarence_assessment,
+                        clarence_flags: tc.clarence_flags || [],
+                        clarence_certified: tc.clarence_certified || false,
+                        clarence_certified_at: tc.clarence_certified_at,
+                        status: tc.status || (tc.clarence_certified ? 'certified' : 'pending'),
+                        is_header: tc.is_header || false
+                    }))
+                } else {
+                    console.log('Strategy C: No clauses found in template_clauses', tcError)
+                }
+            }
+
+            // Strategy D: Search uploaded_contracts by template name match (fuzzy fallback)
             if (existingClauses.length === 0) {
                 const searchName = templateName || templateData.template_name
                 console.log('Strategy D: Searching uploaded_contracts by name:', searchName)
@@ -547,52 +586,12 @@ function QuickContractCreateContent() {
                 }
             }
 
-            // Strategy E: Query template_clauses directly (for user-created templates from "Save as Template")
-            if (existingClauses.length === 0) {
-                console.log('Strategy E: Querying template_clauses directly for template_id:', templateId)
-                const { data: templateClauses, error: tcError } = await supabase
-                    .from('template_clauses')
-                    .select('*')
-                    .eq('template_id', templateId)
-                    .order('category_order', { ascending: true })
-                    .order('clause_order', { ascending: true })
-
-                if (!tcError && templateClauses && templateClauses.length > 0) {
-                    console.log(`Strategy E SUCCESS: Found ${templateClauses.length} clauses in template_clauses`)
-                    clausesFromTemplateTable = true
-                    templateClausesWithRangeMappings = templateClauses.filter((tc: any) => tc.range_mapping)
-
-                    existingClauses = templateClauses.map((tc, index) => ({
-                        clause_id: tc.template_clause_id || crypto.randomUUID(),
-                        clause_number: tc.clause_number || tc.display_number || String(index + 1),
-                        clause_name: tc.clause_name || 'Untitled Clause',
-                        category: tc.category || 'Other',
-                        content: tc.default_text || '',
-                        original_text: tc.default_text || '',
-                        clause_level: tc.clause_level || 1,
-                        display_order: tc.display_order || (tc.category_order * 100) + tc.clause_order,
-                        parent_clause_id: tc.parent_clause_id || tc.parent_template_clause_id,
-                        clarence_position: tc.clarence_position,
-                        clarence_fairness: tc.clarence_fairness,
-                        clarence_summary: tc.clarence_summary,
-                        clarence_assessment: tc.clarence_assessment,
-                        clarence_flags: tc.clarence_flags || [],
-                        clarence_certified: tc.clarence_certified || false,
-                        clarence_certified_at: tc.clarence_certified_at,
-                        status: tc.status || (tc.clarence_certified ? 'certified' : 'pending'),
-                        is_header: tc.is_header || false
-                    }))
-                } else {
-                    console.log('Strategy E: No clauses found in template_clauses', tcError)
-                }
-            }
-
             // =====================================================
             // SUCCESS PATH: Found clauses - create contract and go to Studio
             // =====================================================
             if (existingClauses.length > 0) {
                 console.log(`Creating new contract from ${existingClauses.length} clauses...`)
-                console.log(`Source: ${clausesFromTemplateTable ? 'template_clauses (Strategy E)' : 'uploaded_contract_clauses'}`)
+                console.log(`Source: ${clausesFromTemplateTable ? 'template_clauses (Strategy C)' : 'uploaded_contract_clauses'}`)
 
                 const { data: newContract, error: createError } = await supabase
                     .from('uploaded_contracts')
