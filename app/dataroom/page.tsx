@@ -1,6 +1,51 @@
-import { ArrowRight, Shield, FileText, BarChart3 } from 'lucide-react'
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ArrowRight, Shield, FileText, BarChart3, Loader2 } from 'lucide-react'
+import { createClient } from '@/lib/dataroom/supabase'
+import { DATAROOM_ADMIN_EMAILS } from '@/lib/dataroom/constants'
+
+type AuthTab = 'investor' | 'team'
 
 export default function DataroomLanding() {
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState<AuthTab>('investor')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  async function handleTeamSignIn(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+      if (error) {
+        setMessage({ type: 'error', text: error.message })
+        setLoading(false)
+        return
+      }
+
+      // Verify this email is in the admin list
+      if (!DATAROOM_ADMIN_EMAILS.includes(email.toLowerCase())) {
+        await supabase.auth.signOut()
+        setMessage({ type: 'error', text: 'This account does not have data room admin access.' })
+        setLoading(false)
+        return
+      }
+
+      router.push('/admin')
+    } catch {
+      setMessage({ type: 'error', text: 'An unexpected error occurred.' })
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-20">
       {/* Hero */}
@@ -47,31 +92,121 @@ export default function DataroomLanding() {
         </div>
       </div>
 
-      {/* Sign in prompt */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
-        <h2 className="text-white text-xl font-semibold mb-2">Investor Access</h2>
-        <p className="text-slate-400 text-sm mb-6">
-          If you have been invited, enter your email to receive a secure access link.
-        </p>
-        {/* Placeholder for magic link form */}
-        <div className="max-w-md mx-auto flex gap-3">
-          <input
-            type="email"
-            placeholder="your@email.com"
-            disabled
-            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder:text-slate-500 disabled:opacity-50"
-          />
+      {/* Auth section */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        {/* Tabs */}
+        <div className="flex border-b border-slate-800">
           <button
-            disabled
-            className="bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+            onClick={() => { setActiveTab('investor'); setMessage(null) }}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'investor'
+                ? 'text-white border-b-2 border-emerald-500'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
           >
-            Access
-            <ArrowRight className="w-4 h-4" />
+            Investor Access
+          </button>
+          <button
+            onClick={() => { setActiveTab('team'); setMessage(null) }}
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'team'
+                ? 'text-white border-b-2 border-emerald-500'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            Team Sign In
           </button>
         </div>
-        <p className="text-slate-600 text-xs mt-3">
-          Magic link authentication — coming soon
-        </p>
+
+        <div className="p-8">
+          {/* Message */}
+          {message && (
+            <div className={`mb-6 p-3 rounded-lg text-center text-sm ${
+              message.type === 'success'
+                ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800'
+                : 'bg-red-900/30 text-red-400 border border-red-800'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
+          {activeTab === 'investor' ? (
+            <div className="text-center">
+              <h2 className="text-white text-xl font-semibold mb-2">Investor Access</h2>
+              <p className="text-slate-400 text-sm mb-6">
+                If you have been invited, enter your email to receive a secure access link.
+              </p>
+              <div className="max-w-md mx-auto flex gap-3">
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  disabled
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder:text-slate-500 disabled:opacity-50"
+                />
+                <button
+                  disabled
+                  className="bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                >
+                  Access
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-slate-600 text-xs mt-3">
+                Magic link authentication — coming soon
+              </p>
+            </div>
+          ) : (
+            <div className="max-w-md mx-auto">
+              <h2 className="text-white text-xl font-semibold mb-2 text-center">
+                Team Sign In
+              </h2>
+              <p className="text-slate-400 text-sm mb-6 text-center">
+                Sign in with your Clarence team credentials.
+              </p>
+              <form onSubmit={handleTeamSignIn} className="space-y-4">
+                <div>
+                  <label className="block text-slate-400 text-sm mb-1.5">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    placeholder="you@clarencelegal.ai"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 text-sm mb-1.5">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    placeholder="Your password"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading || !email || !password}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:bg-emerald-600 transition-colors"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    <>
+                      Sign In
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

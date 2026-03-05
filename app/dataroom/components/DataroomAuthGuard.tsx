@@ -67,16 +67,11 @@ export default function DataroomAuthGuard({
   }
 
   if (status === 'unauthenticated') {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <h2 className="text-white text-xl font-semibold mb-2">Access Required</h2>
-          <p className="text-slate-400 text-sm">
-            Please sign in to access the Data Room.
-          </p>
-        </div>
-      </div>
-    )
+    // Redirect to the data room landing page to sign in
+    if (typeof window !== 'undefined') {
+      window.location.href = '/'
+    }
+    return null
   }
 
   if (requiredRole && role !== requiredRole) {
