@@ -2185,6 +2185,7 @@ function QuickContractStudioContent() {
 
         setGeneratingPositionDraft(true)
         setShowDraftOfferPrompt(false)
+        setActiveTab('draft')
 
         // Add a chat message showing the request
         const requestMessage: ChatMessage = {
