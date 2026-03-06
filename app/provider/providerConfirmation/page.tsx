@@ -315,6 +315,8 @@ function ProviderLobbyContent() {
     const [providerCompany, setProviderCompany] = useState<string>('')
     const [error, setError] = useState<string | null>(null)
     const [isPolling, setIsPolling] = useState(false)
+    const [pollCount, setPollCount] = useState(0)
+    const [pollingTimedOut, setPollingTimedOut] = useState(false)
 
     // ========================================================================
     // SECTION 8B: INITIALIZATION
@@ -452,6 +454,9 @@ function ProviderLobbyContent() {
     }, [searchParams])
 
     // Poll every 10 seconds while waiting for leverage calculation to complete
+    // Times out after 5 minutes (30 polls) to avoid infinite polling
+    const MAX_POLL_ATTEMPTS = 30
+
     useEffect(() => {
         if (!isPolling) return
 
@@ -459,7 +464,18 @@ function ProviderLobbyContent() {
         const providerId = searchParams.get('provider_id')
         if (!sessionId || !providerId) return
 
+        let attempts = 0
+
         const poll = async () => {
+            attempts++
+            setPollCount(attempts)
+
+            if (attempts >= MAX_POLL_ATTEMPTS) {
+                setIsPolling(false)
+                setPollingTimedOut(true)
+                return
+            }
+
             try {
                 const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}&provider_id=${providerId}`)
                 if (!response.ok) return
@@ -564,10 +580,29 @@ function ProviderLobbyContent() {
                                     <p className="text-slate-600 mb-3">
                                         Your strategic assessment has been submitted successfully. CLARENCE is now analysing both parties to calculate leverage positions and generate initial negotiating stances.
                                     </p>
-                                    <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-flex">
-                                        <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
-                                        This typically takes a few minutes. You&apos;ll be able to enter the Contract Studio once complete.
-                                    </div>
+                                    {pollingTimedOut ? (
+                                        <div className="flex items-center gap-3 text-sm text-red-700 bg-red-50 rounded-lg px-4 py-3">
+                                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span>Activation is taking longer than expected. The other party may not have completed their assessment yet.</span>
+                                            <button
+                                                onClick={() => {
+                                                    setPollingTimedOut(false)
+                                                    setPollCount(0)
+                                                    setIsPolling(true)
+                                                }}
+                                                className="ml-auto px-3 py-1 bg-white border border-red-200 text-red-700 rounded-md text-xs font-medium hover:bg-red-50 transition-colors whitespace-nowrap"
+                                            >
+                                                Check Again
+                                            </button>
+                                        </div>
+                                    ) : isPolling ? (
+                                        <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 inline-flex">
+                                            <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></div>
+                                            This typically takes a few minutes. You&apos;ll be able to enter the Contract Studio once complete.
+                                        </div>
+                                    ) : null}
                                 </div>
                             </div>
                         </div>

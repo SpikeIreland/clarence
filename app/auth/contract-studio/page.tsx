@@ -1130,7 +1130,11 @@ async function fetchClauseChat(sessionId: string, positionId: string | null): Pr
             : `${API_BASE}/clause-chat-api-get?session_id=${sessionId}&general=true`
         const response = await fetch(url)
         if (!response.ok) throw new Error('Failed to fetch clause chat')
-        const data = await response.json()
+
+        // Handle empty response body (n8n returns empty 200 when a node errors)
+        const text = await response.text()
+        if (!text) return []
+        const data = JSON.parse(text)
 
         const messages = Array.isArray(data) ? data : (data.messages || [])
 
@@ -3223,6 +3227,21 @@ function ContractStudioContent() {
             }
         } catch (error) {
             console.error('Failed to load CLARENCE welcome:', error)
+            // Fallback welcome so the chat panel is never blank
+            const fallbackMessage: ClauseChatMessage = {
+                messageId: `clarence-welcome-fallback-${Date.now()}`,
+                sessionId: sessionId,
+                positionId: null,
+                sender: 'clarence',
+                senderUserId: null,
+                message: "Welcome to the Contract Studio. I'm CLARENCE, your negotiation advisor. Select a clause from the left panel to get started — I'll explain what each one means for your position.",
+                messageType: 'auto_response',
+                relatedPositionChange: false,
+                triggeredBy: 'session_load',
+                createdAt: new Date().toISOString()
+            }
+            setChatMessages(prev => [fallbackMessage, ...prev])
+            setClarenceWelcomeLoaded(true)
         } finally {
             setIsChatLoading(false)
         }
@@ -3790,7 +3809,9 @@ function ContractStudioContent() {
     // ============================================================================
 
     useEffect(() => {
-        if (session?.sessionId && sessionStatus === 'ready' && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
+        // Trigger welcome for both 'ready' (full negotiation) and 'solo_prep' (reviewing while waiting for provider)
+        const shouldLoadWelcome = sessionStatus === 'ready' || sessionStatus === 'solo_prep'
+        if (session?.sessionId && shouldLoadWelcome && !clarenceWelcomeLoaded && !loading && userInfo?.role) {
             loadClarenceWelcome(session.sessionId, userInfo.role as 'customer' | 'provider')
         }
     }, [session?.sessionId, sessionStatus, clarenceWelcomeLoaded, loading, loadClarenceWelcome, userInfo?.role])
@@ -4969,7 +4990,7 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
         setSelectedClause(clause)
         setActiveTab('positions')
 
-        if (session?.sessionId && sessionStatus === 'ready' && userInfo?.role) {
+        if (session?.sessionId && (sessionStatus === 'ready' || sessionStatus === 'solo_prep') && userInfo?.role) {
             explainClauseWithClarence(session.sessionId, clause, userInfo.role)
         }
     }

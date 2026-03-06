@@ -245,6 +245,7 @@ function ProviderQuestionnaireContent() {
 
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
+    const [submitError, setSubmitError] = useState<string | null>(null)
     const [sessionData, setSessionData] = useState<SessionData | null>(null)
     const [currentQuestion, setCurrentQuestion] = useState(0)
     const [answers, setAnswers] = useState<Record<string, string | number>>({})
@@ -423,6 +424,7 @@ function ProviderQuestionnaireContent() {
         if (!sessionData?.sessionId) return
 
         setSubmitting(true)
+        setSubmitError(null)
 
         // LOG: Final question answered
         const lastQuestion = STRATEGIC_QUESTIONS[currentQuestion]
@@ -489,14 +491,8 @@ function ProviderQuestionnaireContent() {
                 'SUBMISSION_ERROR'
             )
 
-            // Still redirect to confirmation (graceful degradation)
-            eventLogger.completed('provider_onboarding', 'redirect_to_provider_confirmation', {
-                sessionId: sessionData.sessionId,
-                providerId: sessionData.providerId,
-                afterError: true
-            })
-
-            router.push(`/provider/providerConfirmation?session_id=${sessionData.sessionId}&provider_id=${sessionData.providerId}`)
+            // Block progression — do NOT redirect with unsaved data
+            setSubmitError('Your assessment could not be saved. Please try again. If the problem persists, contact support.')
         } finally {
             setSubmitting(false)
         }
@@ -803,6 +799,13 @@ function ProviderQuestionnaireContent() {
                             </button>
                         )}
                     </div>
+
+                    {/* Submission Error */}
+                    {submitError && (
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                            {submitError}
+                        </div>
+                    )}
 
                     {/* Question Navigation Dots */}
                     <div className="flex justify-center mt-8 gap-1.5">

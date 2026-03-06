@@ -444,6 +444,7 @@ function IntelligentQuestionnaireContent() {
   const [conversationComplete, setConversationComplete] = useState(false)
   const [leverageAssessment, setLeverageAssessment] = useState<LeverageAssessment | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // WP2: Fast-track mode state
   const [showFastTrackReview, setShowFastTrackReview] = useState(false)
@@ -833,9 +834,23 @@ I have the facts. Now I need to understand the *dynamics* that will determine yo
     e.preventDefault()
     if (!userInput.trim() || isTyping) return
     const input = userInput.trim()
+    const currentQuestion = activeQuestions[currentQuestionIndex]
+
+    // Input quality gate — scale questions (batnaRealismScore) accept short answers,
+    // but strategic text questions need meaningful responses
+    const isScaleQuestion = currentQuestion?.key === 'batnaRealismScore'
+    const MIN_ANSWER_LENGTH = 10
+
+    if (!isScaleQuestion && input.length < MIN_ANSWER_LENGTH) {
+      setIsTyping(true)
+      await new Promise(resolve => setTimeout(resolve, 400))
+      addClarenceMessage("I need a bit more detail to work with — could you expand on that? The more specific you are, the better I can advise you during negotiations.")
+      setIsTyping(false)
+      return
+    }
+
     setUserInput('')
     addUserMessage(input)
-    const currentQuestion = activeQuestions[currentQuestionIndex]
     if (currentQuestion) {
       setStrategicAnswers(prev => ({ ...prev, [currentQuestion.key]: input }))
     }
@@ -937,6 +952,7 @@ Your data is saved and ready. Click below to continue.`)
   const handleProceedToContractPrep = async () => {
     if (!sessionId) return
     setIsSubmitting(true)
+    setSaveError(null)
 
     try {
       const leveragePayload = {
@@ -951,7 +967,7 @@ Your data is saved and ready. Click below to continue.`)
         reasoning: leverageAssessment?.reasoning || 'Preliminary assessment based on customer data'
       }
 
-      await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
+      const response = await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/strategic-assessment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -963,12 +979,19 @@ Your data is saved and ready. Click below to continue.`)
             trustLevel: ''
           },
           leverage_assessment: leveragePayload,
-          assessment_mode: assessmentMode,  // WP2: Track which mode was used
+          assessment_mode: assessmentMode,
           completed_at: new Date().toISOString()
         })
       })
+
+      if (!response.ok) {
+        throw new Error(`Assessment save failed (${response.status})`)
+      }
     } catch (error) {
       console.error('Error saving assessment:', error)
+      setSaveError('Your assessment could not be saved. Please try again. If the problem persists, contact support.')
+      setIsSubmitting(false)
+      return // Block progression — do NOT redirect with unsaved data
     }
 
     const params = new URLSearchParams()
@@ -1154,6 +1177,11 @@ Your data is saved and ready. Click below to continue.`)
 
           {/* Actions */}
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200">
+            {saveError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {saveError}
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={() => {
@@ -1410,6 +1438,11 @@ Your data is saved and ready. Click below to continue.`)
                       </div>
                     ) : (
                       <div className="border-t border-slate-200 p-4">
+                        {saveError && (
+                          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                            {saveError}
+                          </div>
+                        )}
                         <button
                           onClick={handleProceedToContractPrep}
                           disabled={isSubmitting}
@@ -1422,7 +1455,7 @@ Your data is saved and ready. Click below to continue.`)
                             </>
                           ) : (
                             <>
-                              Continue to Invite Provider
+                              {saveError ? 'Retry' : 'Continue to Invite Provider'}
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
