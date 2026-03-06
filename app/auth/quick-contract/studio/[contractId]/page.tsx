@@ -423,6 +423,7 @@ function QuickContractStudioContent() {
     const [editingDraftText, setEditingDraftText] = useState('')
     const [savingDraft, setSavingDraft] = useState(false)
     const [generatingBalancedDraft, setGeneratingBalancedDraft] = useState(false)
+    const [bespokeDraftTarget, setBespokeDraftTarget] = useState<number>(5.0)
 
     // Chat state (CLARENCE AI chat - right panel)
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -5678,30 +5679,63 @@ INSTRUCTIONS:
                                                                     Unlock to Edit
                                                                 </button>
 
-                                                                {/* Create More Balanced Draft Button */}
-                                                                <button
-                                                                    onClick={handleCreateBalancedDraft}
-                                                                    disabled={generatingBalancedDraft || !selectedClause.clarenceCertified}
-                                                                    className="px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                    title={!selectedClause.clarenceCertified ? 'Clause must be certified before generating a balanced draft' : 'Generate a more balanced version of this clause'}
-                                                                >
-                                                                    {generatingBalancedDraft ? (
-                                                                        <>
-                                                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                                            </svg>
-                                                                            Generating...
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                                                                            </svg>
-                                                                            Create More Balanced Draft
-                                                                        </>
-                                                                    )}
-                                                                </button>
+                                                                {/* Bespoke Drafting — Redraft to any position */}
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs text-slate-500 whitespace-nowrap">
+                                                                        {selectedClause.clarencePosition != null
+                                                                            ? `Current: ${selectedClause.clarencePosition.toFixed(1)}`
+                                                                            : 'Not certified'}
+                                                                    </span>
+                                                                    <span className="text-xs text-slate-400">|</span>
+                                                                    <span className="text-xs text-slate-500 whitespace-nowrap">Redraft to:</span>
+                                                                    <button
+                                                                        onClick={() => setBespokeDraftTarget(prev => Math.max(1, +(prev - 1).toFixed(0)))}
+                                                                        disabled={bespokeDraftTarget <= 1 || generatingPositionDraft || !selectedClause.clarenceCertified}
+                                                                        className="w-7 h-7 flex items-center justify-center text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-300 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                                    >
+                                                                        -
+                                                                    </button>
+                                                                    <div className="flex flex-col items-center min-w-[3rem]">
+                                                                        <span className="text-sm font-semibold text-slate-800">{bespokeDraftTarget.toFixed(1)}</span>
+                                                                        <span className="text-[10px] text-slate-400 leading-tight truncate max-w-[5rem]">
+                                                                            {getPositionDescription(
+                                                                                Math.round(bespokeDraftTarget),
+                                                                                roleContext?.protectedPartyLabel || 'Protected',
+                                                                                roleContext?.providingPartyLabel || 'Providing'
+                                                                            )}
+                                                                        </span>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => setBespokeDraftTarget(prev => Math.min(10, +(prev + 1).toFixed(0)))}
+                                                                        disabled={bespokeDraftTarget >= 10 || generatingPositionDraft || !selectedClause.clarenceCertified}
+                                                                        className="w-7 h-7 flex items-center justify-center text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 border border-slate-300 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                                    >
+                                                                        +
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleGenerateDraftForPosition(bespokeDraftTarget)}
+                                                                        disabled={generatingPositionDraft || !selectedClause.clarenceCertified}
+                                                                        className="px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                                                        title={!selectedClause.clarenceCertified ? 'Clause must be certified before generating a draft' : `Redraft this clause to position ${bespokeDraftTarget.toFixed(1)}`}
+                                                                    >
+                                                                        {generatingPositionDraft ? (
+                                                                            <>
+                                                                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                </svg>
+                                                                                Drafting...
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                                </svg>
+                                                                                Redraft
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                </div>
 
                                                                 {/* Discuss with CLARENCE Button */}
                                                                 <button

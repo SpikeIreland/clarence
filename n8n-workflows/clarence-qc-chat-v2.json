@@ -28,7 +28,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.N8N_WEBHOOK_URL || 'https://spikeislandstudios.app.n8n.cloud' }}/webhook/clarence-prompt-builder",
+        "url": "https://spikeislandstudios.app.n8n.cloud/webhook/clarence-prompt-builder",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
