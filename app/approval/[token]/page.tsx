@@ -34,6 +34,9 @@ interface ApprovalData {
         priority: string
         status: string
         created_at: string
+        request_category: 'document' | 'clause' | 'contract' | null
+        clause_name: string | null
+        approval_context: Record<string, unknown> | null
     }
 }
 
@@ -173,7 +176,13 @@ export default function ApprovalPage() {
                     </div>
                     <div>
                         <span className="font-semibold text-white tracking-wide">CLARENCE</span>
-                        <span className="text-slate-400 text-xs ml-2">Document Approval</span>
+                        <span className="text-slate-400 text-xs ml-2">
+                            {data?.internal_approval_requests.request_category === 'clause'
+                                ? 'Clause Approval'
+                                : data?.internal_approval_requests.request_category === 'contract'
+                                    ? 'Contract Sign-off'
+                                    : 'Document Approval'}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -200,7 +209,7 @@ export default function ApprovalPage() {
                             {decision === 'approved' ? 'Approved' : 'Rejected'}
                         </h2>
                         <p className="text-sm text-slate-500 mb-2">
-                            Your response for &quot;{request.document_name}&quot; has been recorded.
+                            Your response for &quot;{request.request_category === 'clause' ? (request.clause_name || request.document_name) : request.document_name}&quot; has been recorded.
                         </p>
                         {note && (
                             <p className="text-sm text-slate-600 italic mt-2">&quot;{note}&quot;</p>
@@ -229,7 +238,7 @@ export default function ApprovalPage() {
                                 <strong>{request.requested_by_name}</strong> ({request.requested_by_email}) has requested your approval.
                             </p>
 
-                            {/* Document details */}
+                            {/* Request details */}
                             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
                                 <div className="flex items-center gap-2">
                                     <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
@@ -237,7 +246,35 @@ export default function ApprovalPage() {
                                     </svg>
                                     <span className="text-sm font-semibold text-slate-800">{request.document_name}</span>
                                 </div>
-                                <p className="text-xs text-slate-500 capitalize">Type: {request.document_type.replace(/-/g, ' ')}</p>
+
+                                {/* Clause-specific context */}
+                                {request.request_category === 'clause' && request.clause_name && (
+                                    <div className="pt-1">
+                                        <p className="text-xs font-semibold text-slate-600 mb-0.5">Clause under review</p>
+                                        <p className="text-sm text-slate-800">{request.clause_name}</p>
+                                    </div>
+                                )}
+
+                                {/* Contract-specific context */}
+                                {request.request_category === 'contract' && request.approval_context && (
+                                    <div className="pt-1 space-y-1">
+                                        {(request.approval_context.deal_value as string | undefined) && (
+                                            <p className="text-xs text-slate-600">
+                                                Deal value: <span className="font-semibold text-slate-800">{request.approval_context.deal_value as string}</span>
+                                            </p>
+                                        )}
+                                        {(request.approval_context.counterparty as string | undefined) && (
+                                            <p className="text-xs text-slate-600">
+                                                Counterparty: <span className="font-semibold text-slate-800">{request.approval_context.counterparty as string}</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {request.request_category === null || request.request_category === 'document' ? (
+                                    <p className="text-xs text-slate-500 capitalize">Type: {request.document_type.replace(/-/g, ' ')}</p>
+                                ) : null}
+
                                 <p className="text-xs text-slate-400">
                                     Requested {new Date(request.created_at).toLocaleDateString([], {
                                         day: 'numeric', month: 'long', year: 'numeric'

@@ -409,6 +409,14 @@ function QuickContractStudioContent() {
     // Commit modal
     const [commitModalState, setCommitModalState] = useState<CommitModalState>('closed')
 
+    // DoA Approval state
+    const [doaContractApprovalStatus, setDoaContractApprovalStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>('none')
+    const [showContractApprovalModal, setShowContractApprovalModal] = useState(false)
+    const [clauseApprovalStatuses, setClauseApprovalStatuses] = useState<Record<string, 'pending' | 'approved' | 'rejected'>>({})
+    const [clauseApprovalTarget, setClauseApprovalTarget] = useState<{ clauseId: string; clauseName: string } | null>(null)
+    const [isRequestingApproval, setIsRequestingApproval] = useState(false)
+    const [approvalMessage, setApprovalMessage] = useState('')
+
     // Query input per clause
     const [queryText, setQueryText] = useState('')
 
@@ -882,6 +890,23 @@ function QuickContractStudioContent() {
 
         loadData()
     }, [contractId, router])
+
+    // Load DoA approval status for this contract
+    useEffect(() => {
+        if (!contractId) return
+        async function loadApprovalStatus() {
+            try {
+                const res = await fetch(`/api/approval/status?contractId=${contractId}`)
+                const json = await res.json()
+                if (!json.success) return
+                if (json.contract?.status) setDoaContractApprovalStatus(json.contract.status)
+                if (json.clauses) setClauseApprovalStatuses(json.clauses)
+            } catch (e) {
+                console.error('Failed to load approval status:', e)
+            }
+        }
+        loadApprovalStatus()
+    }, [contractId])
 
     // ========================================================================
     // SECTION: TRIGGER CERTIFICATION ON STUDIO LOAD
@@ -1656,9 +1681,82 @@ function QuickContractStudioContent() {
         }
     }
 
+    // REQUEST CONTRACT SIGN-OFF
+    const handleRequestContractApproval = async () => {
+        if (!contract || !userInfo || isRequestingApproval) return
+        setIsRequestingApproval(true)
+        try {
+            const res = await fetch('/api/approval/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyId: userInfo.companyId,
+                    requestedByUserId: userInfo.userId,
+                    requestedByName: userInfo.fullName || userInfo.email,
+                    requestedByEmail: userInfo.email,
+                    documentName: contract.contractName,
+                    requestCategory: 'contract',
+                    contractId: contract.contractId,
+                    message: approvalMessage || null,
+                }),
+            })
+            const json = await res.json()
+            if (!json.success) { setError(json.error || 'Failed to request sign-off'); return }
+            setDoaContractApprovalStatus('pending')
+            setShowContractApprovalModal(false)
+            setApprovalMessage('')
+        } catch (e) {
+            console.error('Contract approval request error:', e)
+            setError('Failed to send sign-off request')
+        } finally {
+            setIsRequestingApproval(false)
+        }
+    }
+
+    // REQUEST CLAUSE APPROVAL
+    const handleRequestClauseApproval = async () => {
+        if (!contract || !userInfo || !clauseApprovalTarget || isRequestingApproval) return
+        setIsRequestingApproval(true)
+        try {
+            const res = await fetch('/api/approval/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyId: userInfo.companyId,
+                    requestedByUserId: userInfo.userId,
+                    requestedByName: userInfo.fullName || userInfo.email,
+                    requestedByEmail: userInfo.email,
+                    documentName: contract.contractName,
+                    requestCategory: 'clause',
+                    contractId: contract.contractId,
+                    clauseId: clauseApprovalTarget.clauseId,
+                    clauseName: clauseApprovalTarget.clauseName,
+                    message: approvalMessage || null,
+                }),
+            })
+            const json = await res.json()
+            if (!json.success) { setError(json.error || 'Failed to request clause approval'); return }
+            setClauseApprovalStatuses(prev => ({ ...prev, [clauseApprovalTarget.clauseId]: 'pending' }))
+            setClauseApprovalTarget(null)
+            setApprovalMessage('')
+        } catch (e) {
+            console.error('Clause approval request error:', e)
+            setError('Failed to send clause approval request')
+        } finally {
+            setIsRequestingApproval(false)
+        }
+    }
+
     // COMMIT: Current user agrees to all remaining clauses and commits
     const handleCommitContract = async () => {
         if (!contract || !userInfo) return
+
+        // Block commit if contract sign-off is pending
+        if (doaContractApprovalStatus === 'pending') {
+            setError('Contract sign-off is pending approval. Please wait for the approver to respond before committing.')
+            setCommitModalState('closed')
+            return
+        }
 
         // PERSISTENCE: Force-save any unsaved position adjustments before committing
         const saveSuccess = await forceSavePositions()
@@ -3834,15 +3932,32 @@ INSTRUCTIONS:
                             const allBothAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
                             if (allBothAgreed) {
                                 return (
-                                    <button
-                                        onClick={() => setCommitModalState('confirm')}
-                                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5 animate-pulse"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                        </svg>
-                                        Commit Contract
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        {doaContractApprovalStatus === 'pending' ? (
+                                            <span className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
+                                                <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+                                                Sign-off Pending
+                                            </span>
+                                        ) : (
+                                            <button
+                                                onClick={() => setShowContractApprovalModal(true)}
+                                                className="px-3 py-2 border border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 rounded-lg transition-colors text-sm font-medium"
+                                            >
+                                                Request Sign-off
+                                            </button>
+                                        )}
+                                        {doaContractApprovalStatus !== 'pending' && (
+                                            <button
+                                                onClick={() => setCommitModalState('confirm')}
+                                                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5 animate-pulse"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                                </svg>
+                                                Commit Contract
+                                            </button>
+                                        )}
+                                    </div>
                                 )
                             }
 
@@ -4941,15 +5056,40 @@ INSTRUCTIONS:
 
                                                 // Default: show Agree button (respondent can always agree, or no query pending)
                                                 return (
-                                                    <button
-                                                        onClick={() => handleAgreeClause(selectedClause.clauseId)}
-                                                        className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                        </svg>
-                                                        Agree
-                                                    </button>
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => handleAgreeClause(selectedClause.clauseId)}
+                                                            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors shadow-sm"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                            Agree
+                                                        </button>
+                                                        {currentRole === 'initiator' && !clauseApprovalStatuses[selectedClause.clauseId] && (
+                                                            <button
+                                                                onClick={() => setClauseApprovalTarget({ clauseId: selectedClause.clauseId, clauseName: selectedClause.clauseName })}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 rounded-full text-sm font-medium transition-colors"
+                                                            >
+                                                                Seek Approval
+                                                            </button>
+                                                        )}
+                                                        {currentRole === 'initiator' && clauseApprovalStatuses[selectedClause.clauseId] === 'pending' && (
+                                                            <span className="inline-flex items-center px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-600 rounded-full text-sm font-medium">
+                                                                Approval Pending
+                                                            </span>
+                                                        )}
+                                                        {currentRole === 'initiator' && clauseApprovalStatuses[selectedClause.clauseId] === 'approved' && (
+                                                            <span className="inline-flex items-center px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-600 rounded-full text-sm font-medium">
+                                                                ✓ Approved
+                                                            </span>
+                                                        )}
+                                                        {currentRole === 'initiator' && clauseApprovalStatuses[selectedClause.clauseId] === 'rejected' && (
+                                                            <span className="inline-flex items-center px-3 py-1.5 bg-red-50 border border-red-200 text-red-600 rounded-full text-sm font-medium">
+                                                                Approval Rejected
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 )
                                             })()}
 
@@ -6223,6 +6363,78 @@ INSTRUCTIONS:
                                 )
                             })()
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* CONTRACT SIGN-OFF MODAL */}
+            {/* ============================================================ */}
+            {showContractApprovalModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                        <div className="p-6 border-b border-slate-200">
+                            <h3 className="text-lg font-semibold text-slate-800">Request Contract Sign-off</h3>
+                            <p className="text-sm text-slate-500 mt-1">An approver will be notified to review and sign off on this contract before you commit.</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Message to approver (optional)</label>
+                                <textarea
+                                    value={approvalMessage}
+                                    onChange={(e) => setApprovalMessage(e.target.value)}
+                                    placeholder="Any context or notes for the approver..."
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 p-6 pt-0">
+                            <button onClick={() => { setShowContractApprovalModal(false); setApprovalMessage('') }} className="px-4 py-2 text-slate-600 hover:text-slate-800 rounded-lg text-sm font-medium">Cancel</button>
+                            <button
+                                onClick={handleRequestContractApproval}
+                                disabled={isRequestingApproval}
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isRequestingApproval ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Sending...</> : 'Send Sign-off Request'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* CLAUSE APPROVAL MODAL */}
+            {/* ============================================================ */}
+            {clauseApprovalTarget && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                        <div className="p-6 border-b border-slate-200">
+                            <h3 className="text-lg font-semibold text-slate-800">Seek Clause Approval</h3>
+                            <p className="text-sm text-slate-500 mt-1">Request internal approval for your position on: <strong>{clauseApprovalTarget.clauseName}</strong></p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Message to approver (optional)</label>
+                                <textarea
+                                    value={approvalMessage}
+                                    onChange={(e) => setApprovalMessage(e.target.value)}
+                                    placeholder="Context for the approver..."
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 p-6 pt-0">
+                            <button onClick={() => { setClauseApprovalTarget(null); setApprovalMessage('') }} className="px-4 py-2 text-slate-600 hover:text-slate-800 rounded-lg text-sm font-medium">Cancel</button>
+                            <button
+                                onClick={handleRequestClauseApproval}
+                                disabled={isRequestingApproval}
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isRequestingApproval ? <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Sending...</> : 'Send Approval Request'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

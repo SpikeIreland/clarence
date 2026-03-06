@@ -122,6 +122,26 @@ export async function POST(request: NextRequest) {
                         updated_at: new Date().toISOString(),
                     })
                     .eq('request_id', requestId)
+
+                // Notify the requester of the decision
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+                const contractId = parentRequest.contract_id || null
+                const studioUrl = contractId ? `${appUrl}/auth/quick-contract/studio/${contractId}` : undefined
+                await fetch(`${appUrl}/api/email/send-approval-notification`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        requesterEmail: parentRequest.requested_by_email,
+                        requesterName: parentRequest.requested_by_name,
+                        approverName: responseRow.approver_name,
+                        decision: newRequestStatus,
+                        decisionNote: decision_note || null,
+                        documentName: parentRequest.document_name,
+                        requestCategory: parentRequest.request_category || null,
+                        clauseName: parentRequest.clause_name || null,
+                        studioUrl,
+                    }),
+                }).catch((e) => console.error('Failed to send approval notification email:', e))
             }
         }
 
@@ -161,7 +181,7 @@ export async function GET(request: NextRequest) {
         // Look up response and parent request
         const { data: responseRow, error } = await supabase
             .from('internal_approval_responses')
-            .select('response_id, approver_name, approver_email, status, decision_note, responded_at, request_id, internal_approval_requests(request_id, document_name, document_type, document_url, requested_by_name, requested_by_email, message, priority, status, created_at)')
+            .select('response_id, approver_name, approver_email, status, decision_note, responded_at, request_id, internal_approval_requests(request_id, document_name, document_type, document_url, requested_by_name, requested_by_email, message, priority, status, created_at, request_category, clause_name, approval_context)')
             .eq('access_token', token)
             .single()
 

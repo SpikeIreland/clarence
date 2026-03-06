@@ -29,6 +29,7 @@ interface CompanyUser {
     fullName: string
     role: 'admin' | 'manager' | 'user' | 'viewer'
     status: 'invited' | 'active' | 'suspended' | 'removed'
+    approvalRole: 'negotiator' | 'approver' | 'admin'
     invitedAt: string
     lastActiveAt?: string
 }
@@ -1622,10 +1623,11 @@ interface UsersTabProps {
     onAddUser: (email: string, fullName: string, role: string) => Promise<void>
     onRemoveUser: (id: string) => Promise<void>
     onSendInvite: (id: string, email: string) => Promise<void>
+    onUpdateApprovalRole: (id: string, approvalRole: string) => Promise<void>
     onRefresh: () => void
 }
 
-function UsersTab({ users, isLoading, onAddUser, onRemoveUser, onSendInvite, onRefresh }: UsersTabProps) {
+function UsersTab({ users, isLoading, onAddUser, onRemoveUser, onSendInvite, onUpdateApprovalRole, onRefresh }: UsersTabProps) {
     const [showAddForm, setShowAddForm] = useState(false)
     const [newEmail, setNewEmail] = useState('')
     const [newFullName, setNewFullName] = useState('')
@@ -1662,7 +1664,7 @@ function UsersTab({ users, isLoading, onAddUser, onRemoveUser, onSendInvite, onR
 
             {isLoading ? (<div className="text-center py-12"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div></div>
             ) : users.length === 0 ? (<div className="text-center py-12 text-slate-500"><p>No users yet</p></div>
-            ) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">User</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Role</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Status</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Added</th><th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div><p className="font-medium text-slate-800">{user.fullName}</p><p className="text-sm text-slate-500">{user.email}</p></div></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{user.role}</span></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2">{user.status === 'invited' && <button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend Invite</button>}<button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
+            ) : (<div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-slate-200"><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">User</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Role</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Approval Role</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Status</th><th className="text-left py-3 px-4 text-sm font-medium text-slate-500">Added</th><th className="text-right py-3 px-4 text-sm font-medium text-slate-500">Actions</th></tr></thead><tbody>{users.map((user) => (<tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="py-3 px-4"><div><p className="font-medium text-slate-800">{user.fullName}</p><p className="text-sm text-slate-500">{user.email}</p></div></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.role === 'admin' ? 'bg-purple-100 text-purple-700' : user.role === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{user.role}</span></td><td className="py-3 px-4"><select value={user.approvalRole} onChange={(e) => onUpdateApprovalRole(user.id, e.target.value)} className="px-2 py-1 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200"><option value="negotiator">Negotiator</option><option value="approver">Approver</option><option value="admin">Admin</option></select></td><td className="py-3 px-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : user.status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{user.status}</span></td><td className="py-3 px-4 text-sm text-slate-500">{new Date(user.invitedAt).toLocaleDateString()}</td><td className="py-3 px-4 text-right"><div className="flex items-center justify-end gap-2">{user.status === 'invited' && <button onClick={() => onSendInvite(user.id, user.email)} className="text-xs text-indigo-600 hover:text-indigo-700">Resend Invite</button>}<button onClick={() => onRemoveUser(user.id)} className="text-xs text-red-600 hover:text-red-700">Remove</button></div></td></tr>))}</tbody></table></div>)}
         </div>
     )
 }
@@ -1788,7 +1790,7 @@ function CompanyAdminContent() {
             const supabase = createClient()
             const { data, error } = await supabase.from('company_users').select('*').eq('company_id', companyId).neq('status', 'removed').order('created_at', { ascending: false })
             if (error) { if (error.code === '42P01') { setCompanyUsers([]); return }; throw error }
-            setCompanyUsers((data || []).map(u => ({ id: u.company_user_id, userId: u.user_id, email: u.email, fullName: u.full_name, role: u.role, status: u.status, invitedAt: u.invited_at || u.created_at, lastActiveAt: u.last_active_at })))
+            setCompanyUsers((data || []).map(u => ({ id: u.company_user_id, userId: u.user_id, email: u.email, fullName: u.full_name, role: u.role, status: u.status, approvalRole: u.approval_role || 'negotiator', invitedAt: u.invited_at || u.created_at, lastActiveAt: u.last_active_at })))
         } catch (e) { console.error('Load company users error:', e); setCompanyUsers([]) } finally { setUsersLoading(false) }
     }, [])
 
@@ -2229,6 +2231,13 @@ function CompanyAdminContent() {
 
     const handleRemoveCompanyUser = async (id: string) => { if (!userInfo?.companyId) return; const supabase = createClient(); await supabase.from('company_users').update({ status: 'removed' }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
 
+    const handleUpdateApprovalRole = async (id: string, approvalRole: string) => {
+        if (!userInfo?.companyId) return
+        const supabase = createClient()
+        await supabase.from('company_users').update({ approval_role: approvalRole }).eq('company_user_id', id)
+        await loadCompanyUsers(userInfo.companyId)
+    }
+
     const handleSendCompanyInvite = async (id: string, email: string) => {
         try { await fetch(`${API_BASE}/send-user-invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, company_name: companyName, inviter_name: `${userInfo?.firstName || ''} ${userInfo?.lastName || ''}`.trim() || userInfo?.email, inviter_email: userInfo?.email, invite_type: 'platform' }) }) } catch (e) { console.log('Invite error:', e) }
         if (id && userInfo?.companyId) { const supabase = createClient(); await supabase.from('company_users').update({ invitation_sent: true, invitation_sent_at: new Date().toISOString() }).eq('company_user_id', id); await loadCompanyUsers(userInfo.companyId) }
@@ -2282,7 +2291,7 @@ function CompanyAdminContent() {
                     {activeTab === 'playbooks' && <PlaybooksTab playbooks={playbooks} isLoading={playbooksLoading} onUpload={handlePlaybookUpload} onActivate={handlePlaybookActivate} onDeactivate={handlePlaybookDeactivate} onParse={handlePlaybookParse} onDelete={handlePlaybookDelete} onDownload={handlePlaybookDownload} onRename={handlePlaybookRename} onTypeChange={handlePlaybookTypeChange} onRefresh={() => userInfo?.companyId && loadPlaybooks(userInfo.companyId)} />}
                     {activeTab === 'templates' && <TemplatesTab templates={companyTemplates} isLoading={templatesLoading} userInfo={userInfo} onUpload={handleTemplateUpload} onDelete={handleTemplateDelete} onToggleActive={handleTemplateToggleActive} onRefresh={() => userInfo?.companyId && loadCompanyTemplates(userInfo.companyId)} />}
                     {activeTab === 'training' && <TrainingAccessTab users={trainingUsers} isLoading={trainingLoading} onAddUser={handleAddTrainingUser} onRemoveUser={handleRemoveTrainingUser} onSendInvite={handleSendTrainingInvite} onRefresh={() => userInfo?.companyId && loadTrainingUsers(userInfo.companyId)} />}
-                    {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
+                    {activeTab === 'users' && <UsersTab users={companyUsers} isLoading={usersLoading} onAddUser={handleAddCompanyUser} onRemoveUser={handleRemoveCompanyUser} onSendInvite={handleSendCompanyInvite} onUpdateApprovalRole={handleUpdateApprovalRole} onRefresh={() => userInfo?.companyId && loadCompanyUsers(userInfo.companyId)} />}
                     {activeTab === 'audit' && <AuditLogTab />}
                 </div>
             </main>
