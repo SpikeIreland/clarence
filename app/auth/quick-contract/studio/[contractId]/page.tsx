@@ -67,6 +67,7 @@ import QCPartyChatPanel from '@/app/auth/quick-contract/components/qc-party-chat
 
 // ROLE MATRIX Phase 2: Dynamic position labels
 import { useRoleContext, getScaleLabels } from '@/lib/useRoleContext'
+import { getPositionDescription } from '@/lib/role-matrix'
 
 // Playbook compliance engine + indicator component
 import { calculatePlaybookCompliance, type PlaybookRule, type ComplianceResult, type ContractClause as ComplianceClause } from '@/lib/playbook-compliance'
@@ -465,6 +466,7 @@ function QuickContractStudioContent() {
     // Retry failed certification state
     const [retryingClauses, setRetryingClauses] = useState<Set<string>>(new Set())
     const [retryInProgress, setRetryInProgress] = useState(false)
+    const [recertifyInProgress, setRecertifyInProgress] = useState(false)
 
     // NEW: Auto-save state for position persistence
     const [dirtyPositions, setDirtyPositions] = useState<Map<string, number>>(new Map())
@@ -929,7 +931,11 @@ function QuickContractStudioContent() {
         fetch('https://spikeislandstudios.app.n8n.cloud/webhook/certify-next-clause', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contract_id: resolvedContractId || contractId })
+            body: JSON.stringify({
+                contract_id: resolvedContractId || contractId,
+                contract_type_key: contract?.contractTypeKey || null,
+                initiator_party_role: contract?.initiatorPartyRole || null,
+            })
         }).catch(err => console.error('Failed to trigger certification:', err))
 
     }, [contractId, resolvedContractId, clauses.length, certificationTriggered])
@@ -1225,18 +1231,40 @@ function QuickContractStudioContent() {
                 }
                 rationaleContent += `\n**CLARENCE Recommends:** Position ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
 
-                // Add comparison insight
-                // docPosition > clarencePosition = document is HIGHER on scale = MORE customer-protective
-                // docPosition < clarencePosition = document is LOWER on scale = MORE provider-favouring
+                // Add comparison insight using role-aware labels
+                const protLabel = roleContext?.protectedPartyLabel || 'the protected party'
+                const provLabel = roleContext?.providingPartyLabel || 'the providing party'
+                // docPosition > clarencePosition = document is HIGHER on scale = MORE protective
+                // docPosition < clarencePosition = document is LOWER on scale = MORE flexible
+                const docFavoursProtected = clause.documentPosition > clause.clarencePosition
+                // Determine if "works in your favour" based on which end favours the user
+                const userFavoursHigh = (roleContext?.positionFavorEnd ?? 10) === 10
+
                 if (difference < 0.5) {
                     rationaleContent += `\u2705 **Assessment:** This clause is well-balanced and aligns with industry standards.\n\n`
-                } else if (clause.documentPosition > clause.clarencePosition) {
-                    rationaleContent += `\u{1F4A1} **Assessment:** This clause is more customer-protective than typical, which works in your favour.\n\n`
+                } else if (docFavoursProtected) {
+                    const inYourFavour = userFavoursHigh
+                    rationaleContent += inYourFavour
+                        ? `\u{1F4A1} **Assessment:** This clause is more protective of ${protLabel} than typical, which works in your favour.\n\n`
+                        : `\u26A0\uFE0F **Assessment:** This clause is more protective of ${protLabel} than typical. Consider whether the terms are justified for your situation.\n\n`
                 } else {
-                    rationaleContent += `\u26A0\uFE0F **Assessment:** This clause is more provider-favouring than typical. Consider whether the terms are justified for your situation.\n\n`
+                    const inYourFavour = !userFavoursHigh
+                    rationaleContent += inYourFavour
+                        ? `\u{1F4A1} **Assessment:** This clause is more flexible towards ${provLabel} than typical, which works in your favour.\n\n`
+                        : `\u26A0\uFE0F **Assessment:** This clause is more flexible towards ${provLabel} than typical. Consider whether the terms are justified for your situation.\n\n`
                 }
             } else if (clause.clarencePosition !== null) {
                 rationaleContent += `**CLARENCE Position:** ${clause.clarencePosition.toFixed(1)} - ${posLabel}\n\n`
+            }
+
+            // Add scale context grounding before stored assessment
+            if (clause.clarencePosition !== null && roleContext) {
+                const scaleDesc = getPositionDescription(
+                    Math.round(clause.clarencePosition),
+                    roleContext.protectedPartyLabel,
+                    roleContext.providingPartyLabel
+                )
+                rationaleContent += `**Scale Position:** ${clause.clarencePosition.toFixed(1)} \u2014 ${scaleDesc}\n\n`
             }
 
             // Add the summary/assessment
@@ -2288,9 +2316,9 @@ INSTRUCTIONS:
                         role: 'assistant',
                         content: `I've redrafted "${selectedClause.clauseName}" to reflect your position of ${targetPosition.toFixed(1)}.\n\n` +
                             (targetPosition <= 3
-                                ? `This version gives the provider more flexibility with reduced obligations.\n\n`
+                                ? `This version gives ${roleContext?.providingPartyLabel || 'the providing party'} more flexibility with reduced obligations.\n\n`
                                 : targetPosition >= 7
-                                    ? `This version strengthens customer protections with more provider accountability.\n\n`
+                                    ? `This version strengthens protections for ${roleContext?.protectedPartyLabel || 'the protected party'} with more accountability.\n\n`
                                     : `This version balances both parties' interests.\n\n`) +
                             `The draft is now in the editor. You can:\n` +
                             `• **Save Draft** to keep this version\n` +
@@ -2493,9 +2521,9 @@ INSTRUCTIONS:
                         role: 'assistant',
                         content: `I've generated a more balanced version of "${selectedClause.clauseName}".\n\n` +
                             (currentPosition !== null && currentPosition < 4
-                                ? `The original was at position ${currentPosition.toFixed(1)} (provider-favouring). I've strengthened the customer safeguards to create a fairer balance.\n\n`
+                                ? `The original was at position ${currentPosition.toFixed(1)} (favouring ${roleContext?.providingPartyLabel || 'the providing party'}). I've strengthened the safeguards to create a fairer balance.\n\n`
                                 : currentPosition !== null && currentPosition > 6
-                                    ? `The original was at position ${currentPosition.toFixed(1)} (customer-favouring). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
+                                    ? `The original was at position ${currentPosition.toFixed(1)} (favouring ${roleContext?.protectedPartyLabel || 'the protected party'}). I've moderated the terms to be more equitable while maintaining reasonable protections.\n\n`
                                     : `I've refined the language for clearer, more neutral phrasing.\n\n`) +
                             `The draft is now in the editor for your review. You can:\n` +
                             `\u2022 **Save Draft** to keep the balanced version\n` +
@@ -2709,7 +2737,11 @@ INSTRUCTIONS:
             await fetch('https://spikeislandstudios.app.n8n.cloud/webhook/certify-next-clause', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contract_id: effectiveId })
+                body: JSON.stringify({
+                    contract_id: effectiveId,
+                    contract_type_key: contract?.contractTypeKey || null,
+                    initiator_party_role: contract?.initiatorPartyRole || null,
+                })
             })
         } catch (err) {
             console.error('Retry certification error:', err)
@@ -2718,6 +2750,47 @@ INSTRUCTIONS:
             setRetryInProgress(false)
         }
     }, [contractId, resolvedContractId, clauses, supabase])
+
+    // Re-analyse all clauses with full position scale context
+    const handleRecertifyAll = useCallback(async () => {
+        const effectiveId = resolvedContractId || contractId
+        if (!effectiveId) return
+
+        setRecertifyInProgress(true)
+        try {
+            const response = await fetch('/api/n8n/recertify-contract', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contractId: effectiveId,
+                    contractTypeKey: contract?.contractTypeKey || null,
+                    initiatorPartyRole: contract?.initiatorPartyRole || null,
+                })
+            })
+
+            if (!response.ok) {
+                throw new Error('Re-certification failed')
+            }
+
+            // Reset local clause state to show pending
+            setClauses(prev => prev.map(c => c.isHeader ? c : {
+                ...c,
+                processingStatus: 'pending',
+                clarenceCertified: false,
+                clarenceAssessment: null as unknown as string,
+                clarenceSummary: null as unknown as string,
+                clarenceFlags: [],
+            }))
+
+            // Start polling to track progress
+            setCertificationTriggered(true)
+            setIsPolling(true)
+        } catch (err) {
+            console.error('Re-certification error:', err)
+        } finally {
+            setRecertifyInProgress(false)
+        }
+    }, [contractId, resolvedContractId, contract?.contractTypeKey, contract?.initiatorPartyRole, supabase])
 
     // Cancel delete
     const handleCancelDelete = () => {
@@ -4181,6 +4254,31 @@ INSTRUCTIONS:
                                     ))
                                 }
                             </div>
+                        </div>
+                    )}
+
+                    {/* ==================== RE-ANALYSE BUTTON (after certification complete) ==================== */}
+                    {!isPolling && certificationProgress.failed === 0 && certificationProgress.certified > 0 && (
+                        <div className="px-4 py-2 border-b border-slate-200 flex-shrink-0">
+                            <button
+                                onClick={handleRecertifyAll}
+                                disabled={recertifyInProgress}
+                                className="w-full text-xs font-medium px-3 py-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-50 disabled:text-slate-300 rounded-md transition-colors flex items-center justify-center gap-1.5"
+                            >
+                                {recertifyInProgress ? (
+                                    <>
+                                        <span className="inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                                        Re-analysing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Re-analyse All Clauses
+                                    </>
+                                )}
+                            </button>
                         </div>
                     )}
 

@@ -50,6 +50,9 @@ interface Session {
     // STRAIGHT TO CONTRACT:
     mediationType?: 'straight_to_contract' | 'partial_mediation' | 'full_mediation' | null
     templateSource?: 'existing_template' | 'modified_template' | 'uploaded' | 'from_scratch' | null
+    // ROLE MATRIX: Contract type context for AI pipeline
+    contractTypeKey?: string | null
+    initiatorPartyRole?: string | null
 }
 
 // ============================================================================
@@ -744,8 +747,6 @@ function getPositionOptionsForClause(
 // SECTION 2B: CLARENCE AI API FUNCTIONS
 // ============================================================================
 
-const CLARENCE_AI_URL = `${API_BASE}/clarence-ai`
-
 type ClarencePromptType = 'welcome' | 'clause_explain' | 'chat' | 'position_change' | 'alignment_reached' | 'recommendation_adopted'
 
 async function callClarenceAI(
@@ -772,17 +773,44 @@ async function callClarenceAI(
             isAligned?: boolean
             alignedWithClarence?: boolean
         }
-    } = {}
+    } = {},
+    contextFields?: {
+        contractTypeKey?: string | null
+        initiatorPartyRole?: string | null
+    }
 ): Promise<ClarenceAIResponse | null> {
     try {
-        const response = await fetch(CLARENCE_AI_URL, {
+        // Build descriptive message for the unified API based on prompt type
+        let message = options.message || ''
+        if (!message) {
+            switch (promptType) {
+                case 'welcome':
+                    message = `[SYSTEM:welcome] Generate a welcome message. Alignment: ${options.alignmentPercentage ?? 0}%.`
+                    break
+                case 'clause_explain':
+                    message = `[SYSTEM:clause_explain] Explain the selected clause in the context of this negotiation.`
+                    break
+                case 'position_change':
+                case 'alignment_reached':
+                case 'recommendation_adopted':
+                    message = `[SYSTEM:${promptType}] Respond to position change: ${options.positionChange?.clauseName || 'clause'} moved from ${options.positionChange?.oldPosition} to ${options.positionChange?.newPosition}.`
+                    break
+            }
+        }
+
+        const response = await fetch('/api/n8n/clarence-chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                message,
                 sessionId,
-                promptType,
-                viewerRole,
-                ...options
+                context: `contract_studio_${promptType}`,
+                viewerRole: viewerRole === 'customer' ? 'initiator' as const : 'respondent' as const,
+                contractTypeKey: contextFields?.contractTypeKey || null,
+                initiatorPartyRole: contextFields?.initiatorPartyRole || null,
+                clauseId: options.clauseId || null,
+                alignmentScore: options.alignmentPercentage || null,
+                negotiationContext: options.positionChange || null,
             })
         })
 
@@ -790,7 +818,18 @@ async function callClarenceAI(
             throw new Error(`CLARENCE AI request failed: ${response.status}`)
         }
 
-        return await response.json()
+        const data = await response.json()
+
+        // Map unified API response to ClarenceAIResponse format
+        return {
+            success: data.success ?? true,
+            promptType,
+            sessionId,
+            clauseId: options.clauseId,
+            response: data.response || data.message || '',
+            leverage: data.leverage || { customer: 50, provider: 50, alignment: 0 },
+            timestamp: new Date().toISOString(),
+        }
     } catch (error) {
         console.error('CLARENCE AI Error:', error)
         return null
@@ -2719,7 +2758,9 @@ function ContractStudioContent() {
                     clausesSelected: data.session.clausesSelected || false,
                     clauseCount: data.session.clauseCount || 0,
                     mediationType: data.session.mediationType || data.session.mediation_type || null,
-                    templateSource: data.session.templateSource || data.session.template_source || null
+                    templateSource: data.session.templateSource || data.session.template_source || null,
+                    contractTypeKey: data.session.contractTypeKey || data.session.contract_type_key || null,
+                    initiatorPartyRole: data.session.initiatorPartyRole || data.session.initiator_party_role || null,
                 }
 
                 setSession(basicSession)
@@ -2773,7 +2814,10 @@ function ContractStudioContent() {
                 notes: data.session.notes || null,
                 // STRAIGHT TO CONTRACT OR FULL INTAKE:
                 mediationType: data.session.mediationType || data.session.mediation_type || null,
-                templateSource: data.session.templateSource || data.session.template_source || null
+                templateSource: data.session.templateSource || data.session.template_source || null,
+                // ROLE MATRIX: Contract type context for AI pipeline
+                contractTypeKey: data.session.contractTypeKey || data.session.contract_type_key || null,
+                initiatorPartyRole: data.session.initiatorPartyRole || data.session.initiator_party_role || null,
             }
 
             const clauseData: ContractClause[] = (data.clauses || []).map((c: ApiClauseResponse) => {
@@ -3205,6 +3249,9 @@ function ContractStudioContent() {
             const alignment = calculateAlignmentPercentage(clauses)
             const response = await callClarenceAI(sessionId, 'welcome', viewerRole, {
                 alignmentPercentage: alignment
+            }, {
+                contractTypeKey: session?.contractTypeKey,
+                initiatorPartyRole: session?.initiatorPartyRole,
             })
 
             if (response?.success && response.response) {
@@ -3263,6 +3310,9 @@ function ContractStudioContent() {
         try {
             const response = await callClarenceAI(sessionId, 'clause_explain', viewerRole, {
                 clauseId: clause.clauseId
+            }, {
+                contractTypeKey: session?.contractTypeKey,
+                initiatorPartyRole: session?.initiatorPartyRole,
             })
 
             if (response?.success && response.response) {
@@ -4812,6 +4862,9 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                             isAligned: isNowAligned,
                             alignedWithClarence: alignedWithClarence
                         }
+                    }, {
+                        contractTypeKey: session?.contractTypeKey,
+                        initiatorPartyRole: session?.initiatorPartyRole,
                     })
 
                     if (aiResponse?.success && aiResponse.response) {
@@ -5045,6 +5098,9 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 message: userMessage,
                 clauseId: selectedClause?.clauseId,
                 alignmentPercentage: calculateAlignmentPercentage(clauses)
+            }, {
+                contractTypeKey: session?.contractTypeKey,
+                initiatorPartyRole: session?.initiatorPartyRole,
             })
 
             if (response?.success && response.response) {
@@ -5173,7 +5229,10 @@ Current gaps: ${tradeOff.clauseA.clauseName} has ${tradeOff.clauseA.gapSize.toFi
 
 Explain why this trade makes sense and what each party gains.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, alignmentPercentage: calculateAlignmentPercentage(clauses) })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, alignmentPercentage: calculateAlignmentPercentage(clauses) }, {
+                contractTypeKey: session?.contractTypeKey,
+                initiatorPartyRole: session?.initiatorPartyRole,
+            })
 
             if (response?.success && response.response) {
                 setTradeOffExplanation(response.response)
@@ -5220,7 +5279,10 @@ Clause description: ${clause.description}
 
 As "The Honest Broker", generate clear, legally-appropriate contract language that reflects a fair compromise between the parties' positions. Keep it concise but comprehensive.`
 
-            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, alignmentPercentage: calculateAlignmentPercentage(clauses) })
+            const response = await callClarenceAI(session.sessionId, 'chat', userInfo?.role || 'customer', { message, alignmentPercentage: calculateAlignmentPercentage(clauses) }, {
+                contractTypeKey: session?.contractTypeKey,
+                initiatorPartyRole: session?.initiatorPartyRole,
+            })
 
             if (response?.success && response.response) {
                 setDraftLanguage(response.response)
