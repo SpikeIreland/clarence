@@ -798,6 +798,16 @@ async function callClarenceAI(
             }
         }
 
+        // Get userId from localStorage for the session-based workflow
+        let chatUserId: string | null = null
+        try {
+            const storedAuth = localStorage.getItem('clarence_auth')
+            if (storedAuth) {
+                const parsed = JSON.parse(storedAuth)
+                chatUserId = parsed.userInfo?.userId || parsed.userId || null
+            }
+        } catch { /* ignore */ }
+
         const response = await fetch('/api/n8n/clarence-chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -805,7 +815,8 @@ async function callClarenceAI(
                 message,
                 sessionId,
                 context: `contract_studio_${promptType}`,
-                viewerRole: viewerRole === 'customer' ? 'initiator' as const : 'respondent' as const,
+                viewerRole,
+                viewerUserId: chatUserId,
                 contractTypeKey: contextFields?.contractTypeKey || null,
                 initiatorPartyRole: contextFields?.initiatorPartyRole || null,
                 clauseId: options.clauseId || null,

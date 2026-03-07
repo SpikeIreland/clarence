@@ -1,7 +1,17 @@
 // ============================================================================
 // FILE: app/api/n8n/clarence-chat/route.ts
 // PURPOSE: Unified API route for ALL CLARENCE chat touchpoints
-// VERSION: 3.0 - Full context pipeline with role derivation
+// VERSION: 4.0 - Dual-path routing: session-based (Contract Studio) vs
+//                contract-based (QC Studio)
+//
+// CHANGES in v4.0:
+// - FIX: Contract Studio was routing to clarence-qc-chat instead of
+//   clarence-chat, causing context builder to skip (no contractId)
+// - Added SESSION_CHAT_WEBHOOK for session-based Contract Studio path
+// - Route detection: sessionId (no contractId) → session path
+//                    contractId → QC path
+// - Session path maps viewerRole back to customer/provider for the
+//   original clarence-chat workflow
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -20,7 +30,7 @@ interface ClarenceChatRequest {
     clauseCategory?: string
     context?: string
     // Context builder fields
-    viewerRole?: 'initiator' | 'respondent'
+    viewerRole?: 'initiator' | 'respondent' | 'customer' | 'provider'
     viewerUserId?: string
     viewerCompanyId?: string
     // Role matrix fields — enables contract-type-specific party labels
@@ -46,26 +56,36 @@ interface ClarenceChatRequest {
 const N8N_BASE_URL = process.env.N8N_WEBHOOK_URL
     || 'https://spikeislandstudios.app.n8n.cloud'
 
-const CHAT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-qc-chat`
-const CONTEXT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-qc-context-builder`
+// QC Studio path: contract-based, uses QC context builder
+const QC_CHAT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-qc-chat`
+const QC_CONTEXT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-qc-context-builder`
+
+// Contract Studio path: session-based, has its own context builder
+const SESSION_CHAT_WEBHOOK = `${N8N_BASE_URL}/webhook/clarence-chat`
 
 // ============================================================================
 // SECTION 3: POST HANDLER
 // ============================================================================
 
 export async function POST(request: NextRequest) {
-    console.log('=== CLARENCE CHAT API v3.0 ===')
-
     try {
         const body: ClarenceChatRequest = await request.json()
 
+        // ================================================================
+        // STEP 0: Detect routing path
+        // ================================================================
+        // Contract Studio sends sessionId (no contractId)
+        // QC Studio sends contractId (no sessionId)
+        // Dashboard sends neither (general mode)
+        const isSessionPath = !!(body.sessionId && !body.contractId)
+        const isQCPath = !!body.contractId
+
+        console.log(`=== CLARENCE CHAT API v4.0 [${isSessionPath ? 'SESSION' : isQCPath ? 'QC' : 'GENERAL'}] ===`)
         console.log('Contract:', body.contractId)
         console.log('Session:', body.sessionId)
         console.log('Viewer Role:', body.viewerRole)
         console.log('Context Type:', body.context)
         console.log('Clause:', body.clauseName)
-        console.log('Contract Type:', body.contractTypeKey)
-        console.log('Initiator Party Role:', body.initiatorPartyRole)
         console.log('Message preview:', body.message?.substring(0, 100))
 
         if (!body.message) {
@@ -76,11 +96,70 @@ export async function POST(request: NextRequest) {
         }
 
         // ================================================================
-        // STEP 1: Derive Role Context (server-side)
+        // SESSION PATH: Contract Studio → clarence-chat workflow
         // ================================================================
-        // Resolve party labels so the n8n workflow receives explicit
-        // "userRoleLabel", "counterpartyRoleLabel", "positionFavorEnd"
-        // instead of having to derive them from contractTypeKey.
+        if (isSessionPath) {
+            console.log('Routing to SESSION workflow (clarence-chat)')
+
+            // Map viewerRole to customer/provider for the session workflow
+            // Contract Studio may send initiator/respondent — convert back
+            let sessionViewerRole = body.viewerRole || 'customer'
+            if (sessionViewerRole === 'initiator') sessionViewerRole = 'customer'
+            if (sessionViewerRole === 'respondent') sessionViewerRole = 'provider'
+
+            const n8nResponse = await fetch(SESSION_CHAT_WEBHOOK, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: body.message,
+                    userId: body.viewerUserId || null,
+                    sessionId: body.sessionId,
+                    viewerRole: sessionViewerRole,
+                    companyId: body.viewerCompanyId || null,
+                    // Pass through optional fields
+                    clauseId: body.clauseId || null,
+                    context: body.context || 'contract_studio',
+                    contractTypeKey: body.contractTypeKey || null,
+                    initiatorPartyRole: body.initiatorPartyRole || null,
+                    providerId: body.providerId || null,
+                    currentPhase: body.currentPhase || null,
+                    alignmentScore: body.alignmentScore || null,
+                    negotiationContext: body.negotiationContext || null,
+                    // Dashboard fields (for general mode fallthrough)
+                    dashboardData: body.dashboardData || null,
+                })
+            })
+
+            console.log('Session chat response status:', n8nResponse.status)
+
+            if (!n8nResponse.ok) {
+                const errorText = await n8nResponse.text()
+                console.error('Session chat webhook error:', n8nResponse.status, errorText)
+                return NextResponse.json(
+                    {
+                        error: 'Failed to get response from CLARENCE',
+                        success: false,
+                        response: 'I apologize, but I encountered an issue connecting to the service. Please try again.'
+                    },
+                    { status: 502 }
+                )
+            }
+
+            const data = await n8nResponse.json()
+            console.log('Session response received, length:', (data.response || data.message || '').length)
+
+            return NextResponse.json({
+                response: data.response || data.message || data.text || '',
+                message: data.response || data.message || data.text || '',
+                success: true
+            })
+        }
+
+        // ================================================================
+        // QC PATH: QC Studio → clarence-qc-chat workflow
+        // ================================================================
+
+        // STEP 1: Derive Role Context (server-side)
         let roleContext = null
         if (body.contractTypeKey && body.initiatorPartyRole && body.viewerRole) {
             const isInitiator = body.viewerRole === 'initiator'
@@ -92,15 +171,13 @@ export async function POST(request: NextRequest) {
             console.log('Role context derived:', roleContext.userRoleLabel, 'vs', roleContext.counterpartyRoleLabel)
         }
 
-        // ================================================================
-        // STEP 2: Build Context (if contractId provided)
-        // ================================================================
+        // STEP 2: Build QC Context (if contractId provided)
         let qcContext = null
 
         if (body.contractId && body.viewerRole) {
             console.log('Building QC context...')
             try {
-                const contextResponse = await fetch(CONTEXT_WEBHOOK, {
+                const contextResponse = await fetch(QC_CONTEXT_WEBHOOK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -110,7 +187,6 @@ export async function POST(request: NextRequest) {
                         viewerCompanyId: body.viewerCompanyId || '',
                         clauseId: body.clauseId || '',
                         touchpointType: body.context || 'qc_chat',
-                        // Forward role matrix fields to context builder
                         contractTypeKey: body.contractTypeKey || '',
                         initiatorPartyRole: body.initiatorPartyRole || '',
                         touchpointContext: {
@@ -135,12 +211,10 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // ================================================================
-        // STEP 3: Call Chat Workflow with Full Context
-        // ================================================================
-        console.log('Calling chat workflow...')
+        // STEP 3: Call QC Chat Workflow
+        console.log('Routing to QC workflow (clarence-qc-chat)')
 
-        const n8nResponse = await fetch(CHAT_WEBHOOK, {
+        const n8nResponse = await fetch(QC_CHAT_WEBHOOK, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -152,31 +226,26 @@ export async function POST(request: NextRequest) {
                 clauseCategory: body.clauseCategory || null,
                 context: body.context || 'quick_contract_studio',
                 viewerRole: body.viewerRole || null,
-                // Role context — resolved party labels for the viewer
                 roleContext: roleContext,
                 contractTypeKey: body.contractTypeKey || null,
                 initiatorPartyRole: body.initiatorPartyRole || null,
-                // Pass the full context to the workflow
                 qcContext: qcContext,
-                // Session-based fields (for Chat page, Contract Studio)
                 providerId: body.providerId || null,
                 currentPhase: body.currentPhase || null,
                 alignmentScore: body.alignmentScore || null,
                 negotiationContext: body.negotiationContext || null,
-                // Dashboard fields
                 dashboardData: body.dashboardData || null,
-                // Assessment fields
                 action: body.action || null,
                 type: body.type || null,
                 prompt: body.prompt || null,
             })
         })
 
-        console.log('Chat response status:', n8nResponse.status)
+        console.log('QC chat response status:', n8nResponse.status)
 
         if (!n8nResponse.ok) {
             const errorText = await n8nResponse.text()
-            console.error('Chat webhook error:', n8nResponse.status, errorText)
+            console.error('QC chat webhook error:', n8nResponse.status, errorText)
             return NextResponse.json(
                 {
                     error: 'Failed to get response from CLARENCE',
