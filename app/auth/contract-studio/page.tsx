@@ -755,6 +755,8 @@ async function callClarenceAI(
     viewerRole: 'customer' | 'provider' | string,
     options: {
         clauseId?: string
+        clauseName?: string
+        clauseCategory?: string
         message?: string
         alignmentPercentage?: number
         positionChange?: {
@@ -820,6 +822,8 @@ async function callClarenceAI(
                 contractTypeKey: contextFields?.contractTypeKey || null,
                 initiatorPartyRole: contextFields?.initiatorPartyRole || null,
                 clauseId: options.clauseId || null,
+                clauseName: options.clauseName || null,
+                clauseCategory: options.clauseCategory || null,
                 alignmentScore: options.alignmentPercentage || null,
                 negotiationContext: options.positionChange || null,
             })
@@ -3320,7 +3324,9 @@ function ContractStudioContent() {
 
         try {
             const response = await callClarenceAI(sessionId, 'clause_explain', viewerRole, {
-                clauseId: clause.clauseId
+                clauseId: clause.clauseId,
+                clauseName: clause.clauseName,
+                clauseCategory: clause.category
             }, {
                 contractTypeKey: session?.contractTypeKey,
                 initiatorPartyRole: session?.initiatorPartyRole,
@@ -4856,6 +4862,8 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
                 try {
                     const aiResponse = await callClarenceAI(session.sessionId, promptType, resolvedParty || 'customer', {
                         clauseId: selectedClause.clauseId,
+                        clauseName: selectedClause.clauseName,
+                        clauseCategory: selectedClause.category,
                         alignmentPercentage: calculateAlignmentPercentage(clauses),
                         positionChange: {
                             clauseName: selectedClause.clauseName,
@@ -5108,6 +5116,8 @@ The ${userInfo.role} wants to negotiate specific terms for this aspect of the co
             const response = await callClarenceAI(session.sessionId, 'chat', userInfo.role || 'customer', {
                 message: userMessage,
                 clauseId: selectedClause?.clauseId,
+                clauseName: selectedClause?.clauseName,
+                clauseCategory: selectedClause?.category,
                 alignmentPercentage: calculateAlignmentPercentage(clauses)
             }, {
                 contractTypeKey: session?.contractTypeKey,
