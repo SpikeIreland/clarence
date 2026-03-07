@@ -781,7 +781,7 @@ function TrainingStudioPage() {
                     userName: `${userInfo.firstName} ${userInfo.lastName}`, isTraining: true,
                     mediation_type: 'standard', contract_type: selectedTemplate.contractType,
                     contract_name: `Training: ${selectedTemplate.templateName}`,
-                    template_source: 'template', source_template_id: selectedTemplate.templateId,
+                    template_source: 'existing_template', source_template_id: selectedTemplate.templateId,
                     assessment_completed: true,
                     deal_context: {
                         training_mode: 'choose_contract', ai_difficulty: practiceDifficulty,

@@ -10,10 +10,10 @@
             "type": "n8n-nodes-base.webhook",
             "typeVersion": 2,
             "position": [
-                -1120,
-                224
+                -3504,
+                -16
             ],
-            "id": "ac401a72-9001-4998-9387-58e5db130d05",
+            "id": "0cbe421d-3b59-41fe-80d8-14bb9562d704",
             "name": "Webhook",
             "webhookId": "certify-next-clause-endpoint"
         },
@@ -24,10 +24,10 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                -896,
-                224
+                -3280,
+                -16
             ],
-            "id": "65147a1c-01bd-47b3-a9c1-c73ec96db233",
+            "id": "39260f10-cc23-4510-acab-6a85732680a0",
             "name": "Validate Input"
         },
         {
@@ -41,10 +41,10 @@
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.6,
             "position": [
-                -672,
-                224
+                -3056,
+                -16
             ],
-            "id": "fd0bfe8b-2f31-43de-bc12-18d7975a69c1",
+            "id": "c7b70728-88af-4c5c-bee4-e63504e60bee",
             "name": "Get Next Pending Clause",
             "alwaysOutputData": true,
             "credentials": {
@@ -61,10 +61,10 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                -448,
-                224
+                -2832,
+                -16
             ],
-            "id": "518e03cc-8c67-4596-b535-59130d6b723a",
+            "id": "168fd9ff-a97a-4d9b-8e0d-37d0991ce1b1",
             "name": "Check Result"
         },
         {
@@ -92,10 +92,10 @@
             "type": "n8n-nodes-base.if",
             "typeVersion": 2,
             "position": [
-                -224,
-                224
+                -2608,
+                -16
             ],
-            "id": "f719d27e-6cc2-4d19-b020-a88a66218278",
+            "id": "e65049dd-79e5-4dd3-bd55-1175c6adc393",
             "name": "Has Pending Clause?"
         },
         {
@@ -109,10 +109,10 @@
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.6,
             "position": [
-                0,
-                128
+                -2384,
+                -112
             ],
-            "id": "9a6a09a9-becf-4247-83bf-3d787661a7f0",
+            "id": "83a488ce-8859-4a52-b606-de02e7484c1e",
             "name": "Mark Processing",
             "credentials": {
                 "postgres": {
@@ -144,10 +144,10 @@
             "type": "n8n-nodes-base.respondToWebhook",
             "typeVersion": 1.5,
             "position": [
-                224,
-                128
+                -2160,
+                -112
             ],
-            "id": "8b594fe9-3004-446c-9f63-ab83c3cd747e",
+            "id": "c6e781d2-031b-4439-8965-8834ac767104",
             "name": "Respond 202 Processing"
         },
         {
@@ -161,10 +161,10 @@
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.6,
             "position": [
-                448,
-                128
+                -1936,
+                -112
             ],
-            "id": "c3bb0430-49b1-4629-9331-8d4bd6ca1e69",
+            "id": "1b7f4388-dab5-4876-a3c8-3e907530b508",
             "name": "Get Document Text",
             "credentials": {
                 "postgres": {
@@ -175,15 +175,15 @@
         },
         {
             "parameters": {
-                "jsCode": "// ============================================================================\n// PREPARE CERTIFICATION REQUEST\n// Locate the clause in the document, resolve party labels, build Claude prompt\n// ============================================================================\n\nconst contractId = $(\"Validate Input\").first().json.contractId;\nconst clauseData = $(\"Check Result\").first().json;\nconst docData = $input.first().json;\n\nconst documentText = docData.extracted_text || \"\";\nconst allClauses = docData.all_clauses || [];\nconst contractType = docData.detected_contract_type || \"contract\";\n\n// ---- Resolve contract type and party labels ----\n// Prefer webhook value, fall back to DB value from uploaded_contracts\nconst contractTypeKey = $(\"Validate Input\").first().json.contractTypeKey || docData.contract_type_key || null;\nconst initiatorPartyRole = $(\"Validate Input\").first().json.initiatorPartyRole || docData.initiator_party_role || null;\n\nconst PARTY_LABELS = {\n  'service_agreement':      { protected: 'Customer',         providing: 'Provider' },\n  'saas_agreement':         { protected: 'Subscriber',       providing: 'Provider' },\n  'it_outsourcing':         { protected: 'Customer',         providing: 'Provider' },\n  'bpo_agreement':          { protected: 'Customer',         providing: 'Provider' },\n  'managed_services':       { protected: 'Customer',         providing: 'Provider' },\n  'consultancy_agreement':  { protected: 'Client',           providing: 'Consultant' },\n  'software_license':       { protected: 'Licensee',         providing: 'Licensor' },\n  'maintenance_agreement':  { protected: 'Customer',         providing: 'Service Provider' },\n  'nda_one_way':            { protected: 'Disclosing Party', providing: 'Receiving Party' },\n  'nda_mutual':             { protected: 'Disclosing Parties', providing: 'Receiving Parties' },\n  'lease_agreement':        { protected: 'Tenant',           providing: 'Landlord' },\n  'loan_agreement':         { protected: 'Borrower',         providing: 'Lender' },\n  'insurance_policy':       { protected: 'Policyholder',     providing: 'Insurer' },\n  'sales_agreement':        { protected: 'Buyer',            providing: 'Seller' },\n  'purchase_agreement':     { protected: 'Buyer',            providing: 'Seller' },\n  'distribution_agreement': { protected: 'Distributor',      providing: 'Supplier' },\n  'franchise_agreement':    { protected: 'Franchisee',       providing: 'Franchisor' },\n  'employment_contract':    { protected: 'Employee',         providing: 'Employer' },\n  'construction_contract':  { protected: 'Client',           providing: 'Contractor' },\n  'agency_agreement':       { protected: 'Principal',        providing: 'Agent' },\n};\n\nconst labels = PARTY_LABELS[contractTypeKey] || { protected: 'Protected Party', providing: 'Providing Party' };\nconst protectedLabel = labels.protected;\nconst providingLabel = labels.providing;\nconst isMutual = contractTypeKey && contractTypeKey.includes('mutual');\n\nconsole.log(\"=== PREPARE CERTIFICATION ===\");\nconsole.log(\"Clause:\", clauseData.clause_number, \"-\", clauseData.clause_name);\nconsole.log(\"Document length:\", documentText.length);\nconsole.log(\"Contract Type Key:\", contractTypeKey);\nconsole.log(\"Party Labels:\", protectedLabel, \"/\", providingLabel);\nconsole.log(\"Is Mutual:\", isMutual);\n\nconst mutualContext = isMutual ? `\\nMUTUAL AGREEMENT NOTE:\\n- Both parties are SIMULTANEOUSLY ${protectedLabel} AND ${providingLabel} in this agreement.\\n- The scale measures DEGREE OF RESTRICTION on information, not which party benefits (both are equally affected).\\n- Low positions (1-4): More PERMISSIVE — greater flexibility in how received information can be used.\\n- High positions (7-10): More RESTRICTIVE — stronger obligations to protect disclosed information.\\n- In your assessment, describe whether the clause is more restrictive or more permissive, not which party it favours.\\n- Example position 3: \"This clause is relatively permissive, allowing greater flexibility for ${providingLabel} in how information is handled.\"\\n- Example position 7: \"This clause is moderately restrictive, imposing stronger obligations to protect information disclosed by ${protectedLabel}.\"\\n` : '';\n\n// ---- Find clause location in document ----\nfunction escapeRegex(str) {\n  return str.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$&\");\n}\n\nfunction findClauseSection(docText, clauseNum, snippet, clauses) {\n  let startIdx = -1;\n\n  // Strategy 1: Find by snippet text\n  if (snippet && snippet.length > 20) {\n    const clean = snippet.replace(/\\.{3,}$/, \"\").trim();\n    if (clean.length > 15) {\n      const searchStr = clean.substring(0, Math.min(clean.length, 60));\n      startIdx = docText.indexOf(searchStr);\n    }\n  }\n\n  // Strategy 2: Find by clause number pattern\n  if (startIdx === -1) {\n    const escaped = escapeRegex(clauseNum);\n    const patterns = [\n      new RegExp(\"\\\\n\\\\s*\" + escaped + \"[.\\\\s\\\\t]\"),\n      new RegExp(\"\\\\b\" + escaped + \"\\\\b\"),\n    ];\n    for (const p of patterns) {\n      const m = p.exec(docText);\n      if (m) {\n        startIdx = m.index;\n        break;\n      }\n    }\n  }\n\n  // Strategy 3: Find by clause name\n  if (startIdx === -1 && clauseData.clause_name) {\n    startIdx = docText.toLowerCase().indexOf(clauseData.clause_name.toLowerCase());\n  }\n\n  if (startIdx === -1) {\n    console.log(\"WARNING: Could not locate clause in document, using first 10000 chars\");\n    return docText.substring(0, Math.min(docText.length, 10000));\n  }\n\n  // Find end boundary: look for the next clause\n  const currentOrder = (clauses || []).find((c) => c.clause_number === clauseNum)?.display_order || 0;\n  const nextClauses = (clauses || [])\n    .filter((c) => c.display_order > currentOrder)\n    .sort((a, b) => a.display_order - b.display_order);\n\n  let endIdx = startIdx + 6000;\n\n  for (const next of nextClauses.slice(0, 5)) {\n    const nextEscaped = escapeRegex(next.clause_number);\n    try {\n      const nextPattern = new RegExp(\"\\\\n\\\\s*\" + nextEscaped + \"[.\\\\s\\\\t]\");\n      const searchFrom = docText.substring(startIdx + 20);\n      const nextMatch = nextPattern.exec(searchFrom);\n      if (nextMatch) {\n        endIdx = startIdx + 20 + nextMatch.index + 200;\n        break;\n      }\n    } catch (e) { /* skip invalid regex */ }\n  }\n\n  const contextStart = Math.max(0, startIdx - 300);\n  endIdx = Math.min(docText.length, endIdx);\n\n  return docText.substring(contextStart, endIdx);\n}\n\nconst relevantSection = findClauseSection(\n  documentText,\n  clauseData.clause_number,\n  clauseData.snippet,\n  allClauses,\n);\n\nconsole.log(\"Extracted section length:\", relevantSection.length, \"chars\");\n\n// ---- Build Claude prompt with position scale context ----\nconst prompt = `You are CLARENCE — a legal contract certification engine. Your task is to certify ONE specific clause OBJECTIVELY.\n\nCONTRACT TYPE: ${contractType}${contractTypeKey ? ' (' + contractTypeKey + ')' : ''}\n\nPOSITION SCALE (YOU MUST FOLLOW THIS):\n- Position 1: Maximum flexibility for ${providingLabel}\n- Position 2: Strong ${providingLabel} terms\n- Position 3: ${providingLabel}-leaning but reasonable\n- Position 4: Slight ${providingLabel} advantage\n- Position 5: Balanced / Market standard\n- Position 6: Slight ${protectedLabel} advantage\n- Position 7: Moderate protection for ${protectedLabel}\n- Position 8: Strong protection for ${protectedLabel}\n- Position 9: Very high protection for ${protectedLabel}\n- Position 10: Maximum protection for ${protectedLabel}\n\nCRITICAL RULES:\n- The position number you assign and the assessment text MUST be consistent.\n- If you assign position 7, the assessment MUST say it favours/protects ${protectedLabel}.\n- If you assign position 3, the assessment MUST say it favours ${providingLabel}.\n- If you assign position 5, the assessment MUST say it is balanced or market standard.\n- NEVER say a low position (1-4) favours ${protectedLabel}.\n- NEVER say a high position (7-10) favours ${providingLabel}.\n- Use the party labels above (${protectedLabel}/${providingLabel}), NOT generic terms.\n${mutualContext}\nCLAUSE TO CERTIFY:\nNumber: ${clauseData.clause_number}\nName: ${clauseData.clause_name}\nCategory: ${clauseData.category}\n\nDOCUMENT TEXT (section containing this clause):\n---\n${relevantSection}\n---\n\nYOUR TASKS:\n\n1. EXTRACT FULL TEXT: Find clause ${clauseData.clause_number} in the text above. Extract its COMPLETE text - every word until the next clause begins. Do not truncate.\n\n2. POSITION (1.0-10.0 scale): Using the scale above. 1.0 = Maximum flexibility for ${providingLabel}. 10.0 = Maximum protection for ${protectedLabel}.\n\n3. FAIRNESS: One of: \"balanced\", \"slight_imbalance\", \"moderate_imbalance\", \"significant_imbalance\", \"review_recommended\"\n\n4. SUMMARY: One sentence describing what this clause does.\n\n5. ASSESSMENT: 2-3 sentences explaining your position rating. Use the party labels ${protectedLabel} and ${providingLabel}. The assessment MUST be consistent with the position number per the scale above.\n\n6. FLAGS: Any concerns, unusual provisions, or missing protections. Empty array if none.\n\n7. VALUE EXTRACTION: If the clause contains a specific quantifiable value (duration, amount, percentage), extract it. Otherwise null.\n\nReturn ONLY valid JSON - no markdown, no backticks, no explanation:\n{\n  \"full_text\": \"The complete clause text...\",\n  \"position\": 6.5,\n  \"fairness\": \"slight_imbalance\",\n  \"summary\": \"This clause establishes...\",\n  \"assessment\": \"This clause provides moderate protection for ${protectedLabel} by...\",\n  \"flags\": [\"Extended payment period\"],\n  \"extracted_value\": \"45\",\n  \"extracted_unit\": \"days\",\n  \"value_type\": \"duration\"\n}`;\n\nconst requestBody = {\n  model: \"claude-sonnet-4-20250514\",\n  max_tokens: 4096,\n  temperature: 0,\n  messages: [{ role: \"user\", content: prompt }],\n};\n\nreturn {\n  json: {\n    contractId,\n    clauseId: clauseData.clause_id,\n    clauseNumber: clauseData.clause_number,\n    clauseName: clauseData.clause_name,\n    claudeRequestBody: requestBody,\n  },\n};\n"
+                "jsCode": "// ============================================================================\n// PREPARE CERTIFICATION REQUEST\n// Locate the clause in the document, resolve party labels, build Claude prompt\n// ============================================================================\n\nconst contractId = $(\"Validate Input\").first().json.contractId;\nconst clauseData = $(\"Check Result\").first().json;\nconst docData = $input.first().json;\n\nconst documentText = docData.extracted_text || \"\";\nconst allClauses = docData.all_clauses || [];\nconst contractType = docData.detected_contract_type || \"contract\";\n\n// ---- Resolve contract type and party labels ----\n// Prefer webhook value, fall back to DB value from uploaded_contracts\nconst contractTypeKey = $(\"Validate Input\").first().json.contractTypeKey || docData.contract_type_key || null;\nconst initiatorPartyRole = $(\"Validate Input\").first().json.initiatorPartyRole || docData.initiator_party_role || null;\n\nconst PARTY_LABELS = {\n  'service_agreement':      { protected: 'Customer',         providing: 'Provider' },\n  'saas_agreement':         { protected: 'Subscriber',       providing: 'Provider' },\n  'it_outsourcing':         { protected: 'Customer',         providing: 'Provider' },\n  'bpo_agreement':          { protected: 'Customer',         providing: 'Provider' },\n  'managed_services':       { protected: 'Customer',         providing: 'Provider' },\n  'consultancy_agreement':  { protected: 'Client',           providing: 'Consultant' },\n  'software_license':       { protected: 'Licensee',         providing: 'Licensor' },\n  'maintenance_agreement':  { protected: 'Customer',         providing: 'Service Provider' },\n  'nda_one_way':            { protected: 'Disclosing Party', providing: 'Receiving Party' },\n  'nda_mutual':             { protected: 'Disclosing Parties', providing: 'Receiving Parties' },\n  'lease_agreement':        { protected: 'Tenant',           providing: 'Landlord' },\n  'loan_agreement':         { protected: 'Borrower',         providing: 'Lender' },\n  'insurance_policy':       { protected: 'Policyholder',     providing: 'Insurer' },\n  'sales_agreement':        { protected: 'Buyer',            providing: 'Seller' },\n  'purchase_agreement':     { protected: 'Buyer',            providing: 'Seller' },\n  'distribution_agreement': { protected: 'Distributor',      providing: 'Supplier' },\n  'franchise_agreement':    { protected: 'Franchisee',       providing: 'Franchisor' },\n  'employment_contract':    { protected: 'Employee',         providing: 'Employer' },\n  'construction_contract':  { protected: 'Client',           providing: 'Contractor' },\n  'agency_agreement':       { protected: 'Principal',        providing: 'Agent' },\n};\n\nconst labels = PARTY_LABELS[contractTypeKey] || { protected: 'Protected Party', providing: 'Providing Party' };\nconst protectedLabel = labels.protected;\nconst providingLabel = labels.providing;\nconst isMutual = contractTypeKey && contractTypeKey.includes('mutual');\n\nconsole.log(\"=== PREPARE CERTIFICATION ===\");\nconsole.log(\"Clause:\", clauseData.clause_number, \"-\", clauseData.clause_name);\nconsole.log(\"Document length:\", documentText.length);\nconsole.log(\"Contract Type Key:\", contractTypeKey);\nconsole.log(\"Party Labels:\", protectedLabel, \"/\", providingLabel);\nconsole.log(\"Is Mutual:\", isMutual);\n\nconst mutualContext = isMutual ? `\\nMUTUAL AGREEMENT NOTE:\\n- Both parties are SIMULTANEOUSLY ${protectedLabel} AND ${providingLabel} in this agreement.\\n- The scale measures DEGREE OF RESTRICTION on information, not which party benefits (both are equally affected).\\n- Low positions (1-4): More PERMISSIVE — greater flexibility in how received information can be used.\\n- High positions (7-10): More RESTRICTIVE — stronger obligations to protect disclosed information.\\n- In your assessment, describe whether the clause is more restrictive or more permissive, not which party it favours.\\n- Example position 3: \"This clause is relatively permissive, allowing greater flexibility for ${providingLabel} in how information is handled.\"\\n- Example position 7: \"This clause is moderately restrictive, imposing stronger obligations to protect information disclosed by ${protectedLabel}.\"\\n` : '';\n\n// ---- Find clause location in document ----\nfunction escapeRegex(str) {\n  return str.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$&\");\n}\n\nfunction findClauseSection(docText, clauseNum, snippet, clauses) {\n  let startIdx = -1;\n\n  // Strategy 1: Find by snippet text\n  if (snippet && snippet.length > 20) {\n    const clean = snippet.replace(/\\.{3,}$/, \"\").trim();\n    if (clean.length > 15) {\n      const searchStr = clean.substring(0, Math.min(clean.length, 60));\n      startIdx = docText.indexOf(searchStr);\n    }\n  }\n\n  // Strategy 2: Find by clause number pattern\n  if (startIdx === -1) {\n    const escaped = escapeRegex(clauseNum);\n    const patterns = [\n      new RegExp(\"\\\\n\\\\s*\" + escaped + \"[.\\\\s\\\\t]\"),\n      new RegExp(\"\\\\b\" + escaped + \"\\\\b\"),\n    ];\n    for (const p of patterns) {\n      const m = p.exec(docText);\n      if (m) {\n        startIdx = m.index;\n        break;\n      }\n    }\n  }\n\n  // Strategy 3: Find by clause name\n  if (startIdx === -1 && clauseData.clause_name) {\n    startIdx = docText.toLowerCase().indexOf(clauseData.clause_name.toLowerCase());\n  }\n\n  if (startIdx === -1) {\n    console.log(\"WARNING: Could not locate clause in document, using first 10000 chars\");\n    return docText.substring(0, Math.min(docText.length, 10000));\n  }\n\n  // Find end boundary: look for the next clause\n  const currentOrder = (clauses || []).find((c) => c.clause_number === clauseNum)?.display_order || 0;\n  const nextClauses = (clauses || [])\n    .filter((c) => c.display_order > currentOrder)\n    .sort((a, b) => a.display_order - b.display_order);\n\n  let endIdx = startIdx + 6000;\n\n  for (const next of nextClauses.slice(0, 5)) {\n    const nextEscaped = escapeRegex(next.clause_number);\n    try {\n      const nextPattern = new RegExp(\"\\\\n\\\\s*\" + nextEscaped + \"[.\\\\s\\\\t]\");\n      const searchFrom = docText.substring(startIdx + 20);\n      const nextMatch = nextPattern.exec(searchFrom);\n      if (nextMatch) {\n        endIdx = startIdx + 20 + nextMatch.index + 200;\n        break;\n      }\n    } catch (e) { /* skip invalid regex */ }\n  }\n\n  const contextStart = Math.max(0, startIdx - 300);\n  endIdx = Math.min(docText.length, endIdx);\n\n  return docText.substring(contextStart, endIdx);\n}\n\nconst relevantSection = findClauseSection(\n  documentText,\n  clauseData.clause_number,\n  clauseData.snippet,\n  allClauses,\n);\n\nconsole.log(\"Extracted section length:\", relevantSection.length, \"chars\");\n\n// ---- Build Claude prompt with position scale context ----\nconst prompt = `You are CLARENCE — a legal contract certification engine. Your task is to certify ONE specific clause OBJECTIVELY.\n\nCONTRACT TYPE: ${contractType}${contractTypeKey ? ' (' + contractTypeKey + ')' : ''}\n\nPOSITION SCALE (YOU MUST FOLLOW THIS):\n- Position 1: Maximum flexibility for ${providingLabel}\n- Position 2: Strong ${providingLabel} terms\n- Position 3: ${providingLabel}-leaning but reasonable\n- Position 4: Slight ${providingLabel} advantage\n- Position 5: Balanced / Market standard\n- Position 6: Slight ${protectedLabel} advantage\n- Position 7: Moderate protection for ${protectedLabel}\n- Position 8: Strong protection for ${protectedLabel}\n- Position 9: Very high protection for ${protectedLabel}\n- Position 10: Maximum protection for ${protectedLabel}\n\nCRITICAL RULES:\n- The position number you assign and the assessment text MUST be consistent.\n- If you assign position 7, the assessment MUST say it favours/protects ${protectedLabel}.\n- If you assign position 3, the assessment MUST say it favours ${providingLabel}.\n- If you assign position 5, the assessment MUST say it is balanced or market standard.\n- NEVER say a low position (1-4) favours ${protectedLabel}.\n- NEVER say a high position (7-10) favours ${providingLabel}.\n- Use the party labels above (${protectedLabel}/${providingLabel}), NOT generic terms.\n${mutualContext}\nCLAUSE TO CERTIFY:\nNumber: ${clauseData.clause_number}\nName: ${clauseData.clause_name}\nCategory: ${clauseData.category}\n\nDOCUMENT TEXT (section containing this clause):\n---\n${relevantSection}\n---\n\nYOUR TASKS:\n\n1. EXTRACT FULL TEXT: Find clause ${clauseData.clause_number} in the text above. Extract its COMPLETE text - every word until the next clause begins. Do not truncate.\n\n2. POSITION (1.0-10.0 scale): Using the scale above. 1.0 = Maximum flexibility for ${providingLabel}. 10.0 = Maximum protection for ${protectedLabel}.\n\n3. FAIRNESS: One of: \"balanced\", \"slightly_customer_favoring\", \"customer_favoring\", \"heavily_customer_favoring\", \"slightly_provider_favoring\", \"provider_favoring\", \"heavily_provider_favoring\", \"review_recommended\"\\n   - Use \"customer\" side when the clause favours ${protectedLabel} (the protected party)\\n   - Use \"provider\" side when the clause favours ${providingLabel} (the providing party)\\n   - \"slightly\" = positions 4 or 6, \"customer/provider_favoring\" = positions 3 or 7-8, \"heavily\" = positions 1-2 or 9-10\n\n4. SUMMARY: One sentence describing what this clause does.\n\n5. ASSESSMENT: 2-3 sentences explaining your position rating. Use the party labels ${protectedLabel} and ${providingLabel}. The assessment MUST be consistent with the position number per the scale above.\n\n6. FLAGS: Any concerns, unusual provisions, or missing protections. Empty array if none.\n\n7. VALUE EXTRACTION: If the clause contains a specific quantifiable value (duration, amount, percentage), extract it. Otherwise null.\n\nReturn ONLY valid JSON - no markdown, no backticks, no explanation:\n{\n  \"full_text\": \"The complete clause text...\",\n  \"position\": 6.5,\n  \"fairness\": \"slightly_customer_favoring\",\n  \"summary\": \"This clause establishes...\",\n  \"assessment\": \"This clause provides moderate protection for ${protectedLabel} by...\",\n  \"flags\": [\"Extended payment period\"],\n  \"extracted_value\": \"45\",\n  \"extracted_unit\": \"days\",\n  \"value_type\": \"duration\"\n}`;\n\nconst requestBody = {\n  model: \"claude-sonnet-4-20250514\",\n  max_tokens: 4096,\n  temperature: 0,\n  messages: [{ role: \"user\", content: prompt }],\n};\n\nreturn {\n  json: {\n    contractId,\n    clauseId: clauseData.clause_id,\n    clauseNumber: clauseData.clause_number,\n    clauseName: clauseData.clause_name,\n    claudeRequestBody: requestBody,\n  },\n};\n"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                672,
-                128
+                -1712,
+                -112
             ],
-            "id": "a2a700e8-da9c-45b9-b2f9-031b27aaee8d",
+            "id": "45e5964f-42c5-4303-bdb0-940aa115ad0d",
             "name": "Prepare Certification Request"
         },
         {
@@ -216,10 +216,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                896,
-                128
+                -1488,
+                -112
             ],
-            "id": "474b458a-6ca3-4493-9d0b-a0930d9ddff4",
+            "id": "45518689-66f5-4f92-a62b-7f5fe8f9b78b",
             "name": "Claude API - Certify Clause",
             "credentials": {
                 "anthropicApi": {
@@ -235,15 +235,15 @@
         },
         {
             "parameters": {
-                "jsCode": "// ============================================================================\n// PROCESS CLAUDE CERTIFICATION RESPONSE\n// Parse the JSON response and prepare for database update\n// ============================================================================\n\nconst input = $('Prepare Certification Request').first().json;\nconst response = $input.first().json;\n\nconsole.log('=== PROCESS CERTIFICATION RESPONSE ===' );\nconsole.log('Clause:', input.clauseNumber, '-', input.clauseName);\n\nconst content = response.content || [];\nconst textBlock = content.find(b => b.type === 'text');\nconst responseText = textBlock?.text || '';\n\n// Parse JSON from response\nlet parsed;\ntry {\n  let jsonStr = responseText.trim();\n  // Strip markdown code fences if present\n  if (jsonStr.startsWith('```')) {\n    jsonStr = jsonStr.replace(/^```json?\\n?/, '').replace(/\\n?```$/, '');\n  }\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  // Try to find JSON object in the response\n  const jsonMatch = responseText.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    try {\n      parsed = JSON.parse(jsonMatch[0]);\n    } catch(e2) {\n      console.error('Failed to parse response:', responseText.substring(0, 300));\n      throw new Error('Failed to parse certification response as JSON');\n    }\n  } else {\n    console.error('No JSON found in response:', responseText.substring(0, 300));\n    throw new Error('No JSON found in Claude certification response');\n  }\n}\n\nconsole.log('Position:', parsed.position);\nconsole.log('Fairness:', parsed.fairness);\nconsole.log('Full text length:', (parsed.full_text || '').length);\n\n// Sanitize text for SQL\nfunction sanitize(text) {\n  if (!text) return '';\n  return text.replace(/\\u0000/g, '').trim();\n}\n\nreturn {\n  json: {\n    contractId: input.contractId,\n    clauseId: input.clauseId,\n    clauseNumber: input.clauseNumber,\n    fullText: sanitize(parsed.full_text || ''),\n    position: parseFloat(parsed.position) || 5.0,\n    fairness: parsed.fairness || 'balanced',\n    summary: sanitize(parsed.summary || ''),\n    assessment: sanitize(parsed.assessment || ''),\n    flags: JSON.stringify(parsed.flags || []),\n    extractedValue: parsed.extracted_value || null,\n    extractedUnit: parsed.extracted_unit || null,\n    valueType: parsed.value_type || null\n  }\n};\n"
+                "jsCode": "// ============================================================================\n// PROCESS CLAUDE CERTIFICATION RESPONSE\n// Parse the JSON response and prepare for database update\n// ============================================================================\n\nconst input = $('Prepare Certification Request').first().json;\nconst response = $input.first().json;\n\nconsole.log('=== PROCESS CERTIFICATION RESPONSE ===' );\nconsole.log('Clause:', input.clauseNumber, '-', input.clauseName);\n\nconst content = response.content || [];\nconst textBlock = content.find(b => b.type === 'text');\nconst responseText = textBlock?.text || '';\n\n// Parse JSON from response\nlet parsed;\ntry {\n  let jsonStr = responseText.trim();\n  // Strip markdown code fences if present\n  if (jsonStr.startsWith('```')) {\n    jsonStr = jsonStr.replace(/^```json?\\n?/, '').replace(/\\n?```$/, '');\n  }\n  parsed = JSON.parse(jsonStr);\n} catch (e) {\n  // Try to find JSON object in the response\n  const jsonMatch = responseText.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    try {\n      parsed = JSON.parse(jsonMatch[0]);\n    } catch(e2) {\n      console.error('Failed to parse response:', responseText.substring(0, 300));\n      throw new Error('Failed to parse certification response as JSON');\n    }\n  } else {\n    console.error('No JSON found in response:', responseText.substring(0, 300));\n    throw new Error('No JSON found in Claude certification response');\n  }\n}\n\nconsole.log('Position:', parsed.position);\nconsole.log('Fairness (raw):', parsed.fairness);\nconsole.log('Full text length:', (parsed.full_text || '').length);\n\n// Validate fairness against DB constraint\nconst VALID_FAIRNESS = ['balanced', 'slightly_customer_favoring', 'customer_favoring', 'heavily_customer_favoring', 'slightly_provider_favoring', 'provider_favoring', 'heavily_provider_favoring', 'review_recommended'];\nlet fairness = parsed.fairness || 'balanced';\nif (!VALID_FAIRNESS.includes(fairness)) {\n  console.warn('Invalid fairness value:', fairness, '- mapping from position');\n  const pos = parseFloat(parsed.position) || 5.0;\n  if (pos >= 4.5 && pos <= 5.5) fairness = 'balanced';\n  else if (pos > 5.5 && pos <= 6.5) fairness = 'slightly_customer_favoring';\n  else if (pos > 6.5 && pos <= 8.0) fairness = 'customer_favoring';\n  else if (pos > 8.0) fairness = 'heavily_customer_favoring';\n  else if (pos >= 3.5 && pos < 4.5) fairness = 'slightly_provider_favoring';\n  else if (pos >= 2.0 && pos < 3.5) fairness = 'provider_favoring';\n  else fairness = 'heavily_provider_favoring';\n  console.log('Mapped fairness to:', fairness);\n}\nconsole.log('Fairness (final):', fairness);\n\n// Sanitize text for SQL\nfunction sanitize(text) {\n  if (!text) return '';\n  return text.replace(/\\u0000/g, '').trim();\n}\n\nreturn {\n  json: {\n    contractId: input.contractId,\n    clauseId: input.clauseId,\n    clauseNumber: input.clauseNumber,\n    fullText: sanitize(parsed.full_text || ''),\n    position: parseFloat(parsed.position) || 5.0,\n    fairness: fairness,\n    summary: sanitize(parsed.summary || ''),\n    assessment: sanitize(parsed.assessment || ''),\n    flags: JSON.stringify(parsed.flags || []),\n    extractedValue: parsed.extracted_value || null,\n    extractedUnit: parsed.extracted_unit || null,\n    valueType: parsed.value_type || null\n  }\n};\n"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1120,
-                48
+                -1264,
+                -192
             ],
-            "id": "ac2a7569-adb4-44e5-89ce-ebe4bb42d380",
+            "id": "650f90f2-b9bb-445b-a8e7-a8a48591db6b",
             "name": "Process Certification Response",
             "onError": "continueErrorOutput"
         },
@@ -258,10 +258,10 @@
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.6,
             "position": [
-                1344,
-                -128
+                -1040,
+                -368
             ],
-            "id": "8f31b80c-4197-49fc-8174-ca355537474e",
+            "id": "4490e511-316a-430f-81fa-ad961a663872",
             "name": "Update Clause Certified",
             "credentials": {
                 "postgres": {
@@ -294,10 +294,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                1568,
-                -128
+                -816,
+                -368
             ],
-            "id": "62ae5be9-df17-4d75-82a8-5a1106a41c89",
+            "id": "78fa87de-eba9-43a2-ba38-6015e8ce9877",
             "name": "Chain Next Clause",
             "continueOnFail": true
         },
@@ -312,10 +312,10 @@
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.6,
             "position": [
-                0,
-                320
+                -2384,
+                80
             ],
-            "id": "85340c52-a781-44b0-bdec-a21163d8a0eb",
+            "id": "9381d610-7080-4940-904f-af9f0bc8e878",
             "name": "Mark Contract Ready",
             "credentials": {
                 "postgres": {
@@ -347,10 +347,10 @@
             "type": "n8n-nodes-base.respondToWebhook",
             "typeVersion": 1.5,
             "position": [
-                224,
-                320
+                -2160,
+                80
             ],
-            "id": "00020d8a-583c-458d-b88e-ff76ed6d2d8c",
+            "id": "1a6f9b77-baaf-493b-a7d7-0d110828228f",
             "name": "Respond Complete"
         },
         {
@@ -364,10 +364,10 @@
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.6,
             "position": [
-                1344,
-                224
+                -1040,
+                -16
             ],
-            "id": "2f34266a-c2fb-4463-9382-f4fb6eb8ebd3",
+            "id": "22a4edfe-228c-4c44-b09d-b64676076e3f",
             "name": "Mark Clause Failed",
             "credentials": {
                 "postgres": {
@@ -400,10 +400,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                1568,
-                224
+                -816,
+                -16
             ],
-            "id": "d774a827-f6d5-40ec-b37e-7191f373ff56",
+            "id": "629f1465-ec21-4534-9e51-65c84e26f8b5",
             "name": "Chain Next After Error",
             "continueOnFail": true
         },
@@ -414,10 +414,10 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1568,
-                48
+                -816,
+                -192
             ],
-            "id": "15a8a850-db1e-45b4-986d-58deeb2bcf11",
+            "id": "f9837309-51b2-477d-9583-9ea68f2329a4",
             "name": "Build Single CLause Range Payload"
         },
         {
@@ -443,10 +443,10 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.3,
             "position": [
-                1760,
-                48
+                -624,
+                -192
             ],
-            "id": "01e70b9b-44db-402b-b8a6-488632533549",
+            "id": "6ff491e4-2071-436f-afd4-df281684b0c0",
             "name": "Trigger Clause Range Mapping",
             "alwaysOutputData": false,
             "executeOnce": false
@@ -622,11 +622,6 @@
                 ]
             ]
         },
-        "Respond Complete": {
-            "main": [
-                []
-            ]
-        },
         "Mark Clause Failed": {
             "main": [
                 [
@@ -652,7 +647,6 @@
     },
     "pinData": {},
     "meta": {
-        "templateCredsSetupCompleted": true,
         "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
     }
 }
