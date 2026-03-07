@@ -8,6 +8,13 @@
 
 
 -- ============================================================================
+-- 0. FIX: Allow invited users without an account (user_id is NULL until they sign up)
+-- ============================================================================
+
+ALTER TABLE company_users ALTER COLUMN user_id DROP NOT NULL;
+
+
+-- ============================================================================
 -- 1. ADD approval_role TO company_users
 -- ============================================================================
 -- Scoped per-company (a person can be approver in one company, negotiator in another)

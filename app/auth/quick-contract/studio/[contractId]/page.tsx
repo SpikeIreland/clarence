@@ -411,6 +411,7 @@ function QuickContractStudioContent() {
 
     // DoA Approval state
     const [doaContractApprovalStatus, setDoaContractApprovalStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>('none')
+    const [doaApproverName, setDoaApproverName] = useState<string | null>(null)
     const [showContractApprovalModal, setShowContractApprovalModal] = useState(false)
     const [clauseApprovalStatuses, setClauseApprovalStatuses] = useState<Record<string, 'pending' | 'approved' | 'rejected'>>({})
     const [clauseApprovalTarget, setClauseApprovalTarget] = useState<{ clauseId: string; clauseName: string } | null>(null)
@@ -900,13 +901,42 @@ function QuickContractStudioContent() {
                 const json = await res.json()
                 if (!json.success) return
                 if (json.contract?.status) setDoaContractApprovalStatus(json.contract.status)
-                if (json.clauses) setClauseApprovalStatuses(json.clauses)
+                if (json.contract?.approverName) setDoaApproverName(json.contract.approverName)
+                if (json.clauses) {
+                    const mapped: Record<string, 'pending' | 'approved' | 'rejected'> = {}
+                    for (const [cid, val] of Object.entries(json.clauses)) {
+                        const v = val as { status: string }
+                        if (v.status === 'pending' || v.status === 'approved' || v.status === 'rejected') {
+                            mapped[cid] = v.status
+                        }
+                    }
+                    setClauseApprovalStatuses(mapped)
+                }
             } catch (e) {
                 console.error('Failed to load approval status:', e)
             }
         }
         loadApprovalStatus()
     }, [contractId])
+
+    // Load company's designated approver for the modal
+    useEffect(() => {
+        if (doaApproverName || !userInfo?.companyId) return
+        async function loadApprover() {
+            try {
+                const { data } = await supabase
+                    .from('company_users')
+                    .select('full_name, email')
+                    .eq('company_id', userInfo!.companyId!)
+                    .in('approval_role', ['approver', 'admin'])
+                    .eq('status', 'active')
+                    .limit(1)
+                    .single()
+                if (data) setDoaApproverName(data.full_name || data.email)
+            } catch { /* no approver configured */ }
+        }
+        loadApprover()
+    }, [userInfo?.companyId, doaApproverName])
 
     // ========================================================================
     // SECTION: TRIGGER CERTIFICATION ON STUDIO LOAD
@@ -3932,32 +3962,15 @@ INSTRUCTIONS:
                             const allBothAgreed = leafClauses.length > 0 && leafClauses.every(c => isBothPartiesAgreed(c.clauseId))
                             if (allBothAgreed) {
                                 return (
-                                    <div className="flex items-center gap-2">
-                                        {doaContractApprovalStatus === 'pending' ? (
-                                            <span className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
-                                                <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-                                                Sign-off Pending
-                                            </span>
-                                        ) : (
-                                            <button
-                                                onClick={() => setShowContractApprovalModal(true)}
-                                                className="px-3 py-2 border border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 rounded-lg transition-colors text-sm font-medium"
-                                            >
-                                                Request Sign-off
-                                            </button>
-                                        )}
-                                        {doaContractApprovalStatus !== 'pending' && (
-                                            <button
-                                                onClick={() => setCommitModalState('confirm')}
-                                                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5 animate-pulse"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                                </svg>
-                                                Commit Contract
-                                            </button>
-                                        )}
-                                    </div>
+                                    <button
+                                        onClick={() => setCommitModalState('confirm')}
+                                        className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-1.5 animate-pulse"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        Commit Contract
+                                    </button>
                                 )
                             }
 
@@ -3993,6 +4006,30 @@ INSTRUCTIONS:
                                 </button>
                             )
                         })()}
+
+                        {/* Request Sign-off Button (non-template, initiator, not committed) */}
+                        {!isTemplateMode && isInitiator && contract?.status !== 'committed' && (
+                            doaContractApprovalStatus === 'pending' ? (
+                                <span className="px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
+                                    <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+                                    Sign-off Pending
+                                </span>
+                            ) : doaContractApprovalStatus === 'approved' ? (
+                                <span className="px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium flex items-center gap-1.5">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    Signed Off
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={() => setShowContractApprovalModal(true)}
+                                    className="px-3 py-2 border border-slate-300 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 rounded-lg transition-colors text-sm font-medium"
+                                >
+                                    Request Sign-off
+                                </button>
+                            )
+                        )}
 
                         {/* Contract Lifecycle Button (non-template, respondent) */}
                         {!isTemplateMode && !isInitiator && (() => {
@@ -6375,7 +6412,11 @@ INSTRUCTIONS:
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
                         <div className="p-6 border-b border-slate-200">
                             <h3 className="text-lg font-semibold text-slate-800">Request Contract Sign-off</h3>
-                            <p className="text-sm text-slate-500 mt-1">An approver will be notified to review and sign off on this contract before you commit.</p>
+                            <p className="text-sm text-slate-500 mt-1">
+                                {doaApproverName
+                                    ? <>This will be sent to <strong>{doaApproverName}</strong> for review and sign-off before you commit.</>
+                                    : 'An approver will be notified to review and sign off on this contract before you commit.'}
+                            </p>
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
@@ -6411,7 +6452,12 @@ INSTRUCTIONS:
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
                         <div className="p-6 border-b border-slate-200">
                             <h3 className="text-lg font-semibold text-slate-800">Seek Clause Approval</h3>
-                            <p className="text-sm text-slate-500 mt-1">Request internal approval for your position on: <strong>{clauseApprovalTarget.clauseName}</strong></p>
+                            <p className="text-sm text-slate-500 mt-1">
+                                Request internal approval for your position on: <strong>{clauseApprovalTarget.clauseName}</strong>
+                            </p>
+                            {doaApproverName && (
+                                <p className="text-xs text-slate-400 mt-1">This will be sent to <strong className="text-slate-600">{doaApproverName}</strong></p>
+                            )}
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
