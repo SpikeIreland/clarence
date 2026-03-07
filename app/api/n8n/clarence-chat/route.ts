@@ -118,6 +118,8 @@ export async function POST(request: NextRequest) {
                     companyId: body.viewerCompanyId || null,
                     // Pass through optional fields
                     clauseId: body.clauseId || null,
+                    clauseName: body.clauseName || null,
+                    clauseCategory: body.clauseCategory || null,
                     context: body.context || 'contract_studio',
                     contractTypeKey: body.contractTypeKey || null,
                     initiatorPartyRole: body.initiatorPartyRole || null,
