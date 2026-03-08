@@ -5267,7 +5267,7 @@ INSTRUCTIONS:
                                                     )}
                                                 </div>
 
-                                                {/* Scale Labels â€” Real-world values if range mapping exists, otherwise numeric */}
+                                                {/* Scale Labels — Real-world values if range mapping exists, otherwise numeric */}
                                                 {rangeMappings.has(selectedClause.clauseId) && rangeMappings.get(selectedClause.clauseId)?.isDisplayable ? (
                                                     <>
                                                         <div className="relative mt-4 h-4">
@@ -5285,7 +5285,7 @@ INSTRUCTIONS:
                                                                 )
                                                             })}
                                                         </div>
-                                                        {/* Current position â€” show real-world value */}
+                                                        {/* Current position — show real-world value */}
                                                         {getUserDisplayPosition(selectedClause) !== null && (
                                                             <div className="text-center mt-2">
                                                                 <span className="text-sm font-semibold text-purple-700">
@@ -5300,7 +5300,7 @@ INSTRUCTIONS:
                                                         {rangeMappings.get(selectedClause.clauseId)?.industryStandardMin && (
                                                             <div className="text-center mt-1">
                                                                 <span className="text-[10px] text-purple-400">
-                                                                    Industry standard: {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMin)?.label || ''} â€” {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMax)?.label || ''}
+                                                                    Industry standard: {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMin)?.label || ''} — {rangeMappings.get(selectedClause.clauseId)?.rangeData.scale_points.find(p => p.position === rangeMappings.get(selectedClause.clauseId)?.industryStandardMax)?.label || ''}
                                                                 </span>
                                                             </div>
                                                         )}
@@ -6739,7 +6739,7 @@ INSTRUCTIONS:
                         <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                                    <span className="text-white text-lg">Ã°Å¸â€œÂ</span>
+                                    <span className="text-white text-lg">📝</span>
                                 </div>
                                 <div>
                                     <h3 className="text-white font-semibold">Position Changed</h3>
@@ -6772,7 +6772,7 @@ INSTRUCTIONS:
                                         {selectedClause.clarencePosition?.toFixed(1) ?? '—'}
                                     </div>
                                 </div>
-                                <div className="text-slate-300">Ã¢â€ â€™</div>
+                                <div className="text-slate-300">→</div>
                                 <div className="text-center">
                                     <div className="text-xs text-slate-500 mb-1">Your Position</div>
                                     <div className="text-lg font-bold text-emerald-600">

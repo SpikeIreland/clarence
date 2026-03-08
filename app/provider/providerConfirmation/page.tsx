@@ -362,7 +362,7 @@ function ProviderLobbyContent() {
                     const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}&provider_id=${providerId}`)
                     if (response.ok) {
                         const data = await response.json()
-                        const bidStatus = data.bid?.bidStatus || data.bid?.status || data.bidStatus || data.bid_status || 'questionnaire_complete'
+                        const bidStatus = data.bid?.bidStatus || data.bid?.status || data.session?.status || data.bidStatus || data.bid_status || 'questionnaire_complete'
                         const sessionData: ProviderSession = {
                             sessionId,
                             sessionNumber: data.session?.sessionNumber || data.sessionNumber || data.session_number || '',
@@ -480,7 +480,7 @@ function ProviderLobbyContent() {
                 const response = await fetch(`${API_BASE}/contract-studio-api?session_id=${sessionId}&provider_id=${providerId}`)
                 if (!response.ok) return
                 const data = await response.json()
-                const bidStatus = data.bid?.bidStatus || data.bid?.status || data.bidStatus || data.bid_status || 'questionnaire_complete'
+                const bidStatus = data.bid?.bidStatus || data.bid?.status || data.session?.status || data.bidStatus || data.bid_status || 'questionnaire_complete'
 
                 if (bidStatus === 'ready' || bidStatus === 'active' || bidStatus === 'negotiation_active') {
                     setSessions(prev => prev.map(s =>
