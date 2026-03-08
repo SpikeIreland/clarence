@@ -1,0 +1,1050 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "session-create",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                -4256,
+                -1184
+            ],
+            "id": "6759902a-379b-4436-9088-956ab3e1f478",
+            "name": "Webhook",
+            "webhookId": "session-create-endpoint"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "options-check",
+                            "leftValue": "={{ $json.headers['access-control-request-method'] }}",
+                            "rightValue": "",
+                            "operator": {
+                                "type": "string",
+                                "operation": "exists"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -4032,
+                -1184
+            ],
+            "id": "3e768d7f-d173-46ad-8502-e3bc278e43d0",
+            "name": "CORS Check"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "{}",
+                "options": {
+                    "responseCode": 200,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Methods",
+                                "value": "GET, POST, OPTIONS"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Headers",
+                                "value": "Content-Type, Authorization"
+                            },
+                            {
+                                "name": "Access-Control-Max-Age",
+                                "value": "86400"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.4,
+            "position": [
+                -3808,
+                -1280
+            ],
+            "id": "c13195d4-a5b8-4832-a976-cd62ea129880",
+            "name": "CORS Response"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// SESSION CREATE V2.3 - Process incoming request with uploaded doc fix\n// ============================================================================\n\nconst body = $input.first().json.body || {};\n\nconsole.log(\"=== SESSION CREATE REQUEST V2.3 ===\");\nconsole.log(\"Request body:\", JSON.stringify(body, null, 2));\n\nconst userEmail = body.userEmail || body.email || \"\";\nconst companyName = body.companyName || body.company || \"Unknown Company\";\nconst userName = body.userName || body.name || \"Unknown User\";\nconst isTraining = body.isTraining === true;\n\n// Assessment fields\nconst mediationType =\n  body.mediation_type || body.mediationType || \"full_mediation\";\nconst contractType = body.contract_type || body.contractType || null;\nconst templateSource =\n  body.template_source || body.templateSource || \"from_scratch\";\nconst sourceTemplateId =\n  body.source_template_id || body.sourceTemplateId || null;\nconst assessmentCompleted =\n  body.assessment_completed ?? body.assessmentCompleted ?? false;\n\n// V2.2: Pathway tracking\nconst pathwayId = body.pathway_id || body.pathwayId || null;\n\n// V2.3 CRITICAL: Uploaded contract reference (for 'uploaded' template source)\n// This is the EXISTING contract_id from document upload, NOT a new one\nconst uploadedContractId =\n  body.uploaded_contract_id || body.uploadedContractId || null;\n\n// Contract name for template-based sessions\nconst contractName = body.contract_name || body.contractName || null;\n// ROLE MATRIX: Contract type key and initiator party role\nconst contractTypeKey = body.contract_type_key || body.contractTypeKey || null;\nconst initiatorPartyRole =\n  body.initiator_party_role || body.initiatorPartyRole || null;\n\n// Deal context\nconst dealContext = body.deal_context || body.dealContext || {};\nconst dealValue = dealContext.deal_value || dealContext.dealValue || null;\nconst serviceCriticality =\n  dealContext.service_criticality || dealContext.serviceCriticality || null;\nconst timelinePressure =\n  dealContext.timeline_pressure || dealContext.timelinePressure || null;\nconst bidderCount = dealContext.bidder_count || dealContext.bidderCount || null;\nconst batnaStatus = dealContext.batna_status || dealContext.batnaStatus || null;\nconst topPriorities =\n  dealContext.top_priorities || dealContext.topPriorities || [];\n\nif (!userEmail) {\n  return [\n    {\n      json: {\n        error: true,\n        message: \"User email is required to create a session\",\n      },\n    },\n  ];\n}\n\n// V2.3: Validate uploaded contract ID is provided for 'uploaded' source\nif (templateSource === \"uploaded\" && !uploadedContractId) {\n  console.warn(\n    \"WARNING: template_source is 'uploaded' but no uploaded_contract_id provided\",\n  );\n}\n\nconst now = new Date();\nconst day = String(now.getDate()).padStart(2, \"0\");\nconst month = String(now.getMonth() + 1).padStart(2, \"0\");\nconst year = now.getFullYear();\nconst prefix = isTraining ? \"TRN\" : \"SIS\";\nconst sessionNumberBase = `${prefix}-${day}${month}${year}`;\n\nconsole.log(\"Template Source:\", templateSource);\nconsole.log(\"Source Template ID:\", sourceTemplateId);\nconsole.log(\"Uploaded Contract ID:\", uploadedContractId);\nconsole.log(\"Pathway ID:\", pathwayId);\nconsole.log(\"Contract Name:\", contractName);\n\nreturn [\n  {\n    json: {\n      error: false,\n      userEmail,\n      companyName,\n      userName,\n      sessionNumberBase,\n      isTraining,\n      mediationType,\n      contractType,\n      templateSource,\n      sourceTemplateId,\n      uploadedContractId,\n      pathwayId,\n      assessmentCompleted,\n      contractName,\n      contractTypeKey,\n      initiatorPartyRole,\n      dealContext: {\n        dealValue,\n        serviceCriticality,\n        timelinePressure,\n        bidderCount,\n        batnaStatus,\n        topPriorities,\n      },\n      timestamp: now.toISOString(),\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -3808,
+                -1088
+            ],
+            "id": "a57830ec-6df2-48d7-9d22-5386cd04da17",
+            "name": "Process Request"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "validation-check",
+                            "leftValue": "={{ $json.error }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -3584,
+                -1088
+            ],
+            "id": "f5c982d6-7027-4804-9c92-267c7b6e0ac1",
+            "name": "Validation Check"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={\n  \"success\": false,\n  \"error\": \"{{ $json.message }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+                "options": {
+                    "responseCode": 400,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                -3360,
+                -1184
+            ],
+            "id": "88fb4f11-9d0e-4e78-91af-da372b7aaf9c",
+            "name": "Validation Error"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT user_id, email, company_name FROM users WHERE email = $1 LIMIT 1",
+                "options": {
+                    "queryReplacement": "={{ [$json.userEmail] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -3360,
+                -992
+            ],
+            "id": "104c33ab-c25f-4593-a60f-05e7a9adac7d",
+            "name": "Lookup User",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// V2.3: Added uploadedContractId pass-through\nconst prevData = $(\"Process Request\").first().json;\nconst userResult = $input.first().json;\n\nif (!userResult || !userResult.user_id) {\n  return [\n    {\n      json: {\n        error: true,\n        message: `User not found with email: ${prevData.userEmail}`,\n      },\n    },\n  ];\n}\n\nreturn [\n  {\n    json: {\n      error: false,\n      userId: userResult.user_id,\n      userEmail: prevData.userEmail,\n      companyName: prevData.companyName || userResult.company_name,\n      userName: prevData.userName,\n      sessionNumberBase: prevData.sessionNumberBase,\n      isTraining: prevData.isTraining,\n      mediationType: prevData.mediationType,\n      contractType: prevData.contractType,\n      templateSource: prevData.templateSource,\n      sourceTemplateId: prevData.sourceTemplateId,\n      uploadedContractId: prevData.uploadedContractId,\n      pathwayId: prevData.pathwayId,\n      assessmentCompleted: prevData.assessmentCompleted,\n      contractName: prevData.contractName,\n      contractTypeKey: prevData.contractTypeKey,\n      initiatorPartyRole: prevData.initiatorPartyRole,\n      dealContext: prevData.dealContext,\n      timestamp: prevData.timestamp,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -3136,
+                -1056
+            ],
+            "id": "b187a396-bb52-46c6-8353-f16b73714178",
+            "name": "Validate User"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "user-check",
+                            "leftValue": "={{ $json.error }}",
+                            "rightValue": true,
+                            "operator": {
+                                "type": "boolean",
+                                "operation": "equals"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -2912,
+                -1056
+            ],
+            "id": "74fcdac3-25a6-4330-bd50-af868a17c0e0",
+            "name": "User Exists Check"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={\n  \"success\": false,\n  \"error\": \"{{ $json.message }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+                "options": {
+                    "responseCode": 404,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                -2688,
+                -1152
+            ],
+            "id": "65ee10be-e524-49e4-ba8e-f8521ad0ef17",
+            "name": "User Not Found"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT COALESCE(MAX(CAST(SUBSTRING(session_number FROM '[0-9]+$') AS INTEGER)), 100) + 1 AS next_sequence FROM sessions WHERE session_number LIKE $1 || '%'",
+                "options": {
+                    "queryReplacement": "={{ [$json.sessionNumberBase] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -2688,
+                -960
+            ],
+            "id": "6a5090f2-e061-4c2c-9926-9e4869029ce0",
+            "name": "Get Next Sequence",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "const prevData = $('Validate User').first().json;\nconst sequenceResult = $input.first().json;\nconst nextSequence = sequenceResult.next_sequence || 101;\nconst sessionNumber = `${prevData.sessionNumberBase}-${nextSequence}`;\n\nconsole.log('Final session number:', sessionNumber);\nconsole.log('Pathway ID:', prevData.pathwayId);\nconsole.log('Uploaded Contract ID:', prevData.uploadedContractId);\n\nreturn [{ json: { ...prevData, sessionNumber, sequenceNumber: nextSequence } }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -2464,
+                -1040
+            ],
+            "id": "cb9d33ac-f261-4b49-8bbd-aaba1013c4ba",
+            "name": "Build Session Number"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO sessions (\n    session_number, customer_company, customer_id, status, is_training,\n    mediation_type, contract_type, template_source, source_template_id,\n    pathway_id, contract_name,\n    template_accepted, template_accepted_at,\n    assessment_completed, assessment_completed_at,\n    contract_type_key, initiator_party_role,\n    created_at, updated_at\n) VALUES (\n    $1, $2, $3, 'initiated', $4, $5, $6, $7, $8, $9, $10,\n    CASE WHEN $7 IN ('modified_template', 'existing_template') THEN true ELSE false END,\n    CASE WHEN $7 IN ('modified_template', 'existing_template') THEN NOW() ELSE NULL END,\n    $11, CASE WHEN $11 = true THEN NOW() ELSE NULL END,\n    $12, $13,\n    NOW(), NOW()\n)\nRETURNING session_id, session_number, customer_company, contract_name, status, is_training, mediation_type, contract_type, template_source, source_template_id, pathway_id, template_accepted, contract_type_key, initiator_party_role, created_at",
+                "options": {
+                    "queryReplacement": "={{ [\n    $json.sessionNumber,\n    $json.companyName,\n    $('Validate User').first().json.userId,\n    $('Process Request').first().json.isTraining,\n    $('Process Request').first().json.mediationType,\n    $('Process Request').first().json.contractType,\n    $('Process Request').first().json.templateSource,\n    $('Process Request').first().json.sourceTemplateId,\n    $('Process Request').first().json.pathwayId,\n    $('Process Request').first().json.contractName,\n    $('Process Request').first().json.assessmentCompleted,\n    $('Process Request').first().json.contractTypeKey,\n    $('Process Request').first().json.initiatorPartyRole\n] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -2240,
+                -1104
+            ],
+            "id": "e7d3cb21-82f0-4ee3-82c2-b865867cca04",
+            "name": "Insert Session",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO customer_requirements (\n    session_id, company_name, contact_name, contact_email, service_required,\n    deal_value, service_criticality, decision_timeline, number_of_bidders,\n    alternative_options, created_at, updated_at\n) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())\nON CONFLICT (session_id) DO UPDATE SET\n    company_name = EXCLUDED.company_name,\n    contact_name = EXCLUDED.contact_name,\n    deal_value = COALESCE(EXCLUDED.deal_value, customer_requirements.deal_value),\n    service_criticality = COALESCE(EXCLUDED.service_criticality, customer_requirements.service_criticality),\n    decision_timeline = COALESCE(EXCLUDED.decision_timeline, customer_requirements.decision_timeline),\n    number_of_bidders = COALESCE(EXCLUDED.number_of_bidders, customer_requirements.number_of_bidders),\n    alternative_options = COALESCE(EXCLUDED.alternative_options, customer_requirements.alternative_options),\n    updated_at = NOW()\nRETURNING requirement_id, session_id",
+                "options": {
+                    "queryReplacement": "={{ [\n    $('Insert Session').first().json.session_id,\n    $('Build Session Number').first().json.companyName,\n    $('Build Session Number').first().json.userName,\n    $('Build Session Number').first().json.userEmail,\n    $('Build Session Number').first().json.contractType,\n    $('Build Session Number').first().json.dealContext?.dealValue || null,\n    $('Build Session Number').first().json.dealContext?.serviceCriticality || null,\n    $('Build Session Number').first().json.dealContext?.timelinePressure || null,\n    $('Build Session Number').first().json.dealContext?.bidderCount || null,\n    $('Build Session Number').first().json.dealContext?.batnaStatus || null\n] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -2016,
+                -1120
+            ],
+            "id": "44945e69-bce5-4ebb-9e90-a4b0396320e8",
+            "name": "Insert Customer Requirements",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "uploaded-check",
+                                        "leftValue": "={{ $('Insert Session').first().json.template_source }}",
+                                        "rightValue": "uploaded",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Uploaded Doc"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "template-check",
+                                        "leftValue": "={{ $('Insert Session').first().json.template_source }}",
+                                        "rightValue": "modified_template",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "or"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "From Template"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "id": "existing-check",
+                                        "leftValue": "={{ $('Insert Session').first().json.template_source }}",
+                                        "rightValue": "existing_template",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "or"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Existing Template"
+                        }
+                    ]
+                },
+                "options": {
+                    "fallbackOutput": "extra"
+                }
+            },
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.2,
+            "position": [
+                -1792,
+                -1120
+            ],
+            "id": "ce373291-ac47-475e-9321-6619885a36d8",
+            "name": "Route by Source"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "-- V2.4: Link EXISTING uploaded contract to the new session\n-- Also propagate contract_type_key and initiator_party_role for role context\nUPDATE uploaded_contracts\nSET \n    linked_session_id = $1::uuid,\n    contract_type_key = COALESCE($3, contract_type_key),\n    initiator_party_role = COALESCE($4, initiator_party_role),\n    updated_at = NOW()\nWHERE contract_id = $2::uuid\nRETURNING contract_id, linked_session_id, contract_name, clause_count, status, contract_type_key, initiator_party_role",
+                "options": {
+                    "queryReplacement": "={{ [\n    $('Insert Session').first().json.session_id,\n    $('Build Session Number').first().json.uploadedContractId,\n    $('Insert Session').first().json.contract_type_key,\n    $('Insert Session').first().json.initiator_party_role\n] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -1568,
+                -1296
+            ],
+            "id": "2fbf3fec-fb11-4c69-adc7-f523a2c609a6",
+            "name": "Link Uploaded Contract",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// V2.3: Format response for UPLOADED document flow\n// Uses the EXISTING contract that was already parsed\nconst sessionResult = $('Insert Session').first().json;\nconst requirementsResult = $('Insert Customer Requirements').first().json;\nconst contractResult = $input.first().json;\nconst requestData = $('Build Session Number').first().json;\n\nconst isTraining = sessionResult.is_training || false;\nconst pathwayId = sessionResult.pathway_id || null;\n\nlet nextStep, nextUrl;\n\nif (isTraining) {\n  nextStep = \"Start training session\";\n  nextUrl = `/training/${sessionResult.session_id}`;\n} else {\n  nextStep = \"Configure contract in Contract Prep\";\n  nextUrl = `/auth/contract-prep?session_id=${sessionResult.session_id}&contract_id=${contractResult.contract_id}&pathway_id=${pathwayId || ''}`;\n}\n\nconsole.log('Uploaded contract linked:', contractResult.contract_id);\nconsole.log('Clause count from existing upload:', contractResult.clause_count);\n\nreturn [{\n  json: {\n    success: true,\n    message: \"Contract session created with uploaded document\",\n    sessionId: sessionResult.session_id,\n    sessionNumber: sessionResult.session_number,\n    customerCompany: sessionResult.customer_company,\n    status: sessionResult.status,\n    isTraining: isTraining,\n    mediationType: sessionResult.mediation_type,\n    contractType: sessionResult.contract_type,\n    templateSource: sessionResult.template_source,\n    templateAccepted: false,\n    pathwayId: pathwayId,\n    // V2.3: Contract info from EXISTING uploaded document\n    contractId: contractResult.contract_id,\n    contractName: contractResult.contract_name,\n    clauseCount: contractResult.clause_count || 0,\n    contractStatus: contractResult.status,\n    requirementId: requirementsResult?.requirement_id || null,\n    createdAt: sessionResult.created_at,\n    nextStep: nextStep,\n    nextUrl: nextUrl\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1328,
+                -1312
+            ],
+            "id": "9914f14c-79a4-4b62-a908-5dfa65aacf68",
+            "name": "Format Response (Uploaded)"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "-- V2.4: Create uploaded_contracts record for template-based sessions\n-- Now includes contract_type_key and initiator_party_role for role context\nINSERT INTO uploaded_contracts (\n    contract_id, linked_session_id, contract_name, file_name, file_type, file_size,\n    status, detected_contract_type, contract_type_key, initiator_party_role,\n    created_at, updated_at\n) VALUES (\n    gen_random_uuid(),\n    $1::uuid,\n    $2,\n    'template_' || $3 || '.docx',\n    'template',\n    0,\n    'ready',\n    $3,\n    $4,\n    $5,\n    NOW(),\n    NOW()\n)\nRETURNING contract_id, linked_session_id, contract_name, contract_type_key, initiator_party_role",
+                "options": {
+                    "queryReplacement": "={{ [\n    $('Insert Session').first().json.session_id,\n    $('Build Session Number').first().json.contractName || ($('Build Session Number').first().json.contractType + ' Agreement'),\n    $('Insert Session').first().json.contract_type || 'contract',\n    $('Insert Session').first().json.contract_type_key,\n    $('Insert Session').first().json.initiator_party_role\n] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -1568,
+                -1136
+            ],
+            "id": "ea681611-3dfc-49c6-bebc-bacecbeb8c48",
+            "name": "Create Uploaded Contract",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "-- V2.5: Read from uploaded_contract_clauses (already created by Copy Clauses to Upload Table)\n-- Explicitly provides position_id since column may lack DEFAULT gen_random_uuid()\nINSERT INTO session_clause_positions (\n    position_id,\n    session_id,\n    clause_id,\n    clause_number,\n    clause_level,\n    display_order,\n    customer_position,\n    provider_position,\n    original_customer_position,\n    original_provider_position,\n    customer_weight,\n    provider_weight,\n    is_locked,\n    status,\n    source_type,\n    source_template_clause_id,\n    source_master_clause_id,\n    selected_by_customer,\n    is_applicable,\n    clause_content,\n    created_at,\n    updated_at\n)\nSELECT \n    gen_random_uuid() AS position_id,\n    $1::uuid AS session_id,\n    ucc.clause_id,\n    ucc.clause_number,\n    COALESCE(ucc.clause_level, 1) AS clause_level,\n    ucc.display_order,\n    COALESCE(ucc.clarence_position, 5) AS customer_position,\n    COALESCE(ucc.clarence_position, 5) AS provider_position,\n    COALESCE(ucc.clarence_position, 5) AS original_customer_position,\n    COALESCE(ucc.clarence_position, 5) AS original_provider_position,\n    5 AS customer_weight,\n    5 AS provider_weight,\n    false AS is_locked,\n    'pending' AS status,\n    'template' AS source_type,\n    NULL AS source_template_clause_id,\n    ucc.maps_to_master_clause_id AS source_master_clause_id,\n    true AS selected_by_customer,\n    true AS is_applicable,\n    ucc.content AS clause_content,\n    NOW() AS created_at,\n    NOW() AS updated_at\nFROM uploaded_contract_clauses ucc\nWHERE ucc.contract_id = $2::uuid\nORDER BY ucc.display_order\nRETURNING position_id, clause_id;",
+                "options": {
+                    "queryReplacement": "={{ [\n    $('Insert Session').first().json.session_id,\n    $('Create Uploaded Contract').first().json.contract_id\n] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -1344,
+                -1152
+            ],
+            "id": "8a2c9677-540b-4b53-95da-4ba2911ccf99",
+            "name": "Copy Template Clauses",
+            "executeOnce": true,
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE uploaded_contracts \nSET clause_count = (SELECT COUNT(*) FROM uploaded_contract_clauses WHERE contract_id = $1::uuid)\nWHERE contract_id = $1::uuid\nRETURNING contract_id, clause_count",
+                "options": {
+                    "queryReplacement": "={{ [$('Create Uploaded Contract').first().json.contract_id] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -912,
+                -1152
+            ],
+            "id": "3236b396-408f-44b8-8055-acfa7c84455f",
+            "name": "Update Clause Count",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// V2.3: Format response WITH contractId and pathwayId for template flows\nconst sessionResult = $('Insert Session').first().json;\nconst requirementsResult = $('Insert Customer Requirements').first().json;\nconst contractResult = $('Create Uploaded Contract').first().json;\nconst clauseCountResult = $input.first().json;\n\nconst isTraining = sessionResult.is_training || false;\nconst pathwayId = sessionResult.pathway_id || null;\n\nlet nextStep, nextUrl;\n\nif (isTraining) {\n  nextStep = \"Start training session\";\n  nextUrl = `/training/${sessionResult.session_id}`;\n} else {\n  nextStep = \"Configure contract in Contract Prep\";\n  nextUrl = `/auth/contract-prep?session_id=${sessionResult.session_id}&contract_id=${contractResult.contract_id}&pathway_id=${pathwayId || ''}`;\n}\n\nreturn [{\n  json: {\n    success: true,\n    message: \"Contract session created with template\",\n    sessionId: sessionResult.session_id,\n    sessionNumber: sessionResult.session_number,\n    customerCompany: sessionResult.customer_company,\n    status: sessionResult.status,\n    isTraining: isTraining,\n    mediationType: sessionResult.mediation_type,\n    contractType: sessionResult.contract_type,\n    templateSource: sessionResult.template_source,\n    templateAccepted: sessionResult.template_accepted,\n    pathwayId: pathwayId,\n    contractId: contractResult.contract_id,\n    contractName: contractResult.contract_name,\n    clauseCount: clauseCountResult.clause_count,\n    requirementId: requirementsResult?.requirement_id || null,\n    createdAt: sessionResult.created_at,\n    nextStep: nextStep,\n    nextUrl: nextUrl\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -464,
+                -1168
+            ],
+            "id": "b158215e-4fa0-4d05-8240-31e3e338a735",
+            "name": "Format Response (Template)"
+        },
+        {
+            "parameters": {
+                "jsCode": "// V2.3: Format response for from_scratch (no contract yet)\nconst sessionResult = $('Insert Session').first().json;\nconst requirementsResult = $('Insert Customer Requirements').first().json;\nconst requestData = $('Build Session Number').first().json;\n\nconst isTraining = sessionResult.is_training || false;\nconst pathwayId = sessionResult.pathway_id || null;\n\nlet nextStep, nextUrl;\n\nif (isTraining) {\n  nextStep = \"Start training session\";\n  nextUrl = `/training/${sessionResult.session_id}`;\n} else {\n  nextStep = \"Build contract from scratch\";\n  let url = `/auth/contract-prep?session_id=${sessionResult.session_id}`;\n  if (pathwayId) url += `&pathway_id=${pathwayId}`;\n  nextUrl = url;\n}\n\nreturn [{\n  json: {\n    success: true,\n    message: \"Contract session created - ready to build from scratch\",\n    sessionId: sessionResult.session_id,\n    sessionNumber: sessionResult.session_number,\n    customerCompany: sessionResult.customer_company,\n    status: sessionResult.status,\n    isTraining: isTraining,\n    mediationType: sessionResult.mediation_type,\n    contractType: sessionResult.contract_type,\n    templateSource: sessionResult.template_source,\n    templateAccepted: false,\n    pathwayId: pathwayId,\n    contractId: null,\n    requirementId: requirementsResult?.requirement_id || null,\n    createdAt: sessionResult.created_at,\n    nextStep: nextStep,\n    nextUrl: nextUrl\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -1568,
+                -896
+            ],
+            "id": "5d86f8ef-aa7d-439e-b4e2-a2e316b52e96",
+            "name": "Format Response (No Template)"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json }}",
+                "options": {
+                    "responseCode": 201,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Methods",
+                                "value": "GET, POST, OPTIONS"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Headers",
+                                "value": "Content-Type"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                -176,
+                -1056
+            ],
+            "id": "37557612-0a69-4098-9297-695ee04f0e96",
+            "name": "Success Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={\n  \"success\": false,\n  \"error\": \"Database error occurred\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+                "options": {
+                    "responseCode": 500,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                -688,
+                -784
+            ],
+            "id": "25a66d16-1a82-4c8b-8f9e-1562b6329b37",
+            "name": "Database Error"
+        },
+        {
+            "parameters": {
+                "content": "## V2.3 Uploaded Document Fix\n\n**THREE-WAY ROUTING:**\n\n1. **uploaded** → Link to EXISTING contract\n   - Uses uploadedContractId from request\n   - Updates linked_session_id only\n   - Preserves all parsed clauses\n\n2. **modified_template / existing_template** → Create from template\n   - Creates new contract record\n   - Copies template clauses\n\n3. **from_scratch** → No contract yet\n   - Session only, no contract linking\n\n**Request must include:**\n```json\n{\n  \"template_source\": \"uploaded\",\n  \"uploaded_contract_id\": \"uuid-from-upload\"\n}\n```",
+                "height": 400,
+                "width": 400
+            },
+            "type": "n8n-nodes-base.stickyNote",
+            "typeVersion": 1,
+            "position": [
+                -2224,
+                -1456
+            ],
+            "id": "d6e6e419-15fb-4643-8f2d-9edb2bc9db12",
+            "name": "V2.3 Notes"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE sessions \nSET \n  clause_count = $1,\n  clauses_selected = true,\n  template_name = (SELECT template_name FROM contract_templates WHERE template_id = source_template_id)\nWHERE session_id = $2::uuid\nRETURNING session_id, clause_count, template_name",
+                "options": {
+                    "queryReplacement": "={{ [    $('Update Clause Count').first().json.clause_count,    $('Insert Session').first().json.session_id] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -704,
+                -1168
+            ],
+            "id": "176995bf-703f-4750-aa7f-d6c063557995",
+            "name": "Update Sessions Table",
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO uploaded_contract_clauses (\n    clause_id,\n    contract_id,\n    clause_number,\n    clause_name,\n    category,\n    content,\n    original_text,\n    is_header,\n    clause_level,\n    display_order,\n    ai_suggested_category,\n    ai_confidence,\n    maps_to_master_clause_id,\n    mapping_confidence,\n    verified,\n    status,\n    clarence_position,\n    clarence_fairness,\n    clarence_summary,\n    clarence_assessment,\n    clarence_flags,\n    clarence_certified,\n    clarence_certified_at,\n    created_at,\n    updated_at\n)\nSELECT \n    gen_random_uuid() AS clause_id,\n    $1::uuid AS contract_id,\n    COALESCE(tc.display_number, tc.clause_number) AS clause_number,\n    COALESCE(mc.clause_name, tc.clause_name) AS clause_name,\n    COALESCE(mc.category, tc.category) AS category,\n    COALESCE(mc.description, tc.default_text) AS content,\n    COALESCE(mc.description, tc.default_text) AS original_text,\n    false AS is_header,\n    COALESCE(tc.clause_level, 1) AS clause_level,\n    ROW_NUMBER() OVER (ORDER BY COALESCE(\n        (tc.category_order * 100) + tc.clause_order,\n        tc.display_order,\n        0\n    )) AS display_order,\n    COALESCE(mc.category, tc.category) AS ai_suggested_category,\n    CASE WHEN mc.clause_id IS NOT NULL THEN 1.0 ELSE 0.0 END AS ai_confidence,\n    mc.clause_id AS maps_to_master_clause_id,\n    CASE WHEN mc.clause_id IS NOT NULL THEN 1.0 ELSE 0.0 END AS mapping_confidence,\n    CASE WHEN mc.clause_id IS NOT NULL THEN true ELSE false END AS verified,\n    CASE \n        WHEN tc.clarence_certified = true THEN 'certified'\n        WHEN mc.clause_id IS NOT NULL THEN 'verified'\n        ELSE 'pending'\n    END AS status,\n    tc.clarence_position,\n    tc.clarence_fairness,\n    tc.clarence_summary,\n    tc.clarence_assessment,\n    COALESCE(tc.clarence_flags, '[]'::jsonb) AS clarence_flags,\n    COALESCE(tc.clarence_certified, false) AS clarence_certified,\n    tc.clarence_certified_at,\n    NOW() AS created_at,\n    NOW() AS updated_at\nFROM template_clauses tc\nLEFT JOIN master_clauses mc ON mc.clause_id = tc.clause_id\nWHERE tc.template_id = $2::uuid\n  AND COALESCE(tc.is_hidden, false) = false\nORDER BY COALESCE(\n    (tc.category_order * 100) + tc.clause_order,\n    tc.display_order\n)\nRETURNING clause_id;",
+                "options": {
+                    "queryReplacement": "={{ [\n    $('Create Uploaded Contract').first().json.contract_id,\n    $('Insert Session').first().json.source_template_id\n] }}"
+                }
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -1120,
+                -1152
+            ],
+            "id": "5c07613b-ac20-41cf-8ab4-32ba532938e2",
+            "name": "Copy Clauses to Upload Table",
+            "executeOnce": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            },
+            "onError": "continueErrorOutput"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "CORS Check": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Process Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Request": {
+            "main": [
+                [
+                    {
+                        "node": "Validation Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validation Check": {
+            "main": [
+                [
+                    {
+                        "node": "Validation Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Lookup User",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Lookup User": {
+            "main": [
+                [
+                    {
+                        "node": "Validate User",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate User": {
+            "main": [
+                [
+                    {
+                        "node": "User Exists Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "User Exists Check": {
+            "main": [
+                [
+                    {
+                        "node": "User Not Found",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Get Next Sequence",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Next Sequence": {
+            "main": [
+                [
+                    {
+                        "node": "Build Session Number",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Session Number": {
+            "main": [
+                [
+                    {
+                        "node": "Insert Session",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Insert Session": {
+            "main": [
+                [
+                    {
+                        "node": "Insert Customer Requirements",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Insert Customer Requirements": {
+            "main": [
+                [
+                    {
+                        "node": "Route by Source",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Route by Source": {
+            "main": [
+                [
+                    {
+                        "node": "Link Uploaded Contract",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Create Uploaded Contract",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Create Uploaded Contract",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Format Response (No Template)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Link Uploaded Contract": {
+            "main": [
+                [
+                    {
+                        "node": "Format Response (Uploaded)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Response (Uploaded)": {
+            "main": [
+                [
+                    {
+                        "node": "Success Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create Uploaded Contract": {
+            "main": [
+                [
+                    {
+                        "node": "Copy Clauses to Upload Table",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Copy Clauses to Upload Table": {
+            "main": [
+                [
+                    {
+                        "node": "Copy Template Clauses",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Clause Count": {
+            "main": [
+                [
+                    {
+                        "node": "Update Sessions Table",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Response (Template)": {
+            "main": [
+                [
+                    {
+                        "node": "Success Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Response (No Template)": {
+            "main": [
+                [
+                    {
+                        "node": "Success Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Sessions Table": {
+            "main": [
+                [
+                    {
+                        "node": "Format Response (Template)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Copy Template Clauses": {
+            "main": [
+                [
+                    {
+                        "node": "Update Clause Count",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Database Error",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}

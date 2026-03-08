@@ -87,7 +87,7 @@ export function useRoleContext({
                 if (contractId) {
                     const { data, error } = await supabase
                         .from('uploaded_contracts')
-                        .select('contract_type_key, initiator_party_role, uploaded_by_user_id')
+                        .select('contract_type_key, initiator_party_role, uploaded_by_user_id, linked_session_id')
                         .eq('contract_id', contractId)
                         .single()
 
@@ -95,6 +95,22 @@ export function useRoleContext({
                         contractTypeKey = data.contract_type_key
                         initiatorPartyRole = data.initiator_party_role as PartyRole | null
                         isInitiator = data.uploaded_by_user_id === userId
+
+                        // Fallback: if uploaded_contracts has no role data,
+                        // check the linked session (which stores it from assessment)
+                        if (!contractTypeKey && data.linked_session_id) {
+                            const { data: sessionData } = await supabase
+                                .from('sessions')
+                                .select('contract_type_key, initiator_party_role, customer_id')
+                                .eq('session_id', data.linked_session_id)
+                                .single()
+
+                            if (sessionData) {
+                                contractTypeKey = sessionData.contract_type_key
+                                initiatorPartyRole = sessionData.initiator_party_role as PartyRole | null
+                                isInitiator = sessionData.customer_id === userId
+                            }
+                        }
                     }
                 }
 
