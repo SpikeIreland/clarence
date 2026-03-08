@@ -109,7 +109,7 @@ function getStatusConfig(session: ProviderSession): {
     // Only show this if status is EXACTLY questionnaire_complete — not if already ready/active
     if (
         (questionnaireComplete || bidStatus === 'questionnaire_complete') &&
-        bidStatus !== 'ready' && bidStatus !== 'active' && bidStatus !== 'negotiation_active'
+        bidStatus !== 'ready' && bidStatus !== 'active' && bidStatus !== 'negotiation_active' && bidStatus !== 'negotiation_ready'
     ) {
         return {
             colour: 'text-amber-600',
@@ -123,7 +123,7 @@ function getStatusConfig(session: ProviderSession): {
     }
 
     // Ready or active - can enter studio
-    if (bidStatus === 'ready' || bidStatus === 'active' || bidStatus === 'negotiation_active') {
+    if (bidStatus === 'ready' || bidStatus === 'active' || bidStatus === 'negotiation_active' || bidStatus === 'negotiation_ready') {
         return {
             colour: 'text-emerald-600',
             bgColour: 'bg-emerald-50 border-emerald-200',
@@ -482,7 +482,7 @@ function ProviderLobbyContent() {
                 const data = await response.json()
                 const bidStatus = data.bid?.bidStatus || data.bid?.status || data.session?.status || data.bidStatus || data.bid_status || 'questionnaire_complete'
 
-                if (bidStatus === 'ready' || bidStatus === 'active' || bidStatus === 'negotiation_active') {
+                if (bidStatus === 'ready' || bidStatus === 'active' || bidStatus === 'negotiation_active' || bidStatus === 'negotiation_ready') {
                     setSessions(prev => prev.map(s =>
                         s.sessionId === sessionId
                             ? { ...s, bidStatus, mediationType: data.session?.mediationType || data.mediationType || data.mediation_type || s.mediationType }
