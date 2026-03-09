@@ -1,0 +1,330 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "path": "contract-studio-api",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                -1440,
+                -208
+            ],
+            "id": "7ba8e616-6246-4674-b369-caa21f8c344c",
+            "name": "Webhook",
+            "webhookId": "contract-studio-api-endpoint"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "strict",
+                        "version": 2
+                    },
+                    "conditions": [
+                        {
+                            "id": "cors-check",
+                            "leftValue": "={{ $json.headers?.['access-control-request-method'] }}",
+                            "rightValue": "",
+                            "operator": {
+                                "type": "string",
+                                "operation": "exists"
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                -1216,
+                -208
+            ],
+            "id": "1582271b-ac03-49d6-89bb-145982f1ed85",
+            "name": "CORS Check"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "{}",
+                "options": {
+                    "responseCode": 200,
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Methods",
+                                "value": "GET, POST, OPTIONS"
+                            },
+                            {
+                                "name": "Access-Control-Allow-Headers",
+                                "value": "Content-Type, Authorization"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                -992,
+                -304
+            ],
+            "id": "4e6f353c-10d2-4f52-bc62-e6b3a9ec029d",
+            "name": "CORS Response"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// EXTRACT SESSION ID NODE V10 - WITH VIEWER IDENTITY PARAMS\n// ============================================================================\n\nconst query = $input.first().json.query || {};\nconst headers = $input.first().json.headers || {};\n\n// Extract session identification\nconst sessionId = query.session_id || '';\nconst providerId = query.provider_id || '';\n\n// Extract viewer identity for role detection (NEW)\nconst viewerEmail = (query.user_email || headers['x-user-email'] || '').toLowerCase().trim();\nconst viewerUserId = query.user_id || headers['x-user-id'] || '';\nconst viewerRoleHint = query.viewer_role || '';  // Hint from frontend, not authoritative\n\nconsole.log('=== EXTRACT SESSION ID V10 ===');\nconsole.log('Session ID:', sessionId);\nconsole.log('Provider ID:', providerId);\nconsole.log('Viewer Email:', viewerEmail);\nconsole.log('Viewer User ID:', viewerUserId);\nconsole.log('Viewer Role Hint:', viewerRoleHint);\n\n// Validation\nif (!sessionId) {\n    throw new Error('Missing required parameter: session_id');\n}\n\nreturn [{\n    json: {\n        sessionId,\n        providerId,\n        viewerEmail,\n        viewerUserId,\n        viewerRoleHint\n    }\n}];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -992,
+                -112
+            ],
+            "id": "2de22a05-6444-40f6-9c0d-dcc26ab74f12",
+            "name": "Extract Session ID"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  -- Session metadata\n  s.session_id,\n  s.session_number,\n  s.customer_company,\n  s.status,\n  s.currency,\n  s.created_at,\n  s.updated_at,\n  s.is_training,\n  s.notes,\n  s.mediation_type,\n  s.template_source,\n  \n  -- Template & Clause Builder tracking\n  s.template_name,\n  s.template_pack_id,\n  s.clauses_selected,\n  s.clause_count,\n  \n  -- Customer requirements\n  cr.deal_value,\n  cr.service_required as contract_type,\n  cr.industry,\n  cr.contact_name as customer_contact,\n  cr.contact_email as customer_contact_email,\n  cr.company_name as customer_name,\n  \n  -- Provider data (filtered by provider_id if provided, falls back to session for training)\n  COALESCE(pb.provider_company, s.provider_company, 'Provider') AS provider_company,\n  COALESCE(\n    pb.provider_contact_name,\n    CASE \n      WHEN s.is_training = true AND s.notes LIKE '%Opponent:%' \n      THEN TRIM(SPLIT_PART(SPLIT_PART(s.notes, 'Opponent:', 2), '|', 1))\n      ELSE NULL \n    END\n  ) AS provider_contact,\n  pb.provider_contact_email,\n  pb.provider_id,\n  pb.bid_id,\n  pb.status as bid_status,\n  \n  -- Leverage data (baseline)\n  lc.customer_leverage as baseline_customer,\n  lc.provider_leverage as baseline_provider,\n  lc.alignment_percentage,\n  lc.is_aligned,\n  lc.calculation_factors,\n  lc.leverage_factors_breakdown,\n  lc.calculated_at,\n  \n  -- Leverage tracker (dynamic)\n  COALESCE(s.leverage_tracker_customer, lc.customer_leverage, 50) as tracker_customer,\n  COALESCE(s.leverage_tracker_provider, lc.provider_leverage, 50) as tracker_provider,\n  s.leverage_tracker_calculated_at as tracker_calculated_at,\n  \n  -- Legacy fields for backwards compatibility\n  s.customer_leverage,\n  s.provider_leverage\nFROM sessions s\nLEFT JOIN customer_requirements cr ON cr.session_id = s.session_id\nLEFT JOIN provider_bids pb ON pb.session_id = s.session_id \n  AND (\n    NULLIF('{{ $('Extract Session ID').first().json.providerId }}', '') IS NULL\n    OR pb.provider_id = NULLIF('{{ $('Extract Session ID').first().json.providerId }}', '')::uuid\n  )\nLEFT JOIN leverage_calculations lc ON lc.session_id::uuid = s.session_id\nWHERE s.session_id = '{{ $('Extract Session ID').first().json.sessionId }}'::uuid\nORDER BY lc.calculated_at DESC\nLIMIT 1",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                -768,
+                -112
+            ],
+            "id": "09fe49d7-934f-40b0-98ed-3e6d8b3ca8d5",
+            "name": "Fetch Session",
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  COALESCE(s.leverage_tracker_customer, lc.customer_leverage, s.customer_leverage, 50) as customer_leverage,\n  COALESCE(s.leverage_tracker_provider, lc.provider_leverage, s.provider_leverage, 50) as provider_leverage,\n  lc.alignment_percentage,\n  lc.is_aligned,\n  lc.calculation_factors,\n  lc.leverage_factors_breakdown,\n  lc.calculated_at,\n  s.leverage_tracker_customer as tracker_customer,\n  s.leverage_tracker_provider as tracker_provider,\n  s.leverage_tracker_calculated_at as tracker_calculated_at,\n  s.customer_leverage as baseline_customer,\n  s.provider_leverage as baseline_provider\nFROM sessions s\nLEFT JOIN leverage_calculations lc ON lc.session_id::uuid = s.session_id\nWHERE s.session_id = '{{ $('Extract Session ID').first().json.sessionId }}'::uuid\nORDER BY lc.calculated_at DESC\nLIMIT 1",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                -544,
+                -112
+            ],
+            "id": "fce614f4-67b6-40d5-94d4-4787dd4f282d",
+            "name": "Fetch Leverage Calculation",
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n    scp.position_id,\n    scp.clause_id,\n    scp.clause_number,\n    COALESCE(mc.clause_name, cc.clause_name, ucc.clause_name, scp.clause_content) as clause_name,\n    COALESCE(mc.category, cc.category, ucc.category) as category,\n    COALESCE(mc.description, cc.description, ucc.content) as description,\n    scp.parent_position_id,\n    scp.clause_level,\n    scp.display_order,\n    scp.customer_position,\n    scp.provider_position,\n    scp.original_customer_position,\n    scp.original_provider_position,\n    scp.current_compromise,\n    scp.ai_suggested_compromise,\n    scp.gap_size,\n    scp.gap_severity,\n    scp.customer_weight,\n    scp.provider_weight,\n    scp.is_deal_breaker_customer,\n    scp.is_deal_breaker_provider,\n    scp.clause_content,\n    scp.customer_notes,\n    scp.provider_notes,\n    scp.priority_level,\n    scp.status,\n    scp.position_set_at,\n    scp.position_set_by,\n    scp.source_type,\n    scp.source_master_clause_id,\n    scp.source_template_clause_id,\n    scp.added_mid_session,\n    scp.added_by_party,\n    scp.custom_ai_context,\n    scp.is_applicable,\n    scp.marked_na_by,\n    scp.marked_na_at,\n    scp.na_reason,\n    mc.position_options,\n    mc.ai_context,\n    mc.negotiation_guidance,\n    COALESCE(mc.is_category_header, false) as is_category_header,\n    scp.customer_confirmed_at,\n    scp.customer_confirmed_position,\n    scp.provider_confirmed_at,\n    scp.provider_confirmed_position,\n    scp.agreement_reached_at,\n    scp.final_agreed_position,\n    COALESCE(scp.is_locked, false) as is_locked,\n    scp.locked_at,\n    scp.locked_by_user_id\nFROM session_clause_positions scp\nLEFT JOIN contract_clauses cc ON cc.clause_id = scp.clause_id\nLEFT JOIN master_clauses mc ON mc.clause_id = scp.clause_id\nLEFT JOIN uploaded_contract_clauses ucc ON ucc.clause_id = scp.clause_id\nWHERE scp.session_id = '{{ $('Extract Session ID').item.json.sessionId }}'::uuid\nAND (\n    scp.bid_id IS NULL \n    OR scp.bid_id = (\n        SELECT bid_id FROM provider_bids pb\n        WHERE pb.session_id = '{{ $('Extract Session ID').item.json.sessionId }}'::uuid \n        AND (\n            '{{ $('Extract Session ID').item.json.providerId }}' = ''\n            OR pb.provider_id = NULLIF('{{ $('Extract Session ID').item.json.providerId }}', '')::uuid\n        )\n        ORDER BY pb.invited_at ASC \n        LIMIT 1\n    )\n)\nORDER BY scp.display_order ASC",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.5,
+            "position": [
+                -320,
+                -112
+            ],
+            "id": "50225354-db5c-4da2-8854-dc258bc3c2b8",
+            "name": "Fetch Clause Positions",
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// ============================================================================\n// BUILD CONTRACT STUDIO RESPONSE V10 - WITH VIEWER ROLE DETECTION\n// ============================================================================\n\nconst sessionId = $(\"Extract Session ID\").first().json.sessionId;\nconst sessionData = $(\"Fetch Session\").first().json || {};\n\n// ============================================================================\n// NEW: GET VIEWER CONTEXT FROM EXTRACT SESSION ID NODE\n// ============================================================================\n\n// Get viewer info extracted from webhook query params\nconst extractedData = $(\"Extract Session ID\").first().json || {};\nconst viewerEmail = (extractedData.viewerEmail || \"\").toLowerCase().trim();\nconst viewerUserId = extractedData.viewerUserId || \"\";\nconst viewerRoleHint = extractedData.viewerRoleHint || \"\";\n\nconsole.log(\"=== VIEWER DETECTION ===\");\nconsole.log(\"Viewer email from request:\", viewerEmail);\nconsole.log(\"Viewer user_id from request:\", viewerUserId);\n\nconsole.log(\"=== SESSION DATA RAW ===\");\nconsole.log(\"sessionData:\", JSON.stringify(sessionData));\nconsole.log(\"sessionData.session_id:\", sessionData.session_id);\nconsole.log(\"sessionData.template_name:\", sessionData.template_name);\nconsole.log(\"sessionData.mediation_type:\", sessionData.mediation_type);\nconsole.log(\"sessionData.template_source:\", sessionData.template_source);\nconsole.log(\"sessionData.clause_count:\", sessionData.clause_count);\n\nconst leverageData = $(\"Fetch Leverage Calculation\").first().json || {};\nconst clausePositions = $(\"Fetch Clause Positions\")\n  .all()\n  .map((item) => item.json);\n\n// Fetch unseen moves data\nconst unseenMovesData =\n  $(\"Fetch Unseen Moves\")\n    .all()\n    .map((item) => item.json) || [];\n\n// ============================================================================\n// NEW: FETCH PROVIDER BIDS FOR VIEWER ROLE DETECTION\n// ============================================================================\n\n// Get provider bids data (should already be fetched or fetch now)\nlet providerBidsData = [];\ntry {\n  providerBidsData =\n    $(\"Fetch Provider Bids\")\n      .all()\n      .map((item) => item.json) || [];\n} catch (e) {\n  console.log(\"No Fetch Provider Bids node, using empty array\");\n}\n\nconsole.log(\"=== BUILDING RESPONSE V10 (With Viewer Role Detection) ===\");\nconsole.log(\"Session:\", sessionData.session_number);\nconsole.log(\"Template:\", sessionData.template_name);\nconsole.log(\"Mediation Type:\", sessionData.mediation_type);\nconsole.log(\"Template Source:\", sessionData.template_source);\nconsole.log(\"Clause positions from DB:\", clausePositions.length);\nconsole.log(\"Provider bids count:\", providerBidsData.length);\n\n// ============================================================================\n// SECTION 1: PARSE LEVERAGE FACTORS\n// ============================================================================\n\nlet leverageFactors = {};\ntry {\n  const breakdown = leverageData.leverage_factors_breakdown;\n  const factors = leverageData.calculation_factors;\n\n  let factorsSource = null;\n  if (\n    breakdown &&\n    Object.keys(\n      typeof breakdown === \"string\" ? JSON.parse(breakdown) : breakdown,\n    ).length > 0\n  ) {\n    factorsSource = breakdown;\n  } else if (\n    factors &&\n    Object.keys(typeof factors === \"string\" ? JSON.parse(factors) : factors)\n      .length > 0\n  ) {\n    factorsSource = factors;\n  }\n\n  if (factorsSource) {\n    leverageFactors =\n      typeof factorsSource === \"string\"\n        ? JSON.parse(factorsSource)\n        : factorsSource;\n  }\n  console.log(\"Parsed leverage factors:\", JSON.stringify(leverageFactors));\n} catch (e) {\n  console.log(\"Could not parse leverage factors:\", e.message);\n}\n\n// ============================================================================\n// SECTION 2: LEVERAGE VALUES - BASELINE VS TRACKER\n// ============================================================================\n\n// BASELINE leverage (from onboarding assessment - NEVER CHANGES)\nconst baselineCustomerLeverage =\n  leverageData.baseline_customer || sessionData.customer_leverage || 50;\nconst baselineProviderLeverage =\n  leverageData.baseline_provider || sessionData.provider_leverage || 50;\n\n// TRACKER leverage (dynamic - changes with position moves)\nconst trackerCustomerLeverage =\n  leverageData.tracker_customer ||\n  sessionData.leverage_tracker_customer ||\n  baselineCustomerLeverage;\nconst trackerProviderLeverage =\n  leverageData.tracker_provider ||\n  sessionData.leverage_tracker_provider ||\n  baselineProviderLeverage;\n\nconsole.log(\n  \"Baseline leverage:\",\n  baselineCustomerLeverage,\n  \"/\",\n  baselineProviderLeverage,\n);\nconsole.log(\n  \"Tracker leverage:\",\n  trackerCustomerLeverage,\n  \"/\",\n  trackerProviderLeverage,\n);\n\n// Check if leverage has been calculated\nconst hasLeverageCalculation = !!(\n  baselineCustomerLeverage && baselineProviderLeverage\n);\nconst hasClausePositions = clausePositions.length > 0;\n\nconst alignmentPercentage = leverageData.alignment_percentage || 0;\nconst isAligned = leverageData.is_aligned || false;\n\nconsole.log(\"Has leverage calculation:\", hasLeverageCalculation);\nconsole.log(\"Has clause positions:\", hasClausePositions);\n\n// ============================================================================\n// SECTION 2A: DETERMINE VIEWER ROLE (NEW)\n// ============================================================================\n\nlet viewerRole = \"unknown\";\nlet viewerBidId = null;\nlet viewerProviderId = null;\nlet viewerCompany = null;\n\n// Get customer email from session data\nconst customerEmail = (\n  sessionData.customer_contact_email ||\n  sessionData.customer_email ||\n  \"\"\n)\n  .toLowerCase()\n  .trim();\n\n// Get customer created_by\nconst customerCreatedBy = sessionData.created_by || \"\";\n\nconsole.log(\"=== ROLE DETECTION ===\");\nconsole.log(\"Customer email from session:\", customerEmail);\nconsole.log(\"Session created_by:\", customerCreatedBy);\nconsole.log(\"Viewer email:\", viewerEmail);\nconsole.log(\"Viewer user_id:\", viewerUserId);\n\n// Priority 1: Check if viewer is the customer (by email or created_by)\nif (viewerEmail && customerEmail && viewerEmail === customerEmail) {\n  viewerRole = \"customer\";\n  viewerCompany = sessionData.customer_company || sessionData.customer_name;\n  console.log(\"Role determined: CUSTOMER (email match)\");\n} else if (\n  viewerUserId &&\n  customerCreatedBy &&\n  viewerUserId === customerCreatedBy\n) {\n  viewerRole = \"customer\";\n  viewerCompany = sessionData.customer_company || sessionData.customer_name;\n  console.log(\"Role determined: CUSTOMER (created_by match)\");\n}\n\n// Priority 2: Check if viewer is a provider (check all bids)\nif (viewerRole === \"unknown\" && viewerEmail) {\n  for (const bid of providerBidsData) {\n    const bidEmail = (bid.provider_contact_email || \"\").toLowerCase().trim();\n    if (bidEmail && viewerEmail === bidEmail) {\n      viewerRole = \"provider\";\n      viewerBidId = bid.bid_id;\n      viewerProviderId = bid.provider_id;\n      viewerCompany = bid.provider_company;\n      console.log(\"Role determined: PROVIDER (email match in bids)\");\n      console.log(\"Provider bid_id:\", viewerBidId);\n      console.log(\"Provider provider_id:\", viewerProviderId);\n      break;\n    }\n  }\n}\n\n// Priority 3: Check main provider fields on session (for single-provider sessions)\nif (viewerRole === \"unknown\" && viewerEmail) {\n  const mainProviderEmail = (sessionData.provider_contact_email || \"\")\n    .toLowerCase()\n    .trim();\n  if (mainProviderEmail && viewerEmail === mainProviderEmail) {\n    viewerRole = \"provider\";\n    viewerProviderId = sessionData.provider_id;\n    viewerBidId = sessionData.bid_id;\n    viewerCompany = sessionData.provider_company;\n    console.log(\"Role determined: PROVIDER (main session provider match)\");\n  }\n}\n\n// Priority 4: If viewer_role was passed in query params, use it as hint\n// (but only if we couldn't determine from email)\nif (viewerRole === \"unknown\") {\n  const hintRole = viewerRoleHint;\n  if (hintRole === \"customer\" || hintRole === \"provider\") {\n    viewerRole = hintRole;\n    console.log(\n      \"Role determined: \" +\n        viewerRole.toUpperCase() +\n        \" (from query param hint)\",\n    );\n  }\n}\n\n// Final fallback: If still unknown and no provider is set, assume customer\nif (viewerRole === \"unknown\") {\n  // If there's no provider yet, user is likely the customer\n  if (!sessionData.provider_id && !sessionData.provider_company) {\n    viewerRole = \"customer\";\n    viewerCompany = sessionData.customer_company || sessionData.customer_name;\n    console.log(\"Role determined: CUSTOMER (fallback - no provider set)\");\n  } else {\n    // Can't determine - leave as unknown\n    console.log(\"Role could not be determined - leaving as unknown\");\n  }\n}\n\nconsole.log(\"=== FINAL VIEWER CONTEXT ===\");\nconsole.log(\"viewerRole:\", viewerRole);\nconsole.log(\"viewerBidId:\", viewerBidId);\nconsole.log(\"viewerProviderId:\", viewerProviderId);\nconsole.log(\"viewerCompany:\", viewerCompany);\n\n// ============================================================================\n// SECTION 3: BUILD SESSION RESPONSE\n// ============================================================================\n\nconst session = {\n  sessionId: sessionData.session_id || sessionId,\n  sessionNumber: sessionData.session_number || \"Unknown\",\n  customerCompany:\n    sessionData.customer_company ||\n    sessionData.customer_name ||\n    \"Unknown Customer\",\n  providerCompany: sessionData.provider_company || \"Awaiting Provider\",\n  providerId: sessionData.provider_id || null,\n  bidId: sessionData.bid_id || null,\n  customerContactName: sessionData.customer_contact || null,\n  providerContactName: sessionData.provider_contact || null,\n  customerContactEmail: sessionData.customer_contact_email || null, // NEW\n  providerContactEmail: sessionData.provider_contact_email || null, // NEW\n  contractType: sessionData.contract_type || \"General\",\n  dealValue: sessionData.deal_value || \"0\",\n  phase: sessionData.phase || \"pending\",\n  status: sessionData.status || \"draft\",\n  industry: sessionData.industry || \"General\",\n  currency: sessionData.currency || \"GBP\",\n  createdAt: sessionData.created_at || null,\n  hasClausePositions: hasClausePositions,\n  hasLeverageCalculation: hasLeverageCalculation,\n  isReadyForNegotiation: hasLeverageCalculation && hasClausePositions,\n\n  // ========== STRAIGHT TO CONTRACT SUPPORT ==========\n  mediationType: sessionData.mediation_type || null,\n  templateSource: sessionData.template_source || null,\n  serviceCriticality: sessionData.service_criticality || null,\n\n  // ========== Template & Clause Builder Tracking ==========\n  templateName: sessionData.template_name || null,\n  templatePackId: sessionData.template_pack_id || null,\n  clausesSelected: sessionData.clauses_selected || false,\n  clauseCount: sessionData.clause_count || 0,\n\n  // ========== Training Mode ==========\n  isTraining: sessionData.is_training || false,\n  notes: sessionData.notes || null,\n\n  // ========== VIEWER CONTEXT (NEW V10) ==========\n  viewer: {\n    role: viewerRole,\n    bidId: viewerBidId,\n    providerId: viewerProviderId,\n    company: viewerCompany,\n    email: viewerEmail || null,\n    userId: viewerUserId || null,\n  },\n};\n\nconsole.log(\"Session object built:\", {\n  mediationType: session.mediationType,\n  templateSource: session.templateSource,\n  templateName: session.templateName,\n  clauseCount: session.clauseCount,\n  status: session.status,\n  viewer: session.viewer,\n});\n\n// ============================================================================\n// SECTION 4: CLAUSE MAPPING WITH FULL FIELD SUPPORT\n// ============================================================================\n\n// Helper function to safely parse position_options\nconst parsePositionOptions = (options) => {\n  if (!options) return null;\n  try {\n    return typeof options === \"string\" ? JSON.parse(options) : options;\n  } catch (e) {\n    console.log(\"Could not parse position_options:\", e.message);\n    return null;\n  }\n};\n\n// Debug: Log first clause raw data to verify field availability\nif (clausePositions.length > 0) {\n  console.log(\"=== FIRST CLAUSE RAW DATA ===\");\n  console.log(\"position_id:\", clausePositions[0].position_id);\n  console.log(\"clause_id:\", clausePositions[0].clause_id);\n  console.log(\"clause_name:\", clausePositions[0].clause_name);\n  console.log(\"clause_number:\", clausePositions[0].clause_number);\n  console.log(\"category:\", clausePositions[0].category);\n}\n\n// Build clauses response with camelCase keys\nconst clauses = clausePositions.map((cp) => ({\n  // Core identification\n  positionId: cp.position_id || null,\n  clauseId: cp.clause_id || null,\n  clauseNumber: cp.clause_number || \"\",\n  clauseName: cp.clause_name || \"Unnamed Clause\",\n  category: cp.category || \"General\",\n  description: cp.description || \"\",\n\n  // Hierarchy\n  parentPositionId: cp.parent_position_id || null,\n  clauseLevel: cp.clause_level || 1,\n  displayOrder: cp.display_order || 0,\n  isCategoryHeader: cp.is_category_header || false,\n\n  // Positions (rounded to 1 decimal)\n  customerPosition:\n    cp.customer_position != null\n      ? Math.round(parseFloat(cp.customer_position) * 10) / 10\n      : null,\n  providerPosition:\n    cp.provider_position != null\n      ? Math.round(parseFloat(cp.provider_position) * 10) / 10\n      : null,\n  originalCustomerPosition:\n    cp.original_customer_position != null\n      ? Math.round(parseFloat(cp.original_customer_position) * 10) / 10\n      : null,\n  originalProviderPosition:\n    cp.original_provider_position != null\n      ? Math.round(parseFloat(cp.original_provider_position) * 10) / 10\n      : null,\n  currentCompromise: cp.current_compromise\n    ? Math.round(parseFloat(cp.current_compromise) * 10) / 10\n    : null,\n  aiSuggestedCompromise:\n    cp.ai_suggested_compromise != null\n      ? Math.round(parseFloat(cp.ai_suggested_compromise) * 10) / 10\n      : null,\n\n  // Gap analysis\n  gapSize:\n    cp.gap_size != null ? Math.round(parseFloat(cp.gap_size) * 10) / 10 : 0,\n  gapSeverity: cp.gap_severity || \"low\",\n\n  // Weighting\n  customerWeight: cp.customer_weight || 5,\n  providerWeight: cp.provider_weight || 5,\n  isDealBreakerCustomer: cp.is_deal_breaker_customer || false,\n  isDealBreakerProvider: cp.is_deal_breaker_provider || false,\n\n  // Content\n  clauseContent: cp.clause_content || null,\n  customerNotes: cp.customer_notes || null,\n  providerNotes: cp.provider_notes || null,\n  priorityLevel: cp.priority_level || 5,\n  status: cp.status || \"pending\",\n  positionSetAt: cp.position_set_at || null,\n  positionSetBy: cp.position_set_by || null,\n\n  // UI State\n  isExpanded: true,\n\n  // ========== Clause Management System Fields ==========\n  sourceType: cp.source_type || \"legacy\",\n  sourceMasterClauseId: cp.source_master_clause_id || null,\n  sourceTemplateClauseId: cp.source_template_clause_id || null,\n  addedMidSession: cp.added_mid_session || false,\n  addedByParty: cp.added_by_party || null,\n  positionOptions: parsePositionOptions(cp.position_options),\n  aiContext: cp.ai_context || cp.custom_ai_context || null,\n  negotiationGuidance: cp.negotiation_guidance || null,\n\n  // ========== Clause Confirmation Tracking ==========\n  customerConfirmedAt: cp.customer_confirmed_at || null,\n  customerConfirmedPosition: cp.customer_confirmed_position\n    ? parseFloat(cp.customer_confirmed_position)\n    : null,\n  providerConfirmedAt: cp.provider_confirmed_at || null,\n  providerConfirmedPosition: cp.provider_confirmed_position\n    ? parseFloat(cp.provider_confirmed_position)\n    : null,\n  agreementReachedAt: cp.agreement_reached_at || null,\n  finalAgreedPosition: cp.final_agreed_position\n    ? parseFloat(cp.final_agreed_position)\n    : null,\n\n  // Helper flags for frontend\n  isAgreed: cp.status === \"agreed\",\n  isCustomerConfirmed:\n    cp.status === \"customer_confirmed\" || cp.status === \"agreed\",\n  isProviderConfirmed:\n    cp.status === \"provider_confirmed\" || cp.status === \"agreed\",\n\n  // ========== Locking Fields ==========\n  isLocked: cp.is_locked || false,\n  lockedAt: cp.locked_at || null,\n  lockedByUserId: cp.locked_by_user_id || null,\n}));\n\n// Log clause stats\nconsole.log(\"=== CLAUSE STATS ===\");\nconsole.log(\"Total clauses mapped:\", clauses.length);\nif (clauses.length > 0) {\n  console.log(\"First clause check:\", {\n    positionId: clauses[0].positionId,\n    clauseId: clauses[0].clauseId,\n    clauseName: clauses[0].clauseName,\n    category: clauses[0].category,\n  });\n}\n\nconst templateClauses = clauses.filter(\n  (c) => c.sourceType === \"template\",\n).length;\nconst legacyClauses = clauses.filter((c) => c.sourceType === \"legacy\").length;\nconst customClauses = clauses.filter((c) => c.sourceType === \"custom\").length;\nconst clausesWithOptions = clauses.filter(\n  (c) => c.positionOptions !== null,\n).length;\nconst agreedClauses = clauses.filter((c) => c.isAgreed).length;\nconst pendingConfirmation = clauses.filter(\n  (c) => c.isCustomerConfirmed !== c.isProviderConfirmed,\n).length;\n\nconsole.log(\n  \"Clause sources - Template:\",\n  templateClauses,\n  \"Legacy:\",\n  legacyClauses,\n  \"Custom:\",\n  customClauses,\n);\nconsole.log(\"Clauses with position options:\", clausesWithOptions);\nconsole.log(\n  \"Agreed clauses:\",\n  agreedClauses,\n  \"Pending confirmation:\",\n  pendingConfirmation,\n);\n\n// ============================================================================\n// SECTION 5: BUILD LEVERAGE RESPONSE\n// ============================================================================\n\nconst leverage = {\n  // Master leverage scores (BASELINE - NEVER CHANGES)\n  leverageScoreCustomer: baselineCustomerLeverage,\n  leverageScoreProvider: baselineProviderLeverage,\n  leverageScoreCalculatedAt:\n    leverageData.calculated_at || sessionData.leverage_calculated_at || null,\n\n  // Dynamic tracker (changes with position moves)\n  leverageTrackerCustomer: trackerCustomerLeverage,\n  leverageTrackerProvider: trackerProviderLeverage,\n  leverageTrackerCalculatedAt:\n    leverageData.tracker_calculated_at ||\n    sessionData.leverage_tracker_calculated_at ||\n    null,\n\n  // Alignment\n  alignmentPercentage: alignmentPercentage,\n  isAligned: isAligned,\n\n  // Factor breakdowns\n  marketDynamicsScore:\n    leverageFactors.marketDynamics?.score || baselineCustomerLeverage,\n  marketDynamicsRationale:\n    leverageFactors.marketDynamics?.rationale || \"Not calculated\",\n  economicFactorsScore:\n    leverageFactors.economicFactors?.score || baselineCustomerLeverage,\n  economicFactorsRationale:\n    leverageFactors.economicFactors?.rationale || \"Not calculated\",\n  strategicPositionScore:\n    leverageFactors.strategicPosition?.score || baselineCustomerLeverage,\n  strategicPositionRationale:\n    leverageFactors.strategicPosition?.rationale || \"Not calculated\",\n  batnaScore: leverageFactors.batna?.score || baselineCustomerLeverage,\n  batnaRationale: leverageFactors.batna?.rationale || \"Not calculated\",\n\n  // Status flag\n  isPending: !hasLeverageCalculation,\n};\n\n// ============================================================================\n// SECTION 6: BUILD UNSEEN MOVES RESPONSE\n// ============================================================================\n\nconst unseenMoves = unseenMovesData.map((item) => ({\n  clauseId: item.clause_id,\n  unseenCount: parseInt(item.unseen_count) || 0,\n}));\n\nconst totalUnseenMoves = unseenMoves.reduce(\n  (sum, item) => sum + item.unseenCount,\n  0,\n);\n\nconsole.log(\"Unseen moves:\", unseenMoves.length);\nconsole.log(\"Total unseen:\", totalUnseenMoves);\n\n// ============================================================================\n// SECTION 7: FINAL RESPONSE\n// ============================================================================\n\nconsole.log(\"=== RESPONSE V10 BUILT ===\");\nconsole.log(\"Session mediationType:\", session.mediationType);\nconsole.log(\"Session templateSource:\", session.templateSource);\nconsole.log(\"Clauses:\", clauses.length);\nconsole.log(\n  \"Leverage - Baseline:\",\n  leverage.leverageScoreCustomer,\n  \"/\",\n  leverage.leverageScoreProvider,\n);\nconsole.log(\n  \"Leverage - Tracker:\",\n  leverage.leverageTrackerCustomer,\n  \"/\",\n  leverage.leverageTrackerProvider,\n);\nconsole.log(\"Viewer role:\", session.viewer.role);\n\nreturn [\n  {\n    json: {\n      session,\n      clauses,\n      leverage,\n      unseenMoves,\n      totalUnseenMoves,\n    },\n  },\n];\n"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                128,
+                -112
+            ],
+            "id": "3236e679-8b14-4ba4-8f7e-99c6fe18f9b4",
+            "name": "Build Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify($json) }}",
+                "options": {
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Access-Control-Allow-Origin",
+                                "value": "*"
+                            },
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.2,
+            "position": [
+                352,
+                -112
+            ],
+            "id": "b2255f28-3f3a-4f1a-af4e-0ed061d84bf2",
+            "name": "Success Response"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n    pch.clause_id, \n    COUNT(*) as unseen_count \nFROM position_change_history pch\nLEFT JOIN provider_bids pb ON pb.bid_id = pch.bid_id\nWHERE pch.session_id = '{{ $('Extract Session ID').item.json.sessionId }}'::uuid\nAND (\n    '{{ $('Extract Session ID').item.json.providerId }}' = ''\n    OR pb.provider_id = NULLIF('{{ $('Extract Session ID').item.json.providerId }}', '')::uuid\n)\nAND (\n    (pch.party = 'provider' AND pch.seen_by_customer = false AND '{{ $('Extract Session ID').item.json.userRole }}' = 'customer')\n    OR \n    (pch.party = 'customer' AND pch.seen_by_provider = false AND '{{ $('Extract Session ID').item.json.userRole }}' = 'provider')\n)\nGROUP BY pch.clause_id",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -96,
+                -112
+            ],
+            "id": "c6aecbf0-2b18-45e6-a0b5-d3431925f639",
+            "name": "Fetch Unseen Moves",
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "ZH5KS5KZA0pid8fg",
+                    "name": "Postgres account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Check",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "CORS Check": {
+            "main": [
+                [
+                    {
+                        "node": "CORS Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Extract Session ID",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract Session ID": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Session",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Session": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Leverage Calculation",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Leverage Calculation": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Clause Positions",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Clause Positions": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch Unseen Moves",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Response": {
+            "main": [
+                [
+                    {
+                        "node": "Success Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch Unseen Moves": {
+            "main": [
+                [
+                    {
+                        "node": "Build Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "9a61ad3a4b4343955ebf6507bf60bd76631c703df83526bf98c5c403fa94f01c"
+    }
+}

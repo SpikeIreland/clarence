@@ -8188,7 +8188,17 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                 />
             )}
 
-            <div className="relative flex h-[calc(100vh-52px)] overflow-hidden">
+            {/* Playbook Compliance Banner - Training Mode Only */}
+            {isTrainingMode && session?.sessionId && (
+                <div className="flex-shrink-0 border-b border-slate-200 z-10">
+                    <TrainingPlaybookCompliance
+                        sessionId={session.sessionId}
+                        clauses={clauses}
+                    />
+                </div>
+            )}
+
+            <div className="relative flex flex-1 overflow-hidden">
                 {/* Working Overlay - covers the three-panel workspace */}
                 <WorkingOverlay
                     workingState={workingState}
@@ -8281,16 +8291,6 @@ As "The Honest Broker", generate clear, legally-appropriate contract language th
                             </div>
                         </div>
                     </div>
-
-                    {/* Playbook Compliance - Training Mode Only */}
-                    {isTrainingMode && session?.sessionId && (
-                        <div className="flex-shrink-0 border-b border-slate-200">
-                            <TrainingPlaybookCompliance
-                                sessionId={session.sessionId}
-                                clauses={clauses}
-                            />
-                        </div>
-                    )}
 
                     {/* Clause Tree */}
                     <div className="flex-1 overflow-y-auto p-2">
