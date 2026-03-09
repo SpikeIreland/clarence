@@ -173,6 +173,24 @@ export async function POST(request: NextRequest) {
             console.log('Role context derived:', roleContext.userRoleLabel, 'vs', roleContext.counterpartyRoleLabel)
         }
 
+        // STEP 1b: Agent fallback for ambiguous/missing role data
+        if (!roleContext && body.sessionId) {
+            try {
+                const { resolveRoles } = await import('@/lib/agents/role-resolver')
+                const resolved = await resolveRoles({
+                    sessionId: body.sessionId,
+                    contractTypeKey: body.contractTypeKey || null,
+                    initiatorPartyRole: body.initiatorPartyRole || null,
+                    viewerRole: body.viewerRole,
+                    contractDescription: body.context || null,
+                })
+                roleContext = resolved
+                console.log('Role context resolved by agent:', resolved.resolvedBy, resolved.confidence)
+            } catch (agentError) {
+                console.warn('Role resolver agent failed, continuing without role context:', agentError)
+            }
+        }
+
         // STEP 2: Build QC Context (if contractId provided)
         let qcContext = null
 

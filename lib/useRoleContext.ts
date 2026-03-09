@@ -75,6 +75,37 @@ export function useRoleContext({
 
         const supabase = createClient()
 
+        // Non-blocking agent upgrade — renders static labels first,
+        // then upgrades to agent-resolved context when available
+        function fireAgentUpgrade(
+            sid: string,
+            ctKey: string | null,
+            ipr: PartyRole | null,
+            uid: string | null | undefined
+        ) {
+            fetch('/api/agents/role-resolver', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sessionId: sid,
+                    contractTypeKey: ctKey,
+                    initiatorPartyRole: ipr,
+                    viewerRole: uid ? 'customer' : undefined,
+                }),
+            })
+                .then(res => res.ok ? res.json() : null)
+                .then(data => {
+                    if (data?.success && data.roleContext) {
+                        console.log('[useRoleContext] Agent upgrade received:', data.roleContext.resolvedBy)
+                        setRoleContext(data.roleContext)
+                        setHasRoleData(true)
+                    }
+                })
+                .catch(err => {
+                    console.warn('[useRoleContext] Agent upgrade failed (keeping static):', err)
+                })
+        }
+
         async function fetchRoleData() {
             try {
                 let contractTypeKey: string | null = null
@@ -167,10 +198,20 @@ export function useRoleContext({
                         setHasRoleData(false)
                     }
 
+                    // TIER 2.5: Async agent upgrade for ambiguous cases
+                    if (sessionId) {
+                        fireAgentUpgrade(sessionId, contractTypeKey, null, userId)
+                    }
+
                 } else {
                     // TIER 3: No role data at all — use neutral Party A / Party B
                     setRoleContext(DEFAULT_NEUTRAL_CONTEXT)
                     setHasRoleData(false)
+
+                    // TIER 3.5: Async agent upgrade — try to infer from context
+                    if (sessionId) {
+                        fireAgentUpgrade(sessionId, null, null, userId)
+                    }
                 }
             } catch (err) {
                 console.error('[useRoleContext] Error fetching role data:', err)
